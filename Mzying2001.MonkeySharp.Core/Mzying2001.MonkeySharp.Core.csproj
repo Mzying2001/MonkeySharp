@@ -9,10 +9,8 @@
   </PropertyGroup>
   <PropertyGroup>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
+    <RepositoryUrl>https://github.com/Mzying2001/MonkeySharp</RepositoryUrl>
   </PropertyGroup>
-  <ItemGroup>
-    <None Remove="Js\Inject.js" />
-  </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Js\Inject.js" />
   </ItemGroup>

@@ -9,6 +9,7 @@
   </PropertyGroup>
   <PropertyGroup>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
+    <RepositoryUrl>https://github.com/Mzying2001/MonkeySharp</RepositoryUrl>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="CefSharp.Common" Version="121.3.70" />
