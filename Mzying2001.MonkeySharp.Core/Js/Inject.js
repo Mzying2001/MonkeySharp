@@ -1,0 +1,80 @@
+// Inject.js
+
+var __MonkeySharp =
+{
+    sendMsg: function (msg) {
+        // __MonkeySharp_Messenger: injected by MonkeySharp
+        if (typeof __MonkeySharp_Messenger != "undefined") {
+            return __MonkeySharp_Messenger.sendMessage(msg);
+        } else {
+            console.log("MonkeySharp: Messenger is not found.");
+            return null;
+        }
+    },
+
+    sendMsgAsync: async function (msg) {
+        // __MonkeySharp_AsyncMessenger: injected by MonkeySharp
+        if (typeof __MonkeySharp_AsyncMessenger != "undefined") {
+            return await __MonkeySharp_AsyncMessenger.sendMessageAsync(msg);
+        } else {
+            console.log("MonkeySharp: AsyncMessenger is not found.");
+            return null;
+        }
+    },
+
+    onDocumentStart: function () {
+        __MonkeySharp.sendMsg(["document-start", window.location.href]);
+    },
+
+    onDocumentBody: function () {
+        __MonkeySharp.sendMsg(["document-body", window.location.href]);
+    },
+
+    onDocumentEnd: function () {
+        __MonkeySharp.sendMsg(["document-end", window.location.href]);
+    },
+
+    onDocumentIdle: function () {
+        __MonkeySharp.sendMsg(["document-idle", window.location.href]);
+    },
+
+    onContextMenu: function () {
+        __MonkeySharp.sendMsg(["context-menu", window.location.href]);
+    },
+};
+
+(function () {
+    // avoid duplicate injection
+    if (window.__MonkeySharp_Inject) {
+        return;
+    }
+
+    // mark as injected
+    window.__MonkeySharp_Injected = true;
+
+    // raise document-start event
+    __MonkeySharp.onDocumentStart();
+
+    // register document-end event
+    window.addEventListener("DOMContentLoaded", function () {
+        __MonkeySharp.onDocumentEnd();
+    });
+
+    // register document-idle event
+    window.addEventListener("load", function () {
+        __MonkeySharp.onDocumentIdle();
+    });
+
+    // register context-menu event
+    window.addEventListener("contextmenu", function () {
+        __MonkeySharp.onContextMenu();
+    });
+
+    // register document-body event
+    var intervalId = setInterval(function () {
+        if (document.body) {
+            clearInterval(intervalId);
+            __MonkeySharp.onDocumentBody();
+        }
+    }, 50);
+})();

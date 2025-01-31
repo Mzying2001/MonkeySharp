@@ -1,0 +1,20 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net462</TargetFrameworks>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <Title>Mzying2001.MonkeySharp</Title>
+    <Authors>Mzying2001</Authors>
+    <Platforms>x64;x86</Platforms>
+  </PropertyGroup>
+  <PropertyGroup>
+    <GenerateDocumentationFile>True</GenerateDocumentationFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="CefSharp.Common" Version="121.3.70" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Mzying2001.MonkeySharp.Core\Mzying2001.MonkeySharp.Core.csproj" />
+  </ItemGroup>
+
+</Project>
