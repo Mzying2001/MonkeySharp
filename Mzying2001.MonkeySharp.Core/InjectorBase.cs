@@ -244,8 +244,11 @@ namespace Mzying2001.MonkeySharp.Core
                 }
             }
 
-            ExecuteScript(_injectScriptTemplate.Replace(
-                "/*==========REPLACE_CODE_HERE==========*/", scriptInjectionBuilder.ToString()));
+            if (scriptInjectionBuilder.Length != 0)
+            {
+                ExecuteScript(_injectScriptTemplate.Replace(
+                    "/*==========REPLACE_CODE_HERE==========*/", scriptInjectionBuilder.ToString()));
+            }
         }
 
 
