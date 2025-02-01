@@ -26,6 +26,15 @@ namespace Mzying2001.MonkeySharp.Core.Internal
 
 
         /// <summary>
+        /// Gets the content of the init.js file.
+        /// </summary>
+        public static string GetInitJs()
+        {
+            return GetEmbeddedResource("Mzying2001.MonkeySharp.Core.Js.Init.js");
+        }
+
+
+        /// <summary>
         /// Gets the content of the inject.js file.
         /// </summary>
         public static string GetInjectJs()

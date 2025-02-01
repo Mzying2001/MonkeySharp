@@ -1,7 +1,6 @@
 ﻿using CefSharp;
 using Mzying2001.MonkeySharp.Core;
 using Mzying2001.MonkeySharp.Core.Messaging;
-using Mzying2001.MonkeySharp.Core.Script;
 using System;
 
 namespace Mzying2001.MonkeySharp
@@ -76,12 +75,9 @@ namespace Mzying2001.MonkeySharp
 
 
         /// <inheritdoc/>
-        protected override void OnInjectScript(JScript script, bool isInitInjection)
+        public override void ExecuteScript(string script)
         {
-            try
-            {
-                _browser.ExecuteScriptAsync(script.ScriptText);
-            }
+            try { _browser.ExecuteScriptAsync(script); }
             catch { }
         }
     }

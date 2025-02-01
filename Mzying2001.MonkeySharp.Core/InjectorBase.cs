@@ -5,6 +5,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 
 namespace Mzying2001.MonkeySharp.Core
 {
@@ -34,7 +35,13 @@ namespace Mzying2001.MonkeySharp.Core
         /// <summary>
         /// Script to initialize injection.
         /// </summary>
-        private readonly JScript _initInjectionScript = JScript.LoadFromString(ResourceLoader.GetInjectJs());
+        private readonly string _initInjectionScript = ResourceLoader.GetInitJs();
+
+
+        /// <summary>
+        /// Template for script injection.
+        /// </summary>
+        private readonly string _injectScriptTemplate = ResourceLoader.GetInjectJs();
 
 
         /// <inheritdoc/>
@@ -195,25 +202,23 @@ namespace Mzying2001.MonkeySharp.Core
         /// </summary>
         protected virtual string OnMessage(string[] args)
         {
-            if (args.Length == 1)
+            if (args.Length != 0)
             {
-                // TODO: Handle single argument messages.
-            }
-            else if (args.Length == 2)
-            {
-                switch (args[0])
+                string msg = args[0];
+                switch (msg)
                 {
                     case "document-start":
                     case "document-body":
                     case "document-end":
                     case "document-idle":
                     case "context-menu":
-                        OnPreInjectScript(JScriptInfo.ParseRunAt(args[0]), args[1]);
+                        if (args.Length == 2)
+                        {
+                            string url = args[1];
+                            OnPreInjectScript(JScriptInfo.ParseRunAt(msg), url);
+                        }
                         break;
                 }
-            }
-            else
-            {
             }
             return null;
         }
@@ -224,13 +229,23 @@ namespace Mzying2001.MonkeySharp.Core
         /// </summary>
         protected virtual void OnPreInjectScript(JScriptRunAt runAt, string url)
         {
+            var scriptInjectionBuilder = new StringBuilder();
+
             foreach (var script in _scripts)
             {
                 if (script.Info.RunAt == runAt && script.MatchUrl(url))
                 {
-                    InjectScript(script);
+                    scriptInjectionBuilder.AppendLine("try {");
+                    scriptInjectionBuilder.AppendLine($"__MonkeySharp_CurrentScriptId = '{script.ScriptId}';");
+                    scriptInjectionBuilder.AppendLine($"__MonkeySharp.sendMsg(['script-start', __MonkeySharp_CurrentScriptId]);");
+                    scriptInjectionBuilder.AppendLine(script.ScriptText);
+                    scriptInjectionBuilder.AppendLine($"__MonkeySharp.sendMsg(['script-end', __MonkeySharp_CurrentScriptId]);");
+                    scriptInjectionBuilder.AppendLine("} catch (e) { __MonkeySharp.consoleLog(e); }");
                 }
             }
+
+            ExecuteScript(_injectScriptTemplate.Replace(
+                "/*==========REPLACE_CODE_HERE==========*/", scriptInjectionBuilder.ToString()));
         }
 
 
@@ -239,7 +254,7 @@ namespace Mzying2001.MonkeySharp.Core
         /// </summary>
         public void AttachBrowser(object browser)
         {
-            OnAttachBrowser(browser, _messenger, () => OnInjectScript(_initInjectionScript, true));
+            OnAttachBrowser(browser, _messenger, () => ExecuteScript(_initInjectionScript));
         }
 
 
@@ -253,20 +268,9 @@ namespace Mzying2001.MonkeySharp.Core
 
 
         /// <summary>
-        /// Inject script immediately.
+        /// True if the browser is attached.
         /// </summary>
-        public void InjectScript(JScript script)
-        {
-            OnInjectScript(script, false);
-        }
-
-
-        /// <summary>
-        /// Called when injecting a script.
-        /// </summary>
-        /// <param name="script">The script to inject.</param>
-        /// <param name="isInitInjection">True if the script is the initialization script.</param>
-        protected abstract void OnInjectScript(JScript script, bool isInitInjection);
+        public abstract bool IsBrowserAttached { get; }
 
 
         /// <summary>
@@ -289,8 +293,8 @@ namespace Mzying2001.MonkeySharp.Core
 
 
         /// <summary>
-        /// True if the browser is attached.
+        /// Executes a script on the attached browser.
         /// </summary>
-        public abstract bool IsBrowserAttached { get; }
+        public abstract void ExecuteScript(string script);
     }
 }

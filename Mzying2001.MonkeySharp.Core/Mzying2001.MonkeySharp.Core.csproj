@@ -12,6 +12,7 @@
     <RepositoryUrl>https://github.com/Mzying2001/MonkeySharp</RepositoryUrl>
   </PropertyGroup>
   <ItemGroup>
+    <EmbeddedResource Include="Js\Init.js" />
     <EmbeddedResource Include="Js\Inject.js" />
   </ItemGroup>
 </Project>

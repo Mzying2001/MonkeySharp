@@ -1,4 +1,5 @@
 ﻿using Mzying2001.MonkeySharp.Core.Internal;
+using System;
 using System.IO;
 
 namespace Mzying2001.MonkeySharp.Core.Script
@@ -8,6 +9,12 @@ namespace Mzying2001.MonkeySharp.Core.Script
     /// </summary>
     public class JScript
     {
+        /// <summary>
+        /// The ID of the script instance.
+        /// </summary>
+        public string ScriptId { get; }
+
+
         /// <summary>
         /// The text of the script.
         /// </summary>
@@ -25,6 +32,7 @@ namespace Mzying2001.MonkeySharp.Core.Script
         /// </summary>
         private JScript(string script)
         {
+            ScriptId = Guid.NewGuid().ToString();
             ScriptText = script;
             Info = JScriptInfo.Parse(script);
         }
