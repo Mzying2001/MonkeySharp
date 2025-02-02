@@ -218,6 +218,22 @@ namespace Mzying2001.MonkeySharp.Core
                             OnPreInjectScript(JScriptInfo.ParseRunAt(msg), url);
                         }
                         break;
+
+                    case "script-start":
+                        if (args.Length == 2)
+                        {
+                            string scriptId = args[1];
+                            OnScriptStart(scriptId);
+                        }
+                        break;
+
+                    case "script-end":
+                        if (args.Length == 2)
+                        {
+                            string scriptId = args[1];
+                            OnScriptEnd(scriptId);
+                        }
+                        break;
                 }
             }
             return null;
@@ -249,6 +265,22 @@ namespace Mzying2001.MonkeySharp.Core
                 ExecuteScript(_injectScriptTemplate.Replace(
                     "/*==========REPLACE_CODE_HERE==========*/", scriptInjectionBuilder.ToString()));
             }
+        }
+
+
+        /// <summary>
+        /// Called when a script starts.
+        /// </summary>
+        protected virtual void OnScriptStart(string scriptId)
+        {
+        }
+
+
+        /// <summary>
+        /// Called when a script ends.
+        /// </summary>
+        protected virtual void OnScriptEnd(string scriptId)
+        {
         }
 
 
