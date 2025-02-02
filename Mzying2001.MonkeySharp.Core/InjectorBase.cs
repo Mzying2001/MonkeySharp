@@ -322,7 +322,7 @@ namespace Mzying2001.MonkeySharp.Core
                         {
                             string scriptId = args[1];
                             string message = args[2];
-                            TryExecuteApi(msg, scriptId, () => GM_log(message));
+                            TryExecuteApi(msg, scriptId, () => GM_log(scriptId, message));
                         }
                         break;
 
@@ -332,11 +332,23 @@ namespace Mzying2001.MonkeySharp.Core
                         break;
 
                     default:
-                        GM_log($"Unknown message: {msg}");
+                        GM_log($"Unhandled message: {msg}");
                         break;
                 }
             }
             return null;
+        }
+
+
+        /// <summary>
+        /// Logs a message to the console.
+        /// </summary>
+        /// <param name="scriptId">The ID of the script.</param>
+        /// <param name="message">The message to log.</param>
+        protected virtual void GM_log(string scriptId, string message)
+        {
+            string scriptName = GetScriptNameOrId(scriptId);
+            GM_log($"[{scriptName}]\n{message}");
         }
 
 
