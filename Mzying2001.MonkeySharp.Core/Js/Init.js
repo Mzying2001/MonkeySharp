@@ -2,16 +2,12 @@
 
 var __MonkeySharp =
 {
-    consoleLog: function (msg) {
-        console.log("MonkeySharp: " + msg);
-    },
-
     sendMsg: function (msg) {
         // __MonkeySharp_Messenger: injected by MonkeySharp
         if (typeof __MonkeySharp_Messenger != "undefined") {
             return __MonkeySharp_Messenger.sendMessage(msg);
         } else {
-            __MonkeySharp.consoleLog("Messenger is not found.");
+            this.consoleLog("Messenger is not found.");
             return null;
         }
     },
@@ -23,29 +19,33 @@ var __MonkeySharp =
             //Task<T> is not supported by default in JavaScript, so we use sendMessage rather than sendMessageAsync.
             return await __MonkeySharp_AsyncMessenger.sendMessage(msg);
         } else {
-            __MonkeySharp.consoleLog("AsyncMessenger is not found.");
+            this.consoleLog("AsyncMessenger is not found.");
             return null;
         }
     },
 
+    consoleLog: function (msg) {
+        console.log("MonkeySharp: " + msg);
+    },
+
     onDocumentStart: function () {
-        __MonkeySharp.sendMsg(["document-start", window.location.href]);
+        this.sendMsg(["document-start", window.location.href]);
     },
 
     onDocumentBody: function () {
-        __MonkeySharp.sendMsg(["document-body", window.location.href]);
+        this.sendMsg(["document-body", window.location.href]);
     },
 
     onDocumentEnd: function () {
-        __MonkeySharp.sendMsg(["document-end", window.location.href]);
+        this.sendMsg(["document-end", window.location.href]);
     },
 
     onDocumentIdle: function () {
-        __MonkeySharp.sendMsg(["document-idle", window.location.href]);
+        this.sendMsg(["document-idle", window.location.href]);
     },
 
     onContextMenu: function () {
-        __MonkeySharp.sendMsg(["context-menu", window.location.href]);
+        this.sendMsg(["context-menu", window.location.href]);
     }
 };
 
