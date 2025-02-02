@@ -79,6 +79,12 @@ namespace Mzying2001.MonkeySharp.Core
 
 
         /// <summary>
+        /// Interface for data storage, used by GM_getValue and GM_setValue.
+        /// </summary>
+        public IDataStore DataStore { get; set; }
+
+
+        /// <summary>
         /// Constructor.
         /// </summary>
         public InjectorBase()
@@ -318,6 +324,11 @@ namespace Mzying2001.MonkeySharp.Core
                             string message = args[2];
                             TryExecuteApi(msg, scriptId, () => GM_log(message));
                         }
+                        break;
+
+                    case "GM_getValue":
+                    case "GM_setValue":
+                        // TODO:
                         break;
 
                     default:
