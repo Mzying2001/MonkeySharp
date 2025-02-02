@@ -19,7 +19,9 @@ var __MonkeySharp =
     sendMsgAsync: async function (msg) {
         // __MonkeySharp_AsyncMessenger: injected by MonkeySharp
         if (typeof __MonkeySharp_AsyncMessenger != "undefined") {
-            return await __MonkeySharp_AsyncMessenger.sendMessageAsync(msg);
+            //return await __MonkeySharp_AsyncMessenger.sendMessageAsync(msg);
+            //Task<T> is not supported by default in JavaScript, so we use sendMessage rather than sendMessageAsync.
+            return await __MonkeySharp_AsyncMessenger.sendMessage(msg);
         } else {
             __MonkeySharp.consoleLog("AsyncMessenger is not found.");
             return null;
