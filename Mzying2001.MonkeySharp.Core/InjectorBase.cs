@@ -310,9 +310,77 @@ namespace Mzying2001.MonkeySharp.Core
                             OnScriptEnd(scriptId);
                         }
                         break;
+
+                    case "GM_log":
+                        if (args.Length == 3)
+                        {
+                            string scriptId = args[1];
+                            string message = args[2];
+                            TryExecuteApi(msg, scriptId, () => GM_log(message));
+                        }
+                        break;
                 }
             }
             return null;
+        }
+
+
+        /// <summary>
+        /// Logs a message to the console.
+        /// </summary>
+        protected virtual void GM_log(string message)
+        {
+            ExecuteScriptAsync("__MonkeySharp.consoleLog", message);
+        }
+
+
+        /// <summary>
+        /// Verifies the access permission of the specified API.
+        /// </summary>
+        protected virtual bool VerifyApiAccessPermission(string api, string scriptId)
+        {
+            if (TryGetScriptById(scriptId, out JScript script))
+            {
+                return script.Info.Grant.Contains(api);
+            }
+            return false;
+        }
+
+
+        /// <summary>
+        /// Called when the access to an API is denied.
+        /// </summary>
+        protected virtual void OnApiAccessDenied(string api, string scriptId)
+        {
+            string scriptName = GetScriptNameOrId(scriptId);
+            GM_log($"Script '{scriptName}' access to API '{api}' is denied.");
+        }
+
+
+        /// <summary>
+        /// Executes the specified API, or calls <see cref="OnApiAccessDenied"/> if the permission is denied.
+        /// </summary>
+        private bool TryExecuteApi(string api, string scriptId, Action execute)
+        {
+            if (VerifyApiAccessPermission(api, scriptId))
+            {
+                execute?.Invoke();
+                return true;
+            }
+            else
+            {
+                OnApiAccessDenied(api, scriptId);
+                return false;
+            }
+        }
+
+
+        /// <summary>
+        /// Gets the name of the script by ID, or the ID if the script is not found.
+        /// </summary>
+        private string GetScriptNameOrId(string scriptId)
+        {
+            return TryGetScriptById(scriptId, out JScript script) ? script.Info.Name : scriptId;
         }
 
 
