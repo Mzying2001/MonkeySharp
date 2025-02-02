@@ -75,7 +75,7 @@ namespace Mzying2001.MonkeySharp
 
 
         /// <inheritdoc/>
-        public override void ExecuteScript(string script)
+        public override void ExecuteScriptAsync(string script)
         {
             try { _browser.ExecuteScriptAsync(script); }
             catch { }

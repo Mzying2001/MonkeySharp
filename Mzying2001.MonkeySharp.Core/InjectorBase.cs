@@ -262,7 +262,7 @@ namespace Mzying2001.MonkeySharp.Core
 
             if (scriptInjectionBuilder.Length != 0)
             {
-                ExecuteScript(_injectScriptTemplate.Replace(
+                ExecuteScriptAsync(_injectScriptTemplate.Replace(
                     "/*==========REPLACE_CODE_HERE==========*/", scriptInjectionBuilder.ToString()));
             }
         }
@@ -289,7 +289,7 @@ namespace Mzying2001.MonkeySharp.Core
         /// </summary>
         public void AttachBrowser(object browser)
         {
-            OnAttachBrowser(browser, _messenger, () => ExecuteScript(_initInjectionScript));
+            OnAttachBrowser(browser, _messenger, () => ExecuteScriptAsync(_initInjectionScript));
         }
 
 
@@ -328,8 +328,9 @@ namespace Mzying2001.MonkeySharp.Core
 
 
         /// <summary>
-        /// Executes a script on the attached browser.
+        /// Execute javascript in the context of the attached browser's main frame asynchronously.
         /// </summary>
-        public abstract void ExecuteScript(string script);
+        /// <param name="script">The script to execute.</param>
+        public abstract void ExecuteScriptAsync(string script);
     }
 }
