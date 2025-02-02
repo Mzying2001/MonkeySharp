@@ -21,6 +21,24 @@ namespace Mzying2001.MonkeySharp.Core
 
 
         /// <summary>
+        /// Lock object.
+        /// </summary>
+        private readonly object _syncLock = new object();
+
+
+        /// <summary>
+        /// True if <see cref="_scripts"/> has changed.
+        /// </summary>
+        private volatile bool _scriptListChanged = false;
+
+
+        /// <summary>
+        /// Stores the scripts by ID.
+        /// </summary>
+        private readonly Dictionary<string, JScript> _scriptMap = new Dictionary<string, JScript>();
+
+
+        /// <summary>
         /// List of scripts to inject.
         /// </summary>
         private readonly List<JScript> _scripts = new List<JScript>();
@@ -137,28 +155,44 @@ namespace Mzying2001.MonkeySharp.Core
         /// <inheritdoc/>
         public void Insert(int index, JScript item)
         {
-            ((IList<JScript>)_scripts).Insert(index, item);
+            lock (_syncLock)
+            {
+                _scriptListChanged = true;
+                ((IList<JScript>)_scripts).Insert(index, item);
+            }
         }
 
 
         /// <inheritdoc/>
         public void RemoveAt(int index)
         {
-            ((IList<JScript>)_scripts).RemoveAt(index);
+            lock (_syncLock)
+            {
+                _scriptListChanged = true;
+                ((IList<JScript>)_scripts).RemoveAt(index);
+            }
         }
 
 
         /// <inheritdoc/>
         public void Add(JScript item)
         {
-            ((ICollection<JScript>)_scripts).Add(item);
+            lock (_syncLock)
+            {
+                _scriptListChanged = true;
+                ((ICollection<JScript>)_scripts).Add(item);
+            }
         }
 
 
         /// <inheritdoc/>
         public void Clear()
         {
-            ((ICollection<JScript>)_scripts).Clear();
+            lock (_syncLock)
+            {
+                _scriptListChanged = true;
+                ((ICollection<JScript>)_scripts).Clear();
+            }
         }
 
 
@@ -179,7 +213,11 @@ namespace Mzying2001.MonkeySharp.Core
         /// <inheritdoc/>
         public bool Remove(JScript item)
         {
-            return ((ICollection<JScript>)_scripts).Remove(item);
+            lock (_syncLock)
+            {
+                _scriptListChanged = true;
+                return ((ICollection<JScript>)_scripts).Remove(item);
+            }
         }
 
 
@@ -194,6 +232,44 @@ namespace Mzying2001.MonkeySharp.Core
         IEnumerator IEnumerable.GetEnumerator()
         {
             return ((IEnumerable)_scripts).GetEnumerator();
+        }
+
+
+        /// <summary>
+        /// Tries to get the script by ID.
+        /// </summary>
+        public bool TryGetScriptById(string scriptId, out JScript result)
+        {
+            if (_scriptListChanged)
+            {
+                lock (_syncLock)
+                {
+                    if (_scriptListChanged)
+                    {
+                        _scriptMap.Clear();
+                        for (int i = 0; i < _scripts.Count; i++)
+                            _scriptMap.Add(_scripts[i].ScriptId, _scripts[i]);
+                        _scriptListChanged = false;
+                    }
+                }
+            }
+            return _scriptMap.TryGetValue(scriptId, out result);
+        }
+
+
+        /// <summary>
+        /// Gets the script by ID.
+        /// </summary>
+        public JScript GetScriptById(string scriptId)
+        {
+            if (TryGetScriptById(scriptId, out JScript result))
+            {
+                return result;
+            }
+            else
+            {
+                throw new KeyNotFoundException($"Script with ID {scriptId} not found.");
+            }
         }
 
 
@@ -245,9 +321,15 @@ namespace Mzying2001.MonkeySharp.Core
         /// </summary>
         protected virtual void OnInjectScripts(JScriptRunAt runAt, string url)
         {
+            List<JScript> scripts;
+            lock (_syncLock)
+            {
+                scripts = new List<JScript>(_scripts);
+            }
+
             var scriptInjectionBuilder = new StringBuilder();
 
-            foreach (JScript script in _scripts)
+            foreach (JScript script in scripts)
             {
                 if (script.Info.RunAt == runAt && script.MatchUrl(url))
                 {
