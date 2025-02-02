@@ -67,7 +67,8 @@ namespace Mzying2001.MonkeySharp
             if (_browser != null)
             {
                 _browser.FrameLoadStart -= BrowserFrameLoadStartHandler;
-                _browser.JavascriptObjectRepository.UnRegisterAll();
+                _browser.JavascriptObjectRepository.UnRegister("__MonkeySharp_Messenger");
+                _browser.JavascriptObjectRepository.UnRegister("__MonkeySharp_AsyncMessenger");
                 _browser = null;
                 _callback = null;
             }
