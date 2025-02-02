@@ -319,6 +319,10 @@ namespace Mzying2001.MonkeySharp.Core
                             TryExecuteApi(msg, scriptId, () => GM_log(message));
                         }
                         break;
+
+                    default:
+                        GM_log($"Unknown message: {msg}");
+                        break;
                 }
             }
             return null;
@@ -328,6 +332,7 @@ namespace Mzying2001.MonkeySharp.Core
         /// <summary>
         /// Logs a message to the console.
         /// </summary>
+        /// <param name="message">The message to log.</param>
         protected virtual void GM_log(string message)
         {
             ExecuteScriptAsync("__MonkeySharp.consoleLog", message);
