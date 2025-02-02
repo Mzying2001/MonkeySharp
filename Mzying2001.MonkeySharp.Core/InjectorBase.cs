@@ -215,7 +215,7 @@ namespace Mzying2001.MonkeySharp.Core
                         if (args.Length == 2)
                         {
                             string url = args[1];
-                            OnPreInjectScript(JScriptInfo.ParseRunAt(msg), url);
+                            OnInjectScripts(JScriptInfo.ParseRunAt(msg), url);
                         }
                         break;
 
@@ -241,13 +241,13 @@ namespace Mzying2001.MonkeySharp.Core
 
 
         /// <summary>
-        /// Called before injecting scripts.
+        /// Injects scripts for the specified run-at and url.
         /// </summary>
-        protected virtual void OnPreInjectScript(JScriptRunAt runAt, string url)
+        protected virtual void OnInjectScripts(JScriptRunAt runAt, string url)
         {
             var scriptInjectionBuilder = new StringBuilder();
 
-            foreach (var script in _scripts)
+            foreach (JScript script in _scripts)
             {
                 if (script.Info.RunAt == runAt && script.MatchUrl(url))
                 {
