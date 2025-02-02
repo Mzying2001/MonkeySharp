@@ -81,5 +81,13 @@ namespace Mzying2001.MonkeySharp
             try { _browser.ExecuteScriptAsync(script); }
             catch { }
         }
+
+
+        /// <inheritdoc/>
+        public override void ExecuteScriptAsync(string function, params object[] args)
+        {
+            try { _browser.ExecuteScriptAsync(function, args); }
+            catch { }
+        }
     }
 }

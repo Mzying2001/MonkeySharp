@@ -414,5 +414,13 @@ namespace Mzying2001.MonkeySharp.Core
         /// </summary>
         /// <param name="script">The script to execute.</param>
         public abstract void ExecuteScriptAsync(string script);
+
+
+        /// <summary>
+        /// Execute javascript in the context of the attached browser's main frame asynchronously.
+        /// </summary>
+        /// <param name="function">The function to execute.</param>
+        /// <param name="args">The arguments to pass to the function.</param>
+        public abstract void ExecuteScriptAsync(string function, params object[] args);
     }
 }
