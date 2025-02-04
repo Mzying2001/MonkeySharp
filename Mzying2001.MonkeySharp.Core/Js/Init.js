@@ -43,9 +43,9 @@ var __MonkeySharp =
 
     consoleLog: function (msg, isJson) {
         if (typeof isJson === "undefined" || isJson === false) {
-            console.log("MonkeySharp:", msg);
+            console.log("[MonkeySharp]", msg);
         } else {
-            console.log("MonkeySharp:", this.deserialize(msg));
+            console.log("[MonkeySharp]", this.deserialize(msg));
         }
     },
 
