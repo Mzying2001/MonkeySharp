@@ -281,6 +281,8 @@ namespace Mzying2001.MonkeySharp.Core
         /// </summary>
         protected virtual string OnMessage(string[] args)
         {
+            string result = null;
+
             if (args.Length == 2)
             {
                 string msg = args[0];
@@ -335,7 +337,8 @@ namespace Mzying2001.MonkeySharp.Core
                         break;
                 }
             }
-            return null;
+
+            return result;
         }
 
 
