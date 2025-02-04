@@ -1,11 +1,13 @@
 ﻿using Mzying2001.MonkeySharp.Core.Internal;
 using Mzying2001.MonkeySharp.Core.Messaging;
+using Mzying2001.MonkeySharp.Core.Model;
 using Mzying2001.MonkeySharp.Core.Script;
 using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 
 namespace Mzying2001.MonkeySharp.Core
 {
@@ -136,18 +138,13 @@ namespace Mzying2001.MonkeySharp.Core
         /// </summary>
         private void ReceivedMessageHandler(object sender, MessageEventArgs e)
         {
-            List<string> args = new List<string>();
+            var args = new List<string>();
 
-            if (e.Message is IList<object> objs)
-            {
-                args.AddRange(objs.Select(item => item?.ToString() ?? string.Empty));
-            }
-            else
-            {
-                args.Add(e.Message?.ToString() ?? string.Empty);
-            }
+            if (e.Message is IList<object> list)
+                args.AddRange(list.Select(item => item?.ToString()));
+            else args.Add(e.Message?.ToString());
 
-            e.Result = OnMessage(args.ToArray()) ?? string.Empty;
+            e.Result = OnMessage(args.ToArray());
         }
 
 
@@ -284,9 +281,11 @@ namespace Mzying2001.MonkeySharp.Core
         /// </summary>
         protected virtual string OnMessage(string[] args)
         {
-            if (args.Length != 0)
+            if (args.Length == 2)
             {
                 string msg = args[0];
+                string param = args[1];
+
                 switch (msg)
                 {
                     case "document-start":
@@ -294,35 +293,35 @@ namespace Mzying2001.MonkeySharp.Core
                     case "document-end":
                     case "document-idle":
                     case "context-menu":
-                        if (args.Length == 2)
+                        if (param != null)
                         {
-                            string url = args[1];
+                            var url = JsonSerializer.Deserialize<string>(param);
                             OnInjectScripts(JScriptInfo.ParseRunAt(msg), url);
                         }
                         break;
 
                     case "script-start":
-                        if (args.Length == 2)
+                        if (param != null)
                         {
-                            string scriptId = args[1];
+                            var scriptId = JsonSerializer.Deserialize<string>(param);
                             OnScriptStart(scriptId);
                         }
                         break;
 
                     case "script-end":
-                        if (args.Length == 2)
+                        if (param != null)
                         {
-                            string scriptId = args[1];
+                            var scriptId = JsonSerializer.Deserialize<string>(param);
                             OnScriptEnd(scriptId);
                         }
                         break;
 
                     case "GM_log":
-                        if (args.Length == 3)
+                        if (param != null)
                         {
-                            string scriptId = args[1];
-                            string message = args[2];
-                            TryExecuteApi(msg, scriptId, () => GM_log(scriptId, message));
+                            var apiParam = JsonSerializer.Deserialize<ApiParam>(param);
+                            TryExecuteApi(msg, apiParam.ScriptId,
+                                () => GM_log(apiParam.ScriptId, apiParam.JsonData));
                         }
                         break;
 
@@ -332,7 +331,7 @@ namespace Mzying2001.MonkeySharp.Core
                         break;
 
                     default:
-                        GM_log($"Unhandled message: {msg}");
+                        ConsoleLog($"Unhandled message: {msg}");
                         break;
                 }
             }
@@ -347,8 +346,7 @@ namespace Mzying2001.MonkeySharp.Core
         /// <param name="message">The message to log.</param>
         protected virtual void GM_log(string scriptId, string message)
         {
-            string scriptName = GetScriptNameOrId(scriptId);
-            GM_log($"[{scriptName}]\n{message}");
+            ConsoleLog(message, true);
         }
 
 
@@ -356,9 +354,10 @@ namespace Mzying2001.MonkeySharp.Core
         /// Logs a message to the console.
         /// </summary>
         /// <param name="message">The message to log.</param>
-        protected virtual void GM_log(string message)
+        /// <param name="isJson">True if the message is JSON string.</param>
+        protected void ConsoleLog(string message, bool isJson = false)
         {
-            ExecuteScriptAsync("__MonkeySharp.consoleLog", message);
+            ExecuteScriptAsync("__MonkeySharp.consoleLog", message, isJson);
         }
 
 
@@ -381,7 +380,7 @@ namespace Mzying2001.MonkeySharp.Core
         protected virtual void OnApiAccessDenied(string api, string scriptId)
         {
             string scriptName = GetScriptNameOrId(scriptId);
-            GM_log($"Script '{scriptName}' access to API '{api}' is denied.");
+            ConsoleLog($"Script '{scriptName}' access to API '{api}' is denied.");
         }
 
 
@@ -431,9 +430,9 @@ namespace Mzying2001.MonkeySharp.Core
                 {
                     scriptInjectionBuilder.AppendLine("try {");
                     scriptInjectionBuilder.AppendLine($"__MonkeySharp_CurrentScriptId = '{script.ScriptId}';");
-                    scriptInjectionBuilder.AppendLine($"__MonkeySharp.sendMsg(['script-start', __MonkeySharp_CurrentScriptId]);");
+                    scriptInjectionBuilder.AppendLine($"__MonkeySharp.sendMsg('script-start', __MonkeySharp_CurrentScriptId);");
                     scriptInjectionBuilder.AppendLine(script.ScriptText);
-                    scriptInjectionBuilder.AppendLine($"__MonkeySharp.sendMsg(['script-end', __MonkeySharp_CurrentScriptId]);");
+                    scriptInjectionBuilder.AppendLine($"__MonkeySharp.sendMsg('script-end', __MonkeySharp_CurrentScriptId);");
                     scriptInjectionBuilder.AppendLine("} catch (e) { __MonkeySharp.consoleLog(e); }");
                 }
             }
