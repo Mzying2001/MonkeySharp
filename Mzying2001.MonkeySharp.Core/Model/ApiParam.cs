@@ -1,4 +1,5 @@
-﻿using System.Text.Json.Serialization;
+﻿using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Mzying2001.MonkeySharp.Core.Model
 {
@@ -26,5 +27,23 @@ namespace Mzying2001.MonkeySharp.Core.Model
         /// </summary>
         [JsonPropertyName("data")]
         public string Data { get; set; }
+
+
+        /// <summary>
+        /// Get the data in the specified type.
+        /// </summary>
+        public T GetData<T>()
+        {
+            if (Data == null)
+            {
+                return default;
+            }
+            else
+            {
+                return typeof(T) == typeof(string) && !IsJson
+                    ? (T)(object)Data
+                    : JsonSerializer.Deserialize<T>(Data);
+            }
+        }
     }
 }
