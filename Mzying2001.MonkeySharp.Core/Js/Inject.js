@@ -7,11 +7,19 @@
     // the parameter send to C#
     class __MonkeySharp_ApiParam {
         constructor(param) {
-            if (typeof param === "undefined") {
+            var type = typeof param;
+            if (type === "undefined") {
                 throw new Error("param is required");
-            } else {
+            }
+            if (type === "string") {
                 this.scriptId = __MonkeySharp_CurrentScriptId;
-                this.jsonData = JSON.stringify(param);
+                this.isJson = false;
+                this.data = param;
+            }
+            else {
+                this.scriptId = __MonkeySharp_CurrentScriptId;
+                this.isJson = true;
+                this.data = JSON.stringify(param);
             }
         }
     }

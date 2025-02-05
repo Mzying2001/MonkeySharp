@@ -15,9 +15,16 @@ namespace Mzying2001.MonkeySharp.Core.Model
 
 
         /// <summary>
-        /// Parameters passed from the API call.
+        /// Indicates whether the data is in JSON format.
         /// </summary>
-        [JsonPropertyName("jsonData")]
-        public string JsonData { get; set; }
+        [JsonPropertyName("isJson")]
+        public bool IsJson { get; set; }
+
+
+        /// <summary>
+        /// The data passed from the API call.
+        /// </summary>
+        [JsonPropertyName("data")]
+        public string Data { get; set; }
     }
 }

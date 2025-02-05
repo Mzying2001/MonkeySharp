@@ -322,8 +322,7 @@ namespace Mzying2001.MonkeySharp.Core
                         if (param != null)
                         {
                             var apiParam = JsonSerializer.Deserialize<ApiParam>(param);
-                            TryExecuteApi(msg, apiParam.ScriptId,
-                                () => GM_log(apiParam.ScriptId, apiParam.JsonData));
+                            TryExecuteApi(msg, apiParam.ScriptId, () => GM_log(apiParam));
                         }
                         break;
 
@@ -345,11 +344,10 @@ namespace Mzying2001.MonkeySharp.Core
         /// <summary>
         /// Logs a message to the console.
         /// </summary>
-        /// <param name="scriptId">The ID of the script.</param>
-        /// <param name="message">The message to log.</param>
-        protected virtual void GM_log(string scriptId, string message)
+        /// <param name="apiParam">The parameters from the API call.</param>
+        protected virtual void GM_log(ApiParam apiParam)
         {
-            ConsoleLog(message, true);
+            ConsoleLog(apiParam.Data, apiParam.IsJson);
         }
 
 
