@@ -24,9 +24,34 @@
         }
     }
 
+    // represents a js object
+    class __MonkeySharp_JsObject {
+        constructor(obj) {
+            this.type = typeof obj;
+            this.json = __MonkeySharp.serialize(obj);
+        }
+    }
+
     // logs a message to the console
     function GM_log(message) {
         __MonkeySharp.sendMsg("GM_log", new __MonkeySharp_ApiParam(message));
+    }
+
+    // set the value of a specific key in the userscript's storage
+    function GM_setValue(key, value) {
+        if (typeof key !== "string") {
+            throw new Error("key must be a string");
+        }
+        __MonkeySharp.sendMsg("GM_setValue",
+            new __MonkeySharp_ApiParam({ key: key, value: new __MonkeySharp_JsObject(value) }));
+    }
+
+    // retrieve the value of a specific key in the userscript's storage
+    function GM_getValue(key, defaultValue) {
+        if (typeof key !== "string") {
+            throw new Error("key must be a string");
+        }
+        return __MonkeySharp.sendMsg("GM_getValue", new __MonkeySharp_ApiParam(key));
     }
 
     /*==========REPLACE_CODE_HERE==========*/

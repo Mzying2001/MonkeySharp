@@ -279,6 +279,8 @@ namespace Mzying2001.MonkeySharp.Core
         /// <summary>
         /// Called when a message is received from javascript.
         /// </summary>
+        /// <param name="args">The arguments from the message.</param>
+        /// <returns>The JavaScript object in JSON format, or null if result is undefined.</returns>
         protected virtual string OnMessage(string[] args)
         {
             string result = null;
@@ -327,8 +329,19 @@ namespace Mzying2001.MonkeySharp.Core
                         break;
 
                     case "GM_getValue":
+                        if (param != null)
+                        {
+                            var apiParam = JsonSerializer.Deserialize<ApiParam>(param);
+                            TryExecuteApi(msg, apiParam.ScriptId, () => result = GM_getValue(apiParam));
+                        }
+                        break;
+
                     case "GM_setValue":
-                        // TODO:
+                        if (param != null)
+                        {
+                            var apiParam = JsonSerializer.Deserialize<ApiParam>(param);
+                            TryExecuteApi(msg, apiParam.ScriptId, () => GM_setValue(apiParam));
+                        }
                         break;
 
                     default:
@@ -348,6 +361,47 @@ namespace Mzying2001.MonkeySharp.Core
         protected virtual void GM_log(ApiParam apiParam)
         {
             ConsoleLog(apiParam.Data, apiParam.IsJson);
+        }
+
+
+        /// <summary>
+        /// Retrieves the value of a specific key from the userscript's storage.
+        /// </summary>
+        /// <param name="apiParam">The parameters from the API call.</param>
+        /// <returns>The JavaScript object in JSON format, or null if result is undefined.</returns>
+        protected virtual string GM_getValue(ApiParam apiParam)
+        {
+            IDataStore service = DataStore ?? MemDataStore.Instance;
+            service.Retrieve(GetDataStoreContext(apiParam.ScriptId), apiParam.GetData<string>(), out string value);
+            return value;
+        }
+
+
+        /// <summary>
+        /// Sets the value of a specific key in the userscript's storage.
+        /// </summary>
+        /// <param name="apiParam">The parameters from the API call.</param>
+        protected virtual void GM_setValue(ApiParam apiParam)
+        {
+            StorePair pair = apiParam.GetData<StorePair>();
+            IDataStore service = DataStore ?? MemDataStore.Instance;
+            service.Store(GetDataStoreContext(apiParam.ScriptId), pair.Key, pair.Value.Json);
+        }
+
+
+        /// <summary>
+        /// Gets the data store context for the specified script ID.
+        /// </summary>
+        protected string GetDataStoreContext(string scriptId)
+        {
+            if (TryGetScriptById(scriptId, out JScript script))
+            {
+                return $"{script.Info.Namespace}_{script.Info.Name}";
+            }
+            else
+            {
+                return scriptId;
+            }
         }
 
 
