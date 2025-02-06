@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Linq;
 
 namespace Mzying2001.MonkeySharp.Core.Internal
 {
@@ -19,6 +20,18 @@ namespace Mzying2001.MonkeySharp.Core.Internal
         /// Lock object.
         /// </summary>
         private readonly object _syncLock = new object();
+
+
+        /// <inheritdoc />
+        public string[] ListKeys(string context)
+        {
+            var dic = GetContext(context);
+
+            lock (_syncLock)
+            {
+                return dic.Keys.ToArray();
+            }
+        }
 
 
         /// <inheritdoc />

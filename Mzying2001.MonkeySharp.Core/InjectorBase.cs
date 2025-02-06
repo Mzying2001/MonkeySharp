@@ -361,6 +361,14 @@ namespace Mzying2001.MonkeySharp.Core
                         }
                         break;
 
+                    case "GM_listValues":
+                        if (param != null)
+                        {
+                            var apiParam = JsonSerializer.Deserialize<ApiParam>(param);
+                            TryExecuteApi(msg, apiParam.ScriptId, () => result = JsonSerializer.Serialize(GM_listValues(apiParam)));
+                        }
+                        break;
+
                     default:
                         ConsoleLog($"Unhandled message: {msg}");
                         break;
@@ -415,6 +423,18 @@ namespace Mzying2001.MonkeySharp.Core
         {
             IDataStore service = DataStore ?? MemDataStore.Instance;
             service.Remove(GetDataStoreContext(apiParam.ScriptId), apiParam.GetData<string>());
+        }
+
+
+        /// <summary>
+        /// Retrieves an array of all keys in the userscript's storage.
+        /// </summary>
+        /// <param name="apiParam">The parameters from the API call.</param>
+        /// <returns>An array of keys, if no key found, returns an empty array.</returns>
+        protected virtual string[] GM_listValues(ApiParam apiParam)
+        {
+            IDataStore service = DataStore ?? MemDataStore.Instance;
+            return service.ListKeys(GetDataStoreContext(apiParam.ScriptId));
         }
 
 

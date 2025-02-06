@@ -70,6 +70,11 @@
         __MonkeySharp.sendMsg("GM_deleteValue", new __MonkeySharp_ApiParam(key));
     }
 
+    // retrieve the list of keys in the userscript's storage
+    function GM_listValues() {
+        return __MonkeySharp.sendMsg("GM_listValues", new __MonkeySharp_ApiParam(null));
+    }
+
     // the sandbox object
     var __MonkeySharp_Sandbox = {
         __main: function () {
