@@ -8,7 +8,8 @@
         /// <summary>
         /// Add or update data.
         /// </summary>
-        void Store(string context, string key, string value);
+        /// <returns>Returns true if data stored successfully.</returns>
+        bool Store(string context, string key, string value);
 
 
         /// <summary>

@@ -59,7 +59,7 @@ namespace Mzying2001.MonkeySharp.Core.Internal
 
 
         /// <inheritdoc />
-        public void Store(string context, string key, string value)
+        public bool Store(string context, string key, string value)
         {
             var dic = GetContext(context);
 
@@ -74,6 +74,7 @@ namespace Mzying2001.MonkeySharp.Core.Internal
                     dic.Add(key, value);
                 }
             }
+            return true;
         }
 
 
