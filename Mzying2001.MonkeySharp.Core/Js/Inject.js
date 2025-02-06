@@ -39,6 +39,11 @@
         }
     }
 
+    // gets the real window object
+    function __MonkeySharp_GetUnsafeWindow() {
+        return __MonkeySharp.sendMsg("unsafeWindow", __MonkeySharp_CurrentScriptId) ? window : undefined;
+    }
+
     // logs a message to the console
     function GM_log(message) {
         __MonkeySharp.sendMsg("GM_log",

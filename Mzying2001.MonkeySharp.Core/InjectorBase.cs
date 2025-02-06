@@ -320,6 +320,15 @@ namespace Mzying2001.MonkeySharp.Core
                         }
                         break;
 
+                    case "unsafeWindow":
+                        if (param != null)
+                        {
+                            var scriptId = JsonSerializer.Deserialize<string>(param);
+                            if (TryGetScriptById(scriptId, out JScript script))
+                                result = JsonSerializer.Serialize(script.Info.Grant.Contains(msg));
+                        }
+                        break;
+
                     case "GM_log":
                         if (param != null)
                         {
@@ -503,12 +512,14 @@ namespace Mzying2001.MonkeySharp.Core
             {
                 if (script.Info.RunAt == runAt && script.MatchUrl(url))
                 {
-                    scriptInjectionBuilder.AppendLine("try {");
                     scriptInjectionBuilder.AppendLine($"__MonkeySharp_CurrentScriptId = '{script.ScriptId}';");
                     scriptInjectionBuilder.AppendLine($"__MonkeySharp.sendMsg('script-start', __MonkeySharp_CurrentScriptId);");
+                    scriptInjectionBuilder.AppendLine("try {");
+                    if (script.Info.Grant.Contains("unsafeWindow"))
+                        scriptInjectionBuilder.AppendLine("const unsafeWindow = __MonkeySharp_GetUnsafeWindow();");
                     scriptInjectionBuilder.AppendLine(script.ScriptText);
-                    scriptInjectionBuilder.AppendLine($"__MonkeySharp.sendMsg('script-end', __MonkeySharp_CurrentScriptId);");
                     scriptInjectionBuilder.AppendLine("} catch (e) { __MonkeySharp.consoleLog(e); }");
+                    scriptInjectionBuilder.AppendLine($"__MonkeySharp.sendMsg('script-end', __MonkeySharp_CurrentScriptId);");
                 }
             }
 
