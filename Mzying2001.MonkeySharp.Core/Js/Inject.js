@@ -41,7 +41,8 @@
 
     // logs a message to the console
     function GM_log(message) {
-        __MonkeySharp.sendMsg("GM_log", new __MonkeySharp_ApiParam(message));
+        __MonkeySharp.sendMsg("GM_log",
+            new __MonkeySharp_ApiParam(new __MonkeySharp_JsObject(message)));
     }
 
     // set the value of a specific key in the userscript's storage

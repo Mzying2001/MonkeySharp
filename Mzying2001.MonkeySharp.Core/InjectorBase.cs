@@ -368,7 +368,8 @@ namespace Mzying2001.MonkeySharp.Core
         /// <param name="apiParam">The parameters from the API call.</param>
         protected virtual void GM_log(ApiParam apiParam)
         {
-            ConsoleLog(apiParam.Data, apiParam.IsJson);
+            JsObject message = apiParam.GetData<JsObject>();
+            ConsoleLog(message.Json, true);
         }
 
 
