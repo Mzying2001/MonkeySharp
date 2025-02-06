@@ -67,20 +67,24 @@ namespace Mzying2001.MonkeySharp.Core.Script
         /// <summary>
         /// Load script from file.
         /// </summary>
-        public static JScript LoadFromFile(string fileName)
+        /// <param name="fileName">The path of the script file.</param>
+        /// <param name="verifier">The verifier to verify the script.</param>
+        public static JScript LoadFromFile(string fileName, IScriptVerifier verifier = null)
         {
-            ThrowHelper.ThrowIfArgumentNull(fileName, nameof(fileName));
             ThrowHelper.ThrowIfFileNotFound(fileName);
-            return new JScript(File.ReadAllText(fileName));
+            return LoadFromString(File.ReadAllText(fileName), verifier);
         }
 
 
         /// <summary>
         /// Load script from string.
         /// </summary>
-        public static JScript LoadFromString(string script)
+        /// <param name="script">The script text.</param>
+        /// <param name="verifier">The verifier to verify the script.</param>
+        public static JScript LoadFromString(string script, IScriptVerifier verifier = null)
         {
             ThrowHelper.ThrowIfArgumentNull(script, nameof(script));
+            // TODO: Verify the script
             return new JScript(script);
         }
     }
