@@ -344,6 +344,14 @@ namespace Mzying2001.MonkeySharp.Core
                         }
                         break;
 
+                    case "GM_deleteValue":
+                        if (param != null)
+                        {
+                            var apiParam = JsonSerializer.Deserialize<ApiParam>(param);
+                            TryExecuteApi(msg, apiParam.ScriptId, () => GM_deleteValue(apiParam));
+                        }
+                        break;
+
                     default:
                         ConsoleLog($"Unhandled message: {msg}");
                         break;
@@ -386,6 +394,17 @@ namespace Mzying2001.MonkeySharp.Core
             StorePair pair = apiParam.GetData<StorePair>();
             IDataStore service = DataStore ?? MemDataStore.Instance;
             service.Store(GetDataStoreContext(apiParam.ScriptId), pair.Key, pair.Value.Json);
+        }
+
+
+        /// <summary>
+        /// Deletes a key from the userscript's storage.
+        /// </summary>
+        /// <param name="apiParam">The parameters from the API call.</param>
+        protected virtual void GM_deleteValue(ApiParam apiParam)
+        {
+            IDataStore service = DataStore ?? MemDataStore.Instance;
+            service.Remove(GetDataStoreContext(apiParam.ScriptId), apiParam.GetData<string>());
         }
 
 

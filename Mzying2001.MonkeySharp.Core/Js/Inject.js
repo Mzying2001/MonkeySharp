@@ -54,5 +54,13 @@
         return __MonkeySharp.sendMsg("GM_getValue", new __MonkeySharp_ApiParam(key));
     }
 
+    // delete a key from the userscript's storage
+    function GM_deleteValue(key) {
+        if (typeof key !== "string") {
+            throw new Error("key must be a string");
+        }
+        __MonkeySharp.sendMsg("GM_deleteValue", new __MonkeySharp_ApiParam(key));
+    }
+
     /*==========REPLACE_CODE_HERE==========*/
 })();
