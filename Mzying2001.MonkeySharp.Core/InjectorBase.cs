@@ -534,15 +534,17 @@ namespace Mzying2001.MonkeySharp.Core
                 {
                     // Script start
                     scriptInjectionBuilder.AppendLine($"__MonkeySharp_CurrentScriptId = '{script.ScriptId}';");
-                    scriptInjectionBuilder.AppendLine($"__MonkeySharp.sendMsg('script-start', __MonkeySharp_CurrentScriptId);");
+                    scriptInjectionBuilder.AppendLine("__MonkeySharp.sendMsg('script-start', __MonkeySharp_CurrentScriptId);");
                     scriptInjectionBuilder.AppendLine("try {");
 
                     // Add unsafeWindow if needed
                     if (script.Info.Grant.Contains("unsafeWindow"))
                         scriptInjectionBuilder.AppendLine("const unsafeWindow = __MonkeySharp_GetUnsafeWindow();");
 
-                    // Prevent script from accessing __MonkeySharp_CurrentScriptId and __MonkeySharp
+                    // Prevent script from accessing internal objects
                     scriptInjectionBuilder.AppendLine("const __MonkeySharp_CurrentScriptId = null;");
+                    scriptInjectionBuilder.AppendLine("const __MonkeySharp_AsyncMessenger = null;");
+                    scriptInjectionBuilder.AppendLine("const __MonkeySharp_Messenger = null;");
                     scriptInjectionBuilder.AppendLine("const __MonkeySharp = null;");
 
                     // Add the script
