@@ -75,8 +75,24 @@
         return __MonkeySharp.sendMsg("GM_listValues", new __MonkeySharp_ApiParam(null));
     }
 
+    // the async version of api functions
+    const GM = {
+        setValue: async function (key, value) {
+            GM_setValue(key, value);
+        },
+        getValue: async function (key, defaultValue) {
+            return GM_getValue(key, defaultValue);
+        },
+        deleteValue: async function (key) {
+            GM_deleteValue(key);
+        },
+        listValues: async function () {
+            return GM_listValues();
+        }
+    };
+
     // the sandbox object
-    var __MonkeySharp_Sandbox = {
+    const __MonkeySharp_Sandbox = {
         __main: function () {
             const window = this;
             /*==========REPLACE_CODE_HERE==========*/
