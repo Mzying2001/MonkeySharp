@@ -512,12 +512,23 @@ namespace Mzying2001.MonkeySharp.Core
             {
                 if (script.Info.RunAt == runAt && script.MatchUrl(url))
                 {
+                    // Script start
                     scriptInjectionBuilder.AppendLine($"__MonkeySharp_CurrentScriptId = '{script.ScriptId}';");
                     scriptInjectionBuilder.AppendLine($"__MonkeySharp.sendMsg('script-start', __MonkeySharp_CurrentScriptId);");
                     scriptInjectionBuilder.AppendLine("try {");
+
+                    // Add unsafeWindow if needed
                     if (script.Info.Grant.Contains("unsafeWindow"))
                         scriptInjectionBuilder.AppendLine("const unsafeWindow = __MonkeySharp_GetUnsafeWindow();");
+
+                    // Prevent script from accessing __MonkeySharp_CurrentScriptId and __MonkeySharp
+                    scriptInjectionBuilder.AppendLine("const __MonkeySharp_CurrentScriptId = null;");
+                    scriptInjectionBuilder.AppendLine("const __MonkeySharp = null;");
+
+                    // Add the script
                     scriptInjectionBuilder.AppendLine(script.ScriptText);
+
+                    // Script end
                     scriptInjectionBuilder.AppendLine("} catch (e) { __MonkeySharp.consoleLog(e); }");
                     scriptInjectionBuilder.AppendLine($"__MonkeySharp.sendMsg('script-end', __MonkeySharp_CurrentScriptId);");
                 }
