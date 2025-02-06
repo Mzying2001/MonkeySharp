@@ -65,5 +65,14 @@
         __MonkeySharp.sendMsg("GM_deleteValue", new __MonkeySharp_ApiParam(key));
     }
 
-    /*==========REPLACE_CODE_HERE==========*/
+    // the sandbox object
+    var __MonkeySharp_Sandbox = {
+        __main: function () {
+            const window = this;
+            /*==========REPLACE_CODE_HERE==========*/
+        }
+    };
+
+    // executes script in the sandbox
+    __MonkeySharp_Sandbox.__main();
 })();
