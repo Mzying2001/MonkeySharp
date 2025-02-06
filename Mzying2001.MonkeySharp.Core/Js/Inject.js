@@ -32,6 +32,13 @@
         }
     }
 
+    // throws an error if the value is not a string
+    function __MonkeySharp_ThrowIfNotString(value, name) {
+        if (typeof value !== "string") {
+            throw new Error(name + " must be a string");
+        }
+    }
+
     // logs a message to the console
     function GM_log(message) {
         __MonkeySharp.sendMsg("GM_log", new __MonkeySharp_ApiParam(message));
@@ -39,26 +46,21 @@
 
     // set the value of a specific key in the userscript's storage
     function GM_setValue(key, value) {
-        if (typeof key !== "string") {
-            throw new Error("key must be a string");
-        }
+        __MonkeySharp_ThrowIfNotString(key, "key");
         __MonkeySharp.sendMsg("GM_setValue",
             new __MonkeySharp_ApiParam({ key: key, value: new __MonkeySharp_JsObject(value) }));
     }
 
     // retrieve the value of a specific key in the userscript's storage
     function GM_getValue(key, defaultValue) {
-        if (typeof key !== "string") {
-            throw new Error("key must be a string");
-        }
-        return __MonkeySharp.sendMsg("GM_getValue", new __MonkeySharp_ApiParam(key));
+        __MonkeySharp_ThrowIfNotString(key, "key");
+        var result = __MonkeySharp.sendMsg("GM_getValue", new __MonkeySharp_ApiParam(key));
+        return typeof result === "undefined" ? defaultValue : result;
     }
 
     // delete a key from the userscript's storage
     function GM_deleteValue(key) {
-        if (typeof key !== "string") {
-            throw new Error("key must be a string");
-        }
+        __MonkeySharp_ThrowIfNotString(key, "key");
         __MonkeySharp.sendMsg("GM_deleteValue", new __MonkeySharp_ApiParam(key));
     }
 
