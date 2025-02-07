@@ -68,7 +68,7 @@ namespace Mzying2001.MonkeySharp.Core.Script
         /// Load script from file.
         /// </summary>
         /// <param name="fileName">The path of the script file.</param>
-        /// <param name="verifier">The verifier to verify the script.</param>
+        /// <param name="verifier">The verifier to verify the script, or null to use the default verifier.</param>
         public static JScript LoadFromFile(string fileName, IScriptVerifier verifier = null)
         {
             ThrowHelper.ThrowIfFileNotFound(fileName);
@@ -80,11 +80,17 @@ namespace Mzying2001.MonkeySharp.Core.Script
         /// Load script from string.
         /// </summary>
         /// <param name="script">The script text.</param>
-        /// <param name="verifier">The verifier to verify the script.</param>
+        /// <param name="verifier">The verifier to verify the script, or null to use the default verifier.</param>
         public static JScript LoadFromString(string script, IScriptVerifier verifier = null)
         {
             ThrowHelper.ThrowIfArgumentNull(script, nameof(script));
-            // TODO: Verify the script
+
+            string errmsg = null;
+            verifier = verifier ?? DefScriptVerifier.Instance;
+
+            if (!verifier.Verify(script, ref errmsg))
+                throw new ArgumentException(errmsg, nameof(script));
+
             return new JScript(script);
         }
     }
