@@ -13,7 +13,8 @@ namespace Mzying2001.MonkeySharp.Core.Internal
             None,
             Single,
             Double,
-            Template
+            Template,
+            Regex
         }
 
 
@@ -42,6 +43,10 @@ namespace Mzying2001.MonkeySharp.Core.Internal
             bool inSingleLineComment = false;
             bool inMultiLineComment = false;
             bool escapeNext = false;
+
+            // The previous non-whitespace, non-comment and non-string character,
+            // used to determine if the current context is a regular expression.
+            char? prevChar = null;
 
             for (int i = 0; i < script.Length; i++)
             {
@@ -87,7 +92,8 @@ namespace Mzying2001.MonkeySharp.Core.Internal
                     {
                         if ((inString == StringState.Single && current == '\'') ||
                             (inString == StringState.Double && current == '"') ||
-                            (inString == StringState.Template && current == '`'))
+                            (inString == StringState.Template && current == '`') ||
+                            (inString == StringState.Regex && current == '/'))
                         {
                             inString = StringState.None;
                         }
@@ -107,6 +113,10 @@ namespace Mzying2001.MonkeySharp.Core.Internal
                         {
                             inMultiLineComment = true;
                             i++;
+                        }
+                        else if (IsRegexPossibleContext(prevChar))
+                        {
+                            inString = StringState.Regex;
                         }
                     }
                     else
@@ -168,6 +178,12 @@ namespace Mzying2001.MonkeySharp.Core.Internal
                         } // End switch
                     }
                 } // End if
+
+                if (!inSingleLineComment && !inMultiLineComment
+                    && inString == StringState.None && !char.IsWhiteSpace(current))
+                {
+                    prevChar = current;
+                }
             }
 
             if (bracketStack.Count > 0)
@@ -179,6 +195,12 @@ namespace Mzying2001.MonkeySharp.Core.Internal
             if (/*inSingleLineComment ||*/ inMultiLineComment)
             {
                 error = "Unclosed comment.";
+                return false;
+            }
+
+            if (inString == StringState.Regex)
+            {
+                error = "Unclosed regular expression";
                 return false;
             }
 
@@ -195,6 +217,27 @@ namespace Mzying2001.MonkeySharp.Core.Internal
             }
 
             return true;
+        }
+
+
+        private static bool IsRegexPossibleContext(char? prevChar)
+        {
+            if (prevChar == null)
+            {
+                return true;
+            }
+
+            char c = prevChar.Value;
+
+            return
+                c == '(' || c == '[' || c == '{' ||
+                c == ',' || c == '=' || c == ':' ||
+                c == '?' || c == '!' || c == '&' ||
+                c == '|' || c == '^' || c == '+' ||
+                c == '-' || c == '*' || c == '/' ||
+                c == '%' || c == '<' || c == '>' ||
+                c == '=' || c == '}' || c == ';' ||
+                c == '`' || c == '"' || c == '\'';
         }
 
 
