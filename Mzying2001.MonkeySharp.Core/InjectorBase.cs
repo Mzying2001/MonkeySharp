@@ -324,8 +324,7 @@ namespace Mzying2001.MonkeySharp.Core
                         if (param != null)
                         {
                             var scriptId = JsonSerializer.Deserialize<string>(param);
-                            if (TryGetScriptById(scriptId, out JScript script))
-                                result = JsonSerializer.Serialize(script.Info.Grant.Contains(msg));
+                            TryExecuteApi(msg, scriptId, () => result = "true");
                         }
                         break;
 
