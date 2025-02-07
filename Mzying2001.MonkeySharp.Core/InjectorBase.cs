@@ -535,7 +535,7 @@ namespace Mzying2001.MonkeySharp.Core
                     // Script start
                     scriptInjectionBuilder.AppendLine($"__MonkeySharp_CurrentScriptId = '{script.ScriptId}';");
                     scriptInjectionBuilder.AppendLine("__MonkeySharp.sendMsg('script-start', __MonkeySharp_CurrentScriptId);");
-                    scriptInjectionBuilder.AppendLine("try {");
+                    scriptInjectionBuilder.AppendLine("try { (function () {");
 
                     // Add unsafeWindow if needed
                     if (script.Info.Grant.Contains("unsafeWindow"))
@@ -551,7 +551,7 @@ namespace Mzying2001.MonkeySharp.Core
                     scriptInjectionBuilder.AppendLine(script.ScriptText);
 
                     // Script end
-                    scriptInjectionBuilder.AppendLine("} catch (e) { __MonkeySharp.consoleLog(e); }");
+                    scriptInjectionBuilder.AppendLine("})() } catch (e) { __MonkeySharp.consoleLog(e); }");
                     scriptInjectionBuilder.AppendLine($"__MonkeySharp.sendMsg('script-end', __MonkeySharp_CurrentScriptId);");
                 }
             }
