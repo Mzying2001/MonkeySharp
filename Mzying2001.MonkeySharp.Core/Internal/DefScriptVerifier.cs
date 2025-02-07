@@ -44,9 +44,9 @@ namespace Mzying2001.MonkeySharp.Core.Internal
             bool inMultiLineComment = false;
             bool escapeNext = false;
 
-            // The previous non-whitespace, non-comment and non-string character,
+            // The previous non-whitespace, non-comment and non-string character index,
             // used to determine if the current context is a regular expression.
-            char? prevChar = null;
+            int prevCharIndex = -1;
 
             for (int i = 0; i < script.Length; i++)
             {
@@ -114,7 +114,7 @@ namespace Mzying2001.MonkeySharp.Core.Internal
                             inMultiLineComment = true;
                             i++;
                         }
-                        else if (IsRegexPossibleContext(prevChar))
+                        else if (IsRegexPossibleContext(script, prevCharIndex))
                         {
                             inString = StringState.Regex;
                         }
@@ -182,7 +182,7 @@ namespace Mzying2001.MonkeySharp.Core.Internal
                 if (!inSingleLineComment && !inMultiLineComment
                     && inString == StringState.None && !char.IsWhiteSpace(current))
                 {
-                    prevChar = current;
+                    prevCharIndex = i;
                 }
             }
 
@@ -220,24 +220,43 @@ namespace Mzying2001.MonkeySharp.Core.Internal
         }
 
 
-        private static bool IsRegexPossibleContext(char? prevChar)
+        private static bool IsRegexPossibleContext(string script, int prevCharIndex)
         {
-            if (prevChar == null)
+            if (prevCharIndex < 0)
             {
                 return true;
             }
 
-            char c = prevChar.Value;
+            char c = script[prevCharIndex];
 
-            return
-                c == '(' || c == '[' || c == '{' ||
+            if (c == '(' || c == '[' || c == '{' ||
                 c == ',' || c == '=' || c == ':' ||
                 c == '?' || c == '!' || c == '&' ||
                 c == '|' || c == '^' || c == '+' ||
                 c == '-' || c == '*' || c == '/' ||
                 c == '%' || c == '<' || c == '>' ||
                 c == '=' || c == '}' || c == ';' ||
-                c == '`' || c == '"' || c == '\'';
+                c == '`' || c == '"' || c == '\'')
+            {
+                return true;
+            }
+
+            // Support for `return /regex/` syntax
+            if (c == 'n' && prevCharIndex >= 5 &&
+                script.Substring(prevCharIndex - 5, 6) == "return")
+            {
+                if (prevCharIndex == 5)
+                {
+                    return true;
+                }
+                else
+                {
+                    c = script[prevCharIndex - 6];
+                    return !char.IsLetter(c) && !char.IsDigit(c) && c != '_' && c != '$';
+                }
+            }
+
+            return false;
         }
 
 
