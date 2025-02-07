@@ -47,64 +47,33 @@ namespace Mzying2001.MonkeySharp.Core.Internal
             {
                 char current = script[i];
 
-                if (escapeNext)
+                if (escapeNext) // Escape character
                 {
                     escapeNext = false;
                     continue;
                 }
 
-                if (inSingleLineComment)
+                if (inSingleLineComment) // Single-line comment
                 {
                     if (current == '\n')
                         inSingleLineComment = false;
-                    continue;
                 }
-                else if (inMultiLineComment)
+                else if (inMultiLineComment) // Multi-line comment
                 {
                     if (current == '*' && i + 1 < script.Length && script[i + 1] == '/')
                     {
                         inMultiLineComment = false;
                         i++;
                     }
-                    continue;
                 }
-                else
-                {
-                    if (inString == StringState.None && current == '/' && i + 1 < script.Length)
-                    {
-                        char nextChar = script[i + 1];
-                        if (nextChar == '/')
-                        {
-                            inSingleLineComment = true;
-                            i++;
-                            continue;
-                        }
-                        else if (nextChar == '*')
-                        {
-                            inMultiLineComment = true;
-                            i++;
-                            continue;
-                        }
-                    }
-                }
-
-                if (inString != StringState.None)
+                else if (inString != StringState.None) // Inside a string
                 {
                     if (current == '\\')
                     {
                         escapeNext = true;
-                        continue;
                     }
-
-                    if ((inString == StringState.Single && current == '\'') ||
-                        (inString == StringState.Double && current == '"') ||
-                        (inString == StringState.Template && current == '`'))
-                    {
-                        inString = StringState.None;
-                        continue;
-                    }
-
-                    if (inString == StringState.Template && current == '$' && i + 1 < script.Length && script[i + 1] == '{')
+                    else if (inString == StringState.Template &&
+                        current == '$' && i + 1 < script.Length && script[i + 1] == '{')
                     {
                         templateStack.Push(new TemplateState
                         {
@@ -113,84 +82,115 @@ namespace Mzying2001.MonkeySharp.Core.Internal
                         });
                         inString = StringState.None;
                         i++;
-                        continue;
-                    }
-
-                    continue;
-                }
-                else
-                {
-                    if (current == '\'')
-                    {
-                        inString = StringState.Single;
-                    }
-                    else if (current == '"')
-                    {
-                        inString = StringState.Double;
-                    }
-                    else if (current == '`')
-                    {
-                        inString = StringState.Template;
                     }
                     else
                     {
-                        if (current == '(' || current == '[' || current == '{')
+                        if ((inString == StringState.Single && current == '\'') ||
+                            (inString == StringState.Double && current == '"') ||
+                            (inString == StringState.Template && current == '`'))
                         {
-                            bracketStack.Push(current);
-                        }
-                        else if (current == ')' || current == ']' || current == '}')
-                        {
-                            if (current == '}' && templateStack.Count > 0
-                                && templateStack.Peek().bracketCount == bracketStack.Count)
-                            {
-                                inString = templateStack.Pop().stringState;
-                                continue;
-                            }
-
-                            if (bracketStack.Count == 0)
-                            {
-                                error = $"Unmatched closing bracket '{current}' at position {i}";
-                                return false;
-                            }
-
-                            char top = bracketStack.Peek();
-                            bool isMatching = (current == ')' && top == '(') ||
-                                              (current == ']' && top == '[') ||
-                                              (current == '}' && top == '{');
-
-                            if (!isMatching)
-                            {
-                                error = $"Mismatched closing bracket '{current}' at position {i}. Expected '{GetMatchingBracket(top)}'.";
-                                return false;
-                            }
-
-                            bracketStack.Pop();
+                            inString = StringState.None;
                         }
                     }
                 }
+                else // Outside strings and comments
+                {
+                    if (current == '/' && i + 1 < script.Length)
+                    {
+                        char nextChar = script[i + 1];
+                        if (nextChar == '/')
+                        {
+                            inSingleLineComment = true;
+                            i++;
+                        }
+                        else if (nextChar == '*')
+                        {
+                            inMultiLineComment = true;
+                            i++;
+                        }
+                    }
+                    else
+                    {
+                        switch (current)
+                        {
+                            case '\'':
+                                inString = StringState.Single;
+                                break;
+
+                            case '"':
+                                inString = StringState.Double;
+                                break;
+
+                            case '`':
+                                inString = StringState.Template;
+                                break;
+
+                            case '(':
+                            case '[':
+                            case '{':
+                                bracketStack.Push(current);
+                                break;
+
+                            case ')':
+                            case ']':
+                            case '}':
+                                {
+                                    if (current == '}' && templateStack.Count > 0
+                                        && templateStack.Peek().bracketCount == bracketStack.Count)
+                                    {
+                                        inString = templateStack.Pop().stringState;
+                                    }
+                                    else if (bracketStack.Count == 0)
+                                    {
+                                        error = $"Unmatched closing bracket '{current}' at position {i}";
+                                        return false;
+                                    }
+                                    else
+                                    {
+                                        char top = bracketStack.Peek();
+                                        bool isMatching = (current == ')' && top == '(') ||
+                                                          (current == ']' && top == '[') ||
+                                                          (current == '}' && top == '{');
+
+                                        if (!isMatching)
+                                        {
+                                            error = $"Mismatched closing bracket '{current}' at position {i}. Expected '{GetMatchingBracket(top)}'.";
+                                            return false;
+                                        }
+
+                                        bracketStack.Pop();
+                                    }
+                                }
+                                break;
+
+                            default:
+                                break;
+                        } // End switch
+                    }
+                } // End if
             }
 
             if (bracketStack.Count > 0)
             {
-                error = "Unmatched opening bracket(s): " + string.Join(", ", bracketStack);
+                error = "Unmatched opening bracket(s): " + string.Join(", ", bracketStack) + ".";
                 return false;
             }
 
             if (/*inSingleLineComment ||*/ inMultiLineComment)
             {
-                error = "Unclosed comment";
+                error = "Unclosed comment.";
                 return false;
             }
 
             if (inString != StringState.None)
             {
-                error = "Unclosed string or template string";
+                error = "Unclosed string or template string.";
                 return false;
             }
 
             if (templateStack.Count > 0)
             {
-                error = "Unclosed template string code block";
+                error = "Unclosed template string code block.";
                 return false;
             }
 
@@ -205,7 +205,7 @@ namespace Mzying2001.MonkeySharp.Core.Internal
                 case '(': return ')';
                 case '[': return ']';
                 case '{': return '}';
-                default: throw new ArgumentException("Invalid bracket character");
+                default: throw new ArgumentException("Invalid bracket character.");
             }
         }
 
