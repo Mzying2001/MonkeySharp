@@ -258,6 +258,7 @@ namespace Mzying2001.MonkeySharp.Core.Internal
             switch (GetPreviousWord(script, prevCharIndex, 7))
             {
                 case "in":
+                case "throw":
                 case "typeof":
                 case "return":
                     return true;
