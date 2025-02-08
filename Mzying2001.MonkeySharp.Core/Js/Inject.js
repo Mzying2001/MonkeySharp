@@ -109,7 +109,7 @@
                 }
                 else if (prop === "focus") {
                     // handle the focus function
-                    return () => { if (__MonkeySharp_SendApiRequest("window.focus")) target.focus() };
+                    return () => { if (__MonkeySharp_SendApiRequest("window.focus")) target.focus(); };
                 }
                 else if (prop === "close") {
                     // handle the close function
