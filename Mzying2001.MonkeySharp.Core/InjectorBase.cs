@@ -323,8 +323,8 @@ namespace Mzying2001.MonkeySharp.Core
                     case "unsafeWindow":
                         if (param != null)
                         {
-                            var scriptId = JsonSerializer.Deserialize<string>(param);
-                            TryExecuteApi(msg, scriptId, () => result = "true");
+                            var apiParam = JsonSerializer.Deserialize<ApiParam>(param);
+                            TryExecuteApi(msg, apiParam.ScriptId, () => result = "true");
                         }
                         break;
 

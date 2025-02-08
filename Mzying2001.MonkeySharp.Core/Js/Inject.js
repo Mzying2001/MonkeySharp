@@ -41,7 +41,7 @@
 
     // gets the real window object
     function __MonkeySharp_GetUnsafeWindow() {
-        return __MonkeySharp.sendMsg("unsafeWindow", __MonkeySharp_CurrentScriptId) ? window : undefined;
+        return __MonkeySharp.sendMsg("unsafeWindow", new __MonkeySharp_ApiParam(null)) ? window : undefined;
     }
 
     // logs a message to the console
@@ -92,7 +92,9 @@
     };
 
     // the sandbox object
-    const __MonkeySharp_Sandbox = {
+    const __MonkeySharp_Sandbox =
+    {
+        // the main function
         __main: function () {
             const window = this;
             /*==========REPLACE_CODE_HERE==========*/
