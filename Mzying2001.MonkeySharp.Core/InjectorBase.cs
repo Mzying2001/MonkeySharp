@@ -543,10 +543,11 @@ namespace Mzying2001.MonkeySharp.Core
                         scriptInjectionBuilder.AppendLine("const unsafeWindow = window.unsafeWindow;");
 
                     // Prevent script from accessing internal objects
-                    scriptInjectionBuilder.AppendLine("const __MonkeySharp_CurrentScriptId = null;");
-                    scriptInjectionBuilder.AppendLine("const __MonkeySharp_AsyncMessenger = null;");
-                    scriptInjectionBuilder.AppendLine("const __MonkeySharp_Messenger = null;");
-                    scriptInjectionBuilder.AppendLine("const __MonkeySharp = null;");
+                    scriptInjectionBuilder.AppendLine("var __MonkeySharp_CurrentScriptId = undefined;");
+                    scriptInjectionBuilder.AppendLine("var __MonkeySharp_AsyncMessenger = undefined;");
+                    scriptInjectionBuilder.AppendLine("var __MonkeySharp_Messenger = undefined;");
+                    scriptInjectionBuilder.AppendLine("var __MonkeySharp_Injected = undefined");
+                    scriptInjectionBuilder.AppendLine("var __MonkeySharp = undefined;");
 
                     // Add the script
                     scriptInjectionBuilder.AppendLine(script.ScriptText);

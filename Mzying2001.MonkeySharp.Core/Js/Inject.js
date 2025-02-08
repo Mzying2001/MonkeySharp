@@ -123,6 +123,10 @@
                     // always return the proxy window object
                     return __MonkeySharp_Sandbox.window;
                 }
+                else if (__MonkeySharp.internalProps.includes(prop)) {
+                    // ignore the MonkeySharp internal properties
+                    return undefined;
+                }
                 else {
                     // other properties
                     return target[prop];

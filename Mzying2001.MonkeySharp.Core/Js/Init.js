@@ -2,6 +2,13 @@
 
 var __MonkeySharp =
 {
+    internalProps: [
+        "__MonkeySharp",
+        "__MonkeySharp_Injected",
+        "__MonkeySharp_Messenger",
+        "__MonkeySharp_AsyncMessenger"
+    ],
+
     sendMsg: function (msg, param) {
         // __MonkeySharp_Messenger: injected by MonkeySharp
         if (typeof __MonkeySharp_Messenger !== "undefined") {
