@@ -100,19 +100,51 @@
     // the sandbox object
     const __MonkeySharp_Sandbox =
     {
-        // window.focus api
-        focus: function () {
-            if (__MonkeySharp_SendApiRequest("window.focus")) window.focus();
-        },
+        // the proxy window object
+        window: new Proxy(window, {
+            get: function (target, prop) {
+                if (prop === "unsafeWindow") {
+                    // handle the unsafeWindow property
+                    return __MonkeySharp_GetUnsafeWindow();
+                }
+                else if(prop === "focus") {
+                    // handle the focus function
+                    return () => { if (__MonkeySharp_SendApiRequest("window.focus")) target.focus() };
+                }
+                else if (prop === "close") {
+                    // handle the close function
+                    return () => { if (__MonkeySharp_SendApiRequest("window.close")) target.close(); };
+                }
+                else if (prop in __MonkeySharp_Sandbox.__apis) {
+                    // handle the apis
+                    return __MonkeySharp_Sandbox.__apis[prop];
+                }
+                else if (prop in [/*TODO*/]) {
+                    // handle the properties that are not allowed
+                    return undefined;
+                }
+                else {
+                    // other properties
+                    return target[prop];
+                }
+            }
+        }),
 
-        // window.close api
-        close: function () {
-            if (__MonkeySharp_SendApiRequest("window.close")) window.close();
+        // the apis
+        __apis: {
+            GM: GM,
+            GM_log: GM_log,
+            GM_setValue: GM_setValue,
+            GM_getValue: GM_getValue,
+            GM_deleteValue: GM_deleteValue,
+            GM_listValues: GM_listValues
         },
 
         // the main function
         __main: function () {
-            const window = this;
+            const window = this.window;
+            var focus = window.focus;
+            var close = window.close;
             /*==========REPLACE_CODE_HERE==========*/
         }
     };

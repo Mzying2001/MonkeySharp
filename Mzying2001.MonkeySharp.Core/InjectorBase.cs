@@ -540,7 +540,7 @@ namespace Mzying2001.MonkeySharp.Core
 
                     // Add unsafeWindow if needed
                     if (script.Info.Grant.Contains("unsafeWindow"))
-                        scriptInjectionBuilder.AppendLine("const unsafeWindow = __MonkeySharp_GetUnsafeWindow();");
+                        scriptInjectionBuilder.AppendLine("const unsafeWindow = window.unsafeWindow;");
 
                     // Prevent script from accessing internal objects
                     scriptInjectionBuilder.AppendLine("const __MonkeySharp_CurrentScriptId = null;");
