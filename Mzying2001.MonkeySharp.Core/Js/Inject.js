@@ -80,6 +80,9 @@
 
     // the async version of api functions
     const GM = {
+        log: async function (message) {
+            GM_log(message);
+        },
         setValue: async function (key, value) {
             GM_setValue(key, value);
         },
