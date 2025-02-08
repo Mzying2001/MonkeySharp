@@ -300,7 +300,7 @@ namespace Mzying2001.MonkeySharp.Core
                         if (param != null)
                         {
                             var url = JsonSerializer.Deserialize<string>(param);
-                            OnInjectScripts(JScriptInfo.ParseRunAt(msg), url);
+                            OnInjectScripts(JScriptMeta.ParseRunAt(msg), url);
                         }
                         break;
 
@@ -446,7 +446,7 @@ namespace Mzying2001.MonkeySharp.Core
         {
             if (TryGetScriptById(scriptId, out JScript script))
             {
-                return $"{script.Info.Namespace}_{script.Info.Name}";
+                return $"{script.Metadata.Namespace}_{script.Metadata.Name}";
             }
             else
             {
@@ -473,7 +473,7 @@ namespace Mzying2001.MonkeySharp.Core
         {
             if (TryGetScriptById(scriptId, out JScript script))
             {
-                return script.Info.Grant.Contains(api);
+                return script.Metadata.Grant.Contains(api);
             }
             return false;
         }
@@ -512,7 +512,7 @@ namespace Mzying2001.MonkeySharp.Core
         /// </summary>
         private string GetScriptNameOrId(string scriptId)
         {
-            return TryGetScriptById(scriptId, out JScript script) ? script.Info.Name : scriptId;
+            return TryGetScriptById(scriptId, out JScript script) ? script.Metadata.Name : scriptId;
         }
 
 
@@ -531,7 +531,7 @@ namespace Mzying2001.MonkeySharp.Core
 
             foreach (JScript script in scripts)
             {
-                if (script.Info.RunAt == runAt && script.MatchUrl(url))
+                if (script.Metadata.RunAt == runAt && script.MatchUrl(url))
                 {
                     // Script start
                     scriptInjectionBuilder.AppendLine($"__MonkeySharp_CurrentScriptId = '{script.ScriptId}';");
@@ -539,7 +539,7 @@ namespace Mzying2001.MonkeySharp.Core
                     scriptInjectionBuilder.AppendLine("try { with (window) { (function () {");
 
                     // Add unsafeWindow if needed
-                    if (script.Info.Grant.Contains("unsafeWindow"))
+                    if (script.Metadata.Grant.Contains("unsafeWindow"))
                         scriptInjectionBuilder.AppendLine("const unsafeWindow = window.unsafeWindow;");
 
                     // Prevent script from accessing internal objects

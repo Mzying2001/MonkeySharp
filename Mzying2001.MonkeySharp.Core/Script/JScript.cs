@@ -22,9 +22,9 @@ namespace Mzying2001.MonkeySharp.Core.Script
 
 
         /// <summary>
-        /// Info of the script.
+        /// The metadata of the script.
         /// </summary>
-        public JScriptInfo Info { get; }
+        public JScriptMeta Metadata { get; }
 
 
         /// <summary>
@@ -32,9 +32,9 @@ namespace Mzying2001.MonkeySharp.Core.Script
         /// </summary>
         private JScript(string script)
         {
-            ScriptId = Guid.NewGuid().ToString();
             ScriptText = script;
-            Info = JScriptInfo.Parse(script);
+            Metadata = JScriptMeta.Parse(script);
+            ScriptId = Guid.NewGuid().ToString();
         }
 
 
@@ -45,17 +45,17 @@ namespace Mzying2001.MonkeySharp.Core.Script
         {
             ThrowHelper.ThrowIfArgumentNull(url, nameof(url));
 
-            foreach (var item in Info.Exclude)
+            foreach (var item in Metadata.Exclude)
             {
                 if (Matcher.Match(item, url))
                     return false;
             }
-            foreach (var item in Info.Include)
+            foreach (var item in Metadata.Include)
             {
                 if (Matcher.Match(item, url))
                     return true;
             }
-            foreach (var item in Info.Match)
+            foreach (var item in Metadata.Match)
             {
                 if (Matcher.UrlMatch(item, url))
                     return true;

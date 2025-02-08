@@ -6,9 +6,9 @@ using System.Linq;
 namespace Mzying2001.MonkeySharp.Core.Script
 {
     /// <summary>
-    /// Information of the script.
+    /// Metadata of the script.
     /// </summary>
-    public class JScriptInfo : IReadOnlyDictionary<string, string[]>
+    public class JScriptMeta : IReadOnlyDictionary<string, string[]>
     {
         /// <summary>
         /// Internal data.
@@ -108,7 +108,7 @@ namespace Mzying2001.MonkeySharp.Core.Script
         /// <summary>
         /// Constructor.
         /// </summary>
-        private JScriptInfo(Dictionary<string, List<string>> data)
+        private JScriptMeta(Dictionary<string, List<string>> data)
         {
             _data = data;
         }
@@ -147,9 +147,9 @@ namespace Mzying2001.MonkeySharp.Core.Script
 
 
         /// <summary>
-        /// Get the info of the script.
+        /// Get the metadata of the script.
         /// </summary>
-        public static JScriptInfo Parse(string script)
+        public static JScriptMeta Parse(string script)
         {
             Dictionary<string, List<string>> data
                 = new Dictionary<string, List<string>>();
@@ -194,7 +194,7 @@ namespace Mzying2001.MonkeySharp.Core.Script
                 }
             }
 
-            return new JScriptInfo(data);
+            return new JScriptMeta(data);
         }
 
 
