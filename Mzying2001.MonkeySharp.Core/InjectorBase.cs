@@ -321,6 +321,8 @@ namespace Mzying2001.MonkeySharp.Core
                         break;
 
                     case "unsafeWindow":
+                    case "window.focus":
+                    case "window.close":
                         if (param != null)
                         {
                             var apiParam = JsonSerializer.Deserialize<ApiParam>(param);

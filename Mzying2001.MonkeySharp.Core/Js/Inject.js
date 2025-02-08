@@ -100,6 +100,16 @@
     // the sandbox object
     const __MonkeySharp_Sandbox =
     {
+        // window.focus api
+        focus: function () {
+            if (__MonkeySharp_SendApiRequest("window.focus")) window.focus();
+        },
+
+        // window.close api
+        close: function () {
+            if (__MonkeySharp_SendApiRequest("window.close")) window.close();
+        },
+
         // the main function
         __main: function () {
             const window = this;
