@@ -74,6 +74,12 @@ var __MonkeySharp =
 
     onContextMenu: function () {
         this.sendMsg("context-menu", window.location.href);
+    },
+
+    raiseUrlChangeEvent: function () {
+        var event = new Event("urlchange");
+        window.dispatchEvent(event);
+        if (typeof window.onurlchange === "function") window.onurlchange();
     }
 };
 
@@ -85,6 +91,11 @@ var __MonkeySharp =
 
     // mark as injected
     window.__MonkeySharp_Injected = true;
+
+    // support urlchange event
+    window.onurlchange = null;
+    window.addEventListener("popstate", __MonkeySharp.raiseUrlChangeEvent);
+    window.addEventListener("hashchange", __MonkeySharp.raiseUrlChangeEvent);
 
     // raise document-start event
     __MonkeySharp.onDocumentStart();
