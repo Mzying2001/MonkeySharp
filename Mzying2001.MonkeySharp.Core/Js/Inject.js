@@ -147,12 +147,6 @@
         // the main function
         __main: function () {
             const window = this.window;
-            var self = window.self;
-            var top = window.top;
-            var parent = window.parent;
-            var frames = window.frames;
-            var focus = window.focus;
-            var close = window.close;
             /*==========REPLACE_CODE_HERE==========*/
         }
     };
