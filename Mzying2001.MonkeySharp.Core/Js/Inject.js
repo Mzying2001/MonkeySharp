@@ -32,6 +32,11 @@
         }
     }
 
+    // request the api
+    function __MonkeySharp_SendApiRequest(api, param = null) {
+        return __MonkeySharp.sendMsg(api, new __MonkeySharp_ApiParam(param));
+    }
+
     // throws an error if the value is not a string
     function __MonkeySharp_ThrowIfNotString(value, name) {
         if (typeof value !== "string") {
@@ -41,38 +46,36 @@
 
     // gets the real window object
     function __MonkeySharp_GetUnsafeWindow() {
-        return __MonkeySharp.sendMsg("unsafeWindow", new __MonkeySharp_ApiParam(null)) ? window : undefined;
+        return __MonkeySharp_SendApiRequest("unsafeWindow") ? window : undefined;
     }
 
     // logs a message to the console
     function GM_log(message) {
-        __MonkeySharp.sendMsg("GM_log",
-            new __MonkeySharp_ApiParam(new __MonkeySharp_JsObject(message)));
+        __MonkeySharp_SendApiRequest("GM_log", new __MonkeySharp_JsObject(message));
     }
 
     // set the value of a specific key in the userscript's storage
     function GM_setValue(key, value) {
         __MonkeySharp_ThrowIfNotString(key, "key");
-        __MonkeySharp.sendMsg("GM_setValue",
-            new __MonkeySharp_ApiParam({ key: key, value: new __MonkeySharp_JsObject(value) }));
+        __MonkeySharp_SendApiRequest("GM_setValue", { key: key, value: new __MonkeySharp_JsObject(value) });
     }
 
     // retrieve the value of a specific key in the userscript's storage
     function GM_getValue(key, defaultValue) {
         __MonkeySharp_ThrowIfNotString(key, "key");
-        var result = __MonkeySharp.sendMsg("GM_getValue", new __MonkeySharp_ApiParam(key));
+        var result = __MonkeySharp_SendApiRequest("GM_getValue", key);
         return typeof result === "undefined" ? defaultValue : result;
     }
 
     // delete a key from the userscript's storage
     function GM_deleteValue(key) {
         __MonkeySharp_ThrowIfNotString(key, "key");
-        __MonkeySharp.sendMsg("GM_deleteValue", new __MonkeySharp_ApiParam(key));
+        __MonkeySharp_SendApiRequest("GM_deleteValue", key);
     }
 
     // retrieve the list of keys in the userscript's storage
     function GM_listValues() {
-        return __MonkeySharp.sendMsg("GM_listValues", new __MonkeySharp_ApiParam(null));
+        return __MonkeySharp_SendApiRequest("GM_listValues");
     }
 
     // the async version of api functions
