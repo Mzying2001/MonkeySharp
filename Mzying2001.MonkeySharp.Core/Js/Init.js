@@ -79,7 +79,7 @@ var __MonkeySharp =
     raiseUrlChangeEvent: function () {
         var event = new Event("urlchange");
         window.dispatchEvent(event);
-        if (typeof window.onurlchange === "function") window.onurlchange();
+        if (typeof window.onurlchange === "function") window.onurlchange(event);
     }
 };
 
