@@ -119,7 +119,7 @@
                     // handle the apis
                     return __MonkeySharp_Sandbox.__apis[prop];
                 }
-                else if (["self", "top", "parent", "frames"].includes(prop)) {
+                else if (["window", "self", "top", "parent", "frames"].includes(prop)) {
                     // always return the proxy window object
                     return __MonkeySharp_Sandbox.window;
                 }
