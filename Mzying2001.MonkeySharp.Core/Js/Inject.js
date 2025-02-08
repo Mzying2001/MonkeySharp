@@ -107,7 +107,7 @@
                     // handle the unsafeWindow property
                     return __MonkeySharp_GetUnsafeWindow();
                 }
-                else if(prop === "focus") {
+                else if (prop === "focus") {
                     // handle the focus function
                     return () => { if (__MonkeySharp_SendApiRequest("window.focus")) target.focus() };
                 }
@@ -119,9 +119,9 @@
                     // handle the apis
                     return __MonkeySharp_Sandbox.__apis[prop];
                 }
-                else if (prop in [/*TODO*/]) {
-                    // handle the properties that are not allowed
-                    return undefined;
+                else if (["self", "top", "parent", "frames"].includes(prop)) {
+                    // always return the proxy window object
+                    return __MonkeySharp_Sandbox.window;
                 }
                 else {
                     // other properties
@@ -143,6 +143,10 @@
         // the main function
         __main: function () {
             const window = this.window;
+            var self = window.self;
+            var top = window.top;
+            var parent = window.parent;
+            var frames = window.frames;
             var focus = window.focus;
             var close = window.close;
             /*==========REPLACE_CODE_HERE==========*/
