@@ -220,6 +220,20 @@ namespace Mzying2001.MonkeySharp.Core.Internal
         }
 
 
+        private static string GetPreviousWord(string script, int endIndex, int maxLength = 0)
+        {
+            int i = endIndex;
+            while (--i >= 0)
+            {
+                char c = script[i];
+                if (!(char.IsLetterOrDigit(c) || c == '_' || c == '$') ||
+                    (maxLength > 0 && endIndex - i >= maxLength))
+                    break;
+            }
+            return script.Substring(i + 1, endIndex - i);
+        }
+
+
         private static bool IsRegexPossibleContext(string script, int prevCharIndex)
         {
             if (prevCharIndex < 0)
@@ -241,22 +255,16 @@ namespace Mzying2001.MonkeySharp.Core.Internal
                 return true;
             }
 
-            // Support for `return /regex/` syntax
-            if (c == 'n' && prevCharIndex >= 5 &&
-                script.Substring(prevCharIndex - 5, 6) == "return")
+            switch (GetPreviousWord(script, prevCharIndex, 7))
             {
-                if (prevCharIndex == 5)
-                {
+                case "in":
+                case "typeof":
+                case "return":
                     return true;
-                }
-                else
-                {
-                    c = script[prevCharIndex - 6];
-                    return !char.IsLetter(c) && !char.IsDigit(c) && c != '_' && c != '$';
-                }
-            }
 
-            return false;
+                default:
+                    return false;
+            }
         }
 
 
