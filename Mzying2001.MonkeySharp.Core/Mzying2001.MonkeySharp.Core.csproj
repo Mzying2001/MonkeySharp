@@ -9,11 +9,20 @@
   </PropertyGroup>
   <PropertyGroup>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
-    <RepositoryUrl>https://github.com/Mzying2001/MonkeySharp</RepositoryUrl>
+    <RepositoryUrl>https://github.com/Mzying2001/MonkeySharp.git</RepositoryUrl>
+    <Description>Add user script support to CefSharp.</Description>
+    <PackageProjectUrl>https://github.com/Mzying2001/MonkeySharp</PackageProjectUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
   <ItemGroup>
     <EmbeddedResource Include="Js\Init.js" />
     <EmbeddedResource Include="Js\Inject.js" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\README.md">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="System.Text.Json" Version="9.0.0" />
