@@ -536,7 +536,7 @@ namespace Mzying2001.MonkeySharp.Core
                     // Script start
                     scriptInjectionBuilder.AppendLine($"__MonkeySharp_CurrentScriptId = '{script.ScriptId}';");
                     scriptInjectionBuilder.AppendLine("__MonkeySharp.sendMsg('script-start', __MonkeySharp_CurrentScriptId);");
-                    scriptInjectionBuilder.AppendLine("try { with (this) { (function () {");
+                    scriptInjectionBuilder.AppendLine("try { with (this) { (() => {");
 
                     // Add unsafeWindow if needed
                     if (script.Metadata.Grant.Contains("unsafeWindow"))
