@@ -138,19 +138,10 @@
         }
     };
 
-    // the sandbox object
-    const __MonkeySharp_Sandbox = {
-        // the proxy window object
-        window: new Proxy(window, __MonkeySharp_WindowHandler),
-        // the main function
-        __main: function () {
-            const window = this.window;
-            var __MonkeySharp_ApiList = undefined;
-            var __MonkeySharp_WindowHandler = undefined;
-            /*==========REPLACE_CODE_HERE==========*/
-        }
-    };
-
-    // executes script in the sandbox
-    __MonkeySharp_Sandbox.__main();
+    // executes scripts
+    (function () {
+        var __MonkeySharp_ApiList = undefined;
+        var __MonkeySharp_WindowHandler = undefined;
+        /*==========REPLACE_CODE_HERE==========*/
+    }).bind(new Proxy(window, __MonkeySharp_WindowHandler))();
 })();
