@@ -97,56 +97,56 @@
         }
     };
 
-    // the sandbox object
-    const __MonkeySharp_Sandbox =
-    {
-        // the proxy window object
-        window: new Proxy(window, {
-            get: function (target, prop) {
-                if (prop === "unsafeWindow") {
-                    // handle the unsafeWindow property
-                    return __MonkeySharp_GetUnsafeWindow();
-                }
-                else if (prop === "focus") {
-                    // handle the focus function
-                    return () => { if (__MonkeySharp_SendApiRequest("window.focus")) target.focus(); };
-                }
-                else if (prop === "close") {
-                    // handle the close function
-                    return () => { if (__MonkeySharp_SendApiRequest("window.close")) target.close(); };
-                }
-                else if (prop in __MonkeySharp_Sandbox.__apis) {
-                    // handle the apis
-                    return __MonkeySharp_Sandbox.__apis[prop];
-                }
-                else if (["window", "self", "top", "parent", "frames"].includes(prop)) {
-                    // always return the proxy window object
-                    return __MonkeySharp_Sandbox.window;
-                }
-                else if (__MonkeySharp.internalProps.includes(prop)) {
-                    // ignore the MonkeySharp internal properties
-                    return undefined;
-                }
-                else {
-                    // other properties
-                    return target[prop];
-                }
+    // the api list
+    const __MonkeySharp_ApiList = {
+        GM: GM,
+        GM_log: GM_log,
+        GM_setValue: GM_setValue,
+        GM_getValue: GM_getValue,
+        GM_deleteValue: GM_deleteValue,
+        GM_listValues: GM_listValues
+    };
+
+    // the handler for the proxy window object
+    const __MonkeySharp_WindowHandler = {
+        get: function (target, prop) {
+            if (prop === "unsafeWindow") {
+                // handle the unsafeWindow property
+                return __MonkeySharp_GetUnsafeWindow();
             }
-        }),
+            else if (prop === "focus") {
+                // handle the focus function
+                return () => { if (__MonkeySharp_SendApiRequest("window.focus")) target.focus(); };
+            }
+            else if (prop === "close") {
+                // handle the close function
+                return () => { if (__MonkeySharp_SendApiRequest("window.close")) target.close(); };
+            }
+            else if (prop in __MonkeySharp_ApiList) {
+                // handle the apis
+                return __MonkeySharp_ApiList[prop];
+            }
+            else if (__MonkeySharp.internalProps.includes(prop)) {
+                // ignore the MonkeySharp internal properties
+                return undefined;
+            }
+            else {
+                // other properties
+                var result = target[prop];
+                return result instanceof Window ? new Proxy(result, this) : result;
+            }
+        }
+    };
 
-        // the apis
-        __apis: {
-            GM: GM,
-            GM_log: GM_log,
-            GM_setValue: GM_setValue,
-            GM_getValue: GM_getValue,
-            GM_deleteValue: GM_deleteValue,
-            GM_listValues: GM_listValues
-        },
-
+    // the sandbox object
+    const __MonkeySharp_Sandbox = {
+        // the proxy window object
+        window: new Proxy(window, __MonkeySharp_WindowHandler),
         // the main function
         __main: function () {
             const window = this.window;
+            var __MonkeySharp_ApiList = undefined;
+            var __MonkeySharp_WindowHandler = undefined;
             /*==========REPLACE_CODE_HERE==========*/
         }
     };
