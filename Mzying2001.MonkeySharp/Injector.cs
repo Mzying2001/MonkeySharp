@@ -16,12 +16,6 @@ namespace Mzying2001.MonkeySharp
         private IWebBrowser _browser = null;
 
 
-        /// <summary>
-        /// The callback provided by <see cref="OnAttachBrowser"/>
-        /// </summary>
-        private Action _callback = null;
-
-
         /// <inheritdoc/>
         public override bool IsBrowserAttached => _browser != null;
 
@@ -40,24 +34,15 @@ namespace Mzying2001.MonkeySharp
             browser.JavascriptObjectRepository.Register("__MonkeySharp_Messenger", messenger, isAsync: false);
             browser.JavascriptObjectRepository.Register("__MonkeySharp_AsyncMessenger", messenger, isAsync: true);
 
+            // Call init callback when javascript context is created.
+            new JsContextWatcher(browser).ContextCreated += (_, frame) =>
+            {
+                if (frame.IsMain)
+                    initCallback?.Invoke();
+            };
+
             // Attach browser.
             _browser = browser;
-            _callback = initCallback;
-
-            // Call init callback when the main frame starts loading.
-            _browser.FrameLoadStart += BrowserFrameLoadStartHandler;
-        }
-
-
-        /// <summary>
-        /// Called when the browser frame starts loading.
-        /// </summary>
-        private void BrowserFrameLoadStartHandler(object sender, FrameLoadStartEventArgs e)
-        {
-            if (e.Frame.IsMain)
-            {
-                _callback?.Invoke();
-            }
         }
 
 
@@ -66,11 +51,13 @@ namespace Mzying2001.MonkeySharp
         {
             if (_browser != null)
             {
-                _browser.FrameLoadStart -= BrowserFrameLoadStartHandler;
+                if (_browser.RenderProcessMessageHandler is JsContextWatcher watcher)
+                {
+                    watcher.ReleaseWatcher();
+                }
                 _browser.JavascriptObjectRepository.UnRegister("__MonkeySharp_Messenger");
                 _browser.JavascriptObjectRepository.UnRegister("__MonkeySharp_AsyncMessenger");
                 _browser = null;
-                _callback = null;
             }
         }
 
