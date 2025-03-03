@@ -81,6 +81,12 @@ namespace Mzying2001.MonkeySharp.Core
 
 
         /// <summary>
+        /// True if scripts should be injected in strict mode.
+        /// </summary>
+        public bool ForceUseStrict { get; set; }
+
+
+        /// <summary>
         /// Interface for data storage, used by GM_getValue and GM_setValue.
         /// </summary>
         public IDataStore DataStore { get; set; }
@@ -538,9 +544,13 @@ namespace Mzying2001.MonkeySharp.Core
                     scriptInjectionBuilder.AppendLine("__MonkeySharp.sendMsg('script-start', __MonkeySharp_CurrentScriptId);");
                     scriptInjectionBuilder.AppendLine("try { with (this) { (() => {");
 
+                    // Add 'use strict' if needed
+                    if (ForceUseStrict)
+                        scriptInjectionBuilder.AppendLine("'use strict';");
+
                     // Add unsafeWindow if needed
                     if (script.Metadata.Grant.Contains("unsafeWindow"))
-                        scriptInjectionBuilder.AppendLine("const unsafeWindow = window.unsafeWindow;");
+                        scriptInjectionBuilder.AppendLine("const unsafeWindow = this.unsafeWindow;");
 
                     // Prevent script from accessing internal objects
                     scriptInjectionBuilder.AppendLine("var __MonkeySharp_CurrentScriptId = undefined;");
