@@ -96,6 +96,7 @@
             return GM_listValues();
         }
     };
+    Object.freeze(GM);
 
     // the api list
     const __MonkeySharp_ApiList = {
