@@ -620,11 +620,11 @@ namespace Mzying2001.MonkeySharp.Core
         /// Called when attaching the browser.
         /// The messenger should be registered as __MonkeySharp_Messenger and __MonkeySharp_AsyncMessenger (for async messages)
         /// to the browser for javascript and C# communication.
-        /// When the webpage starts to load, initCallback should be called.
+        /// When the javascript context of the main frame is created, the initCallback should be called.
         /// </summary>
         /// <param name="browser">The browser object.</param>
         /// <param name="messenger">Proxy object for javascript and C# communication.</param>
-        /// <param name="initCallback">When the webpage starts to load, call this callback.</param>
+        /// <param name="initCallback">When the javascript context of the main frame is created, call this callback.</param>
         protected abstract void OnAttachBrowser(object browser, Messenger messenger, Action initCallback);
 
 
