@@ -29,10 +29,24 @@ namespace Mzying2001.MonkeySharp.Core
 
 
         /// <summary>
+        /// Retrieve multiple data.
+        /// </summary>
+        /// <returns>Returns true if all data found.</returns>
+        bool Retrieve(string context, IEnumerable<string> keys, out Dictionary<string, string> values);
+
+
+        /// <summary>
         /// Remove data.
         /// </summary>
         /// <returns>Returns true if data found and removed.</returns>
         bool Remove(string context, string key);
+
+
+        /// <summary>
+        /// Remove multiple data.
+        /// </summary>
+        /// <returns>Returns true if all data found and removed.</returns>
+        bool Remove(string context, IEnumerable<string> keys);
 
 
         /// <summary>

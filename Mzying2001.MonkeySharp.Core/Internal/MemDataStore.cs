@@ -22,7 +22,7 @@ namespace Mzying2001.MonkeySharp.Core.Internal
         private readonly object _syncLock = new object();
 
 
-        /// <inheritdoc />
+        /// <inheritdoc/>
         public string[] ListKeys(string context)
         {
             var dic = GetContext(context);
@@ -34,7 +34,7 @@ namespace Mzying2001.MonkeySharp.Core.Internal
         }
 
 
-        /// <inheritdoc />
+        /// <inheritdoc/>
         public bool Remove(string context, string key)
         {
             var dic = GetContext(context);
@@ -46,7 +46,27 @@ namespace Mzying2001.MonkeySharp.Core.Internal
         }
 
 
-        /// <inheritdoc />
+        /// <inheritdoc/>
+        public bool Remove(string context, IEnumerable<string> keys)
+        {
+            var dic = GetContext(context);
+
+            bool result = true;
+            lock (_syncLock)
+            {
+                foreach (var item in keys)
+                {
+                    if (!dic.Remove(item))
+                    {
+                        result = false;
+                    }
+                }
+            }
+            return result;
+        }
+
+
+        /// <inheritdoc/>
         public bool Retrieve(string context, string key, out string value)
         {
             var dic = GetContext(context);
@@ -58,7 +78,32 @@ namespace Mzying2001.MonkeySharp.Core.Internal
         }
 
 
-        /// <inheritdoc />
+        /// <inheritdoc/>
+        public bool Retrieve(string context, IEnumerable<string> keys, out Dictionary<string, string> values)
+        {
+            var dic = GetContext(context);
+            values = new Dictionary<string, string>();
+
+            bool result = true;
+            lock (_syncLock)
+            {
+                foreach (var key in keys)
+                {
+                    if (dic.TryGetValue(key, out var value))
+                    {
+                        values[key] = value;
+                    }
+                    else
+                    {
+                        result = false;
+                    }
+                }
+            }
+            return result;
+        }
+
+
+        /// <inheritdoc/>
         public bool Store(string context, string key, string value)
         {
             var dic = GetContext(context);
@@ -78,7 +123,7 @@ namespace Mzying2001.MonkeySharp.Core.Internal
         }
 
 
-        /// <inheritdoc />
+        /// <inheritdoc/>
         public bool Store(string context, IEnumerable<KeyValuePair<string, string>> values)
         {
             var dic = GetContext(context);
