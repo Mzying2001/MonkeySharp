@@ -20,6 +20,15 @@ namespace Mzying2001.MonkeySharp
         public override bool IsBrowserAttached => _browser != null;
 
 
+        /// <summary>
+        /// Create a new instance of <see cref="Injector"/>.
+        /// </summary>
+        public Injector(IDataStore dataStore = null)
+        {
+            DataStore = dataStore;
+        }
+
+
         /// <inheritdoc/>
         protected override void OnAttachBrowser(IWebBrowser browser, Messenger messenger, Action initCallback)
         {
