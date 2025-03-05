@@ -25,10 +25,9 @@ namespace Mzying2001.MonkeySharp.Core.Internal
         /// <inheritdoc/>
         public string[] ListKeys(string context)
         {
-            var dic = GetContext(context);
-
             lock (_syncLock)
             {
+                var dic = GetContext(context);
                 return dic.Keys.ToArray();
             }
         }
@@ -37,10 +36,9 @@ namespace Mzying2001.MonkeySharp.Core.Internal
         /// <inheritdoc/>
         public bool Remove(string context, string key)
         {
-            var dic = GetContext(context);
-
             lock (_syncLock)
             {
+                var dic = GetContext(context);
                 return dic.Remove(key);
             }
         }
@@ -49,11 +47,11 @@ namespace Mzying2001.MonkeySharp.Core.Internal
         /// <inheritdoc/>
         public bool Remove(string context, IEnumerable<string> keys)
         {
-            var dic = GetContext(context);
-
             bool result = true;
             lock (_syncLock)
             {
+                var dic = GetContext(context);
+
                 foreach (var item in keys)
                 {
                     if (!dic.Remove(item))
@@ -69,10 +67,9 @@ namespace Mzying2001.MonkeySharp.Core.Internal
         /// <inheritdoc/>
         public bool Retrieve(string context, string key, out string value)
         {
-            var dic = GetContext(context);
-
             lock (_syncLock)
             {
+                var dic = GetContext(context);
                 return dic.TryGetValue(key, out value);
             }
         }
@@ -81,12 +78,12 @@ namespace Mzying2001.MonkeySharp.Core.Internal
         /// <inheritdoc/>
         public bool Retrieve(string context, IEnumerable<string> keys, out Dictionary<string, string> values)
         {
-            var dic = GetContext(context);
-            values = new Dictionary<string, string>();
-
             bool result = true;
             lock (_syncLock)
             {
+                var dic = GetContext(context);
+                values = new Dictionary<string, string>();
+
                 foreach (var key in keys)
                 {
                     if (dic.TryGetValue(key, out var value))
@@ -106,10 +103,10 @@ namespace Mzying2001.MonkeySharp.Core.Internal
         /// <inheritdoc/>
         public bool Store(string context, string key, string value)
         {
-            var dic = GetContext(context);
-
             lock (_syncLock)
             {
+                var dic = GetContext(context);
+
                 if (dic.ContainsKey(key))
                 {
                     dic[key] = value;
@@ -126,10 +123,10 @@ namespace Mzying2001.MonkeySharp.Core.Internal
         /// <inheritdoc/>
         public bool Store(string context, IEnumerable<KeyValuePair<string, string>> values)
         {
-            var dic = GetContext(context);
-
             lock (_syncLock)
             {
+                var dic = GetContext(context);
+
                 foreach (var item in values)
                 {
                     if (dic.ContainsKey(item.Key))
@@ -151,18 +148,15 @@ namespace Mzying2001.MonkeySharp.Core.Internal
         /// </summary>
         private Dictionary<string, string> GetContext(string context)
         {
-            lock (_syncLock)
+            if (_data.TryGetValue(context, out Dictionary<string, string> result))
             {
-                if (_data.TryGetValue(context, out Dictionary<string, string> result))
-                {
-                    return result;
-                }
-                else
-                {
-                    result = new Dictionary<string, string>();
-                    _data.Add(context, result);
-                    return result;
-                }
+                return result;
+            }
+            else
+            {
+                result = new Dictionary<string, string>();
+                _data.Add(context, result);
+                return result;
             }
         }
 
