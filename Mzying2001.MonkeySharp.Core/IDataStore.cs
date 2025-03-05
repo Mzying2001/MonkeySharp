@@ -1,4 +1,6 @@
-﻿namespace Mzying2001.MonkeySharp.Core
+﻿using System.Collections.Generic;
+
+namespace Mzying2001.MonkeySharp.Core
 {
     /// <summary>
     /// Interface for data persistence.
@@ -10,6 +12,13 @@
         /// </summary>
         /// <returns>Returns true if data stored successfully.</returns>
         bool Store(string context, string key, string value);
+
+
+        /// <summary>
+        /// Add or update multiple data.
+        /// </summary>
+        /// <returns>Returns true if all data stored successfully.</returns>
+        bool Store(string context, IEnumerable<KeyValuePair<string, string>> values);
 
 
         /// <summary>

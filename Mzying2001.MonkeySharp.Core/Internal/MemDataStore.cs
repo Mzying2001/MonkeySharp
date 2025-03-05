@@ -78,6 +78,29 @@ namespace Mzying2001.MonkeySharp.Core.Internal
         }
 
 
+        /// <inheritdoc />
+        public bool Store(string context, IEnumerable<KeyValuePair<string, string>> values)
+        {
+            var dic = GetContext(context);
+
+            lock (_syncLock)
+            {
+                foreach (var item in values)
+                {
+                    if (dic.ContainsKey(item.Key))
+                    {
+                        dic[item.Key] = item.Value;
+                    }
+                    else
+                    {
+                        dic.Add(item.Key, item.Value);
+                    }
+                }
+            }
+            return true;
+        }
+
+
         /// <summary>
         /// Get the context.
         /// </summary>
