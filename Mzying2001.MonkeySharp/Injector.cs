@@ -41,7 +41,6 @@ namespace Mzying2001.MonkeySharp
             // Register messenger.
             browser.JavascriptObjectRepository.Settings.LegacyBindingEnabled = true;
             browser.JavascriptObjectRepository.Register("__MonkeySharp_Messenger", messenger, isAsync: false);
-            browser.JavascriptObjectRepository.Register("__MonkeySharp_AsyncMessenger", messenger, isAsync: true);
 
             // Call init callback when javascript context is created.
             new JsContextWatcher(browser).ContextCreated += (_, frame) =>
@@ -65,7 +64,6 @@ namespace Mzying2001.MonkeySharp
                     watcher.ReleaseWatcher();
                 }
                 _browser.JavascriptObjectRepository.UnRegister("__MonkeySharp_Messenger");
-                _browser.JavascriptObjectRepository.UnRegister("__MonkeySharp_AsyncMessenger");
                 _browser = null;
             }
         }

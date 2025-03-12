@@ -15,7 +15,6 @@
             "__MonkeySharp",
             "__MonkeySharp_Injected",
             "__MonkeySharp_Messenger",
-            "__MonkeySharp_AsyncMessenger"
         ],
 
         sendMsg: function (msg, param) {
@@ -30,15 +29,7 @@
         },
 
         sendMsgAsync: async function (msg, param) {
-            // __MonkeySharp_AsyncMessenger: injected by MonkeySharp
-            if (typeof __MonkeySharp_AsyncMessenger !== "undefined") {
-                //Task<T> is not supported by default in JavaScript, so we use sendMessage rather than sendMessageAsync.
-                var result = await __MonkeySharp_AsyncMessenger.sendMessage([msg, this.serialize(param)]);
-                return this.deserialize(result);
-            } else {
-                this.consoleLog("AsyncMessenger is not found.");
-                return undefined;
-            }
+            return this.sendMsg(msg, param);
         },
 
         serialize: function (obj) {

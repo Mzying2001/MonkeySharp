@@ -554,7 +554,6 @@ namespace Mzying2001.MonkeySharp.Core
 
                     // Prevent script from accessing internal objects
                     scriptInjectionBuilder.AppendLine("var __MonkeySharp_CurrentScriptId = undefined;");
-                    scriptInjectionBuilder.AppendLine("var __MonkeySharp_AsyncMessenger = undefined;");
                     scriptInjectionBuilder.AppendLine("var __MonkeySharp_Messenger = undefined;");
                     scriptInjectionBuilder.AppendLine("var __MonkeySharp_Injected = undefined");
                     scriptInjectionBuilder.AppendLine("var __MonkeySharp = undefined;");
@@ -618,8 +617,7 @@ namespace Mzying2001.MonkeySharp.Core
 
         /// <summary>
         /// Called when attaching the browser.
-        /// The messenger should be registered as __MonkeySharp_Messenger and __MonkeySharp_AsyncMessenger (for async messages)
-        /// to the browser for javascript and C# communication.
+        /// The messenger should be registered as __MonkeySharp_Messenger to the browser for javascript and C# communication.
         /// When the javascript context of the main frame is created, the initCallback should be called.
         /// </summary>
         /// <param name="browser">The browser object.</param>
