@@ -1,116 +1,256 @@
-// Init.js
-
 (function () {
-    // avoid duplicate injection
-    if (window.__MonkeySharp_Injected) {
-        return;
-    }
+    "use strict";
 
-    // mark as injected
-    window.__MonkeySharp_Injected = true;
-
-    // MonkeySharp object
-    window.__MonkeySharp = {
-        internalProps: [
-            "__MonkeySharp",
-            "__MonkeySharp_Injected",
-            "__MonkeySharp_Messenger",
-        ],
-
-        sendMsg: function (msg, param) {
-            // __MonkeySharp_Messenger: injected by MonkeySharp
-            if (typeof __MonkeySharp_Messenger !== "undefined") {
-                var result = __MonkeySharp_Messenger.sendMessage([msg, this.serialize(param)]);
-                return this.deserialize(result);
-            } else {
-                this.consoleLog("Messenger is not found.");
-                return undefined;
-            }
-        },
-
-        sendMsgAsync: async function (msg, param) {
-            return this.sendMsg(msg, param);
-        },
-
-        serialize: function (obj) {
-            if (typeof obj === "undefined") {
-                return null;
-            } else {
-                return JSON.stringify(obj);
-            }
-        },
-
-        deserialize: function (str) {
-            if (typeof str === "undefined" || str === null) {
-                return undefined;
-            } else {
-                return JSON.parse(str);
-            }
-        },
-
-        consoleLog: function (msg, isJson) {
-            if (typeof isJson === "undefined" || isJson === false) {
-                console.log("[MonkeySharp]", msg);
-            } else {
-                console.log("[MonkeySharp]", this.deserialize(msg));
-            }
-        },
-
-        onDocumentStart: function () {
-            this.sendMsg("document-start", window.location.href);
-        },
-
-        onDocumentBody: function () {
-            this.sendMsg("document-body", window.location.href);
-        },
-
-        onDocumentEnd: function () {
-            this.sendMsg("document-end", window.location.href);
-        },
-
-        onDocumentIdle: function () {
-            this.sendMsg("document-idle", window.location.href);
-        },
-
-        onContextMenu: function () {
-            this.sendMsg("context-menu", window.location.href);
-        },
-
-        raiseUrlChangeEvent: function () {
-            var event = new Event("urlchange");
-            window.dispatchEvent(event);
-            if (typeof window.onurlchange === "function") window.onurlchange(event);
-        }
+    const decodePayload = function (base64) {
+        const binary = atob(base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+        return JSON.parse(new TextDecoder().decode(bytes));
     };
 
-    // support urlchange event
-    window.onurlchange = null;
-    window.addEventListener("popstate", __MonkeySharp.raiseUrlChangeEvent);
-    window.addEventListener("hashchange", __MonkeySharp.raiseUrlChangeEvent);
+    const payload = decodePayload("__MONKEYSHARP_PAYLOAD_BASE64__");
+    const root = globalThis;
+    const runtimeName = "__MonkeySharpRuntime";
+    let runtime = root[runtimeName];
 
-    // raise document-start event
-    __MonkeySharp.onDocumentStart();
+    if (!runtime) {
+        runtime = (function () {
+            const executions = new Map();
+            let nextListenerId = 1;
 
-    // register document-end event
-    window.addEventListener("DOMContentLoaded", function () {
-        __MonkeySharp.onDocumentEnd();
-    });
+            const uuid = function () {
+                if (root.crypto && typeof root.crypto.randomUUID === "function") return root.crypto.randomUUID();
+                const bytes = new Uint8Array(16);
+                root.crypto.getRandomValues(bytes);
+                bytes[6] = (bytes[6] & 0x0f) | 0x40;
+                bytes[8] = (bytes[8] & 0x3f) | 0x80;
+                const hex = Array.from(bytes, value => value.toString(16).padStart(2, "0"));
+                return hex.slice(0, 4).join("") + "-" + hex.slice(4, 6).join("") + "-" +
+                    hex.slice(6, 8).join("") + "-" + hex.slice(8, 10).join("") + "-" + hex.slice(10).join("");
+            };
 
-    // register document-idle event
-    window.addEventListener("load", function () {
-        __MonkeySharp.onDocumentIdle();
-    });
+            const decodeResult = value => value && value.$monkeySharpType === "undefined" ? undefined : value;
 
-    // register context-menu event
-    window.addEventListener("contextmenu", function () {
-        __MonkeySharp.onContextMenu();
-    });
+            const serializableValue = function (value) {
+                if (typeof value === "undefined" || typeof value === "function" || typeof value === "symbol") {
+                    throw new TypeError("The value is not JSON serializable.");
+                }
+                try {
+                    const json = JSON.stringify(value);
+                    if (typeof json === "undefined") throw new TypeError("The value is not JSON serializable.");
+                    return JSON.parse(json);
+                } catch (error) {
+                    throw new TypeError("The value is not JSON serializable: " + error.message);
+                }
+            };
 
-    // register document-body event
-    var intervalId = setInterval(function () {
-        if (document.body) {
-            clearInterval(intervalId);
-            __MonkeySharp.onDocumentBody();
-        }
-    }, 50);
+            const resolveDispatch = async function () {
+                if (root.CefSharp && typeof root.CefSharp.BindObjectAsync === "function") {
+                    await root.CefSharp.BindObjectAsync("__MonkeySharpBridge");
+                }
+                const bridge = root.__MonkeySharpBridge;
+                return bridge && typeof bridge.dispatch === "function" ? bridge.dispatch.bind(bridge) : null;
+            };
+
+            const createProof = function (plan, invocation) {
+                return Object.freeze({
+                    protocol: plan.protocol,
+                    documentId: plan.documentId,
+                    scriptKey: invocation.scriptKey,
+                    capability: invocation.capability
+                });
+            };
+
+            const send = async function (dispatch, envelope) {
+                const responseJson = await dispatch(JSON.stringify(envelope));
+                const response = typeof responseJson === "string" ? JSON.parse(responseJson) : responseJson;
+                if (!response || response.protocol !== 1) throw new Error("MonkeySharp returned an invalid bridge response.");
+                return response;
+            };
+
+            const call = async function (record, method, parameters, signal) {
+                const requestId = uuid();
+                const envelope = Object.assign({
+                    type: "request",
+                    requestId: requestId,
+                    method: method,
+                    params: parameters
+                }, record.proof);
+                let abortHandler;
+                const dispatchPromise = send(record.dispatch, envelope);
+                const response = signal ? await Promise.race([
+                    dispatchPromise,
+                    new Promise((resolve, reject) => {
+                        abortHandler = function () {
+                            send(record.dispatch, Object.assign({ type: "cancel", requestId: requestId }, record.proof))
+                                .catch(error => console.warn("[MonkeySharp] cancel failed", error));
+                            const error = new Error("The request was canceled.");
+                            error.name = "AbortError";
+                            reject(error);
+                        };
+                        if (signal.aborted) abortHandler();
+                        else signal.addEventListener("abort", abortHandler, { once: true });
+                    })
+                ]) : await dispatchPromise;
+                if (signal && abortHandler) signal.removeEventListener("abort", abortHandler);
+                if (response.type !== "response" || response.requestId !== requestId) {
+                    throw new Error("MonkeySharp returned a response for a different request.");
+                }
+                if (!response.ok) {
+                    const error = new Error(response.error && response.error.message || "MonkeySharp API request failed.");
+                    error.code = response.error && response.error.code;
+                    throw error;
+                }
+                return decodeResult(response.result);
+            };
+
+            const createApi = function (record, invocation, availableApis) {
+                const grants = new Set(invocation.grants);
+                const enabled = name => grants.has(name) && availableApis.has(name);
+                const api = {};
+                if (enabled("GM.info")) {
+                    Object.defineProperty(api, "info", { value: Object.freeze(invocation.info), enumerable: true });
+                }
+                if (enabled("GM.log")) api.log = async value => call(record, "GM.log", { value: serializableValue(value) });
+                if (enabled("GM.getValue")) {
+                    api.getValue = async function (key, defaultValue) {
+                        if (typeof key !== "string" || key.length === 0) throw new TypeError("key must be a non-empty string.");
+                        const parameters = { key: key };
+                        if (arguments.length > 1 && typeof defaultValue !== "undefined") {
+                            parameters.defaultValue = serializableValue(defaultValue);
+                        }
+                        return call(record, "GM.getValue", parameters);
+                    };
+                }
+                if (enabled("GM.setValue")) {
+                    api.setValue = async function (key, value) {
+                        if (typeof key !== "string" || key.length === 0) throw new TypeError("key must be a non-empty string.");
+                        await call(record, "GM.setValue", { key: key, value: serializableValue(value) });
+                    };
+                }
+                if (enabled("GM.deleteValue")) {
+                    api.deleteValue = async function (key) {
+                        if (typeof key !== "string" || key.length === 0) throw new TypeError("key must be a non-empty string.");
+                        return call(record, "GM.deleteValue", { key: key });
+                    };
+                }
+                if (enabled("GM.listValues")) api.listValues = async () => call(record, "GM.listValues", {});
+                if (enabled("GM.addValueChangeListener")) {
+                    api.addValueChangeListener = function (key, callback) {
+                        if (typeof key !== "string" || key.length === 0) throw new TypeError("key must be a non-empty string.");
+                        if (typeof callback !== "function") throw new TypeError("callback must be a function.");
+                        const listenerId = nextListenerId++;
+                        record.handlers.set(listenerId, callback);
+                        call(record, "GM.addValueChangeListener", { listenerId: listenerId, key: key }).catch(error => {
+                            record.handlers.delete(listenerId);
+                            console.error("[MonkeySharp]", error);
+                        });
+                        return listenerId;
+                    };
+                }
+                if (enabled("GM.removeValueChangeListener")) {
+                    api.removeValueChangeListener = async function (listenerId) {
+                        if (!Number.isInteger(listenerId) || listenerId <= 0) throw new TypeError("listenerId must be a positive integer.");
+                        const removed = await call(record, "GM.removeValueChangeListener", { listenerId: listenerId });
+                        if (removed) record.handlers.delete(listenerId);
+                        return removed;
+                    };
+                }
+                if (enabled("GM.addStyle")) {
+                    api.addStyle = async function (css) {
+                        if (typeof css !== "string") throw new TypeError("css must be a string.");
+                        const style = document.createElement("style");
+                        style.textContent = css;
+                        (document.head || document.documentElement).appendChild(style);
+                        return style;
+                    };
+                }
+                if (enabled("GM.addElement")) {
+                    api.addElement = async function (parent, tagName, attributes) {
+                        if (typeof parent === "string") {
+                            attributes = tagName;
+                            tagName = parent;
+                            parent = document.body || document.documentElement;
+                        }
+                        if (!parent || typeof parent.appendChild !== "function") throw new TypeError("parent must be a DOM node.");
+                        if (typeof tagName !== "string" || tagName.length === 0) throw new TypeError("tagName must be a string.");
+                        const element = document.createElement(tagName);
+                        if (attributes && typeof attributes === "object") {
+                            Object.keys(attributes).forEach(name => {
+                                if (name === "textContent") element.textContent = String(attributes[name]);
+                                else element.setAttribute(name, String(attributes[name]));
+                            });
+                        }
+                        parent.appendChild(element);
+                        return element;
+                    };
+                }
+                return Object.freeze(api);
+            };
+
+            const runInvocation = async function (plan, invocation, dispatch) {
+                const proof = createProof(plan, invocation);
+                const record = { proof: proof, dispatch: dispatch, deliveryToken: invocation.deliveryToken, handlers: new Map() };
+                executions.set(invocation.executionId, record);
+                let availableApis = new Set();
+                const grantNone = invocation.grants.length === 1 && invocation.grants[0] === "none";
+                if (!grantNone) {
+                    if (!dispatch) throw new Error("MonkeySharp bridge is unavailable.");
+                    const hello = await send(dispatch, Object.assign({ type: "hello" }, proof));
+                    if (hello.type !== "hello-result" || !hello.ok) {
+                        throw new Error(hello.error && hello.error.message || "MonkeySharp bridge handshake failed.");
+                    }
+                    availableApis = new Set(hello.apis || []);
+                }
+                const gm = grantNone ? undefined : createApi(record, invocation, availableApis);
+                const unsafeWindow = invocation.grants.includes("unsafeWindow") ? root : undefined;
+                try {
+                    const execute = new Function("GM", "unsafeWindow", "window", "\"use strict\";\n" + invocation.source);
+                    await execute.call(undefined, gm, unsafeWindow, root);
+                } catch (error) {
+                    if (dispatch) {
+                        await call(record, "runtime.reportError", {
+                            message: String(error && error.message || error),
+                            stack: error && error.stack ? String(error.stack) : null
+                        }).catch(reportError => console.error("[MonkeySharp] error reporting failed", reportError));
+                    }
+                    throw error;
+                }
+            };
+
+            const install = async function (plan) {
+                if (!plan || plan.protocol !== 1 || !Array.isArray(plan.invocations)) {
+                    throw new Error("MonkeySharp received an invalid injection plan.");
+                }
+                const dispatch = await resolveDispatch();
+                for (const invocation of plan.invocations) {
+                    await runInvocation(plan, invocation, dispatch).catch(error => console.error("[MonkeySharp]", error));
+                }
+            };
+
+            const receive = function (notification) {
+                if (typeof notification === "string") notification = JSON.parse(notification);
+                if (!notification || notification.type !== "notification" || notification.protocol !== 1) return false;
+                const record = executions.get(notification.executionId);
+                if (!record || record.deliveryToken !== notification.deliveryToken) return false;
+                if (notification.event !== "value-change") return false;
+                const data = notification.data || {};
+                const handler = record.handlers.get(data.listenerId);
+                if (!handler) return false;
+                handler(data.key, decodeResult(data.oldValue), decodeResult(data.newValue), Boolean(data.remote));
+                return true;
+            };
+
+            return Object.freeze({ install: install, receive: receive });
+        })();
+
+        Object.defineProperty(root, runtimeName, {
+            value: runtime,
+            writable: false,
+            configurable: false,
+            enumerable: false
+        });
+    }
+
+    runtime.install(payload).catch(error => console.error("[MonkeySharp]", error));
 })();
