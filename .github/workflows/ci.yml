@@ -25,13 +25,13 @@ jobs:
           node-version: 24
 
       - name: Restore
-        run: dotnet restore MonkeySharp.sln -p:Platform=${{ matrix.platform }}
+        run: dotnet restore MonkeySharp.slnx -p:Platform=${{ matrix.platform }}
 
       - name: Build
-        run: dotnet build MonkeySharp.sln -c Release -p:Platform=${{ matrix.platform }} --no-restore --nologo
+        run: dotnet build MonkeySharp.slnx -c Release -p:Platform=${{ matrix.platform }} --no-restore --nologo
 
       - name: Test .NET
-        run: dotnet test MonkeySharp.sln -c Release -p:Platform=${{ matrix.platform }} --no-build --nologo
+        run: dotnet test MonkeySharp.slnx -c Release -p:Platform=${{ matrix.platform }} --no-build --nologo
 
       - name: Test JavaScript protocol
         run: node --test Mzying2001.MonkeySharp.Core.Tests/JavaScript/*.test.js

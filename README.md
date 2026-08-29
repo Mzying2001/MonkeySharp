@@ -223,9 +223,9 @@ Legacy grant aliases are not translated: update metadata to the exact, case-sens
 The repository pins exactly .NET SDK 9.0.315 and CefSharp 121.3.70.
 
 ```powershell
-dotnet restore MonkeySharp.sln -p:Platform=x64
-dotnet build MonkeySharp.sln -c Release -p:Platform=x64 --no-restore
-dotnet test MonkeySharp.sln -c Release -p:Platform=x64 --no-build
+dotnet restore MonkeySharp.slnx -p:Platform=x64
+dotnet build MonkeySharp.slnx -c Release -p:Platform=x64 --no-restore
+dotnet test MonkeySharp.slnx -c Release -p:Platform=x64 --no-build
 node --test Mzying2001.MonkeySharp.Core.Tests/JavaScript/*.test.js
 ```
 

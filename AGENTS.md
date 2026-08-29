@@ -10,7 +10,7 @@ MonkeySharp 2 is a userscript runtime for applications that embed CefSharp. It p
 - `Mzying2001.MonkeySharp.CefSharp/`: CefSharp adapter for frame lifecycle handling, JavaScript binding, and script execution.
 - `Mzying2001.MonkeySharp.Core.Tests/`: Core unit tests and JavaScript protocol tests.
 - `Mzying2001.MonkeySharp.CefSharp.IntegrationTests/`: CefSharp adapter integration tests.
-- `MonkeySharp.sln`: Main solution for building and testing the repository.
+- `MonkeySharp.slnx`: Main solution for building and testing the repository.
 - `README.md`: Setup, supported APIs, security model, migration, and build documentation.
 - `local-notes/`: Local design and implementation notes that are not committed to Git.
 
