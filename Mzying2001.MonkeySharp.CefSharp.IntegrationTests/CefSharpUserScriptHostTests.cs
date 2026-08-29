@@ -1,5 +1,6 @@
 using CefSharp;
 using Moq;
+using Mzying2001.MonkeySharp.Core.Apis;
 using Mzying2001.MonkeySharp.Core.Domain;
 using Mzying2001.MonkeySharp.Core.Repository;
 using Mzying2001.MonkeySharp.Core.Runtime;
@@ -7,6 +8,8 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
@@ -196,6 +199,64 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
             }
         }
 
+        [Fact]
+        public async Task BuilderServicesBecomeHelloCapabilitiesAndResolveDependencies()
+        {
+            var repository = new InMemoryUserScriptRepository();
+            var grants = new[]
+            {
+                "GM.getResourceText", "GM.getResourceURL", "GM.xmlHttpRequest",
+                "GM.registerMenuCommand", "GM.unregisterMenuCommand", "GM.notification",
+                "GM.setClipboard", "GM.openInTab", "GM.download", "GM.getTab", "GM.saveTab", "GM.getTabs"
+            };
+            var metadata = string.Join("\n", grants.Select(item => "// @grant " + item));
+            var source = "// ==UserScript==\n// @name capabilities\n// @match https://example.com/*\n" +
+                "// @run-at document-end\n// @connect api.example.com\n" +
+                "// @resource template https://cdn.example/template.txt\n" +
+                "// @require https://cdn.example/dependency.js\n" + metadata + "\n// ==/UserScript==\nwindow.mainLoaded = true;";
+            await repository.InstallAsync(source, "test", true, CancellationToken.None);
+            var services = new AllHostServices();
+            using (var host = new CefSharpUserScriptHostBuilder(repository)
+                .UseDependencyProvider(services)
+                .UseResourceProvider(services)
+                .UseHttpRequestService(services)
+                .UseMenuService(services)
+                .UseNotificationService(services)
+                .UseClipboardService(services)
+                .UseTabService(services)
+                .UseDownloadService(services)
+                .UseTabStateService(services)
+                .Configure(new CefSharpHostOptions { TrustedPageWorld = true })
+                .Build())
+            {
+                var frame = new DocumentFrame(
+                    "browser", "document", "main", new Uri("https://example.com/page"), true,
+                    TimingGuarantee.BestEffortDocumentStart, host.BridgeIntegrity);
+                var plan = await host.Engine.ProcessLifecycleAsync(
+                    new DocumentLifecycleEventArgs(DocumentLifecycleKind.DomContentLoaded, frame),
+                    CancellationToken.None);
+                var invocation = Assert.Single(plan.Invocations);
+                Assert.StartsWith("window.dependencyLoaded = true;", invocation.Source);
+
+                var responseJson = await host.Gateway.DispatchAsync(JsonSerializer.Serialize(new
+                {
+                    type = "hello",
+                    protocol = 1,
+                    documentId = frame.DocumentId,
+                    scriptKey = invocation.ScriptKey.ToString(),
+                    capability = invocation.Capability
+                }), CancellationToken.None);
+                using (var response = JsonDocument.Parse(responseJson))
+                {
+                    Assert.True(response.RootElement.GetProperty("ok").GetBoolean());
+                    var capabilities = response.RootElement.GetProperty("apis")
+                        .EnumerateArray().Select(item => item.GetString()).ToList();
+                    foreach (var grant in grants)
+                        Assert.Contains(grant, capabilities);
+                }
+            }
+        }
+
         private static async Task<CefSharpUserScriptHost> CreateHostAsync(
             string source,
             CefSharpHostOptions options = null)
@@ -287,6 +348,81 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
                 while (Scripts.Count < count && DateTime.UtcNow < timeout)
                     await Task.Delay(10);
                 Assert.True(Scripts.Count >= count, "Timed out waiting for CefSharp frame execution.");
+            }
+        }
+
+        private sealed class AllHostServices :
+            IUserScriptDependencyProvider,
+            IResourceProvider,
+            IHttpRequestService,
+            IMenuService,
+            INotificationService,
+            IClipboardService,
+            ITabService,
+            IDownloadService,
+            ITabStateService
+        {
+            public Task<string> GetScriptAsync(
+                UserScriptInstallation installation,
+                string url,
+                CancellationToken cancellationToken)
+                => Task.FromResult("window.dependencyLoaded = true;");
+
+            public Task<ResourceContent> GetAsync(
+                UserScriptInstallation installation,
+                ResourceDeclaration resource,
+                CancellationToken cancellationToken)
+                => Task.FromResult(new ResourceContent(Encoding.UTF8.GetBytes("resource"), "text/plain", "resource"));
+
+            public Task<UserScriptHttpResponse> SendAsync(
+                UserScriptHttpRequest request,
+                IProgress<UserScriptHttpProgress> progress,
+                CancellationToken cancellationToken)
+                => Task.FromResult(new UserScriptHttpResponse(
+                    200, "OK", request.Url, new Dictionary<string, string>(), new byte[0], string.Empty));
+
+            public Task<IMenuRegistration> RegisterAsync(
+                MenuCommandRequest request,
+                Action invoked,
+                CancellationToken cancellationToken)
+                => Task.FromResult<IMenuRegistration>(new NoopMenuRegistration());
+
+            public Task ShowAsync(UserScriptNotificationRequest request, CancellationToken cancellationToken)
+                => Task.CompletedTask;
+
+            public Task SetTextAsync(string text, string mediaType, CancellationToken cancellationToken)
+                => Task.CompletedTask;
+
+            public Task<OpenTabResult> OpenAsync(OpenTabRequest request, CancellationToken cancellationToken)
+                => Task.FromResult(new OpenTabResult("tab"));
+
+            public Task<DownloadResult> DownloadAsync(DownloadRequest request, CancellationToken cancellationToken)
+                => Task.FromResult(new DownloadResult("download"));
+
+            public Task<string> GetAsync(
+                ScriptKey scriptKey,
+                DocumentFrame frame,
+                CancellationToken cancellationToken)
+                => Task.FromResult("{}");
+
+            public Task SaveAsync(
+                ScriptKey scriptKey,
+                DocumentFrame frame,
+                string jsonValue,
+                CancellationToken cancellationToken)
+                => Task.CompletedTask;
+
+            public Task<IReadOnlyDictionary<string, string>> GetAllAsync(
+                ScriptKey scriptKey,
+                CancellationToken cancellationToken)
+                => Task.FromResult<IReadOnlyDictionary<string, string>>(
+                    new Dictionary<string, string> { ["tab"] = "{}" });
+        }
+
+        private sealed class NoopMenuRegistration : IMenuRegistration
+        {
+            public void Dispose()
+            {
             }
         }
     }

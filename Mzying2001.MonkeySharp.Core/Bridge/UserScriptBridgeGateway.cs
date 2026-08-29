@@ -27,6 +27,8 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
         private readonly BridgeOptions _options;
         private readonly Dictionary<string, IUserScriptApiProvider> _providers =
             new Dictionary<string, IUserScriptApiProvider>(StringComparer.Ordinal);
+        private readonly HashSet<IUserScriptApiProvider> _providerInstances =
+            new HashSet<IUserScriptApiProvider>();
         private readonly object _stateLock = new object();
         private readonly Dictionary<string, PendingRequest> _pending =
             new Dictionary<string, PendingRequest>(StringComparer.Ordinal);
@@ -54,6 +56,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                     RegisterProvider(provider);
             }
             _store.ValueChanged += StoreValueChanged;
+            _engine.ExecutionEnded += EngineExecutionEnded;
         }
 
         public event EventHandler<BridgeNotificationEventArgs> Notification;
@@ -130,6 +133,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             if (_disposed)
                 return;
             _store.ValueChanged -= StoreValueChanged;
+            _engine.ExecutionEnded -= EngineExecutionEnded;
             lock (_stateLock)
             {
                 if (_disposed)
@@ -143,6 +147,10 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                 _listeners.Clear();
                 _disposed = true;
             }
+            foreach (var source in _providerInstances.OfType<IUserScriptNotificationSource>())
+                source.Notification -= ProviderNotification;
+            foreach (var disposable in _providerInstances.OfType<IDisposable>())
+                disposable.Dispose();
         }
 
         private Task<string> HandleHelloAsync(JsonElement root, CancellationToken cancellationToken)
@@ -421,6 +429,50 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                 if (string.IsNullOrEmpty(method) || _providers.ContainsKey(method))
                     throw new ArgumentException("API method '" + method + "' is registered more than once.", nameof(provider));
                 _providers.Add(method, provider);
+            }
+            if (_providerInstances.Add(provider) && provider is IUserScriptNotificationSource source)
+                source.Notification += ProviderNotification;
+        }
+
+        private void ProviderNotification(object sender, ApiNotificationEventArgs notification)
+        {
+            var executions = _engine.GetExecutionsForScript(notification.ScriptKey);
+            if (notification.ExecutionId != null)
+                executions = new ReadOnlyCollection<UserScriptEngine.ExecutionRecord>(
+                    executions.Where(item => item.Invocation.ExecutionId == notification.ExecutionId).ToList());
+            foreach (var execution in executions)
+            {
+                Notification?.Invoke(this, new BridgeNotificationEventArgs(
+                    execution.Frame,
+                    execution.Invocation.ExecutionId,
+                    execution.Invocation.DeliveryToken,
+                    notification.EventName,
+                    notification.DataJson));
+            }
+        }
+
+        private void EngineExecutionEnded(UserScriptEngine.ExecutionRecord execution)
+        {
+            var prefix = execution.Invocation.ExecutionId + ":";
+            lock (_stateLock)
+            {
+                _listeners.Remove(execution.Invocation.ExecutionId);
+                _seenRequests.RemoveWhere(item => item.StartsWith(prefix, StringComparison.Ordinal));
+            }
+            foreach (var observer in _providerInstances.OfType<IUserScriptExecutionObserver>())
+            {
+                try
+                {
+                    observer.OnExecutionEnded(execution.Invocation.ExecutionId);
+                }
+                catch (Exception exception)
+                {
+                    EmitDiagnostic(
+                        BridgeErrorCodes.Internal,
+                        "An API provider failed to release execution state.",
+                        exception,
+                        execution);
+                }
             }
         }
 

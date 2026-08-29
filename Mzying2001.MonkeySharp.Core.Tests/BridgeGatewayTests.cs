@@ -1,5 +1,6 @@
 using Mzying2001.MonkeySharp.Core.Apis;
 using Mzying2001.MonkeySharp.Core.Bridge;
+using Mzying2001.MonkeySharp.Core.Domain;
 using Mzying2001.MonkeySharp.Core.Permissions;
 using Mzying2001.MonkeySharp.Core.Repository;
 using Mzying2001.MonkeySharp.Core.Runtime;
@@ -242,6 +243,35 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Fact]
+        public async Task ProviderNotificationsAreRoutedWithExecutionDeliveryToken()
+        {
+            var provider = new NotificationProvider();
+            using (var fixture = await BridgeFixture.CreateAsync(
+                null,
+                new[] { provider },
+                null,
+                "GM.download"))
+            {
+                BridgeNotificationEventArgs delivered = null;
+                fixture.Gateway.Notification += (_, item) => delivered = item;
+
+                provider.Emit(fixture.Invocation.ScriptKey, fixture.Invocation.ExecutionId);
+
+                Assert.NotNull(delivered);
+                Assert.Equal(fixture.Invocation.ExecutionId, delivered.ExecutionId);
+                Assert.Equal(fixture.Invocation.DeliveryToken, delivered.DeliveryToken);
+                Assert.Equal("provider-event", delivered.EventName);
+
+                delivered = null;
+                await fixture.Engine.InvalidateDocumentAsync(fixture.Frame.DocumentId, CancellationToken.None);
+                provider.Emit(fixture.Invocation.ScriptKey, fixture.Invocation.ExecutionId);
+
+                Assert.Equal(fixture.Invocation.ExecutionId, provider.EndedExecutionId);
+                Assert.Null(delivered);
+            }
+        }
+
+        [Fact]
         public async Task OversizedResponseKeepsCorrelationId()
         {
             using (var fixture = await BridgeFixture.CreateAsync(
@@ -324,6 +354,36 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             public Task<ApiResult> InvokeAsync(ApiInvocationContext context, CancellationToken cancellationToken)
             {
                 return Task.FromResult(ApiResult.FromValue(new string('x', 2000)));
+            }
+        }
+
+        private sealed class NotificationProvider :
+            IUserScriptApiProvider,
+            IUserScriptNotificationSource,
+            IUserScriptExecutionObserver
+        {
+            public event EventHandler<ApiNotificationEventArgs> Notification;
+            public IReadOnlyCollection<string> Methods { get; } =
+                new ReadOnlyCollection<string>(new[] { "GM.download" });
+            public string EndedExecutionId { get; private set; }
+
+            public Task<ApiResult> InvokeAsync(ApiInvocationContext context, CancellationToken cancellationToken)
+            {
+                return Task.FromResult(ApiResult.Undefined);
+            }
+
+            public void Emit(ScriptKey scriptKey, string executionId)
+            {
+                Notification?.Invoke(this, new ApiNotificationEventArgs(
+                    scriptKey,
+                    executionId,
+                    "provider-event",
+                    "{}"));
+            }
+
+            public void OnExecutionEnded(string executionId)
+            {
+                EndedExecutionId = executionId;
             }
         }
 

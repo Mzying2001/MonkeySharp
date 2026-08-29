@@ -82,6 +82,29 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             }
         }
 
+        [Fact]
+        public async Task DependencyResolutionFailureSkipsInvocationAndProducesDiagnostic()
+        {
+            var repository = new InMemoryUserScriptRepository();
+            var source = MetadataAndMatchingTests.Script(
+                "// @name dependencies\n// @match https://example.com/*\n// @grant none\n" +
+                "// @require https://cdn.example/dependency.js\n// @run-at document-end");
+            await repository.InstallAsync(source, "test", true, CancellationToken.None);
+            using (var engine = new UserScriptEngine(repository, sourceResolver: new FailingSourceResolver()))
+            {
+                var diagnostics = new List<UserScriptDiagnostic>();
+                engine.Diagnostic += (_, item) => diagnostics.Add(item);
+
+                var plan = await engine.ProcessLifecycleAsync(
+                    new DocumentLifecycleEventArgs(DocumentLifecycleKind.DomContentLoaded, Frame("doc", true)),
+                    CancellationToken.None);
+
+                Assert.Empty(plan.Invocations);
+                Assert.Contains(diagnostics, item =>
+                    item.Code == "MSR400_DEPENDENCY_RESOLUTION_FAILED" && item.Exception is InvalidOperationException);
+            }
+        }
+
         private static string Script(string runAt)
         {
             return MetadataAndMatchingTests.Script(
@@ -99,6 +122,16 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 mainFrame,
                 TimingGuarantee.BestEffortDocumentStart,
                 BridgeIntegrityGuarantee.Unverified);
+        }
+
+        private sealed class FailingSourceResolver : IUserScriptSourceResolver
+        {
+            public Task<string> ResolveSourceAsync(
+                UserScriptInstallation installation,
+                CancellationToken cancellationToken)
+            {
+                throw new InvalidOperationException("Dependency fixture failure.");
+            }
         }
     }
 }

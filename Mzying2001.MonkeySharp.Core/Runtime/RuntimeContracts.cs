@@ -134,6 +134,11 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
         Task<string> DispatchAsync(string requestJson, CancellationToken cancellationToken);
     }
 
+    public interface IUserScriptSourceResolver
+    {
+        Task<string> ResolveSourceAsync(UserScriptInstallation installation, CancellationToken cancellationToken);
+    }
+
     public sealed class BridgeRequestEventArgs : EventArgs
     {
         public BridgeRequestEventArgs(DocumentFrame frame, string requestJson)

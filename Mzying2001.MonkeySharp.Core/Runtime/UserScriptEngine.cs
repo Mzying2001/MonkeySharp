@@ -17,6 +17,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
         private readonly IUserScriptRepository _repository;
         private readonly IUserScriptMatcher _matcher;
         private readonly UserScriptEngineOptions _options;
+        private readonly IUserScriptSourceResolver _sourceResolver;
         private readonly SemaphoreSlim _queue = new SemaphoreSlim(1, 1);
         private readonly object _stateLock = new object();
         private readonly Dictionary<string, DocumentState> _documents =
@@ -28,14 +29,17 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
         public UserScriptEngine(
             IUserScriptRepository repository,
             IUserScriptMatcher matcher = null,
-            UserScriptEngineOptions options = null)
+            UserScriptEngineOptions options = null,
+            IUserScriptSourceResolver sourceResolver = null)
         {
             _repository = repository ?? throw new ArgumentNullException(nameof(repository));
             _matcher = matcher ?? new UserScriptMatcher();
             _options = options ?? new UserScriptEngineOptions();
+            _sourceResolver = sourceResolver;
         }
 
         public event EventHandler<UserScriptDiagnostic> Diagnostic;
+        internal event Action<ExecutionRecord> ExecutionEnded;
 
         public async Task<InjectionPlan> ProcessLifecycleAsync(
             DocumentLifecycleEventArgs lifecycle,
@@ -82,6 +86,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
         {
             if (_disposed)
                 return;
+            List<ExecutionRecord> endedExecutions = null;
             _queue.Wait();
             try
             {
@@ -89,6 +94,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                     return;
                 lock (_stateLock)
                 {
+                    endedExecutions = _executions.Values.ToList();
                     foreach (var execution in _executions.Values)
                         execution.Cancellation.Cancel();
                     foreach (var execution in _executions.Values)
@@ -103,6 +109,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                 _queue.Release();
                 _queue.Dispose();
             }
+            NotifyExecutionsEnded(endedExecutions);
         }
 
         internal bool TryGetExecution(
@@ -214,7 +221,32 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                         frameId: frame.FrameId));
                 }
 
-                var invocation = CreateInvocation(installation);
+                string source;
+                try
+                {
+                    source = _sourceResolver == null
+                        ? installation.Definition.Source
+                        : await _sourceResolver.ResolveSourceAsync(installation, cancellationToken).ConfigureAwait(false);
+                    if (source == null)
+                        throw new InvalidOperationException("The script source resolver returned null.");
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception exception)
+                {
+                    diagnostics.Add(new UserScriptDiagnostic(
+                        "MSR400_DEPENDENCY_RESOLUTION_FAILED",
+                        DiagnosticSeverity.Error,
+                        "The script dependencies could not be resolved.",
+                        exception,
+                        installation.ScriptKey,
+                        frame.DocumentId,
+                        frame.FrameId));
+                    continue;
+                }
+                var invocation = CreateInvocation(installation, source);
                 var execution = new ExecutionRecord(frame, installation, invocation, new CancellationTokenSource());
                 lock (_stateLock)
                     _executions.Add(invocation.ExecutionId, execution);
@@ -239,10 +271,12 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
 
         private void InvalidateDocument(string documentId)
         {
+            List<ExecutionRecord> endedExecutions;
             lock (_stateLock)
             {
                 if (!_documents.TryGetValue(documentId, out var document))
                     return;
+                endedExecutions = new List<ExecutionRecord>();
                 foreach (var executionId in document.ExecutionIds)
                 {
                     if (_executions.TryGetValue(executionId, out var execution))
@@ -250,13 +284,23 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                         execution.Cancellation.Cancel();
                         execution.Cancellation.Dispose();
                         _executions.Remove(executionId);
+                        endedExecutions.Add(execution);
                     }
                 }
                 _documents.Remove(documentId);
             }
+            NotifyExecutionsEnded(endedExecutions);
         }
 
-        private static ScriptInvocation CreateInvocation(UserScriptInstallation installation)
+        private void NotifyExecutionsEnded(IEnumerable<ExecutionRecord> executions)
+        {
+            if (executions == null)
+                return;
+            foreach (var execution in executions)
+                ExecutionEnded?.Invoke(execution);
+        }
+
+        private static ScriptInvocation CreateInvocation(UserScriptInstallation installation, string source)
         {
             var metadata = installation.Definition.Metadata;
             var info = JsonSerializer.Serialize(new Dictionary<string, object>
@@ -270,7 +314,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
             return new ScriptInvocation(
                 Guid.NewGuid().ToString("D"),
                 installation.ScriptKey,
-                installation.Definition.Source,
+                source,
                 metadata.Grants,
                 info,
                 CreateToken(),

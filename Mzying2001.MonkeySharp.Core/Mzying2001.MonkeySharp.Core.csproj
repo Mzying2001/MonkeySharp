@@ -19,7 +19,7 @@
   <PropertyGroup>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
     <RepositoryUrl>https://github.com/Mzying2001/MonkeySharp.git</RepositoryUrl>
-    <Description>Add user script support to CefSharp.</Description>
+    <Description>Browser-independent userscript runtime, metadata, matching, storage, permissions, and bridge.</Description>
     <PackageProjectUrl>https://github.com/Mzying2001/MonkeySharp</PackageProjectUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>

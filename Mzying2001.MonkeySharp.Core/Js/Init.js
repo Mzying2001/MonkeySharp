@@ -77,22 +77,26 @@
                     params: parameters
                 }, record.proof);
                 let abortHandler;
-                const dispatchPromise = send(record.dispatch, envelope);
-                const response = signal ? await Promise.race([
-                    dispatchPromise,
-                    new Promise((resolve, reject) => {
-                        abortHandler = function () {
-                            send(record.dispatch, Object.assign({ type: "cancel", requestId: requestId }, record.proof))
-                                .catch(error => console.warn("[MonkeySharp] cancel failed", error));
-                            const error = new Error("The request was canceled.");
-                            error.name = "AbortError";
-                            reject(error);
-                        };
-                        if (signal.aborted) abortHandler();
-                        else signal.addEventListener("abort", abortHandler, { once: true });
-                    })
-                ]) : await dispatchPromise;
-                if (signal && abortHandler) signal.removeEventListener("abort", abortHandler);
+                let response;
+                try {
+                    const dispatchPromise = send(record.dispatch, envelope);
+                    response = signal ? await Promise.race([
+                        dispatchPromise,
+                        new Promise((resolve, reject) => {
+                            abortHandler = function () {
+                                send(record.dispatch, Object.assign({ type: "cancel", requestId: requestId }, record.proof))
+                                    .catch(error => console.warn("[MonkeySharp] cancel failed", error));
+                                const error = new Error("The request was canceled.");
+                                error.name = "AbortError";
+                                reject(error);
+                            };
+                            if (signal.aborted) abortHandler();
+                            else signal.addEventListener("abort", abortHandler, { once: true });
+                        })
+                    ]) : await dispatchPromise;
+                } finally {
+                    if (signal && abortHandler) signal.removeEventListener("abort", abortHandler);
+                }
                 if (response.type !== "response" || response.requestId !== requestId) {
                     throw new Error("MonkeySharp returned a response for a different request.");
                 }
@@ -185,12 +189,148 @@
                         return element;
                     };
                 }
+                if (enabled("GM.getResourceText")) {
+                    api.getResourceText = async function (name) {
+                        if (typeof name !== "string" || name.length === 0) throw new TypeError("name must be a non-empty string.");
+                        return call(record, "GM.getResourceText", { name: name });
+                    };
+                }
+                if (enabled("GM.getResourceURL")) {
+                    api.getResourceURL = async function (name) {
+                        if (typeof name !== "string" || name.length === 0) throw new TypeError("name must be a non-empty string.");
+                        return call(record, "GM.getResourceURL", { name: name });
+                    };
+                }
+                if (enabled("GM.xmlHttpRequest")) {
+                    api.xmlHttpRequest = async function (details) {
+                        if (!details || typeof details !== "object" || typeof details.url !== "string") {
+                            throw new TypeError("details.url must be a string.");
+                        }
+                        const xhrId = nextListenerId++;
+                        const callbacks = {
+                            onload: details.onload,
+                            onerror: details.onerror,
+                            ontimeout: details.ontimeout,
+                            onprogress: details.onprogress
+                        };
+                        Object.keys(callbacks).forEach(name => {
+                            if (typeof callbacks[name] !== "undefined" && typeof callbacks[name] !== "function") {
+                                throw new TypeError(name + " must be a function.");
+                            }
+                        });
+                        const parameters = { xhrId: xhrId, url: details.url };
+                        ["method", "data"].forEach(name => {
+                            if (typeof details[name] !== "undefined") {
+                                if (typeof details[name] !== "string") throw new TypeError(name + " must be a string.");
+                                parameters[name] = details[name];
+                            }
+                        });
+                        if (typeof details.headers !== "undefined") parameters.headers = serializableValue(details.headers);
+                        if (typeof details.timeout !== "undefined") {
+                            if (!Number.isInteger(details.timeout) || details.timeout <= 0) throw new TypeError("timeout must be positive.");
+                            parameters.timeout = details.timeout;
+                        }
+                        record.xhrHandlers.set(xhrId, callbacks);
+                        try {
+                            const response = await call(record, "GM.xmlHttpRequest", parameters, details.signal);
+                            if (callbacks.onload) callbacks.onload(response);
+                            return response;
+                        } catch (error) {
+                            if (error.code === "MSP009_TIMEOUT" && callbacks.ontimeout) callbacks.ontimeout(error);
+                            else if (callbacks.onerror) callbacks.onerror(error);
+                            throw error;
+                        } finally {
+                            record.xhrHandlers.delete(xhrId);
+                        }
+                    };
+                }
+                if (enabled("GM.registerMenuCommand")) {
+                    api.registerMenuCommand = async function (name, callback, accessKey) {
+                        if (typeof name !== "string" || name.length === 0) throw new TypeError("name must be a non-empty string.");
+                        if (typeof callback !== "function") throw new TypeError("callback must be a function.");
+                        if (typeof accessKey !== "undefined" && typeof accessKey !== "string") throw new TypeError("accessKey must be a string.");
+                        const commandId = nextListenerId++;
+                        record.menuHandlers.set(commandId, callback);
+                        try {
+                            await call(record, "GM.registerMenuCommand", {
+                                commandId: commandId,
+                                name: name,
+                                accessKey: accessKey || null
+                            });
+                            return commandId;
+                        } catch (error) {
+                            record.menuHandlers.delete(commandId);
+                            throw error;
+                        }
+                    };
+                }
+                if (enabled("GM.unregisterMenuCommand")) {
+                    api.unregisterMenuCommand = async function (commandId) {
+                        if (!Number.isInteger(commandId) || commandId <= 0) throw new TypeError("commandId must be positive.");
+                        const removed = await call(record, "GM.unregisterMenuCommand", { commandId: commandId });
+                        if (removed) record.menuHandlers.delete(commandId);
+                        return removed;
+                    };
+                }
+                if (enabled("GM.notification")) {
+                    api.notification = async function (details) {
+                        if (typeof details === "string") details = { text: details };
+                        if (!details || typeof details !== "object") throw new TypeError("details must be an object.");
+                        return call(record, "GM.notification", {
+                            title: details.title || null,
+                            text: details.text,
+                            imageUrl: details.imageUrl || details.image || null
+                        });
+                    };
+                }
+                if (enabled("GM.setClipboard")) {
+                    api.setClipboard = async function (text, type) {
+                        if (typeof text !== "string") throw new TypeError("text must be a string.");
+                        if (typeof type !== "undefined" && typeof type !== "string") throw new TypeError("type must be a string.");
+                        return call(record, "GM.setClipboard", { text: text, type: type || "text/plain" });
+                    };
+                }
+                if (enabled("GM.openInTab")) {
+                    api.openInTab = async function (url, options) {
+                        if (typeof url !== "string") throw new TypeError("url must be a string.");
+                        options = options || {};
+                        return call(record, "GM.openInTab", {
+                            url: url,
+                            active: typeof options.active === "boolean" ? options.active : true,
+                            insert: Boolean(options.insert),
+                            setParent: Boolean(options.setParent)
+                        });
+                    };
+                }
+                if (enabled("GM.download")) {
+                    api.download = async function (details) {
+                        if (typeof details === "string") details = { url: details };
+                        if (!details || typeof details !== "object") throw new TypeError("details must be an object.");
+                        return call(record, "GM.download", {
+                            url: details.url,
+                            name: details.name || null,
+                            saveAs: Boolean(details.saveAs)
+                        });
+                    };
+                }
+                if (enabled("GM.getTab")) api.getTab = async () => call(record, "GM.getTab", {});
+                if (enabled("GM.saveTab")) {
+                    api.saveTab = async value => call(record, "GM.saveTab", { value: serializableValue(value) });
+                }
+                if (enabled("GM.getTabs")) api.getTabs = async () => call(record, "GM.getTabs", {});
                 return Object.freeze(api);
             };
 
             const runInvocation = async function (plan, invocation, dispatch) {
                 const proof = createProof(plan, invocation);
-                const record = { proof: proof, dispatch: dispatch, deliveryToken: invocation.deliveryToken, handlers: new Map() };
+                const record = {
+                    proof: proof,
+                    dispatch: dispatch,
+                    deliveryToken: invocation.deliveryToken,
+                    handlers: new Map(),
+                    menuHandlers: new Map(),
+                    xhrHandlers: new Map()
+                };
                 executions.set(invocation.executionId, record);
                 let availableApis = new Set();
                 const grantNone = invocation.grants.length === 1 && invocation.grants[0] === "none";
@@ -233,12 +373,31 @@
                 if (!notification || notification.type !== "notification" || notification.protocol !== 1) return false;
                 const record = executions.get(notification.executionId);
                 if (!record || record.deliveryToken !== notification.deliveryToken) return false;
-                if (notification.event !== "value-change") return false;
                 const data = notification.data || {};
-                const handler = record.handlers.get(data.listenerId);
-                if (!handler) return false;
-                handler(data.key, decodeResult(data.oldValue), decodeResult(data.newValue), Boolean(data.remote));
-                return true;
+                try {
+                    if (notification.event === "value-change") {
+                        const handler = record.handlers.get(data.listenerId);
+                        if (!handler) return false;
+                        handler(data.key, decodeResult(data.oldValue), decodeResult(data.newValue), Boolean(data.remote));
+                        return true;
+                    }
+                    if (notification.event === "menu-command") {
+                        const handler = record.menuHandlers.get(data.commandId);
+                        if (!handler) return false;
+                        handler();
+                        return true;
+                    }
+                    if (notification.event === "xhr-progress") {
+                        const handlers = record.xhrHandlers.get(data.xhrId);
+                        if (!handlers || !handlers.onprogress) return false;
+                        handlers.onprogress({ loaded: data.loaded, total: data.total });
+                        return true;
+                    }
+                    return false;
+                } catch (error) {
+                    console.error("[MonkeySharp] callback failed", error);
+                    return false;
+                }
             };
 
             return Object.freeze({ install: install, receive: receive });

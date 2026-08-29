@@ -68,6 +68,37 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         Task<ApiResult> InvokeAsync(ApiInvocationContext context, CancellationToken cancellationToken);
     }
 
+    public sealed class ApiNotificationEventArgs : EventArgs
+    {
+        public ApiNotificationEventArgs(
+            ScriptKey scriptKey,
+            string executionId,
+            string eventName,
+            string dataJson)
+        {
+            ScriptKey = scriptKey;
+            ExecutionId = executionId;
+            EventName = eventName ?? throw new ArgumentNullException(nameof(eventName));
+            DataJson = dataJson ?? throw new ArgumentNullException(nameof(dataJson));
+            using (JsonDocument.Parse(dataJson)) { }
+        }
+
+        public ScriptKey ScriptKey { get; }
+        public string ExecutionId { get; }
+        public string EventName { get; }
+        public string DataJson { get; }
+    }
+
+    public interface IUserScriptNotificationSource
+    {
+        event EventHandler<ApiNotificationEventArgs> Notification;
+    }
+
+    public interface IUserScriptExecutionObserver
+    {
+        void OnExecutionEnded(string executionId);
+    }
+
     public sealed class UserScriptLogEntry
     {
         public UserScriptLogEntry(ScriptKey scriptKey, string documentId, string jsonValue)

@@ -103,6 +103,7 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
 
             var runAt = ParseRunAt(First(values, "run-at"), diagnostics);
             var resources = ParseResources(values, diagnostics);
+            ValidateConnects(ReadCollection(values, "connect"), diagnostics, values);
             var knownKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
                 "name", "namespace", "version", "description", "author", "license", "icon", "iconurl",
@@ -270,6 +271,7 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
             ICollection<MetadataDiagnostic> diagnostics)
         {
             var result = new List<ResourceDeclaration>();
+            var names = new HashSet<string>(StringComparer.Ordinal);
             if (!values.TryGetValue("resource", out var resources))
                 return result.AsReadOnly();
 
@@ -285,11 +287,46 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
                         entry.Line));
                     continue;
                 }
-                result.Add(new ResourceDeclaration(
-                    entry.Value.Substring(0, separator),
-                    entry.Value.Substring(separator).Trim()));
+                var name = entry.Value.Substring(0, separator);
+                if (!names.Add(name))
+                {
+                    diagnostics.Add(new MetadataDiagnostic(
+                        "MSM051_DUPLICATE_RESOURCE",
+                        DiagnosticSeverity.Error,
+                        "A resource named '" + name + "' is already declared.",
+                        entry.Line));
+                    continue;
+                }
+                result.Add(new ResourceDeclaration(name, entry.Value.Substring(separator).Trim()));
             }
             return result.AsReadOnly();
+        }
+
+        private static void ValidateConnects(
+            IReadOnlyList<string> connects,
+            ICollection<MetadataDiagnostic> diagnostics,
+            IDictionary<string, List<Entry>> values)
+        {
+            foreach (var connect in connects)
+            {
+                var valid = connect == "*" || connect == "self";
+                if (!valid)
+                {
+                    var host = connect.StartsWith("*.", StringComparison.Ordinal) ? connect.Substring(2) : connect;
+                    if (Uri.TryCreate(connect, UriKind.Absolute, out var uri))
+                        valid = uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps;
+                    else
+                        valid = Uri.CheckHostName(host) != UriHostNameType.Unknown && !host.Contains("*");
+                }
+                if (!valid)
+                {
+                    diagnostics.Add(new MetadataDiagnostic(
+                        "MSM052_INVALID_CONNECT",
+                        DiagnosticSeverity.Error,
+                        "Invalid @connect value '" + connect + "'.",
+                        values["connect"].First(item => item.Value == connect).Line));
+                }
+            }
         }
 
         private static void ValidateMatchPatterns(
