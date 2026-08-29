@@ -242,6 +242,40 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                         frameId: frame.FrameId));
                 }
 
+                if (!string.IsNullOrEmpty(metadata.InjectInto) &&
+                    !string.Equals(metadata.InjectInto, "page", StringComparison.OrdinalIgnoreCase))
+                {
+                    diagnostics.Add(new UserScriptDiagnostic(
+                        "MSR210_UNSUPPORTED_INJECT_WORLD",
+                        DiagnosticSeverity.Warning,
+                        "The requested @inject-into world is not available in the CefSharp page world.",
+                        scriptKey: installation.ScriptKey,
+                        documentId: frame.DocumentId,
+                        frameId: frame.FrameId));
+                }
+                if (!string.IsNullOrEmpty(metadata.RunIn))
+                {
+                    diagnostics.Add(new UserScriptDiagnostic(
+                        "MSR211_UNSUPPORTED_RUN_IN",
+                        DiagnosticSeverity.Warning,
+                        "The requested @run-in environment is preserved but not implemented by this host.",
+                        scriptKey: installation.ScriptKey,
+                        documentId: frame.DocumentId,
+                        frameId: frame.FrameId));
+                }
+                if (_options.Compatibility.Profile == UserScriptCompatibilityProfile.LegacyCompatible &&
+                    metadata.Requires.Count != 0 && _sourceResolver == null)
+                {
+                    diagnostics.Add(new UserScriptDiagnostic(
+                        "MSR401_DEPENDENCY_PROVIDER_UNAVAILABLE",
+                        DiagnosticSeverity.Error,
+                        "The script declares @require entries but no dependency provider is configured.",
+                        scriptKey: installation.ScriptKey,
+                        documentId: frame.DocumentId,
+                        frameId: frame.FrameId));
+                    continue;
+                }
+
                 string source;
                 try
                 {

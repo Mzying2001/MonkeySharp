@@ -197,6 +197,16 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
                 var trimmed = lines[index].Trim();
                 if (!foundHeader)
                 {
+                    if (index >= options.MaxHeaderScanLines ||
+                        scannedCharacters + lines[index].Length > options.MaxHeaderScanCharacters)
+                    {
+                        diagnostics.Add(new MetadataDiagnostic(
+                            "MSM000_HEADER_MISSING",
+                            DiagnosticSeverity.Error,
+                            "The userscript metadata header was not found within the configured scan limit.",
+                            index + 1));
+                        return result;
+                    }
                     if (trimmed.Length == 0)
                     {
                         scannedCharacters += lines[index].Length + 1;

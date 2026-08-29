@@ -1,4 +1,5 @@
 using Mzying2001.MonkeySharp.Core.Domain;
+using Mzying2001.MonkeySharp.Core.Compatibility;
 using Mzying2001.MonkeySharp.Core.Repository;
 using Mzying2001.MonkeySharp.Core.Runtime;
 using System;
@@ -102,6 +103,48 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 Assert.Empty(plan.Invocations);
                 Assert.Contains(diagnostics, item =>
                     item.Code == "MSR400_DEPENDENCY_RESOLUTION_FAILED" && item.Exception is InvalidOperationException);
+            }
+        }
+
+        [Fact]
+        public async Task MissingDependencyProviderSkipsLegacyInvocation()
+        {
+            var repository = new InMemoryUserScriptRepository();
+            await repository.InstallAsync(CompatibilityFixtures.MissingDependencyProvider, "test", true, CancellationToken.None);
+            using (var engine = new UserScriptEngine(repository))
+            {
+                var diagnostics = new List<UserScriptDiagnostic>();
+                engine.Diagnostic += (_, item) => diagnostics.Add(item);
+
+                var plan = await engine.ProcessLifecycleAsync(
+                    new DocumentLifecycleEventArgs(DocumentLifecycleKind.Load, Frame("missing", true)),
+                    CancellationToken.None);
+
+                Assert.Empty(plan.Invocations);
+                Assert.Contains(diagnostics, item => item.Code == "MSR401_DEPENDENCY_PROVIDER_UNAVAILABLE");
+            }
+        }
+
+        [Fact]
+        public async Task UnsupportedWorldMetadataProducesWarningsButDoesNotChangePageExecution()
+        {
+            var repository = new InMemoryUserScriptRepository();
+            await repository.InstallAsync(
+                MetadataAndMatchingTests.Script(
+                    "// @name worlds\n// @match https://example.com/*\n// @grant none\n" +
+                    "// @inject-into content\n// @run-in content\n// @run-at document-end"),
+                "test", true, CancellationToken.None);
+            using (var engine = new UserScriptEngine(repository))
+            {
+                var diagnostics = new List<UserScriptDiagnostic>();
+                engine.Diagnostic += (_, item) => diagnostics.Add(item);
+                var plan = await engine.ProcessLifecycleAsync(
+                    new DocumentLifecycleEventArgs(DocumentLifecycleKind.DomContentLoaded, Frame("worlds", true)),
+                    CancellationToken.None);
+
+                Assert.Single(plan.Invocations);
+                Assert.Contains(diagnostics, item => item.Code == "MSR210_UNSUPPORTED_INJECT_WORLD");
+                Assert.Contains(diagnostics, item => item.Code == "MSR211_UNSUPPORTED_RUN_IN");
             }
         }
 

@@ -38,5 +38,17 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             Assert.False(result.CanEnable);
             Assert.Contains(result.Diagnostics, item => item.Code == "MSM000_HEADER_MISSING");
         }
+
+        [Fact]
+        public void LegacyHeaderScanHonorsConfiguredBounds()
+        {
+            var result = new UserScriptMetadataParser(new UserScriptMetadataParserOptions
+            {
+                MaxHeaderScanLines = 1
+            }).Parse(CompatibilityFixtures.LegacyHeaderPreamble);
+
+            Assert.False(result.CanEnable);
+            Assert.Contains(result.Diagnostics, item => item.Code == "MSM000_HEADER_MISSING");
+        }
     }
 }
