@@ -1,5 +1,6 @@
 using Mzying2001.MonkeySharp.Core.Bridge;
 using Mzying2001.MonkeySharp.Core.Domain;
+using Mzying2001.MonkeySharp.Core.Runtime;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -15,7 +16,10 @@ namespace Mzying2001.MonkeySharp.Core.Apis
     /// <summary>
     /// Adapts host resource and HTTP services to userscript resource and network GM APIs.
     /// </summary>
-    public sealed class ResourceAndNetworkApiProvider : IUserScriptApiProvider, IUserScriptNotificationSource
+    public sealed class ResourceAndNetworkApiProvider :
+        IUserScriptApiProvider,
+        IUserScriptNotificationSource,
+        IUserScriptCompatibilityBootstrapProvider
     {
         private static readonly HashSet<string> AllowedMethods = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -62,6 +66,35 @@ namespace Mzying2001.MonkeySharp.Core.Apis
 
         /// <inheritdoc />
         public IReadOnlyCollection<string> Methods => _methods;
+
+        /// <inheritdoc />
+        public async Task<IReadOnlyDictionary<string, CompatibilityResourceSnapshot>> PrepareAsync(
+            UserScriptInstallation installation,
+            DocumentFrame frame,
+            IReadOnlyCollection<string> capabilities,
+            CancellationToken cancellationToken)
+        {
+            if (_resources == null || !capabilities.Contains("GM.getResourceText") &&
+                !capabilities.Contains("GM.getResourceURL"))
+                return new ReadOnlyDictionary<string, CompatibilityResourceSnapshot>(
+                    new Dictionary<string, CompatibilityResourceSnapshot>(StringComparer.Ordinal));
+
+            var result = new Dictionary<string, CompatibilityResourceSnapshot>(StringComparer.Ordinal);
+            foreach (var declaration in installation.Definition.Metadata.Resources)
+            {
+                var content = await _resources.GetAsync(installation, declaration, cancellationToken)
+                    .ConfigureAwait(false);
+                if (content == null)
+                    throw new BridgeProtocolException(BridgeErrorCodes.Internal, "The resource provider returned no content.");
+                if (content.Bytes.Length > _options.MaxResourceBytes ||
+                    (content.Text != null && Encoding.UTF8.GetByteCount(content.Text) > _options.MaxResourceBytes))
+                    throw new BridgeProtocolException(BridgeErrorCodes.PayloadTooLarge, "The resource exceeds the configured limit.");
+                var text = content.Text ?? Encoding.UTF8.GetString(content.Bytes);
+                var url = "data:" + content.MediaType + ";base64," + Convert.ToBase64String(content.Bytes);
+                result[declaration.Name] = new CompatibilityResourceSnapshot(text, url);
+            }
+            return new ReadOnlyDictionary<string, CompatibilityResourceSnapshot>(result);
+        }
 
         /// <inheritdoc />
         public async Task<ApiResult> InvokeAsync(ApiInvocationContext context, CancellationToken cancellationToken)

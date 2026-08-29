@@ -165,6 +165,41 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         void OnExecutionEnded(string executionId);
     }
 
+    /// <summary>Provides execution bootstrap data for compatibility facades.</summary>
+    public interface IUserScriptCompatibilityBootstrapProvider
+    {
+        /// <summary>Prepares provider-owned data for one authenticated execution.</summary>
+        /// <param name="installation">The script installation being executed.</param>
+        /// <param name="frame">The document frame being executed.</param>
+        /// <param name="capabilities">The normalized capabilities granted to the execution.</param>
+        /// <param name="cancellationToken">A token that cancels bootstrap preparation.</param>
+        /// <returns>A resource-name keyed compatibility contribution.</returns>
+        Task<IReadOnlyDictionary<string, CompatibilityResourceSnapshot>> PrepareAsync(
+            UserScriptInstallation installation,
+            DocumentFrame frame,
+            IReadOnlyCollection<string> capabilities,
+            CancellationToken cancellationToken);
+    }
+
+    /// <summary>Contains text and data URL representations of a declared resource.</summary>
+    public sealed class CompatibilityResourceSnapshot
+    {
+        /// <summary>Initializes a resource snapshot.</summary>
+        /// <param name="text">The decoded text representation.</param>
+        /// <param name="url">The data URL representation.</param>
+        public CompatibilityResourceSnapshot(string text, string url)
+        {
+            Text = text;
+            Url = url;
+        }
+
+        /// <summary>Gets the decoded text representation.</summary>
+        public string Text { get; }
+
+        /// <summary>Gets the data URL representation.</summary>
+        public string Url { get; }
+    }
+
     /// <summary>
     /// Represents a value logged by a userscript execution.
     /// </summary>

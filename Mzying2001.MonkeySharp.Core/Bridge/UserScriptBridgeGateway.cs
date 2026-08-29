@@ -221,6 +221,36 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                         execution);
                 }
             }
+            if (execution.Invocation.Compatibility.SynchronousResourceSnapshot && HasResourceCapability(grants))
+            {
+                try
+                {
+                    using (var timeout = new CancellationTokenSource(_options.CompatibilityBootstrapTimeout))
+                    using (var linked = CancellationTokenSource.CreateLinkedTokenSource(
+                        cancellationToken, execution.Cancellation.Token, timeout.Token))
+                    {
+                        compatibility["resources"] = await BuildResourceBootstrapAsync(execution, linked.Token)
+                            .ConfigureAwait(false);
+                    }
+                }
+                catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested &&
+                    !execution.Cancellation.IsCancellationRequested)
+                {
+                    EmitDiagnostic(
+                        "MSC410_COMPATIBILITY_BOOTSTRAP_FAILED",
+                        "The compatibility resource snapshot timed out.",
+                        null,
+                        execution);
+                }
+                catch (Exception exception)
+                {
+                    EmitDiagnostic(
+                        "MSC410_COMPATIBILITY_BOOTSTRAP_FAILED",
+                        "The compatibility resource snapshot could not be prepared.",
+                        exception,
+                        execution);
+                }
+            }
             return Limit(ProtocolJson.Hello(_options, supported, compatibility));
         }
 
@@ -280,6 +310,51 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             return grants.Contains("GM.getValue") || grants.Contains("GM.setValue") ||
                 grants.Contains("GM.deleteValue") || grants.Contains("GM.listValues") ||
                 grants.Contains("GM.addValueChangeListener") || grants.Contains("GM.removeValueChangeListener");
+        }
+
+        private static bool HasResourceCapability(IReadOnlyList<string> grants)
+        {
+            return grants.Contains("GM.getResourceText") || grants.Contains("GM.getResourceURL");
+        }
+
+        private async Task<object> BuildResourceBootstrapAsync(
+            UserScriptEngine.ExecutionRecord execution,
+            CancellationToken cancellationToken)
+        {
+            var resources = new Dictionary<string, object>(StringComparer.Ordinal);
+            foreach (var provider in _providerInstances.OfType<IUserScriptCompatibilityBootstrapProvider>())
+            {
+                var contribution = await provider.PrepareAsync(
+                    execution.Installation,
+                    execution.Frame,
+                    execution.Installation.Definition.Metadata.Grants,
+                    cancellationToken).ConfigureAwait(false);
+                if (contribution == null)
+                    continue;
+                foreach (var item in contribution)
+                {
+                    resources[item.Key] = new Dictionary<string, object>
+                    {
+                        ["text"] = item.Value.Text,
+                        ["url"] = item.Value.Url
+                    };
+                }
+            }
+            var result = new Dictionary<string, object>
+            {
+                ["complete"] = true,
+                ["values"] = resources
+            };
+            if (Encoding.UTF8.GetByteCount(JsonSerializer.Serialize(result)) > _options.MaxCompatibilityBootstrapBytes)
+            {
+                EmitDiagnostic(
+                    "MSC412_COMPATIBILITY_BOOTSTRAP_LIMIT",
+                    "The compatibility resource snapshot exceeds the configured limit.",
+                    null,
+                    execution);
+                return new Dictionary<string, object> { ["complete"] = false, ["values"] = new Dictionary<string, object>() };
+            }
+            return result;
         }
 
         private async Task<string> HandleRequestAsync(JsonElement root, CancellationToken cancellationToken)

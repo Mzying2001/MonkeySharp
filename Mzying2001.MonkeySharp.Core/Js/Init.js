@@ -137,6 +137,12 @@
                 });
             };
 
+            const detailsWithSignal = function (details, signal, xhrId) {
+                const copy = Object.assign({}, details, { __monkeySharpXhrId: xhrId, __monkeySharpLegacy: true });
+                if (signal) copy.signal = signal;
+                return copy;
+            };
+
             const createApi = function (record, invocation, availableApis) {
                 const grants = new Set(invocation.grants);
                 const enabled = name => grants.has(name) && availableApis.has(name);
@@ -252,12 +258,18 @@
                 if (enabled("GM.getResourceText")) {
                     api.getResourceText = async function (name) {
                         if (typeof name !== "string" || name.length === 0) throw new TypeError("name must be a non-empty string.");
+                        if (record.resourceMirror && Object.prototype.hasOwnProperty.call(record.resourceMirror, name)) {
+                            return record.resourceMirror[name].text;
+                        }
                         return call(record, "GM.getResourceText", { name: name });
                     };
                 }
                 if (enabled("GM.getResourceURL")) {
                     api.getResourceURL = async function (name) {
                         if (typeof name !== "string" || name.length === 0) throw new TypeError("name must be a non-empty string.");
+                        if (record.resourceMirror && Object.prototype.hasOwnProperty.call(record.resourceMirror, name)) {
+                            return record.resourceMirror[name].url;
+                        }
                         return call(record, "GM.getResourceURL", { name: name });
                     };
                 }
@@ -266,7 +278,8 @@
                         if (!details || typeof details !== "object" || typeof details.url !== "string") {
                             throw new TypeError("details.url must be a string.");
                         }
-                        const xhrId = nextListenerId++;
+                        const xhrId = Number.isInteger(details.__monkeySharpXhrId)
+                            ? details.__monkeySharpXhrId : nextListenerId++;
                         const callbacks = {
                             onload: details.onload,
                             onerror: details.onerror,
@@ -293,11 +306,13 @@
                         record.xhrHandlers.set(xhrId, callbacks);
                         try {
                             const response = await call(record, "GM.xmlHttpRequest", parameters, details.signal);
-                            if (callbacks.onload) callbacks.onload(response);
+                            if (!details.__monkeySharpLegacy && callbacks.onload) callbacks.onload(response);
                             return response;
                         } catch (error) {
-                            if (error.code === "MSP009_TIMEOUT" && callbacks.ontimeout) callbacks.ontimeout(error);
-                            else if (callbacks.onerror) callbacks.onerror(error);
+                            if (!details.__monkeySharpLegacy) {
+                                if (error.code === "MSP009_TIMEOUT" && callbacks.ontimeout) callbacks.ontimeout(error);
+                                else if (callbacks.onerror) callbacks.onerror(error);
+                            }
                             throw error;
                         } finally {
                             record.xhrHandlers.delete(xhrId);
@@ -401,9 +416,7 @@
                 }
                 const aliases = {
                     GM_addValueChangeListener: "addValueChangeListener",
-                    GM_addStyle: "addStyle",
-                    GM_addElement: "addElement", GM_getResourceText: "getResourceText",
-                    GM_getResourceURL: "getResourceURL", GM_xmlhttpRequest: "xmlHttpRequest",
+                    GM_xmlhttpRequest: "xmlHttpRequest",
                     GM_registerMenuCommand: "registerMenuCommand", GM_unregisterMenuCommand: "unregisterMenuCommand",
                     GM_notification: "notification", GM_setClipboard: "setClipboard", GM_openInTab: "openInTab",
                     GM_download: "download", GM_getTab: "getTab", GM_saveTab: "saveTab", GM_getTabs: "getTabs"
@@ -456,6 +469,143 @@
                         return removed;
                     };
                 }
+                if (record.resourceMirror) {
+                    if (api.getResourceText) facade.GM_getResourceText = function (name) {
+                        if (typeof name !== "string" || name.length === 0) throw new TypeError("name must be a non-empty string.");
+                        if (!Object.prototype.hasOwnProperty.call(record.resourceMirror, name)) {
+                            throw new Error("The resource snapshot is unavailable.");
+                        }
+                        return record.resourceMirror[name].text;
+                    };
+                    if (api.getResourceURL) facade.GM_getResourceURL = function (name) {
+                        if (typeof name !== "string" || name.length === 0) throw new TypeError("name must be a non-empty string.");
+                        if (!Object.prototype.hasOwnProperty.call(record.resourceMirror, name)) {
+                            throw new Error("The resource snapshot is unavailable.");
+                        }
+                        return record.resourceMirror[name].url;
+                    };
+                }
+                if (api.addStyle) facade.GM_addStyle = function (css) {
+                    if (typeof css !== "string") throw new TypeError("css must be a string.");
+                    const style = document.createElement("style");
+                    style.textContent = css;
+                    (document.head || document.documentElement).appendChild(style);
+                    return style;
+                };
+                if (api.addElement) facade.GM_addElement = function (parent, tagName, attributes) {
+                    if (typeof parent === "string") {
+                        attributes = tagName;
+                        tagName = parent;
+                        parent = document.body || document.documentElement;
+                    }
+                    if (!parent || typeof parent.appendChild !== "function") throw new TypeError("parent must be a DOM node.");
+                    if (typeof tagName !== "string" || tagName.length === 0) throw new TypeError("tagName must be a string.");
+                    const element = document.createElement(tagName);
+                    if (attributes && typeof attributes === "object") Object.keys(attributes).forEach(name => {
+                        if (name === "textContent") element.textContent = String(attributes[name]);
+                        else element.setAttribute(name, String(attributes[name]));
+                    });
+                    parent.appendChild(element);
+                    return element;
+                };
+                if (api.xmlHttpRequest) facade.GM_xmlhttpRequest = function (details) {
+                    if (!details || typeof details !== "object" || typeof details.url !== "string") {
+                        throw new TypeError("details.url must be a string.");
+                    }
+                    const xhrId = nextListenerId++;
+                    const callbacks = {
+                        onload: details.onload,
+                        onerror: details.onerror,
+                        ontimeout: details.ontimeout,
+                        onprogress: details.onprogress
+                    };
+                    Object.keys(callbacks).forEach(name => {
+                        if (typeof callbacks[name] !== "undefined" && typeof callbacks[name] !== "function") {
+                            throw new TypeError(name + " must be a function.");
+                        }
+                    });
+                    const parameters = { xhrId: xhrId, url: details.url };
+                    ["method", "data"].forEach(name => {
+                        if (typeof details[name] !== "undefined") {
+                            if (typeof details[name] !== "string") throw new TypeError(name + " must be a string.");
+                            parameters[name] = details[name];
+                        }
+                    });
+                    if (typeof details.headers !== "undefined") parameters.headers = serializableValue(details.headers);
+                    if (typeof details.timeout !== "undefined") {
+                        if (!Number.isInteger(details.timeout) || details.timeout <= 0) throw new TypeError("timeout must be positive.");
+                        parameters.timeout = details.timeout;
+                    }
+                    const controller = typeof AbortController === "function" ? new AbortController() : null;
+                    const handle = { abort: function () { if (controller) controller.abort(); } };
+                    record.xhrHandlers.set(xhrId, callbacks);
+                    api.xmlHttpRequest(detailsWithSignal(details, controller && controller.signal, xhrId))
+                        .then(response => { if (callbacks.onload) callbacks.onload(response); })
+                        .catch(error => {
+                            if (error && error.name === "AbortError") return;
+                            if (error && error.code === "MSP009_TIMEOUT" && callbacks.ontimeout) callbacks.ontimeout(error);
+                            else if (callbacks.onerror) callbacks.onerror(error);
+                        })
+                        .finally(() => record.xhrHandlers.delete(xhrId));
+                    return handle;
+                };
+                if (api.registerMenuCommand) facade.GM_registerMenuCommand = function (name, callback, accessKey) {
+                    if (typeof name !== "string" || name.length === 0) throw new TypeError("name must be a non-empty string.");
+                    if (typeof callback !== "function") throw new TypeError("callback must be a function.");
+                    if (typeof accessKey !== "undefined" && typeof accessKey !== "string") throw new TypeError("accessKey must be a string.");
+                    const commandId = nextListenerId++;
+                    record.menuHandlers.set(commandId, callback);
+                    call(record, "GM.registerMenuCommand", {
+                        commandId: commandId,
+                        name: name,
+                        accessKey: accessKey || null
+                    }).catch(error => {
+                        record.menuHandlers.delete(commandId);
+                        console.error("[MonkeySharp] legacy menu registration failed", error);
+                    });
+                    return commandId;
+                };
+                if (api.unregisterMenuCommand) facade.GM_unregisterMenuCommand = function (commandId) {
+                    if (!Number.isInteger(commandId) || commandId <= 0) throw new TypeError("commandId must be positive.");
+                    const removed = record.menuHandlers.delete(commandId);
+                    api.unregisterMenuCommand(commandId).catch(error => console.error("[MonkeySharp] legacy menu removal failed", error));
+                    return removed;
+                };
+                if (api.getTab) facade.GM_getTab = function (callback) {
+                    if (typeof callback !== "function") throw new TypeError("callback must be a function.");
+                    api.getTab().then(callback).catch(error => console.error("[MonkeySharp] legacy getTab failed", error));
+                };
+                if (api.getTabs) facade.GM_getTabs = function (callback) {
+                    if (typeof callback !== "function") throw new TypeError("callback must be a function.");
+                    api.getTabs().then(callback).catch(error => console.error("[MonkeySharp] legacy getTabs failed", error));
+                };
+                if (api.setClipboard) facade.GM_setClipboard = function (text, type) {
+                    api.setClipboard(text, type).catch(error => console.error("[MonkeySharp] legacy clipboard failed", error));
+                };
+                if (api.notification) facade.GM_notification = function (details, ondone) {
+                    api.notification(details).then(() => {
+                        if (typeof ondone === "function") ondone();
+                    }).catch(error => console.error("[MonkeySharp] legacy notification failed", error));
+                };
+                if (api.openInTab) facade.GM_openInTab = function (url, options) {
+                    const state = { closed: false, id: null };
+                    const handle = {
+                        close: function () { state.closed = true; },
+                        get closed() { return state.closed; }
+                    };
+                    api.openInTab(url, options).then(result => { state.id = result && result.id; })
+                        .catch(error => console.error("[MonkeySharp] legacy tab open failed", error));
+                    return handle;
+                };
+                if (api.download) facade.GM_download = function (details, onload, onerror) {
+                    if (typeof details === "string") details = { url: details };
+                    api.download(details).then(result => {
+                        if (typeof onload === "function") onload(result);
+                    }).catch(error => {
+                        if (typeof onerror === "function") onerror(error);
+                        else console.error("[MonkeySharp] legacy download failed", error);
+                    });
+                };
                 return facade;
             };
 
@@ -471,7 +621,8 @@
                     xhrHandlers: new Map(),
                     valueListenerKeys: new Map(),
                     mutationTail: Promise.resolve(),
-                    storageMirror: null
+                    storageMirror: null,
+                    resourceMirror: null
                 };
                 executions.set(invocation.executionId, record);
                 let availableApis = new Set();
@@ -487,6 +638,10 @@
                         hello.compatibility.storage.complete &&
                         hello.compatibility.storage.values) {
                         record.storageMirror = Object.assign({}, hello.compatibility.storage.values);
+                    }
+                    if (hello.compatibility && hello.compatibility.resources &&
+                        hello.compatibility.resources.complete && hello.compatibility.resources.values) {
+                        record.resourceMirror = Object.assign({}, hello.compatibility.resources.values);
                     }
                 }
                 const gm = grantNone ? undefined : createApi(record, invocation, availableApis);
