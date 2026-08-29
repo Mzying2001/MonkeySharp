@@ -9,8 +9,15 @@ using System.Threading.Tasks;
 
 namespace Mzying2001.MonkeySharp.Core.Apis
 {
+    /// <summary>
+    /// Contains the binary and optional decoded text returned for a declared userscript resource.
+    /// </summary>
     public sealed class ResourceContent
     {
+        /// <summary>Initializes resource content.</summary>
+        /// <param name="bytes">The resource bytes.</param>
+        /// <param name="mediaType">The media type used for generated data URLs.</param>
+        /// <param name="text">An optional host-decoded text representation.</param>
         public ResourceContent(byte[] bytes, string mediaType = "application/octet-stream", string text = null)
         {
             Bytes = bytes != null ? (byte[])bytes.Clone() : throw new ArgumentNullException(nameof(bytes));
@@ -20,29 +27,61 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             Text = text;
         }
 
+        /// <summary>Gets a copy of the resource bytes supplied at construction.</summary>
         public byte[] Bytes { get; }
+
+        /// <summary>Gets the resource media type.</summary>
         public string MediaType { get; }
+
+        /// <summary>Gets the host-decoded text representation, if available.</summary>
         public string Text { get; }
     }
 
+    /// <summary>
+    /// Loads named resources declared in userscript metadata.
+    /// </summary>
     public interface IResourceProvider
     {
+        /// <summary>Loads a declared userscript resource.</summary>
+        /// <param name="installation">The userscript requesting the resource.</param>
+        /// <param name="resource">The declared resource to load.</param>
+        /// <param name="cancellationToken">A token that cancels resource loading.</param>
+        /// <returns>The resource content.</returns>
         Task<ResourceContent> GetAsync(
             UserScriptInstallation installation,
             ResourceDeclaration resource,
             CancellationToken cancellationToken);
     }
 
+    /// <summary>
+    /// Loads JavaScript dependencies declared with <c>@require</c>.
+    /// </summary>
     public interface IUserScriptDependencyProvider
     {
+        /// <summary>Loads one dependency as JavaScript source text.</summary>
+        /// <param name="installation">The userscript requesting the dependency.</param>
+        /// <param name="url">The dependency URL from metadata.</param>
+        /// <param name="cancellationToken">A token that cancels dependency loading.</param>
+        /// <returns>The dependency source text.</returns>
         Task<string> GetScriptAsync(
             UserScriptInstallation installation,
             string url,
             CancellationToken cancellationToken);
     }
 
+    /// <summary>
+    /// Describes a validated HTTP request initiated by a userscript.
+    /// </summary>
     public sealed class UserScriptHttpRequest
     {
+        /// <summary>Initializes a userscript HTTP request.</summary>
+        /// <param name="method">The HTTP method.</param>
+        /// <param name="url">The absolute HTTP or HTTPS URL.</param>
+        /// <param name="headers">The request headers.</param>
+        /// <param name="body">The optional request body.</param>
+        /// <param name="timeout">The optional host request timeout.</param>
+        /// <param name="maxResponseBytes">The maximum accepted response body size.</param>
+        /// <param name="redirectAllowed">A callback that authorizes each redirect target.</param>
         public UserScriptHttpRequest(
             string method,
             Uri url,
@@ -64,17 +103,41 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             RedirectAllowed = redirectAllowed ?? throw new ArgumentNullException(nameof(redirectAllowed));
         }
 
+        /// <summary>Gets the HTTP method.</summary>
         public string Method { get; }
+
+        /// <summary>Gets the absolute request URL.</summary>
         public Uri Url { get; }
+
+        /// <summary>Gets the case-insensitive request headers.</summary>
         public IReadOnlyDictionary<string, string> Headers { get; }
+
+        /// <summary>Gets the optional request body.</summary>
         public string Body { get; }
+
+        /// <summary>Gets the optional host request timeout.</summary>
         public TimeSpan? Timeout { get; }
+
+        /// <summary>Gets the maximum accepted response body size in bytes.</summary>
         public int MaxResponseBytes { get; }
+
+        /// <summary>Gets the callback that must authorize every redirect target before it is followed.</summary>
         public Func<Uri, bool> RedirectAllowed { get; }
     }
 
+    /// <summary>
+    /// Contains an HTTP response returned by a userscript host service.
+    /// </summary>
     public sealed class UserScriptHttpResponse
     {
+        /// <summary>Initializes a userscript HTTP response.</summary>
+        /// <param name="status">The numeric HTTP status code.</param>
+        /// <param name="statusText">The HTTP reason phrase.</param>
+        /// <param name="finalUrl">The final response URL after redirects.</param>
+        /// <param name="headers">The response headers.</param>
+        /// <param name="body">The response body bytes.</param>
+        /// <param name="responseText">An optional host-decoded text representation.</param>
+        /// <param name="redirectUrls">The redirect targets followed in order.</param>
         public UserScriptHttpResponse(
             int status,
             string statusText,
@@ -94,37 +157,74 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             RedirectUrls = new ReadOnlyCollection<Uri>((redirectUrls ?? Enumerable.Empty<Uri>()).ToList());
         }
 
+        /// <summary>Gets the numeric HTTP status code.</summary>
         public int Status { get; }
+
+        /// <summary>Gets the HTTP reason phrase.</summary>
         public string StatusText { get; }
+
+        /// <summary>Gets the final response URL after redirects.</summary>
         public Uri FinalUrl { get; }
+
+        /// <summary>Gets the case-insensitive response headers.</summary>
         public IReadOnlyDictionary<string, string> Headers { get; }
+
+        /// <summary>Gets a copy of the response body bytes supplied at construction.</summary>
         public byte[] Body { get; }
+
+        /// <summary>Gets the optional host-decoded response text.</summary>
         public string ResponseText { get; }
+
+        /// <summary>Gets the redirect targets followed in order.</summary>
         public IReadOnlyList<Uri> RedirectUrls { get; }
     }
 
+    /// <summary>
+    /// Reports HTTP response download progress in bytes.
+    /// </summary>
     public sealed class UserScriptHttpProgress
     {
+        /// <summary>Initializes an HTTP progress update.</summary>
+        /// <param name="loaded">The number of response bytes received.</param>
+        /// <param name="total">The expected total response size, if known.</param>
         public UserScriptHttpProgress(long loaded, long? total)
         {
             Loaded = loaded;
             Total = total;
         }
 
+        /// <summary>Gets the number of response bytes received.</summary>
         public long Loaded { get; }
+
+        /// <summary>Gets the expected total response size in bytes, if known.</summary>
         public long? Total { get; }
     }
 
+    /// <summary>
+    /// Sends validated HTTP requests on behalf of userscripts.
+    /// </summary>
     public interface IHttpRequestService
     {
+        /// <summary>Sends an HTTP request while enforcing its redirect and response-size constraints.</summary>
+        /// <param name="request">The validated HTTP request.</param>
+        /// <param name="progress">The receiver for response download progress.</param>
+        /// <param name="cancellationToken">A token that cancels the request.</param>
+        /// <returns>The completed HTTP response.</returns>
         Task<UserScriptHttpResponse> SendAsync(
             UserScriptHttpRequest request,
             IProgress<UserScriptHttpProgress> progress,
             CancellationToken cancellationToken);
     }
 
+    /// <summary>
+    /// Describes a userscript menu command to register with the host.
+    /// </summary>
     public sealed class MenuCommandRequest
     {
+        /// <summary>Initializes a menu command request.</summary>
+        /// <param name="scriptKey">The script installation that owns the command.</param>
+        /// <param name="name">The command label.</param>
+        /// <param name="accessKey">The optional keyboard access key.</param>
         public MenuCommandRequest(ScriptKey scriptKey, string name, string accessKey)
         {
             ScriptKey = scriptKey;
@@ -134,25 +234,49 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             AccessKey = accessKey;
         }
 
+        /// <summary>Gets the script installation that owns the command.</summary>
         public ScriptKey ScriptKey { get; }
+
+        /// <summary>Gets the command label.</summary>
         public string Name { get; }
+
+        /// <summary>Gets the optional keyboard access key.</summary>
         public string AccessKey { get; }
     }
 
+    /// <summary>
+    /// Represents the lifetime of a registered userscript menu command.
+    /// </summary>
     public interface IMenuRegistration : IDisposable
     {
     }
 
+    /// <summary>
+    /// Registers userscript commands in a host-provided menu.
+    /// </summary>
     public interface IMenuService
     {
+        /// <summary>Registers a menu command and its invocation callback.</summary>
+        /// <param name="request">The command to register.</param>
+        /// <param name="invoked">The callback to invoke when the user selects the command.</param>
+        /// <param name="cancellationToken">A token that cancels registration.</param>
+        /// <returns>A registration whose disposal removes the command.</returns>
         Task<IMenuRegistration> RegisterAsync(
             MenuCommandRequest request,
             Action invoked,
             CancellationToken cancellationToken);
     }
 
+    /// <summary>
+    /// Describes a notification requested by a userscript.
+    /// </summary>
     public sealed class UserScriptNotificationRequest
     {
+        /// <summary>Initializes a userscript notification request.</summary>
+        /// <param name="scriptKey">The requesting script installation.</param>
+        /// <param name="title">The notification title.</param>
+        /// <param name="text">The notification body text.</param>
+        /// <param name="imageUrl">The optional notification image URL.</param>
         public UserScriptNotificationRequest(ScriptKey scriptKey, string title, string text, string imageUrl)
         {
             ScriptKey = scriptKey;
@@ -161,24 +285,54 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             ImageUrl = imageUrl;
         }
 
+        /// <summary>Gets the requesting script installation.</summary>
         public ScriptKey ScriptKey { get; }
+
+        /// <summary>Gets the notification title.</summary>
         public string Title { get; }
+
+        /// <summary>Gets the notification body text.</summary>
         public string Text { get; }
+
+        /// <summary>Gets the optional notification image URL.</summary>
         public string ImageUrl { get; }
     }
 
+    /// <summary>
+    /// Displays host-native notifications requested by userscripts.
+    /// </summary>
     public interface INotificationService
     {
+        /// <summary>Displays a notification.</summary>
+        /// <param name="request">The notification to display.</param>
+        /// <param name="cancellationToken">A token that cancels the operation.</param>
+        /// <returns>A task that completes after the host accepts the notification.</returns>
         Task ShowAsync(UserScriptNotificationRequest request, CancellationToken cancellationToken);
     }
 
+    /// <summary>
+    /// Writes userscript-provided text to the host clipboard.
+    /// </summary>
     public interface IClipboardService
     {
+        /// <summary>Writes text to the clipboard.</summary>
+        /// <param name="text">The text to write.</param>
+        /// <param name="mediaType">The media type describing the text.</param>
+        /// <param name="cancellationToken">A token that cancels the operation.</param>
+        /// <returns>A task that completes after the clipboard is updated.</returns>
         Task SetTextAsync(string text, string mediaType, CancellationToken cancellationToken);
     }
 
+    /// <summary>
+    /// Describes a request to open a browser tab.
+    /// </summary>
     public sealed class OpenTabRequest
     {
+        /// <summary>Initializes an open-tab request.</summary>
+        /// <param name="url">The absolute HTTP or HTTPS URL to open.</param>
+        /// <param name="active">Whether the new tab should become active.</param>
+        /// <param name="insert">Whether to insert the tab next to the current tab.</param>
+        /// <param name="setParent">Whether to associate the current tab as the parent.</param>
         public OpenTabRequest(Uri url, bool active, bool insert, bool setParent)
         {
             Url = url ?? throw new ArgumentNullException(nameof(url));
@@ -187,29 +341,57 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             SetParent = setParent;
         }
 
+        /// <summary>Gets the absolute URL to open.</summary>
         public Uri Url { get; }
+
+        /// <summary>Gets whether the new tab should become active.</summary>
         public bool Active { get; }
+
+        /// <summary>Gets whether to insert the tab next to the current tab.</summary>
         public bool Insert { get; }
+
+        /// <summary>Gets whether to associate the current tab as the parent.</summary>
         public bool SetParent { get; }
     }
 
+    /// <summary>
+    /// Identifies a browser tab opened by the host.
+    /// </summary>
     public sealed class OpenTabResult
     {
+        /// <summary>Initializes an open-tab result.</summary>
+        /// <param name="tabId">The host-defined tab identifier.</param>
         public OpenTabResult(string tabId)
         {
             TabId = tabId;
         }
 
+        /// <summary>Gets the host-defined tab identifier.</summary>
         public string TabId { get; }
     }
 
+    /// <summary>
+    /// Opens browser tabs on behalf of userscripts.
+    /// </summary>
     public interface ITabService
     {
+        /// <summary>Opens a browser tab.</summary>
+        /// <param name="request">The tab request.</param>
+        /// <param name="cancellationToken">A token that cancels the operation.</param>
+        /// <returns>The opened tab identifier, if supplied by the host.</returns>
         Task<OpenTabResult> OpenAsync(OpenTabRequest request, CancellationToken cancellationToken);
     }
 
+    /// <summary>
+    /// Describes a file download requested by a userscript.
+    /// </summary>
     public sealed class DownloadRequest
     {
+        /// <summary>Initializes a download request.</summary>
+        /// <param name="scriptKey">The requesting script installation.</param>
+        /// <param name="url">The absolute HTTP or HTTPS download URL.</param>
+        /// <param name="name">The optional suggested file name.</param>
+        /// <param name="saveAs">Whether the host should prompt for a destination.</param>
         public DownloadRequest(ScriptKey scriptKey, Uri url, string name, bool saveAs)
         {
             ScriptKey = scriptKey;
@@ -218,31 +400,71 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             SaveAs = saveAs;
         }
 
+        /// <summary>Gets the requesting script installation.</summary>
         public ScriptKey ScriptKey { get; }
+
+        /// <summary>Gets the absolute download URL.</summary>
         public Uri Url { get; }
+
+        /// <summary>Gets the optional suggested file name.</summary>
         public string Name { get; }
+
+        /// <summary>Gets whether the host should prompt for a destination.</summary>
         public bool SaveAs { get; }
     }
 
+    /// <summary>
+    /// Identifies a download started by the host.
+    /// </summary>
     public sealed class DownloadResult
     {
+        /// <summary>Initializes a download result.</summary>
+        /// <param name="downloadId">The host-defined download identifier.</param>
         public DownloadResult(string downloadId)
         {
             DownloadId = downloadId;
         }
 
+        /// <summary>Gets the host-defined download identifier.</summary>
         public string DownloadId { get; }
     }
 
+    /// <summary>
+    /// Starts file downloads on behalf of userscripts.
+    /// </summary>
     public interface IDownloadService
     {
+        /// <summary>Starts a file download.</summary>
+        /// <param name="request">The download request.</param>
+        /// <param name="cancellationToken">A token that cancels the operation.</param>
+        /// <returns>The download identifier, if supplied by the host.</returns>
         Task<DownloadResult> DownloadAsync(DownloadRequest request, CancellationToken cancellationToken);
     }
 
+    /// <summary>
+    /// Persists JSON tab state scoped to a userscript installation.
+    /// </summary>
     public interface ITabStateService
     {
+        /// <summary>Gets the state associated with the current tab.</summary>
+        /// <param name="scriptKey">The userscript installation.</param>
+        /// <param name="frame">The requesting document frame.</param>
+        /// <param name="cancellationToken">A token that cancels the lookup.</param>
+        /// <returns>The tab state encoded as a JSON object.</returns>
         Task<string> GetAsync(ScriptKey scriptKey, DocumentFrame frame, CancellationToken cancellationToken);
+
+        /// <summary>Saves the state associated with the current tab.</summary>
+        /// <param name="scriptKey">The userscript installation.</param>
+        /// <param name="frame">The requesting document frame.</param>
+        /// <param name="jsonValue">The tab state encoded as JSON.</param>
+        /// <param name="cancellationToken">A token that cancels the operation.</param>
+        /// <returns>A task that completes after the state is saved.</returns>
         Task SaveAsync(ScriptKey scriptKey, DocumentFrame frame, string jsonValue, CancellationToken cancellationToken);
+
+        /// <summary>Gets states for all tabs accessible to the userscript.</summary>
+        /// <param name="scriptKey">The userscript installation.</param>
+        /// <param name="cancellationToken">A token that cancels the lookup.</param>
+        /// <returns>Tab identifiers mapped to state values encoded as JSON.</returns>
         Task<IReadOnlyDictionary<string, string>> GetAllAsync(ScriptKey scriptKey, CancellationToken cancellationToken);
     }
 }

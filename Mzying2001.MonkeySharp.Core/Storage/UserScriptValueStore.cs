@@ -8,8 +8,14 @@ using System.Threading.Tasks;
 
 namespace Mzying2001.MonkeySharp.Core.Storage
 {
+    /// <summary>
+    /// Represents either a stored JSON value or an explicitly missing value.
+    /// </summary>
     public readonly struct StoredValue
     {
+        /// <summary>Initializes a stored value.</summary>
+        /// <param name="exists">Whether a value exists for the key.</param>
+        /// <param name="jsonValue">The stored JSON value, or <see langword="null"/> when missing.</param>
         public StoredValue(bool exists, string jsonValue)
         {
             if (exists && jsonValue == null)
@@ -18,19 +24,40 @@ namespace Mzying2001.MonkeySharp.Core.Storage
             JsonValue = jsonValue;
         }
 
+        /// <summary>Gets whether the value exists.</summary>
         public bool Exists { get; }
+
+        /// <summary>Gets the stored JSON value, or <see langword="null"/> when missing.</summary>
         public string JsonValue { get; }
+
+        /// <summary>Gets a value representing a missing storage key.</summary>
         public static StoredValue Missing => new StoredValue(false, null);
     }
 
+    /// <summary>
+    /// Specifies how a userscript storage value changed.
+    /// </summary>
     public enum ValueChangeKind
     {
+        /// <summary>A value was created or replaced.</summary>
         Set,
+
+        /// <summary>An existing value was deleted.</summary>
         Deleted
     }
 
+    /// <summary>
+    /// Provides the ordered old and new values for a userscript storage change.
+    /// </summary>
     public sealed class UserScriptValueChangedEventArgs : EventArgs
     {
+        /// <summary>Initializes storage change event data.</summary>
+        /// <param name="sequence">The process-wide monotonically increasing change sequence.</param>
+        /// <param name="scriptKey">The storage partition identifier.</param>
+        /// <param name="key">The changed storage key.</param>
+        /// <param name="oldValue">The value before the change.</param>
+        /// <param name="newValue">The value after the change.</param>
+        /// <param name="kind">The kind of change.</param>
         public UserScriptValueChangedEventArgs(
             long sequence,
             string scriptKey,
@@ -47,23 +74,65 @@ namespace Mzying2001.MonkeySharp.Core.Storage
             Kind = kind;
         }
 
+        /// <summary>Gets the process-wide monotonically increasing change sequence.</summary>
         public long Sequence { get; }
+
+        /// <summary>Gets the storage partition identifier.</summary>
         public string ScriptKey { get; }
+
+        /// <summary>Gets the changed storage key.</summary>
         public string Key { get; }
+
+        /// <summary>Gets the value before the change.</summary>
         public StoredValue OldValue { get; }
+
+        /// <summary>Gets the value after the change.</summary>
         public StoredValue NewValue { get; }
+
+        /// <summary>Gets the kind of change.</summary>
         public ValueChangeKind Kind { get; }
     }
 
+    /// <summary>
+    /// Stores canonical JSON values in isolated userscript partitions.
+    /// </summary>
     public interface IUserScriptValueStore
     {
+        /// <summary>Gets a value from a userscript storage partition.</summary>
+        /// <param name="scriptKey">The storage partition identifier.</param>
+        /// <param name="key">The storage key.</param>
+        /// <param name="cancellationToken">A token that cancels the lookup.</param>
+        /// <returns>The stored value, including whether the key exists.</returns>
         Task<StoredValue> GetAsync(string scriptKey, string key, CancellationToken cancellationToken);
+
+        /// <summary>Creates or replaces a value in a userscript storage partition.</summary>
+        /// <param name="scriptKey">The storage partition identifier.</param>
+        /// <param name="key">The storage key.</param>
+        /// <param name="jsonValue">The value encoded as JSON.</param>
+        /// <param name="cancellationToken">A token that cancels the operation before it commits.</param>
+        /// <returns>A task that completes after the value is committed.</returns>
         Task SetAsync(string scriptKey, string key, string jsonValue, CancellationToken cancellationToken);
+
+        /// <summary>Deletes a value from a userscript storage partition.</summary>
+        /// <param name="scriptKey">The storage partition identifier.</param>
+        /// <param name="key">The storage key.</param>
+        /// <param name="cancellationToken">A token that cancels the operation before it commits.</param>
+        /// <returns><see langword="true"/> when a value was deleted.</returns>
         Task<bool> DeleteAsync(string scriptKey, string key, CancellationToken cancellationToken);
+
+        /// <summary>Lists keys in ordinal sort order.</summary>
+        /// <param name="scriptKey">The storage partition identifier.</param>
+        /// <param name="cancellationToken">A token that cancels the lookup.</param>
+        /// <returns>An immutable list of storage keys.</returns>
         Task<IReadOnlyList<string>> ListKeysAsync(string scriptKey, CancellationToken cancellationToken);
+
+        /// <summary>Occurs after a storage mutation commits.</summary>
         event EventHandler<UserScriptValueChangedEventArgs> ValueChanged;
     }
 
+    /// <summary>
+    /// Provides a thread-safe, process-local userscript value store with per-script serialization.
+    /// </summary>
     public class InMemoryUserScriptValueStore : IUserScriptValueStore, IDisposable
     {
         private readonly object _partitionsLock = new object();
@@ -72,8 +141,10 @@ namespace Mzying2001.MonkeySharp.Core.Storage
         private long _sequence;
         private bool _disposed;
 
+        /// <inheritdoc />
         public event EventHandler<UserScriptValueChangedEventArgs> ValueChanged;
 
+        /// <inheritdoc />
         public async Task<StoredValue> GetAsync(string scriptKey, string key, CancellationToken cancellationToken)
         {
             ValidateKey(scriptKey, nameof(scriptKey));
@@ -93,6 +164,7 @@ namespace Mzying2001.MonkeySharp.Core.Storage
             }
         }
 
+        /// <inheritdoc />
         public async Task SetAsync(string scriptKey, string key, string jsonValue, CancellationToken cancellationToken)
         {
             ValidateKey(scriptKey, nameof(scriptKey));
@@ -123,6 +195,7 @@ namespace Mzying2001.MonkeySharp.Core.Storage
             }
         }
 
+        /// <inheritdoc />
         public async Task<bool> DeleteAsync(string scriptKey, string key, CancellationToken cancellationToken)
         {
             ValidateKey(scriptKey, nameof(scriptKey));
@@ -152,6 +225,7 @@ namespace Mzying2001.MonkeySharp.Core.Storage
             }
         }
 
+        /// <inheritdoc />
         public async Task<IReadOnlyList<string>> ListKeysAsync(string scriptKey, CancellationToken cancellationToken)
         {
             ValidateKey(scriptKey, nameof(scriptKey));
@@ -169,6 +243,12 @@ namespace Mzying2001.MonkeySharp.Core.Storage
             }
         }
 
+        /// <summary>Provides an asynchronous extension point immediately before a mutation commits.</summary>
+        /// <param name="scriptKey">The storage partition identifier.</param>
+        /// <param name="key">The storage key being changed.</param>
+        /// <param name="kind">The kind of pending change.</param>
+        /// <param name="cancellationToken">A token that can cancel the mutation before commit.</param>
+        /// <returns>A task that completes when the mutation may commit.</returns>
         protected virtual Task BeforeCommitAsync(
             string scriptKey,
             string key,
@@ -178,10 +258,15 @@ namespace Mzying2001.MonkeySharp.Core.Storage
             return Task.CompletedTask;
         }
 
+        /// <summary>Provides an extension point after a mutation commits and before its event is published.</summary>
+        /// <param name="scriptKey">The storage partition identifier.</param>
+        /// <param name="key">The storage key that changed.</param>
+        /// <param name="kind">The committed change kind.</param>
         protected virtual void OnCommitted(string scriptKey, string key, ValueChangeKind kind)
         {
         }
 
+        /// <inheritdoc />
         public void Dispose()
         {
             if (_disposed)

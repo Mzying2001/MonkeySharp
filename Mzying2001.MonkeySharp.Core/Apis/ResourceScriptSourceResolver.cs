@@ -7,11 +7,17 @@ using System.Threading.Tasks;
 
 namespace Mzying2001.MonkeySharp.Core.Apis
 {
+    /// <summary>
+    /// Resolves <c>@require</c> dependencies in metadata order before the userscript source.
+    /// </summary>
     public sealed class ResourceScriptSourceResolver : IUserScriptSourceResolver
     {
         private readonly IUserScriptDependencyProvider _provider;
         private readonly int _maxDependencyBytes;
 
+        /// <summary>Initializes a dependency-backed source resolver.</summary>
+        /// <param name="provider">The service used to load dependency source.</param>
+        /// <param name="maxDependencyBytes">The maximum combined UTF-8 size of all dependencies.</param>
         public ResourceScriptSourceResolver(IUserScriptDependencyProvider provider, int maxDependencyBytes)
         {
             _provider = provider ?? throw new ArgumentNullException(nameof(provider));
@@ -20,6 +26,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             _maxDependencyBytes = maxDependencyBytes;
         }
 
+        /// <inheritdoc />
         public async Task<string> ResolveSourceAsync(
             UserScriptInstallation installation,
             CancellationToken cancellationToken)

@@ -7,6 +7,9 @@ using System.Text;
 
 namespace Mzying2001.MonkeySharp.Core.Matching
 {
+    /// <summary>
+    /// Represents a compiled case-sensitive glob supporting <c>*</c> and <c>?</c> wildcards.
+    /// </summary>
     public sealed class GlobPattern
     {
         private readonly string _pattern;
@@ -18,6 +21,9 @@ namespace Mzying2001.MonkeySharp.Core.Matching
             _questionMarkIsWildcard = questionMarkIsWildcard;
         }
 
+        /// <summary>Compiles a glob pattern.</summary>
+        /// <param name="pattern">The pattern to compile.</param>
+        /// <returns>A reusable compiled glob.</returns>
         public static GlobPattern Compile(string pattern)
         {
             if (pattern == null)
@@ -30,6 +36,9 @@ namespace Mzying2001.MonkeySharp.Core.Matching
             return new GlobPattern(pattern, false);
         }
 
+        /// <summary>Determines whether a value matches the compiled glob.</summary>
+        /// <param name="value">The value to test.</param>
+        /// <returns><see langword="true"/> when the complete value matches the pattern.</returns>
         public bool IsMatch(string value)
         {
             if (value == null)
@@ -70,6 +79,9 @@ namespace Mzying2001.MonkeySharp.Core.Matching
         }
     }
 
+    /// <summary>
+    /// Represents a compiled WebExtension-style URL match pattern.
+    /// </summary>
     public sealed class MatchPattern
     {
         private readonly bool _allUrls;
@@ -98,6 +110,9 @@ namespace Mzying2001.MonkeySharp.Core.Matching
             _path = path;
         }
 
+        /// <summary>Determines whether an absolute URL matches the pattern.</summary>
+        /// <param name="uri">The URL to test.</param>
+        /// <returns><see langword="true"/> when the URL matches the scheme, host, port, and path constraints.</returns>
         public bool IsMatch(Uri uri)
         {
             if (uri == null || !uri.IsAbsoluteUri)
@@ -139,8 +154,15 @@ namespace Mzying2001.MonkeySharp.Core.Matching
         }
     }
 
+    /// <summary>
+    /// Compiles WebExtension-style URL match patterns used by userscript metadata.
+    /// </summary>
     public static class MatchPatternCompiler
     {
+        /// <summary>Compiles a URL match pattern or throws when it is invalid.</summary>
+        /// <param name="pattern">The match pattern text.</param>
+        /// <returns>The compiled match pattern.</returns>
+        /// <exception cref="FormatException">The pattern is invalid.</exception>
         public static MatchPattern Compile(string pattern)
         {
             if (!TryCompile(pattern, out var result, out var error))
@@ -148,6 +170,11 @@ namespace Mzying2001.MonkeySharp.Core.Matching
             return result;
         }
 
+        /// <summary>Attempts to compile a URL match pattern.</summary>
+        /// <param name="pattern">The match pattern text.</param>
+        /// <param name="result">Receives the compiled pattern when successful.</param>
+        /// <param name="error">Receives a validation message when compilation fails.</param>
+        /// <returns><see langword="true"/> when the pattern was compiled successfully.</returns>
         public static bool TryCompile(string pattern, out MatchPattern result, out string error)
         {
             result = null;
@@ -252,13 +279,24 @@ namespace Mzying2001.MonkeySharp.Core.Matching
         }
     }
 
+    /// <summary>
+    /// Determines whether userscript metadata permits execution on a URL.
+    /// </summary>
     public interface IUserScriptMatcher
     {
+        /// <summary>Evaluates the include and exclusion rules in userscript metadata.</summary>
+        /// <param name="metadata">The metadata containing URL rules.</param>
+        /// <param name="url">The absolute URL to evaluate.</param>
+        /// <returns><see langword="true"/> when the script should run on the URL.</returns>
         bool IsMatch(UserScriptMetadata metadata, Uri url);
     }
 
+    /// <summary>
+    /// Implements userscript URL matching with exclusion rules taking precedence.
+    /// </summary>
     public sealed class UserScriptMatcher : IUserScriptMatcher
     {
+        /// <inheritdoc />
         public bool IsMatch(UserScriptMetadata metadata, Uri url)
         {
             if (metadata == null)

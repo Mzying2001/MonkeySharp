@@ -11,6 +11,9 @@ using System.Threading.Tasks;
 
 namespace Mzying2001.MonkeySharp.Core.Apis
 {
+    /// <summary>
+    /// Adapts optional host UI, clipboard, tab, download, and tab-state services to GM APIs.
+    /// </summary>
     public sealed class HostInteractionApiProvider :
         IUserScriptApiProvider,
         IUserScriptNotificationSource,
@@ -31,6 +34,13 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         private readonly HashSet<string> _endedPendingMenus = new HashSet<string>(StringComparer.Ordinal);
         private bool _disposed;
 
+        /// <summary>Initializes a provider from the host interaction services that are available.</summary>
+        /// <param name="menu">The optional menu command service.</param>
+        /// <param name="notifications">The optional notification service.</param>
+        /// <param name="clipboard">The optional clipboard service.</param>
+        /// <param name="tabs">The optional tab-opening service.</param>
+        /// <param name="downloads">The optional download service.</param>
+        /// <param name="tabState">The optional tab-state service.</param>
         public HostInteractionApiProvider(
             IMenuService menu = null,
             INotificationService notifications = null,
@@ -67,9 +77,13 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             _methods = new ReadOnlyCollection<string>(methods);
         }
 
+        /// <inheritdoc />
         public event EventHandler<ApiNotificationEventArgs> Notification;
+
+        /// <inheritdoc />
         public IReadOnlyCollection<string> Methods => _methods;
 
+        /// <inheritdoc />
         public async Task<ApiResult> InvokeAsync(ApiInvocationContext context, CancellationToken cancellationToken)
         {
             if (_disposed)
@@ -133,6 +147,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             }
         }
 
+        /// <inheritdoc />
         public void Dispose()
         {
             if (_disposed)
@@ -152,6 +167,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 registration.Dispose();
         }
 
+        /// <inheritdoc />
         public void OnExecutionEnded(string executionId)
         {
             if (string.IsNullOrEmpty(executionId))

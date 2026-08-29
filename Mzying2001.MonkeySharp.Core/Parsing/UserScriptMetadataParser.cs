@@ -7,11 +7,20 @@ using System.Linq;
 
 namespace Mzying2001.MonkeySharp.Core.Parsing
 {
+    /// <summary>
+    /// Parses and validates metadata from userscript source text.
+    /// </summary>
     public interface IUserScriptMetadataParser
     {
+        /// <summary>Parses the userscript metadata block at the beginning of a source file.</summary>
+        /// <param name="source">The complete userscript source text.</param>
+        /// <returns>The normalized metadata and any parsing or validation diagnostics.</returns>
         MetadataParseResult Parse(string source);
     }
 
+    /// <summary>
+    /// Parses MonkeySharp-supported userscript metadata and preserves unknown entries.
+    /// </summary>
     public sealed class UserScriptMetadataParser : IUserScriptMetadataParser
     {
         private static readonly HashSet<string> CollectionKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -35,6 +44,7 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
             "GM.getTab", "GM.saveTab", "GM.getTabs"
         };
 
+        /// <inheritdoc />
         public MetadataParseResult Parse(string source)
         {
             if (source == null)

@@ -13,7 +13,6 @@
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
-    <NoWarn>$(NoWarn);1591</NoWarn>
   </PropertyGroup>
   <PropertyGroup>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>

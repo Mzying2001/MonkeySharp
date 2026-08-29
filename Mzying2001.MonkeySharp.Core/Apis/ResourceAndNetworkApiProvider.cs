@@ -12,6 +12,9 @@ using System.Threading.Tasks;
 
 namespace Mzying2001.MonkeySharp.Core.Apis
 {
+    /// <summary>
+    /// Adapts host resource and HTTP services to userscript resource and network GM APIs.
+    /// </summary>
     public sealed class ResourceAndNetworkApiProvider : IUserScriptApiProvider, IUserScriptNotificationSource
     {
         private static readonly HashSet<string> AllowedMethods = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -29,6 +32,10 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         private readonly BridgeOptions _options;
         private readonly IReadOnlyCollection<string> _methods;
 
+        /// <summary>Initializes a resource and network API provider.</summary>
+        /// <param name="resources">The optional declared-resource provider.</param>
+        /// <param name="http">The optional HTTP request service.</param>
+        /// <param name="options">Bridge limits used for resources and responses, or <see langword="null"/> for defaults.</param>
         public ResourceAndNetworkApiProvider(
             IResourceProvider resources = null,
             IHttpRequestService http = null,
@@ -50,9 +57,13 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             _methods = new ReadOnlyCollection<string>(methods);
         }
 
+        /// <inheritdoc />
         public event EventHandler<ApiNotificationEventArgs> Notification;
+
+        /// <inheritdoc />
         public IReadOnlyCollection<string> Methods => _methods;
 
+        /// <inheritdoc />
         public async Task<ApiResult> InvokeAsync(ApiInvocationContext context, CancellationToken cancellationToken)
         {
             switch (context.Method)

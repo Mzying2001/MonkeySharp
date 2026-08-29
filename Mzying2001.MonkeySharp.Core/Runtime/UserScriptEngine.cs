@@ -12,6 +12,9 @@ using System.Threading.Tasks;
 
 namespace Mzying2001.MonkeySharp.Core.Runtime
 {
+    /// <summary>
+    /// Selects eligible userscripts and creates authenticated injection plans for document lifecycle events.
+    /// </summary>
     public sealed class UserScriptEngine : IDisposable
     {
         private readonly IUserScriptRepository _repository;
@@ -26,6 +29,11 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
             new Dictionary<string, ExecutionRecord>(StringComparer.Ordinal);
         private bool _disposed;
 
+        /// <summary>Initializes a userscript execution engine.</summary>
+        /// <param name="repository">The repository containing installed userscripts.</param>
+        /// <param name="matcher">The URL matcher, or <see langword="null"/> to use the default matcher.</param>
+        /// <param name="options">Execution safety requirements, or <see langword="null"/> for defaults.</param>
+        /// <param name="sourceResolver">An optional resolver for script dependencies and final source.</param>
         public UserScriptEngine(
             IUserScriptRepository repository,
             IUserScriptMatcher matcher = null,
@@ -38,9 +46,14 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
             _sourceResolver = sourceResolver;
         }
 
+        /// <summary>Occurs when script selection or source resolution produces a diagnostic.</summary>
         public event EventHandler<UserScriptDiagnostic> Diagnostic;
         internal event Action<ExecutionRecord> ExecutionEnded;
 
+        /// <summary>Processes a document lifecycle transition and creates the corresponding injection plan.</summary>
+        /// <param name="lifecycle">The lifecycle transition to process.</param>
+        /// <param name="cancellationToken">A token that cancels processing.</param>
+        /// <returns>An injection plan containing each eligible script that has not already run in the document.</returns>
         public async Task<InjectionPlan> ProcessLifecycleAsync(
             DocumentLifecycleEventArgs lifecycle,
             CancellationToken cancellationToken)
@@ -66,6 +79,10 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
             return plan;
         }
 
+        /// <summary>Ends active executions and releases state for a document.</summary>
+        /// <param name="documentId">The document identifier to invalidate.</param>
+        /// <param name="cancellationToken">A token that cancels invalidation before it starts.</param>
+        /// <returns>A task that completes when document state has been released.</returns>
         public async Task InvalidateDocumentAsync(string documentId, CancellationToken cancellationToken)
         {
             if (string.IsNullOrEmpty(documentId))
@@ -82,6 +99,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
             }
         }
 
+        /// <inheritdoc />
         public void Dispose()
         {
             if (_disposed)

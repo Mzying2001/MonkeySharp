@@ -14,6 +14,9 @@ using System.Threading.Tasks;
 
 namespace Mzying2001.MonkeySharp.Core.Bridge
 {
+    /// <summary>
+    /// Validates and dispatches authenticated userscript bridge requests to host API providers.
+    /// </summary>
     public sealed class UserScriptBridgeGateway : IUserScriptBridge, IDisposable
     {
         private static readonly HashSet<string> LocalApis = new HashSet<string>(StringComparer.Ordinal)
@@ -37,6 +40,13 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             new Dictionary<string, Dictionary<int, ValueListener>>(StringComparer.Ordinal);
         private bool _disposed;
 
+        /// <summary>Initializes a userscript bridge gateway.</summary>
+        /// <param name="engine">The engine that owns active script executions.</param>
+        /// <param name="store">The value store used by built-in storage APIs.</param>
+        /// <param name="permissionPolicy">The host authorization policy, or <see langword="null"/> to allow declared grants.</param>
+        /// <param name="providers">Additional host API providers.</param>
+        /// <param name="options">Bridge limits and timeout settings, or <see langword="null"/> for defaults.</param>
+        /// <param name="log">An optional sink for <c>GM.log</c> entries.</param>
         public UserScriptBridgeGateway(
             UserScriptEngine engine,
             IUserScriptValueStore store,
@@ -59,9 +69,13 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             _engine.ExecutionEnded += EngineExecutionEnded;
         }
 
+        /// <summary>Occurs when JavaScript must be executed to deliver a provider notification.</summary>
         public event EventHandler<BridgeNotificationEventArgs> Notification;
+
+        /// <summary>Occurs when bridge processing or an API provider produces a diagnostic.</summary>
         public event EventHandler<UserScriptDiagnostic> Diagnostic;
 
+        /// <inheritdoc />
         public async Task<string> DispatchAsync(string requestJson, CancellationToken cancellationToken)
         {
             if (_disposed)
@@ -128,6 +142,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             }
         }
 
+        /// <inheritdoc />
         public void Dispose()
         {
             if (_disposed)

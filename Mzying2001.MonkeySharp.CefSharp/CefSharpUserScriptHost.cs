@@ -14,8 +14,12 @@ using System.Threading.Tasks;
 
 namespace Mzying2001.MonkeySharp.CefSharp
 {
+    /// <summary>
+    /// Connects the MonkeySharp runtime to the lifecycle and JavaScript binding facilities of one CefSharp browser.
+    /// </summary>
     public sealed class CefSharpUserScriptHost : IUserScriptHost, IDisposable
     {
+        /// <summary>The JavaScript binding name reserved for the MonkeySharp bridge.</summary>
         public const string BridgeObjectName = "__MonkeySharpBridge";
 
         private readonly object _sync = new object();
@@ -52,21 +56,35 @@ namespace Mzying2001.MonkeySharp.CefSharp
             _gateway.Notification += GatewayNotification;
         }
 
+        /// <inheritdoc />
         public event EventHandler<DocumentLifecycleEventArgs> DocumentLifecycle;
+
+        /// <inheritdoc />
         public event EventHandler<BridgeRequestEventArgs> BridgeRequest;
+
+        /// <summary>Occurs when the runtime, bridge, or CefSharp adapter produces a diagnostic.</summary>
         public event EventHandler<UserScriptDiagnostic> Diagnostic;
 
+        /// <summary>Gets the userscript execution engine owned by this host.</summary>
         public UserScriptEngine Engine => _engine;
+
+        /// <summary>Gets the bridge gateway owned by this host.</summary>
         public UserScriptBridgeGateway Gateway => _gateway;
+
+        /// <summary>Gets whether the host is currently attached to a browser.</summary>
         public bool IsAttached
         {
             get { lock (_sync) return _browser != null; }
         }
 
+        /// <summary>Gets the bridge integrity guarantee provided by the configured JavaScript world.</summary>
         public BridgeIntegrityGuarantee BridgeIntegrity => _options.TrustedPageWorld
             ? BridgeIntegrityGuarantee.TrustedPageWorld
             : BridgeIntegrityGuarantee.Unverified;
 
+        /// <summary>Attaches the host before the CefSharp browser is initialized.</summary>
+        /// <param name="browser">The uninitialized browser to attach.</param>
+        /// <exception cref="InvalidOperationException">The host is already attached or the browser cannot accept the bridge handlers.</exception>
         public void Attach(IWebBrowser browser)
         {
             if (browser == null)
@@ -136,6 +154,9 @@ namespace Mzying2001.MonkeySharp.CefSharp
             }
         }
 
+        /// <summary>Detaches the current browser and releases all active document sessions.</summary>
+        /// <param name="cancellationToken">A token checked before detachment begins.</param>
+        /// <returns>A task that completes after pending background work is drained.</returns>
         public async Task DetachAsync(CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -194,6 +215,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             attachmentCancellation.Dispose();
         }
 
+        /// <inheritdoc />
         public Task ExecuteAsync(DocumentFrame frame, string javaScript, CancellationToken cancellationToken)
         {
             if (frame == null)
@@ -219,6 +241,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             return Task.CompletedTask;
         }
 
+        /// <inheritdoc />
         public void RegisterBridge(IUserScriptBridge bridge)
         {
             if (bridge == null)
@@ -232,6 +255,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             }
         }
 
+        /// <inheritdoc />
         public void Dispose()
         {
             if (_disposed)

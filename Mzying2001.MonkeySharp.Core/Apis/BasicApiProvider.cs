@@ -10,6 +10,9 @@ using System.Threading.Tasks;
 
 namespace Mzying2001.MonkeySharp.Core.Apis
 {
+    /// <summary>
+    /// Implements logging and persistent-value GM APIs.
+    /// </summary>
     public sealed class BasicApiProvider : IUserScriptApiProvider
     {
         private static readonly IReadOnlyCollection<string> SupportedMethods =
@@ -21,14 +24,19 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         private readonly IUserScriptValueStore _store;
         private readonly Action<UserScriptLogEntry> _log;
 
+        /// <summary>Initializes the basic API provider.</summary>
+        /// <param name="store">The store used by persistent-value APIs.</param>
+        /// <param name="log">An optional sink for <c>GM.log</c> entries.</param>
         public BasicApiProvider(IUserScriptValueStore store, Action<UserScriptLogEntry> log = null)
         {
             _store = store ?? throw new ArgumentNullException(nameof(store));
             _log = log;
         }
 
+        /// <inheritdoc />
         public IReadOnlyCollection<string> Methods => SupportedMethods;
 
+        /// <inheritdoc />
         public async Task<ApiResult> InvokeAsync(ApiInvocationContext context, CancellationToken cancellationToken)
         {
             if (context == null)

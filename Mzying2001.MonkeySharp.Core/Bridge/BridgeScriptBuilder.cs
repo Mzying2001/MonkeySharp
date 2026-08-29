@@ -9,6 +9,9 @@ using System.Text.Json;
 
 namespace Mzying2001.MonkeySharp.Core.Bridge
 {
+    /// <summary>
+    /// Builds JavaScript payloads for userscript injection and bridge notifications.
+    /// </summary>
     public static class BridgeScriptBuilder
     {
         private const string PayloadPlaceholder = "__MONKEYSHARP_PAYLOAD_BASE64__";
@@ -17,6 +20,9 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
         private static readonly Lazy<string> NotificationTemplate =
             new Lazy<string>(() => LoadResource("Mzying2001.MonkeySharp.Core.Js.Inject.js"));
 
+        /// <summary>Builds the bootstrap JavaScript for an injection plan.</summary>
+        /// <param name="plan">The authenticated plan to serialize.</param>
+        /// <returns>JavaScript that initializes the bridge and executes the plan.</returns>
         public static string BuildInjection(InjectionPlan plan)
         {
             if (plan == null)
@@ -41,6 +47,9 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             return InsertPayload(BootstrapTemplate.Value, JsonSerializer.Serialize(payload));
         }
 
+        /// <summary>Builds JavaScript that delivers an authenticated bridge notification.</summary>
+        /// <param name="notification">The notification to serialize.</param>
+        /// <returns>JavaScript that delivers the notification to its target execution.</returns>
         public static string BuildNotification(BridgeNotificationEventArgs notification)
         {
             if (notification == null)
