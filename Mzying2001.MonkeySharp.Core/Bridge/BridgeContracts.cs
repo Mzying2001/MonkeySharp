@@ -53,23 +53,31 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
         /// <param name="maxResourceBytes">The maximum resource or dependency size.</param>
         /// <param name="requestTimeout">The API request timeout, or <see langword="null"/> for 30 seconds.</param>
         /// <param name="maxPendingRequestsPerDocument">The maximum concurrent requests for one document.</param>
+        /// <param name="maxCompatibilityBootstrapBytes">The maximum compatibility bootstrap size.</param>
+        /// <param name="compatibilityBootstrapTimeout">The compatibility bootstrap timeout.</param>
         public BridgeOptions(
             int maxRequestBytes = 1024 * 1024,
             int maxResponseBytes = 1024 * 1024,
             int maxResourceBytes = 10 * 1024 * 1024,
             TimeSpan? requestTimeout = null,
-            int maxPendingRequestsPerDocument = 64)
+            int maxPendingRequestsPerDocument = 64,
+            int maxCompatibilityBootstrapBytes = 1024 * 1024,
+            TimeSpan? compatibilityBootstrapTimeout = null)
         {
             if (maxRequestBytes <= 0) throw new ArgumentOutOfRangeException(nameof(maxRequestBytes));
             if (maxResponseBytes <= 0) throw new ArgumentOutOfRangeException(nameof(maxResponseBytes));
             if (maxResourceBytes <= 0) throw new ArgumentOutOfRangeException(nameof(maxResourceBytes));
             if (maxPendingRequestsPerDocument <= 0) throw new ArgumentOutOfRangeException(nameof(maxPendingRequestsPerDocument));
+            if (maxCompatibilityBootstrapBytes <= 0) throw new ArgumentOutOfRangeException(nameof(maxCompatibilityBootstrapBytes));
             MaxRequestBytes = maxRequestBytes;
             MaxResponseBytes = maxResponseBytes;
             MaxResourceBytes = maxResourceBytes;
             RequestTimeout = requestTimeout ?? TimeSpan.FromSeconds(30);
             if (RequestTimeout <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(requestTimeout));
             MaxPendingRequestsPerDocument = maxPendingRequestsPerDocument;
+            MaxCompatibilityBootstrapBytes = maxCompatibilityBootstrapBytes;
+            CompatibilityBootstrapTimeout = compatibilityBootstrapTimeout ?? TimeSpan.FromSeconds(5);
+            if (CompatibilityBootstrapTimeout <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(compatibilityBootstrapTimeout));
         }
 
         /// <summary>Gets the maximum UTF-8 request size.</summary>
@@ -86,6 +94,12 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
 
         /// <summary>Gets the maximum number of concurrent requests for one document.</summary>
         public int MaxPendingRequestsPerDocument { get; }
+
+        /// <summary>Gets the maximum UTF-8 compatibility bootstrap size.</summary>
+        public int MaxCompatibilityBootstrapBytes { get; }
+
+        /// <summary>Gets the compatibility bootstrap timeout.</summary>
+        public TimeSpan CompatibilityBootstrapTimeout { get; }
     }
 
     /// <summary>

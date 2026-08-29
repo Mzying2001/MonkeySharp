@@ -34,6 +34,22 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Fact]
+        public async Task HelloReturnsAtomicCompatibilityStorageSnapshot()
+        {
+            using (var fixture = await BridgeFixture.CreateAsync("GM.getValue", "GM.listValues"))
+            {
+                await fixture.Store.SetAsync(
+                    fixture.Invocation.ScriptKey.ToString(), "theme", "{\"dark\":true}", CancellationToken.None);
+
+                var response = await fixture.HelloAsync();
+                var storage = response.GetProperty("compatibility").GetProperty("storage");
+
+                Assert.True(storage.GetProperty("complete").GetBoolean());
+                Assert.True(storage.GetProperty("values").GetProperty("theme").GetProperty("dark").GetBoolean());
+            }
+        }
+
+        [Fact]
         public async Task ForgedIdentityAndStaleDocumentAreRejected()
         {
             using (var fixture = await BridgeFixture.CreateAsync("GM.getValue"))

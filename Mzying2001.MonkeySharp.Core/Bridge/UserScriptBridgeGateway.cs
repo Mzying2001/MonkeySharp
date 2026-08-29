@@ -38,6 +38,8 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
         private readonly HashSet<string> _seenRequests = new HashSet<string>(StringComparer.Ordinal);
         private readonly Dictionary<string, Dictionary<int, ValueListener>> _listeners =
             new Dictionary<string, Dictionary<int, ValueListener>>(StringComparer.Ordinal);
+        private readonly Dictionary<string, Queue<MutationOrigin>> _mutationOrigins =
+            new Dictionary<string, Queue<MutationOrigin>>(StringComparer.Ordinal);
         private bool _disposed;
 
         /// <summary>Initializes a userscript bridge gateway.</summary>
@@ -160,6 +162,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                 _pending.Clear();
                 _seenRequests.Clear();
                 _listeners.Clear();
+                _mutationOrigins.Clear();
                 _disposed = true;
             }
             foreach (var source in _providerInstances.OfType<IUserScriptNotificationSource>())
@@ -168,21 +171,115 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                 disposable.Dispose();
         }
 
-        private Task<string> HandleHelloAsync(JsonElement root, CancellationToken cancellationToken)
+        private async Task<string> HandleHelloAsync(JsonElement root, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (!TryReadExecution(root, out var execution))
             {
-                return Task.FromResult(Limit(ProtocolJson.Error(
+                return Limit(ProtocolJson.Error(
                     null,
                     BridgeErrorCodes.SessionExpired,
                     "The script execution session is not active.",
-                    true)));
+                    true));
             }
 
             var grants = execution.Installation.Definition.Metadata.Grants;
             var supported = SupportedApis().Where(grants.Contains);
-            return Task.FromResult(Limit(ProtocolJson.Hello(_options, supported)));
+            var compatibility = new Dictionary<string, object>
+            {
+                ["profile"] = execution.Invocation.Compatibility.Profile.ToString(),
+                ["strict"] = execution.Invocation.Compatibility.Strict,
+                ["legacyGlobals"] = execution.Invocation.Compatibility.LegacyGlobals
+            };
+            if (execution.Invocation.Compatibility.SynchronousStorageMirror && HasStorageCapability(grants))
+            {
+                try
+                {
+                    using (var timeout = new CancellationTokenSource(_options.CompatibilityBootstrapTimeout))
+                    using (var linked = CancellationTokenSource.CreateLinkedTokenSource(
+                        cancellationToken, execution.Cancellation.Token, timeout.Token))
+                    {
+                        compatibility["storage"] = await BuildStorageBootstrapAsync(execution, linked.Token)
+                            .ConfigureAwait(false);
+                    }
+                }
+                catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested &&
+                    !execution.Cancellation.IsCancellationRequested)
+                {
+                    EmitDiagnostic(
+                        "MSC410_COMPATIBILITY_BOOTSTRAP_FAILED",
+                        "The compatibility storage snapshot timed out.",
+                        null,
+                        execution);
+                }
+                catch (Exception exception)
+                {
+                    EmitDiagnostic(
+                        "MSC410_COMPATIBILITY_BOOTSTRAP_FAILED",
+                        "The compatibility storage snapshot could not be prepared.",
+                        exception,
+                        execution);
+                }
+            }
+            return Limit(ProtocolJson.Hello(_options, supported, compatibility));
+        }
+
+        private async Task<object> BuildStorageBootstrapAsync(
+            UserScriptEngine.ExecutionRecord execution,
+            CancellationToken cancellationToken)
+        {
+            var scriptKey = execution.Installation.ScriptKey.ToString();
+            IReadOnlyDictionary<string, string> snapshot;
+            if (_store is IUserScriptValueSnapshotProvider provider)
+            {
+                snapshot = await provider.GetSnapshotAsync(scriptKey, cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                var values = new Dictionary<string, string>(StringComparer.Ordinal);
+                var keys = await _store.ListKeysAsync(scriptKey, cancellationToken).ConfigureAwait(false);
+                foreach (var key in keys)
+                {
+                    var value = await _store.GetAsync(scriptKey, key, cancellationToken).ConfigureAwait(false);
+                    if (value.Exists)
+                        values[key] = value.JsonValue;
+                }
+                snapshot = values;
+                EmitDiagnostic(
+                    "MSC411_COMPATIBILITY_SNAPSHOT_DEGRADED",
+                    "The value store does not provide an atomic snapshot.",
+                    null,
+                    execution);
+            }
+
+            var jsonValues = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+            foreach (var item in snapshot)
+            {
+                using (var value = JsonDocument.Parse(item.Value))
+                    jsonValues[item.Key] = value.RootElement.Clone();
+            }
+            var result = new Dictionary<string, object>
+            {
+                ["complete"] = true,
+                ["values"] = jsonValues
+            };
+            if (Encoding.UTF8.GetByteCount(JsonSerializer.Serialize(result)) > _options.MaxCompatibilityBootstrapBytes)
+            {
+                EmitDiagnostic(
+                    "MSC412_COMPATIBILITY_BOOTSTRAP_LIMIT",
+                    "The compatibility storage snapshot exceeds the configured limit.",
+                    null,
+                    execution);
+                return new Dictionary<string, object> { ["complete"] = false, ["values"] = new Dictionary<string, object>() };
+            }
+            return result;
+        }
+
+        private static bool HasStorageCapability(IReadOnlyList<string> grants)
+        {
+            return grants.Contains("GM.getValue") || grants.Contains("GM.setValue") ||
+                grants.Contains("GM.deleteValue") || grants.Contains("GM.listValues") ||
+                grants.Contains("GM.addValueChangeListener") || grants.Contains("GM.removeValueChangeListener");
         }
 
         private async Task<string> HandleRequestAsync(JsonElement root, CancellationToken cancellationToken)
@@ -236,13 +333,24 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                         result = RemoveValueListener(execution, parameters);
                     else if (_providers.TryGetValue(method, out var provider))
                     {
-                        result = await provider.InvokeAsync(new ApiInvocationContext(
-                            execution.Installation,
-                            execution.Frame,
-                            execution.Invocation.ExecutionId,
-                            requestId,
-                            method,
-                            parameters), linked.Token).ConfigureAwait(false);
+                        var mutation = IsValueMutation(method)
+                            ? BeginMutation(execution, parameters)
+                            : null;
+                        try
+                        {
+                            result = await provider.InvokeAsync(new ApiInvocationContext(
+                                execution.Installation,
+                                execution.Frame,
+                                execution.Invocation.ExecutionId,
+                                requestId,
+                                method,
+                                parameters), linked.Token).ConfigureAwait(false);
+                        }
+                        finally
+                        {
+                            if (mutation != null)
+                                RemovePendingMutation(mutation);
+                        }
                     }
                     else
                     {
@@ -386,7 +494,12 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
         {
             if (!ScriptKey.TryParse(args.ScriptKey, out var scriptKey))
                 return;
-            var executions = _engine.GetExecutionsForScript(scriptKey);
+            var mutation = TakeMutation(args.ScriptKey, args.Key);
+            var originExecutionId = args.OriginExecutionId ?? mutation?.OriginExecutionId;
+            var mutationId = args.MutationId ?? mutation?.MutationId;
+            var executions = _engine.GetExecutionsForScript(scriptKey)
+                .Where(item => item.Invocation.ExecutionId != originExecutionId)
+                .ToList();
             var deliveries = new List<Tuple<UserScriptEngine.ExecutionRecord, ValueListener>>();
             lock (_stateLock)
             {
@@ -405,7 +518,9 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                 0,
                 args.Key,
                 args.OldValue.Exists ? args.OldValue.JsonValue : null,
-                args.NewValue.Exists ? args.NewValue.JsonValue : null);
+                args.NewValue.Exists ? args.NewValue.JsonValue : null,
+                mutationId,
+                originExecutionId);
             foreach (var delivery in deliveries)
             {
                 var listenerData = ReplaceListenerId(data, delivery.Item2.Id);
@@ -415,6 +530,58 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                     delivery.Item1.Invocation.DeliveryToken,
                     "value-change",
                     listenerData));
+            }
+        }
+
+        private static bool IsValueMutation(string method)
+        {
+            return method == "GM.setValue" || method == "GM.deleteValue";
+        }
+
+        private MutationOrigin BeginMutation(UserScriptEngine.ExecutionRecord execution, JsonElement parameters)
+        {
+            var key = ReadRequiredString(parameters, "key");
+            var mutation = new MutationOrigin(
+                Guid.NewGuid().ToString("D"), execution.Invocation.ExecutionId, execution.Installation.ScriptKey.ToString(), key);
+            lock (_stateLock)
+            {
+                var bucketKey = mutation.ScriptKey + ":" + mutation.Key;
+                if (!_mutationOrigins.TryGetValue(bucketKey, out var queue))
+                {
+                    queue = new Queue<MutationOrigin>();
+                    _mutationOrigins.Add(bucketKey, queue);
+                }
+                queue.Enqueue(mutation);
+            }
+            return mutation;
+        }
+
+        private MutationOrigin TakeMutation(string scriptKey, string key)
+        {
+            lock (_stateLock)
+            {
+                var bucketKey = scriptKey + ":" + key;
+                if (!_mutationOrigins.TryGetValue(bucketKey, out var queue) || queue.Count == 0)
+                    return null;
+                var mutation = queue.Dequeue();
+                if (queue.Count == 0)
+                    _mutationOrigins.Remove(bucketKey);
+                return mutation;
+            }
+        }
+
+        private void RemovePendingMutation(MutationOrigin mutation)
+        {
+            lock (_stateLock)
+            {
+                var bucketKey = mutation.ScriptKey + ":" + mutation.Key;
+                if (!_mutationOrigins.TryGetValue(bucketKey, out var queue))
+                    return;
+                var remaining = queue.Where(item => item.MutationId != mutation.MutationId).ToList();
+                if (remaining.Count == 0)
+                    _mutationOrigins.Remove(bucketKey);
+                else
+                    _mutationOrigins[bucketKey] = new Queue<MutationOrigin>(remaining);
             }
         }
 
@@ -431,6 +598,10 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                     ["newValue"] = root.GetProperty("newValue").Clone(),
                     ["remote"] = true
                 };
+                if (root.TryGetProperty("mutationId", out var mutationId))
+                    values["mutationId"] = mutationId.GetString();
+                if (root.TryGetProperty("originExecutionId", out var origin))
+                    values["originExecutionId"] = origin.GetString();
                 return JsonSerializer.Serialize(values);
             }
         }
@@ -625,6 +796,22 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             }
 
             public int Id { get; }
+            public string Key { get; }
+        }
+
+        private sealed class MutationOrigin
+        {
+            public MutationOrigin(string mutationId, string originExecutionId, string scriptKey, string key)
+            {
+                MutationId = mutationId;
+                OriginExecutionId = originExecutionId;
+                ScriptKey = scriptKey;
+                Key = key;
+            }
+
+            public string MutationId { get; }
+            public string OriginExecutionId { get; }
+            public string ScriptKey { get; }
             public string Key { get; }
         }
     }

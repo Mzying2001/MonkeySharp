@@ -53,7 +53,12 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
 
         public static string Hello(BridgeOptions options, IEnumerable<string> apis)
         {
-            return JsonSerializer.Serialize(new Dictionary<string, object>
+            return Hello(options, apis, null);
+        }
+
+        public static string Hello(BridgeOptions options, IEnumerable<string> apis, object compatibility)
+        {
+            var payload = new Dictionary<string, object>
             {
                 ["type"] = "hello-result",
                 ["protocol"] = 1,
@@ -67,14 +72,19 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                     ["pendingRequests"] = options.MaxPendingRequestsPerDocument
                 },
                 ["apis"] = apis.OrderBy(item => item, StringComparer.Ordinal).ToArray()
-            });
+            };
+            if (compatibility != null)
+                payload["compatibility"] = compatibility;
+            return JsonSerializer.Serialize(payload);
         }
 
         public static string ValueChangeData(
             int listenerId,
             string key,
             string oldJson,
-            string newJson)
+            string newJson,
+            string mutationId = null,
+            string originExecutionId = null)
         {
             using (var stream = new MemoryStream())
             {
@@ -88,6 +98,10 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                     writer.WritePropertyName("newValue");
                     WriteOptionalValue(writer, newJson);
                     writer.WriteBoolean("remote", true);
+                    if (mutationId != null)
+                        writer.WriteString("mutationId", mutationId);
+                    if (originExecutionId != null)
+                        writer.WriteString("originExecutionId", originExecutionId);
                     writer.WriteEndObject();
                 }
                 return Encoding.UTF8.GetString(stream.ToArray());

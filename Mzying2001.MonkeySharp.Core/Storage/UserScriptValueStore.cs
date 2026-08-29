@@ -58,13 +58,17 @@ namespace Mzying2001.MonkeySharp.Core.Storage
         /// <param name="oldValue">The value before the change.</param>
         /// <param name="newValue">The value after the change.</param>
         /// <param name="kind">The kind of change.</param>
+        /// <param name="mutationId">The optional gateway mutation identifier.</param>
+        /// <param name="originExecutionId">The optional originating execution identifier.</param>
         public UserScriptValueChangedEventArgs(
             long sequence,
             string scriptKey,
             string key,
             StoredValue oldValue,
             StoredValue newValue,
-            ValueChangeKind kind)
+            ValueChangeKind kind,
+            string mutationId = null,
+            string originExecutionId = null)
         {
             Sequence = sequence;
             ScriptKey = scriptKey;
@@ -72,6 +76,8 @@ namespace Mzying2001.MonkeySharp.Core.Storage
             OldValue = oldValue;
             NewValue = newValue;
             Kind = kind;
+            MutationId = mutationId;
+            OriginExecutionId = originExecutionId;
         }
 
         /// <summary>Gets the process-wide monotonically increasing change sequence.</summary>
@@ -91,6 +97,12 @@ namespace Mzying2001.MonkeySharp.Core.Storage
 
         /// <summary>Gets the kind of change.</summary>
         public ValueChangeKind Kind { get; }
+
+        /// <summary>Gets the optional mutation identifier assigned by a compatibility-aware gateway.</summary>
+        public string MutationId { get; }
+
+        /// <summary>Gets the optional originating execution identifier.</summary>
+        public string OriginExecutionId { get; }
     }
 
     /// <summary>
@@ -130,10 +142,22 @@ namespace Mzying2001.MonkeySharp.Core.Storage
         event EventHandler<UserScriptValueChangedEventArgs> ValueChanged;
     }
 
+    /// <summary>Provides an atomic snapshot of one userscript storage partition.</summary>
+    public interface IUserScriptValueSnapshotProvider
+    {
+        /// <summary>Gets canonical JSON values for all keys in a script partition.</summary>
+        /// <param name="scriptKey">The storage partition identifier.</param>
+        /// <param name="cancellationToken">A token that cancels the snapshot.</param>
+        /// <returns>An immutable key-to-JSON snapshot.</returns>
+        Task<IReadOnlyDictionary<string, string>> GetSnapshotAsync(
+            string scriptKey,
+            CancellationToken cancellationToken);
+    }
+
     /// <summary>
     /// Provides a thread-safe, process-local userscript value store with per-script serialization.
     /// </summary>
-    public class InMemoryUserScriptValueStore : IUserScriptValueStore, IDisposable
+    public class InMemoryUserScriptValueStore : IUserScriptValueStore, IUserScriptValueSnapshotProvider, IDisposable
     {
         private readonly object _partitionsLock = new object();
         private readonly Dictionary<string, Partition> _partitions =
@@ -236,6 +260,26 @@ namespace Mzying2001.MonkeySharp.Core.Storage
                 cancellationToken.ThrowIfCancellationRequested();
                 return new ReadOnlyCollection<string>(
                     partition.Values.Keys.OrderBy(item => item, StringComparer.Ordinal).ToList());
+            }
+            finally
+            {
+                partition.Gate.Release();
+            }
+        }
+
+        /// <inheritdoc />
+        public async Task<IReadOnlyDictionary<string, string>> GetSnapshotAsync(
+            string scriptKey,
+            CancellationToken cancellationToken)
+        {
+            ValidateKey(scriptKey, nameof(scriptKey));
+            var partition = GetPartition(scriptKey);
+            await partition.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return new ReadOnlyDictionary<string, string>(
+                    new Dictionary<string, string>(partition.Values, StringComparer.Ordinal));
             }
             finally
             {

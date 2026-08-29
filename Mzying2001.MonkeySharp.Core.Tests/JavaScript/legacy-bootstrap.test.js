@@ -28,7 +28,7 @@ test("legacy profile exposes lexical globals and window-like top-level this", as
             const request = JSON.parse(requestJson);
             if (request.type === "hello") {
                 return JSON.stringify({
-                    type: "hello-result", protocol: 1, ok: true, limits: {}, apis: ["GM.getValue"]
+                    type: "hello-result", protocol: 1, ok: true, limits: {}, apis: ["GM.log"]
                 });
             }
             return JSON.stringify({
@@ -50,11 +50,11 @@ test("legacy profile exposes lexical globals and window-like top-level this", as
                 "globalThis.__legacyThis = this === window;",
                 "legacyImplicitGlobal = 7;",
                 "globalThis.__legacyImplicit = globalThis.legacyImplicitGlobal;",
-                "globalThis.__legacyType = typeof GM_getValue;"
+                "globalThis.__legacyType = typeof GM_log;"
             ].join("\n"),
-            declaredGrants: ["GM_getValue"],
-            grants: ["GM.getValue"],
-            info: { grants: ["GM_getValue"] },
+            declaredGrants: ["GM_log"],
+            grants: ["GM.log"],
+            info: { grants: ["GM_log"] },
             capability: "legacy-capability",
             deliveryToken: "legacy-delivery",
             compatibility: {

@@ -44,6 +44,10 @@
                 }
             };
 
+            const cloneValue = function (value) {
+                return serializableValue(value);
+            };
+
             const resolveDispatch = async function () {
                 if (root.CefSharp && typeof root.CefSharp.BindObjectAsync === "function") {
                     await root.CefSharp.BindObjectAsync("__MonkeySharpBridge");
@@ -108,6 +112,31 @@
                 return decodeResult(response.result);
             };
 
+            const enqueueMutation = function (record, method, parameters) {
+                const operation = record.mutationTail.then(() => call(record, method, parameters));
+                record.mutationTail = operation.catch(error => {
+                    if (root.console && typeof root.console.error === "function") {
+                        root.console.error("[MonkeySharp] compatibility storage write failed", error);
+                    }
+                });
+                return operation;
+            };
+
+            const notifyLocalValueChange = function (record, key, oldValue, newValue) {
+                record.valueListenerKeys.forEach((listenerKey, listenerId) => {
+                    if (listenerKey !== key) return;
+                    const handler = record.handlers.get(listenerId);
+                    if (!handler) return;
+                    try {
+                        handler(key, oldValue, newValue, false);
+                    } catch (error) {
+                        if (root.console && typeof root.console.error === "function") {
+                            root.console.error("[MonkeySharp] callback failed", error);
+                        }
+                    }
+                });
+            };
+
             const createApi = function (record, invocation, availableApis) {
                 const grants = new Set(invocation.grants);
                 const enabled = name => grants.has(name) && availableApis.has(name);
@@ -119,6 +148,13 @@
                 if (enabled("GM.getValue")) {
                     api.getValue = async function (key, defaultValue) {
                         if (typeof key !== "string" || key.length === 0) throw new TypeError("key must be a non-empty string.");
+                        if (record.storageMirror) {
+                            if (Object.prototype.hasOwnProperty.call(record.storageMirror, key)) {
+                                return cloneValue(record.storageMirror[key]);
+                            }
+                            return arguments.length > 1 && typeof defaultValue !== "undefined"
+                                ? cloneValue(defaultValue) : undefined;
+                        }
                         const parameters = { key: key };
                         if (arguments.length > 1 && typeof defaultValue !== "undefined") {
                             parameters.defaultValue = serializableValue(defaultValue);
@@ -129,24 +165,45 @@
                 if (enabled("GM.setValue")) {
                     api.setValue = async function (key, value) {
                         if (typeof key !== "string" || key.length === 0) throw new TypeError("key must be a non-empty string.");
-                        await call(record, "GM.setValue", { key: key, value: serializableValue(value) });
+                        const cloned = cloneValue(value);
+                        if (record.storageMirror) {
+                            const oldValue = Object.prototype.hasOwnProperty.call(record.storageMirror, key)
+                                ? cloneValue(record.storageMirror[key]) : undefined;
+                            record.storageMirror[key] = cloned;
+                            notifyLocalValueChange(record, key, oldValue, cloneValue(cloned));
+                            await enqueueMutation(record, "GM.setValue", { key: key, value: cloned });
+                            return;
+                        }
+                        await call(record, "GM.setValue", { key: key, value: cloned });
                     };
                 }
                 if (enabled("GM.deleteValue")) {
                     api.deleteValue = async function (key) {
                         if (typeof key !== "string" || key.length === 0) throw new TypeError("key must be a non-empty string.");
+                        if (record.storageMirror) {
+                            const existed = Object.prototype.hasOwnProperty.call(record.storageMirror, key);
+                            const oldValue = existed ? cloneValue(record.storageMirror[key]) : undefined;
+                            if (existed) delete record.storageMirror[key];
+                            if (existed) notifyLocalValueChange(record, key, oldValue, undefined);
+                            await enqueueMutation(record, "GM.deleteValue", { key: key });
+                            return existed;
+                        }
                         return call(record, "GM.deleteValue", { key: key });
                     };
                 }
-                if (enabled("GM.listValues")) api.listValues = async () => call(record, "GM.listValues", {});
+                if (enabled("GM.listValues")) api.listValues = async () => record.storageMirror
+                    ? Object.keys(record.storageMirror).sort()
+                    : call(record, "GM.listValues", {});
                 if (enabled("GM.addValueChangeListener")) {
                     api.addValueChangeListener = function (key, callback) {
                         if (typeof key !== "string" || key.length === 0) throw new TypeError("key must be a non-empty string.");
                         if (typeof callback !== "function") throw new TypeError("callback must be a function.");
                         const listenerId = nextListenerId++;
                         record.handlers.set(listenerId, callback);
+                        record.valueListenerKeys.set(listenerId, key);
                         call(record, "GM.addValueChangeListener", { listenerId: listenerId, key: key }).catch(error => {
                             record.handlers.delete(listenerId);
+                            record.valueListenerKeys.delete(listenerId);
                             console.error("[MonkeySharp]", error);
                         });
                         return listenerId;
@@ -156,7 +213,10 @@
                     api.removeValueChangeListener = async function (listenerId) {
                         if (!Number.isInteger(listenerId) || listenerId <= 0) throw new TypeError("listenerId must be a positive integer.");
                         const removed = await call(record, "GM.removeValueChangeListener", { listenerId: listenerId });
-                        if (removed) record.handlers.delete(listenerId);
+                        if (removed) {
+                            record.handlers.delete(listenerId);
+                            record.valueListenerKeys.delete(listenerId);
+                        }
                         return removed;
                     };
                 }
@@ -340,9 +400,8 @@
                     };
                 }
                 const aliases = {
-                    GM_getValue: "getValue", GM_setValue: "setValue", GM_deleteValue: "deleteValue",
-                    GM_listValues: "listValues", GM_addValueChangeListener: "addValueChangeListener",
-                    GM_removeValueChangeListener: "removeValueChangeListener", GM_addStyle: "addStyle",
+                    GM_addValueChangeListener: "addValueChangeListener",
+                    GM_addStyle: "addStyle",
                     GM_addElement: "addElement", GM_getResourceText: "getResourceText",
                     GM_getResourceURL: "getResourceURL", GM_xmlhttpRequest: "xmlHttpRequest",
                     GM_registerMenuCommand: "registerMenuCommand", GM_unregisterMenuCommand: "unregisterMenuCommand",
@@ -353,6 +412,50 @@
                     const member = api[aliases[name]];
                     if (typeof member === "function") facade[name] = member;
                 });
+                if (record.storageMirror) {
+                    const requireKey = key => {
+                        if (typeof key !== "string" || key.length === 0) {
+                            throw new TypeError("key must be a non-empty string.");
+                        }
+                        return key;
+                    };
+                    if (api.getValue) facade.GM_getValue = function (key, defaultValue) {
+                        key = requireKey(key);
+                        return Object.prototype.hasOwnProperty.call(record.storageMirror, key)
+                            ? cloneValue(record.storageMirror[key])
+                            : (arguments.length > 1 && typeof defaultValue !== "undefined"
+                                ? cloneValue(defaultValue) : undefined);
+                    };
+                    if (api.setValue) facade.GM_setValue = function (key, value) {
+                        key = requireKey(key);
+                        const cloned = cloneValue(value);
+                        const oldValue = Object.prototype.hasOwnProperty.call(record.storageMirror, key)
+                            ? cloneValue(record.storageMirror[key]) : undefined;
+                        record.storageMirror[key] = cloned;
+                        notifyLocalValueChange(record, key, oldValue, cloneValue(cloned));
+                        enqueueMutation(record, "GM.setValue", { key: key, value: cloned });
+                    };
+                    if (api.deleteValue) facade.GM_deleteValue = function (key) {
+                        key = requireKey(key);
+                        const existed = Object.prototype.hasOwnProperty.call(record.storageMirror, key);
+                        const oldValue = existed ? cloneValue(record.storageMirror[key]) : undefined;
+                        if (existed) delete record.storageMirror[key];
+                        if (existed) notifyLocalValueChange(record, key, oldValue, undefined);
+                        enqueueMutation(record, "GM.deleteValue", { key: key });
+                    };
+                    if (api.listValues) facade.GM_listValues = function () {
+                        return Object.keys(record.storageMirror).sort();
+                    };
+                    if (api.removeValueChangeListener) facade.GM_removeValueChangeListener = function (listenerId) {
+                        if (!Number.isInteger(listenerId) || listenerId <= 0) {
+                            throw new TypeError("listenerId must be a positive integer.");
+                        }
+                        const removed = record.handlers.delete(listenerId);
+                        record.valueListenerKeys.delete(listenerId);
+                        if (removed) enqueueMutation(record, "GM.removeValueChangeListener", { listenerId: listenerId });
+                        return removed;
+                    };
+                }
                 return facade;
             };
 
@@ -360,11 +463,15 @@
                 const proof = createProof(plan, invocation);
                 const record = {
                     proof: proof,
+                    executionId: invocation.executionId,
                     dispatch: dispatch,
                     deliveryToken: invocation.deliveryToken,
                     handlers: new Map(),
                     menuHandlers: new Map(),
-                    xhrHandlers: new Map()
+                    xhrHandlers: new Map(),
+                    valueListenerKeys: new Map(),
+                    mutationTail: Promise.resolve(),
+                    storageMirror: null
                 };
                 executions.set(invocation.executionId, record);
                 let availableApis = new Set();
@@ -376,6 +483,11 @@
                         throw new Error(hello.error && hello.error.message || "MonkeySharp bridge handshake failed.");
                     }
                     availableApis = new Set(hello.apis || []);
+                    if (hello.compatibility && hello.compatibility.storage &&
+                        hello.compatibility.storage.complete &&
+                        hello.compatibility.storage.values) {
+                        record.storageMirror = Object.assign({}, hello.compatibility.storage.values);
+                    }
                 }
                 const gm = grantNone ? undefined : createApi(record, invocation, availableApis);
                 const compatibility = invocation.compatibility || { strict: true, legacyGlobals: false };
@@ -416,6 +528,12 @@
                 const data = notification.data || {};
                 try {
                     if (notification.event === "value-change") {
+                        if (record.storageMirror && data.key) {
+                            const incoming = decodeResult(data.newValue);
+                            if (typeof incoming === "undefined") delete record.storageMirror[data.key];
+                            else record.storageMirror[data.key] = cloneValue(incoming);
+                        }
+                        if (data.originExecutionId === record.executionId) return true;
                         const handler = record.handlers.get(data.listenerId);
                         if (!handler) return false;
                         handler(data.key, decodeResult(data.oldValue), decodeResult(data.newValue), Boolean(data.remote));
