@@ -1,4 +1,5 @@
 using Mzying2001.MonkeySharp.Core.Parsing;
+using Mzying2001.MonkeySharp.Core.Compatibility;
 using Xunit;
 
 namespace Mzying2001.MonkeySharp.Core.Tests
@@ -22,14 +23,17 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             }
 
             var preamble = parser.Parse(CompatibilityFixtures.LegacyStorage);
-            Assert.False(preamble.CanEnable);
-            Assert.Contains(preamble.Diagnostics, item => item.Code == "MSM000_HEADER_MISSING");
+            Assert.True(preamble.CanEnable);
+            Assert.NotNull(preamble.Metadata);
         }
 
         [Fact]
         public void StrictBaselineRejectsHeaderPreamble()
         {
-            var result = new UserScriptMetadataParser().Parse(CompatibilityFixtures.LegacyHeaderPreamble);
+            var result = new UserScriptMetadataParser(new UserScriptMetadataParserOptions
+            {
+                Profile = UserScriptCompatibilityProfile.ModernStrict
+            }).Parse(CompatibilityFixtures.LegacyHeaderPreamble);
 
             Assert.False(result.CanEnable);
             Assert.Contains(result.Diagnostics, item => item.Code == "MSM000_HEADER_MISSING");

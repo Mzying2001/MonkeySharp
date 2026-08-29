@@ -321,6 +321,41 @@
                 return Object.freeze(api);
             };
 
+            const legacyNames = [
+                "GM_info", "GM_log", "GM_getValue", "GM_setValue", "GM_deleteValue", "GM_listValues",
+                "GM_addValueChangeListener", "GM_removeValueChangeListener", "GM_addStyle", "GM_addElement",
+                "GM_getResourceText", "GM_getResourceURL", "GM_xmlhttpRequest", "GM_registerMenuCommand",
+                "GM_unregisterMenuCommand", "GM_notification", "GM_setClipboard", "GM_openInTab",
+                "GM_download", "GM_getTab", "GM_saveTab", "GM_getTabs"
+            ];
+
+            const createLegacyFacade = function (record, invocation, api) {
+                const facade = {};
+                if (!invocation.compatibility || !invocation.compatibility.legacyGlobals || !api) return facade;
+                if (api.info) facade.GM_info = api.info;
+                if (api.log) {
+                    facade.GM_log = function (value) {
+                        if (root.console && typeof root.console.log === "function") root.console.log(value);
+                        api.log(value).catch(error => console.error("[MonkeySharp] legacy log failed", error));
+                    };
+                }
+                const aliases = {
+                    GM_getValue: "getValue", GM_setValue: "setValue", GM_deleteValue: "deleteValue",
+                    GM_listValues: "listValues", GM_addValueChangeListener: "addValueChangeListener",
+                    GM_removeValueChangeListener: "removeValueChangeListener", GM_addStyle: "addStyle",
+                    GM_addElement: "addElement", GM_getResourceText: "getResourceText",
+                    GM_getResourceURL: "getResourceURL", GM_xmlhttpRequest: "xmlHttpRequest",
+                    GM_registerMenuCommand: "registerMenuCommand", GM_unregisterMenuCommand: "unregisterMenuCommand",
+                    GM_notification: "notification", GM_setClipboard: "setClipboard", GM_openInTab: "openInTab",
+                    GM_download: "download", GM_getTab: "getTab", GM_saveTab: "saveTab", GM_getTabs: "getTabs"
+                };
+                Object.keys(aliases).forEach(name => {
+                    const member = api[aliases[name]];
+                    if (typeof member === "function") facade[name] = member;
+                });
+                return facade;
+            };
+
             const runInvocation = async function (plan, invocation, dispatch) {
                 const proof = createProof(plan, invocation);
                 const record = {
@@ -343,10 +378,15 @@
                     availableApis = new Set(hello.apis || []);
                 }
                 const gm = grantNone ? undefined : createApi(record, invocation, availableApis);
+                const compatibility = invocation.compatibility || { strict: true, legacyGlobals: false };
+                const legacy = createLegacyFacade(record, Object.assign({}, invocation, { compatibility: compatibility }), gm);
                 const unsafeWindow = invocation.grants.includes("unsafeWindow") ? root : undefined;
                 try {
-                    const execute = new Function("GM", "unsafeWindow", "window", "\"use strict\";\n" + invocation.source);
-                    await execute.call(undefined, gm, unsafeWindow, root);
+                    const names = ["GM", "unsafeWindow", "window"].concat(legacyNames);
+                    const values = [gm, unsafeWindow, root].concat(legacyNames.map(name => legacy[name]));
+                    const prefix = compatibility.strict ? "\"use strict\";\n" : "";
+                    const execute = new Function(...names, prefix + invocation.source);
+                    await execute.call(compatibility.strict ? undefined : root, ...values);
                 } catch (error) {
                     if (dispatch) {
                         await call(record, "runtime.reportError", {

@@ -38,10 +38,19 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                     ["executionId"] = invocation.ExecutionId,
                     ["scriptKey"] = invocation.ScriptKey.ToString(),
                     ["source"] = invocation.Source,
+                    ["declaredGrants"] = invocation.DeclaredGrants,
                     ["grants"] = invocation.Grants,
                     ["info"] = ParseElement(invocation.SerializedInfo),
                     ["capability"] = invocation.Capability,
-                    ["deliveryToken"] = invocation.DeliveryToken
+                    ["deliveryToken"] = invocation.DeliveryToken,
+                    ["compatibility"] = new Dictionary<string, object>
+                    {
+                        ["profile"] = invocation.Compatibility.Profile.ToString(),
+                        ["strict"] = invocation.Compatibility.Strict,
+                        ["legacyGlobals"] = invocation.Compatibility.LegacyGlobals,
+                        ["synchronousStorageMirror"] = invocation.Compatibility.SynchronousStorageMirror,
+                        ["synchronousResourceSnapshot"] = invocation.Compatibility.SynchronousResourceSnapshot
+                    }
                 }).ToArray()
             };
             return InsertPayload(BootstrapTemplate.Value, JsonSerializer.Serialize(payload));

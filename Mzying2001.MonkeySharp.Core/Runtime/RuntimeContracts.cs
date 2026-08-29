@@ -1,4 +1,5 @@
 using Mzying2001.MonkeySharp.Core.Domain;
+using Mzying2001.MonkeySharp.Core.Compatibility;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -158,18 +159,22 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
             string executionId,
             ScriptKey scriptKey,
             string source,
+            IReadOnlyList<string> declaredGrants,
             IReadOnlyList<string> grants,
             string serializedInfo,
             string capability,
-            string deliveryToken)
+            string deliveryToken,
+            ScriptCompatibilityDescriptor compatibility)
         {
             ExecutionId = executionId;
             ScriptKey = scriptKey;
             Source = source;
+            DeclaredGrants = declaredGrants;
             Grants = grants;
             SerializedInfo = serializedInfo;
             Capability = capability;
             DeliveryToken = deliveryToken;
+            Compatibility = compatibility;
         }
 
         /// <summary>Gets the unique execution identifier.</summary>
@@ -182,6 +187,9 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
         public string Source { get; }
 
         /// <summary>Gets the API grants exposed to this execution.</summary>
+        public IReadOnlyList<string> DeclaredGrants { get; }
+
+        /// <summary>Gets the normalized API capabilities exposed to this execution.</summary>
         public IReadOnlyList<string> Grants { get; }
 
         /// <summary>Gets the serialized metadata object exposed to the script.</summary>
@@ -192,6 +200,39 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
 
         /// <summary>Gets the token used to route notifications to this execution.</summary>
         public string DeliveryToken { get; }
+
+        /// <summary>Gets the compatibility behavior used by this execution.</summary>
+        public ScriptCompatibilityDescriptor Compatibility { get; }
+    }
+
+    /// <summary>Describes compatibility behavior serialized with one script invocation.</summary>
+    public sealed class ScriptCompatibilityDescriptor
+    {
+        internal ScriptCompatibilityDescriptor(UserScriptCompatibilityOptions options)
+        {
+            if (options == null)
+                throw new ArgumentNullException(nameof(options));
+            Profile = options.Profile;
+            Strict = options.Strict;
+            LegacyGlobals = options.LegacyGlobalsEnabled;
+            SynchronousStorageMirror = options.EnableSynchronousStorageMirror;
+            SynchronousResourceSnapshot = options.EnableSynchronousResourceSnapshot;
+        }
+
+        /// <summary>Gets the selected compatibility profile.</summary>
+        public UserScriptCompatibilityProfile Profile { get; }
+
+        /// <summary>Gets whether the wrapper uses strict JavaScript semantics.</summary>
+        public bool Strict { get; }
+
+        /// <summary>Gets whether legacy global API names are available.</summary>
+        public bool LegacyGlobals { get; }
+
+        /// <summary>Gets whether synchronous storage mirror bootstrap is enabled.</summary>
+        public bool SynchronousStorageMirror { get; }
+
+        /// <summary>Gets whether synchronous resource snapshot bootstrap is enabled.</summary>
+        public bool SynchronousResourceSnapshot { get; }
     }
 
     /// <summary>
@@ -301,5 +342,9 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
 
         /// <summary>Gets or sets whether scripts requiring privileged APIs need a verified bridge.</summary>
         public bool RequireVerifiedBridge { get; set; } = true;
+
+        /// <summary>Gets or sets the userscript compatibility options.</summary>
+        public UserScriptCompatibilityOptions Compatibility { get; set; } =
+            new UserScriptCompatibilityOptions();
     }
 }

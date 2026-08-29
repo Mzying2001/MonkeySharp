@@ -1,4 +1,5 @@
 using Mzying2001.MonkeySharp.Core.Domain;
+using Mzying2001.MonkeySharp.Core.Compatibility;
 using Mzying2001.MonkeySharp.Core.Matching;
 using System;
 using System.Collections.Generic;
@@ -23,6 +24,8 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
     /// </summary>
     public sealed class UserScriptMetadataParser : IUserScriptMetadataParser
     {
+        private readonly UserScriptMetadataParserOptions _options;
+
         private static readonly HashSet<string> CollectionKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "match", "include", "exclude", "exclude-match", "grant", "connect", "require", "resource"
@@ -34,15 +37,19 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
             "downloadurl", "updateurl", "homepageurl", "supporturl", "noframes", "run-at", "run-in", "inject-into"
         };
 
-        private static readonly HashSet<string> KnownGrants = new HashSet<string>(StringComparer.Ordinal)
+        /// <summary>Initializes a parser with the default legacy-compatible rules.</summary>
+        public UserScriptMetadataParser()
+            : this(null)
         {
-            "none", "unsafeWindow",
-            "GM.info", "GM.log", "GM.getValue", "GM.setValue", "GM.deleteValue", "GM.listValues",
-            "GM.addValueChangeListener", "GM.removeValueChangeListener", "GM.addStyle", "GM.addElement",
-            "GM.getResourceText", "GM.getResourceURL", "GM.xmlHttpRequest", "GM.registerMenuCommand",
-            "GM.unregisterMenuCommand", "GM.notification", "GM.setClipboard", "GM.openInTab", "GM.download",
-            "GM.getTab", "GM.saveTab", "GM.getTabs"
-        };
+        }
+
+        /// <summary>Initializes a parser with explicit compatibility rules.</summary>
+        /// <param name="options">The parser options, or <see langword="null"/> for defaults.</param>
+        public UserScriptMetadataParser(UserScriptMetadataParserOptions options)
+        {
+            _options = options ?? new UserScriptMetadataParserOptions();
+            _options.Validate();
+        }
 
         /// <inheritdoc />
         public MetadataParseResult Parse(string source)
@@ -54,7 +61,7 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
                 source = source.Substring(1);
 
             var diagnostics = new List<MetadataDiagnostic>();
-            var entries = ReadEntries(source, diagnostics, out var foundHeader, out var foundFooter);
+            var entries = ReadEntries(source, diagnostics, _options, out var foundHeader, out var foundFooter);
             if (!foundHeader || !foundFooter)
                 return new MetadataParseResult(null, diagnostics);
 
@@ -93,23 +100,35 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
             ValidateMatchPatterns(matches, "match", diagnostics, values);
             ValidateMatchPatterns(excludeMatches, "exclude-match", diagnostics, values);
 
-            var grants = ReadCollection(values, "grant").ToList();
-            if (grants.Count == 0)
-                grants.Add("none");
-            if (grants.Contains("none") && grants.Count > 1)
+            var declaredGrants = ReadCollection(values, "grant").ToList();
+            if (declaredGrants.Count == 0)
+                declaredGrants.Add("none");
+            if (declaredGrants.Contains("none") && declaredGrants.Count > 1)
             {
                 diagnostics.Add(new MetadataDiagnostic(
                     "MSM030_GRANT_NONE_CONFLICT",
                     DiagnosticSeverity.Error,
                     "@grant none cannot be combined with another grant."));
             }
-            foreach (var grant in grants.Where(item => !KnownGrants.Contains(item)))
+            var grants = new List<string>();
+            foreach (var declaredGrant in declaredGrants)
             {
-                diagnostics.Add(new MetadataDiagnostic(
-                    "MSM031_UNKNOWN_GRANT",
-                    DiagnosticSeverity.Warning,
-                    "Unknown grant '" + grant + "' will not be exposed."));
+                if (UserScriptGrantCatalog.TryNormalize(
+                    declaredGrant, _options.AcceptLegacyGrantAliases, out var canonicalGrant))
+                {
+                    if (!grants.Contains(canonicalGrant, StringComparer.Ordinal))
+                        grants.Add(canonicalGrant);
+                }
+                else
+                {
+                    diagnostics.Add(new MetadataDiagnostic(
+                        "MSM031_UNKNOWN_GRANT",
+                        DiagnosticSeverity.Warning,
+                        "Unknown grant '" + declaredGrant + "' will not be exposed."));
+                }
             }
+            if (grants.Count == 0)
+                grants.Add("none");
 
             var runAt = ParseRunAt(First(values, "run-at"), diagnostics);
             var resources = ParseResources(values, diagnostics);
@@ -150,6 +169,7 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
                 ReadCollection(values, "include"),
                 ReadCollection(values, "exclude"),
                 excludeMatches,
+                declaredGrants,
                 grants,
                 ReadCollection(values, "connect"),
                 ReadCollection(values, "require"),
@@ -162,6 +182,7 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
         private static List<Entry> ReadEntries(
             string source,
             ICollection<MetadataDiagnostic> diagnostics,
+            UserScriptMetadataParserOptions options,
             out bool foundHeader,
             out bool foundFooter)
         {
@@ -170,15 +191,31 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
             foundHeader = false;
             foundFooter = false;
 
+            var scannedCharacters = 0;
             for (var index = 0; index < lines.Length; index++)
             {
                 var trimmed = lines[index].Trim();
                 if (!foundHeader)
                 {
                     if (trimmed.Length == 0)
+                    {
+                        scannedCharacters += lines[index].Length + 1;
                         continue;
+                    }
                     if (trimmed != "// ==UserScript==")
                     {
+                        var preamble = options.AllowHeaderPreamble &&
+                            index < options.MaxHeaderScanLines &&
+                            scannedCharacters + lines[index].Length <= options.MaxHeaderScanCharacters &&
+                            (trimmed.StartsWith("//", StringComparison.Ordinal) ||
+                             trimmed.StartsWith("/*", StringComparison.Ordinal) ||
+                             trimmed.StartsWith("*", StringComparison.Ordinal) ||
+                             trimmed.StartsWith("#", StringComparison.Ordinal));
+                        if (preamble)
+                        {
+                            scannedCharacters += lines[index].Length + 1;
+                            continue;
+                        }
                         diagnostics.Add(new MetadataDiagnostic(
                             "MSM000_HEADER_MISSING",
                             DiagnosticSeverity.Error,

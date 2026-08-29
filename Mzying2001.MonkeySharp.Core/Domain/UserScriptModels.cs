@@ -140,6 +140,7 @@ namespace Mzying2001.MonkeySharp.Core.Domain
             IEnumerable<string> includes,
             IEnumerable<string> excludes,
             IEnumerable<string> excludeMatches,
+            IEnumerable<string> declaredGrants,
             IEnumerable<string> grants,
             IEnumerable<string> connects,
             IEnumerable<string> requires,
@@ -167,6 +168,7 @@ namespace Mzying2001.MonkeySharp.Core.Domain
             Includes = ReadOnlyList(includes);
             Excludes = ReadOnlyList(excludes);
             ExcludeMatches = ReadOnlyList(excludeMatches);
+            DeclaredGrants = ReadOnlyList(declaredGrants);
             Grants = ReadOnlyList(grants);
             Connects = ReadOnlyList(connects);
             Requires = ReadOnlyList(requires);
@@ -239,6 +241,9 @@ namespace Mzying2001.MonkeySharp.Core.Domain
         public IReadOnlyList<string> ExcludeMatches { get; }
 
         /// <summary>Gets the GM API grants declared by the script.</summary>
+        public IReadOnlyList<string> DeclaredGrants { get; }
+
+        /// <summary>Gets the normalized canonical capabilities granted to the script.</summary>
         public IReadOnlyList<string> Grants { get; }
 
         /// <summary>Gets the network targets declared with <c>@connect</c>.</summary>

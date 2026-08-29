@@ -1,4 +1,5 @@
 using Mzying2001.MonkeySharp.Core.Domain;
+using Mzying2001.MonkeySharp.Core.Compatibility;
 using Mzying2001.MonkeySharp.Core.Matching;
 using Mzying2001.MonkeySharp.Core.Parsing;
 using System;
@@ -35,6 +36,30 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             var result = _parser.Parse(Script("// @name none\n// @match https://example.com/*"));
 
             Assert.Equal(new[] { "none" }, result.Metadata.Grants);
+        }
+
+        [Fact]
+        public void LegacyGrantAliasesNormalizeWhilePreservingDeclarations()
+        {
+            var result = new UserScriptMetadataParser().Parse(
+                Script("// @name legacy\n// @match https://example.com/*\n// @grant GM_getValue"));
+
+            Assert.True(result.CanEnable);
+            Assert.Equal(new[] { "GM_getValue" }, result.Metadata.DeclaredGrants);
+            Assert.Equal(new[] { "GM.getValue" }, result.Metadata.Grants);
+        }
+
+        [Fact]
+        public void StrictParserCanRejectLegacyAliases()
+        {
+            var result = new UserScriptMetadataParser(new UserScriptMetadataParserOptions
+            {
+                Profile = UserScriptCompatibilityProfile.ModernStrict,
+                AcceptLegacyGrantAliases = false
+            }).Parse(Script("// @name strict\n// @match https://example.com/*\n// @grant GM_getValue"));
+
+            Assert.Equal(new[] { "none" }, result.Metadata.Grants);
+            Assert.Contains(result.Diagnostics, item => item.Code == "MSM031_UNKNOWN_GRANT");
         }
 
         [Fact]

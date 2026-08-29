@@ -1,5 +1,6 @@
 using Mzying2001.MonkeySharp.Core.Apis;
 using Mzying2001.MonkeySharp.Core.Bridge;
+using Mzying2001.MonkeySharp.Core.Compatibility;
 using Mzying2001.MonkeySharp.Core.Permissions;
 using Mzying2001.MonkeySharp.Core.Repository;
 using Mzying2001.MonkeySharp.Core.Runtime;
@@ -161,6 +162,8 @@ namespace Mzying2001.MonkeySharp.CefSharp
         public CefSharpUserScriptHostBuilder Configure(CefSharpHostOptions options)
         {
             _options = options ?? throw new ArgumentNullException(nameof(options));
+            if (_options.Compatibility == null)
+                _options.Compatibility = new UserScriptCompatibilityOptions();
             return this;
         }
 
@@ -179,7 +182,8 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 options: new UserScriptEngineOptions
                 {
                     RequireGuaranteedDocumentStart = _options.RequireGuaranteedDocumentStart,
-                    RequireVerifiedBridge = true
+                    RequireVerifiedBridge = true,
+                    Compatibility = _options.Compatibility
                 },
                 sourceResolver: _dependencies == null
                     ? null

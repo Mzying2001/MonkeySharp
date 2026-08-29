@@ -1,4 +1,5 @@
 using Mzying2001.MonkeySharp.Core.Bridge;
+using Mzying2001.MonkeySharp.Core.Compatibility;
 
 namespace Mzying2001.MonkeySharp.CefSharp
 {
@@ -17,5 +18,9 @@ namespace Mzying2001.MonkeySharp.CefSharp
 
         /// <summary>Gets or sets bridge payload, resource, concurrency, and timeout limits.</summary>
         public BridgeOptions Bridge { get; set; } = new BridgeOptions();
+
+        /// <summary>Gets or sets userscript compatibility behavior.</summary>
+        public UserScriptCompatibilityOptions Compatibility { get; set; } =
+            new UserScriptCompatibilityOptions();
     }
 }

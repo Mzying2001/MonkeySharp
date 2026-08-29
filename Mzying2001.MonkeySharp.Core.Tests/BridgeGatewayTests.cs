@@ -289,14 +289,13 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Fact]
-        public async Task InjectionPayloadIsJsonEncodedAndContainsNoLegacyApi()
+        public async Task InjectionPayloadIsJsonEncodedAndContainsCompatibilityMetadata()
         {
             using (var fixture = await BridgeFixture.CreateAsync("GM.getValue"))
             {
                 var script = BridgeScriptBuilder.BuildInjection(fixture.Plan);
                 Assert.DoesNotContain(fixture.Invocation.Source, script);
                 Assert.DoesNotContain(fixture.Invocation.Capability, script);
-                Assert.DoesNotContain("GM_getValue", script);
                 Assert.DoesNotContain("__MONKEYSHARP_PAYLOAD_BASE64__", script);
 
                 const string prefix = "decodePayload(\"";
@@ -307,6 +306,10 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 {
                     Assert.Equal(fixture.Invocation.Source,
                         payload.RootElement.GetProperty("invocations")[0].GetProperty("source").GetString());
+                    Assert.Contains("GM.getValue", payload.RootElement.GetProperty("invocations")[0]
+                        .GetProperty("grants").EnumerateArray().Select(item => item.GetString()));
+                    Assert.Contains("GM.getValue", payload.RootElement.GetProperty("invocations")[0]
+                        .GetProperty("declaredGrants").EnumerateArray().Select(item => item.GetString()));
                 }
             }
         }

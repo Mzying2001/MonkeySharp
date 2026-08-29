@@ -1,4 +1,5 @@
 using Mzying2001.MonkeySharp.Core.Domain;
+using Mzying2001.MonkeySharp.Core.Compatibility;
 using Mzying2001.MonkeySharp.Core.Matching;
 using Mzying2001.MonkeySharp.Core.Repository;
 using System;
@@ -43,6 +44,8 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
             _repository = repository ?? throw new ArgumentNullException(nameof(repository));
             _matcher = matcher ?? new UserScriptMatcher();
             _options = options ?? new UserScriptEngineOptions();
+            if (_options.Compatibility == null)
+                _options.Compatibility = new UserScriptCompatibilityOptions();
             _sourceResolver = sourceResolver;
         }
 
@@ -318,7 +321,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                 ExecutionEnded?.Invoke(execution);
         }
 
-        private static ScriptInvocation CreateInvocation(UserScriptInstallation installation, string source)
+        private ScriptInvocation CreateInvocation(UserScriptInstallation installation, string source)
         {
             var metadata = installation.Definition.Metadata;
             var info = JsonSerializer.Serialize(new Dictionary<string, object>
@@ -327,16 +330,19 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                 ["name"] = metadata.Name,
                 ["namespace"] = metadata.Namespace,
                 ["version"] = metadata.Version,
-                ["description"] = metadata.Description
+                ["description"] = metadata.Description,
+                ["grants"] = metadata.DeclaredGrants
             });
             return new ScriptInvocation(
                 Guid.NewGuid().ToString("D"),
                 installation.ScriptKey,
                 source,
+                metadata.DeclaredGrants,
                 metadata.Grants,
                 info,
                 CreateToken(),
-                CreateToken());
+                CreateToken(),
+                new ScriptCompatibilityDescriptor(_options.Compatibility));
         }
 
         private static string CreateToken()
