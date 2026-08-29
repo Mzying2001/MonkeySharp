@@ -1,0 +1,104 @@
+using Mzying2001.MonkeySharp.Core.Domain;
+using Mzying2001.MonkeySharp.Core.Repository;
+using Mzying2001.MonkeySharp.Core.Runtime;
+using System;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+using Xunit;
+
+namespace Mzying2001.MonkeySharp.Core.Tests
+{
+    public sealed class UserScriptEngineTests
+    {
+        [Fact]
+        public async Task ARunAtExecutesOnlyOncePerDocumentAndScript()
+        {
+            var repository = new InMemoryUserScriptRepository();
+            await repository.InstallAsync(Script("document-start"), "test", true, CancellationToken.None);
+            using (var engine = new UserScriptEngine(repository))
+            {
+                var frame = Frame("doc", true);
+                var first = await engine.ProcessLifecycleAsync(
+                    new DocumentLifecycleEventArgs(DocumentLifecycleKind.DocumentStart, frame), CancellationToken.None);
+                var duplicate = await engine.ProcessLifecycleAsync(
+                    new DocumentLifecycleEventArgs(DocumentLifecycleKind.DocumentStart, frame), CancellationToken.None);
+
+                Assert.Single(first.Invocations);
+                Assert.Empty(duplicate.Invocations);
+                Assert.Equal(43, first.Invocations[0].Capability.Length);
+            }
+        }
+
+        [Fact]
+        public async Task NoFramesSkipsChildFrame()
+        {
+            var repository = new InMemoryUserScriptRepository();
+            var source = MetadataAndMatchingTests.Script(
+                "// @name noframes\n// @match https://example.com/*\n// @noframes\n// @run-at document-end");
+            await repository.InstallAsync(source, "test", true, CancellationToken.None);
+            using (var engine = new UserScriptEngine(repository))
+            {
+                var plan = await engine.ProcessLifecycleAsync(
+                    new DocumentLifecycleEventArgs(DocumentLifecycleKind.DomContentLoaded, Frame("child", false)),
+                    CancellationToken.None);
+
+                Assert.Empty(plan.Invocations);
+            }
+        }
+
+        [Fact]
+        public async Task BestEffortDocumentStartProducesDiagnostic()
+        {
+            var repository = new InMemoryUserScriptRepository();
+            await repository.InstallAsync(Script("document-start"), "test", true, CancellationToken.None);
+            using (var engine = new UserScriptEngine(repository))
+            {
+                var diagnostics = new List<UserScriptDiagnostic>();
+                engine.Diagnostic += (_, item) => diagnostics.Add(item);
+
+                await engine.ProcessLifecycleAsync(
+                    new DocumentLifecycleEventArgs(DocumentLifecycleKind.DocumentStart, Frame("doc", true)),
+                    CancellationToken.None);
+
+                Assert.Contains(diagnostics, item => item.Code == "MSR100_DOCUMENT_START_BEST_EFFORT");
+            }
+        }
+
+        [Fact]
+        public async Task RequiredGuaranteedStartSkipsBestEffortHost()
+        {
+            var repository = new InMemoryUserScriptRepository();
+            await repository.InstallAsync(Script("document-start"), "test", true, CancellationToken.None);
+            using (var engine = new UserScriptEngine(
+                repository,
+                options: new UserScriptEngineOptions { RequireGuaranteedDocumentStart = true }))
+            {
+                var plan = await engine.ProcessLifecycleAsync(
+                    new DocumentLifecycleEventArgs(DocumentLifecycleKind.DocumentStart, Frame("doc", true)),
+                    CancellationToken.None);
+
+                Assert.Empty(plan.Invocations);
+            }
+        }
+
+        private static string Script(string runAt)
+        {
+            return MetadataAndMatchingTests.Script(
+                "// @name engine\n// @match https://example.com/*\n// @grant none\n// @run-at " + runAt,
+                "window.test = true;");
+        }
+
+        private static DocumentFrame Frame(string documentId, bool mainFrame)
+        {
+            return new DocumentFrame(
+                "browser",
+                documentId,
+                mainFrame ? "main" : "sub",
+                new Uri("https://example.com/page"),
+                mainFrame,
+                TimingGuarantee.BestEffortDocumentStart,
+                BridgeIntegrityGuarantee.Unverified);
+        }
+    }
+}
