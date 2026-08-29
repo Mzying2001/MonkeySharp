@@ -231,13 +231,38 @@ namespace Mzying2001.MonkeySharp.CefSharp
             }
             if (session == null || session.Cancellation.IsCancellationRequested)
                 throw new InvalidOperationException("The target CefSharp document is no longer active.");
-            if (!session.CefFrame.IsValid || session.CefFrame.IsDisposed)
-                throw new InvalidOperationException("The target CefSharp frame is no longer valid.");
 
-            session.CefFrame.ExecuteJavaScriptAsync(
-                javaScript,
-                "monkeysharp://runtime/" + frame.DocumentId,
-                1);
+            // CefSharp invalidates callback-owned IFrame wrappers after the
+            // renderer callback returns. Resolve a fresh wrapper for delayed
+            // lifecycle injections; mock hosts may not implement GetFrame, so
+            // retain the callback wrapper as a compatibility fallback.
+            IFrame targetFrame = session.CefFrame;
+            IFrame refreshedFrame = null;
+            try
+            {
+                IWebBrowser browser;
+                lock (_sync)
+                    browser = _browser;
+                if (browser != null && long.TryParse(frame.FrameId, NumberStyles.Integer, CultureInfo.InvariantCulture, out var identifier))
+                {
+                    var cefBrowser = browser.GetBrowser();
+                    refreshedFrame = cefBrowser?.GetFrame(identifier);
+                    if (refreshedFrame != null)
+                        targetFrame = refreshedFrame;
+                }
+                if (!targetFrame.IsValid || targetFrame.IsDisposed)
+                    throw new InvalidOperationException("The target CefSharp frame is no longer valid.");
+
+                targetFrame.ExecuteJavaScriptAsync(
+                    javaScript,
+                    "monkeysharp://runtime/" + frame.DocumentId,
+                    1);
+            }
+            finally
+            {
+                if (refreshedFrame != null)
+                    refreshedFrame.Dispose();
+            }
             return Task.CompletedTask;
         }
 

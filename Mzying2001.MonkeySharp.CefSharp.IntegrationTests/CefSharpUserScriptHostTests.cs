@@ -159,6 +159,27 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
         }
 
         [Fact]
+        public async Task DelayedInjectionReacquiresAFrameAfterTheCallbackWrapperIsDisposed()
+        {
+            using (var host = await CreateHostAsync(Script("none", "document-end")))
+            {
+                var browser = new BrowserFixture();
+                var diagnostics = new ConcurrentQueue<UserScriptDiagnostic>();
+                host.Diagnostic += (_, item) => diagnostics.Enqueue(item);
+                host.Attach(browser.Browser.Object);
+                browser.CreateContext();
+                await browser.WaitForScriptCountAsync(1);
+
+                browser.UseRefreshedFrame();
+                browser.RaiseFrameLoadEnd();
+                await browser.WaitForScriptCountAsync(2);
+
+                Assert.DoesNotContain(diagnostics, item => item.Code == "MSC103_LOAD_FALLBACK_FAILED");
+                Assert.Contains(browser.Scripts, script => script.Contains("__MonkeySharpRuntime"));
+            }
+        }
+
+        [Fact]
         public async Task RapidContextReleaseAndRepeatedDisposeCompleteCleanly()
         {
             var host = await CreateHostAsync(Script("none", "document-start"));
@@ -334,6 +355,22 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
                 Browser.Raise(
                     item => item.FrameLoadEnd += null,
                     new FrameLoadEndEventArgs(CefBrowser.Object, Frame.Object, 200));
+            }
+
+            public void UseRefreshedFrame()
+            {
+                Frame.SetupGet(item => item.IsDisposed).Returns(true);
+                var refreshed = new Mock<IFrame>();
+                refreshed.SetupGet(item => item.Identifier).Returns(42);
+                refreshed.SetupGet(item => item.Url).Returns("https://example.com/page");
+                refreshed.SetupGet(item => item.IsMain).Returns(true);
+                refreshed.SetupGet(item => item.IsValid).Returns(true);
+                refreshed.SetupGet(item => item.IsDisposed).Returns(false);
+                refreshed.Setup(item => item.ExecuteJavaScriptAsync(
+                        It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>()))
+                    .Callback<string, string, int>((script, _, __) => Scripts.Enqueue(script));
+                CefBrowser.Setup(item => item.GetFrame(42)).Returns(refreshed.Object);
+                Browser.Setup(item => item.GetBrowser()).Returns(CefBrowser.Object);
             }
 
             public void ReleaseContext()

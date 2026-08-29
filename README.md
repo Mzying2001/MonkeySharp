@@ -2,7 +2,7 @@
 
 MonkeySharp 2 is a userscript runtime for applications that embed CefSharp. It separates browser-independent script parsing, matching, storage, permissions, and API dispatch from the CefSharp lifecycle adapter.
 
-Version 2 is a breaking rewrite. The v1 `Injector`, `JScript`, `IDataStore`, synchronous `GM_*` functions, and WCF bridge were removed.
+Version 2 is a breaking rewrite of the host architecture, but its default `LegacyCompatible` profile provides the common v1 userscript surface over the v2 asynchronous bridge. The v1 `Injector`, `JScript`, `IDataStore`, and WCF bridge remain removed; no synchronous WCF transport is restored.
 
 ## Packages
 
@@ -46,12 +46,12 @@ document.documentElement.dataset.monkeySharp = 'ready';
 
 var host = new CefSharpUserScriptHostBuilder(repository).Build();
 
-// Use the equivalent delayed-creation option for your CefSharp UI package.
-var browser = new CefSharp.WinForms.ChromiumWebBrowser(
-    "about:blank",
-    automaticallyCreateBrowser: false);
+// Attach before the control handle is created.
+var browser = new CefSharp.WinForms.ChromiumWebBrowser("about:blank");
 host.Attach(browser);
-browser.CreateBrowser();
+// Add the control to the form after Attach. CefSharp 121 creates the native
+// browser when the WinForms control handle is created.
+form.Controls.Add(browser);
 ```
 
 The `true` argument enables the installation. This minimal example deliberately uses `@grant none`; scripts with host-backed grants also require the registrations and trust opt-in described below.
@@ -64,6 +64,47 @@ browser.Dispose();
 ```
 
 Do not enable `CefSharpSettings.WcfEnabled`. MonkeySharp uses only CefSharp asynchronous JavaScript binding.
+Before creating the first browser, enable CefSharp's concurrent Task binding once for the process:
+
+```csharp
+CefSharpSettings.ConcurrentTaskExecution = true;
+```
+
+### Compatibility Profiles
+
+`CefSharpHostOptions.Compatibility` defaults to `LegacyCompatible`. It accepts legacy `@grant` aliases such as `GM_getValue`, exposes the corresponding `GM_*` globals with non-strict wrapper semantics, and bootstraps bounded synchronous storage/resource mirrors. Legacy callback facades (`GM_xmlhttpRequest`, menu registration, and tab callbacks) share the same authenticated bridge operations as their `GM.*` counterparts.
+
+Use `ModernStrict` when scripts must retain strict wrapper semantics and Promise-only API names:
+
+```csharp
+using Mzying2001.MonkeySharp.Core.Compatibility;
+using Mzying2001.MonkeySharp.Core.Parsing;
+
+var host = new CefSharpUserScriptHostBuilder(repository)
+    .Configure(new CefSharpHostOptions
+    {
+        Compatibility = new UserScriptCompatibilityOptions
+        {
+            Profile = UserScriptCompatibilityProfile.ModernStrict
+        }
+    })
+    .Build();
+```
+
+The profile is selected by the host for execution. Metadata parsing is selected when the repository is created, so already-installed metadata is not reinterpreted at runtime:
+
+```csharp
+using Mzying2001.MonkeySharp.Core.Compatibility;
+using Mzying2001.MonkeySharp.Core.Parsing;
+
+var parser = new UserScriptMetadataParser(
+    new UserScriptMetadataParserOptions
+    {
+        Profile = UserScriptCompatibilityProfile.ModernStrict,
+        AllowHeaderPreamble = false
+    });
+var repository = new InMemoryUserScriptRepository(parser);
+```
 
 ### Existing Render Handler
 
@@ -103,7 +144,7 @@ Every affected document emits `MSR200_UNVERIFIED_BRIDGE`. The adapter cannot be 
 
 ## Metadata
 
-The strict parser requires the first non-empty line to be `// ==UserScript==` and a matching `// ==/UserScript==` line. Metadata errors prevent installation; warnings are retained in `MetadataParseResult.Diagnostics`.
+The default legacy-compatible parser accepts a BOM, blank lines, license comments, and bounded tool comments before `// ==UserScript==`. The scan is limited to 128 lines and 64 KiB; metadata errors still prevent installation and warnings are retained in `MetadataParseResult.Diagnostics`. `ModernStrict` requires the first non-empty line to be the header and disables preamble scanning.
 
 Supported fields:
 
@@ -115,27 +156,27 @@ Supported fields:
 
 Exclusions win over positive rules. At least one `@match` or `@include` must match. URL fragments are ignored, hosts are IDN-normalized, explicit ports are checked, and `*.example.com` matches subdomains but not the bare domain.
 
-Missing `@grant` means `@grant none`. Grants are exact and case-sensitive. Unknown grants produce a warning and are never exposed.
+Missing `@grant` means `@grant none`. Known legacy aliases are normalized into canonical capabilities while their original spelling remains in `UserScriptMetadata.DeclaredGrants` and `GM.info`. Unknown grants remain case-sensitive, produce a warning, and are never exposed.
 
 ## GM API Support
 
-Only `GM.*` is provided. Legacy synchronous `GM_*` globals do not exist. Except for `GM.info` and the local value-listener ID, methods return real promises.
+Both canonical `GM.*` methods and the legacy facade are available when the corresponding grant and host provider are present. `GM.getValue`, `GM.listValues`, `GM.getResourceText`, and `GM.getResourceURL` remain Promise APIs; their `GM_*` aliases read the execution's bounded bootstrap mirror synchronously. Callback-style legacy APIs return their legacy handle/ID immediately and report callback failures as diagnostics.
 
 | API | Availability | Notes |
 | --- | --- | --- |
-| `GM.info` | Core | Frozen installation information; requires its exact grant. |
+| `GM.info` / `GM_info` | Core | Frozen installation information; requires its exact grant. `GM_info` preserves declared grant spelling. |
 | `GM.log` | Core | Delivered to the builder's `LogTo` callback. |
-| `GM.getValue`, `setValue`, `deleteValue`, `listValues` | Core | Asynchronous canonical JSON storage, isolated by stable `ScriptKey`. |
+| `GM.getValue`, `setValue`, `deleteValue`, `listValues` and `GM_getValue`/`GM_setValue`/`GM_deleteValue`/`GM_listValues` | Core | Canonical JSON storage isolated by stable `ScriptKey`; modern methods are asynchronous, legacy mirror reads are synchronous and writes are queued in order. |
 | `GM.addValueChangeListener`, `removeValueChangeListener` | Core | Notifications go only to active executions of the same installation. |
 | `GM.addStyle`, `addElement` | Bootstrap | Page-local implementation; still requires the exact grant. |
-| `GM.getResourceText`, `getResourceURL` | Conditional | Requires `IResourceProvider` and a declared `@resource`. |
-| `GM.xmlHttpRequest` | Conditional | Requires `IHttpRequestService`; initial and redirected URLs must satisfy `@connect`. Supports load/error/timeout callbacks and progress notifications. |
-| `GM.registerMenuCommand`, `unregisterMenuCommand` | Conditional | Requires `IMenuService`; callbacks use authenticated notifications. |
+| `GM.getResourceText`, `getResourceURL` and `GM_getResourceText`/`GM_getResourceURL` | Conditional | Requires `IResourceProvider` and a declared `@resource`; legacy reads use the bounded bootstrap snapshot. |
+| `GM.xmlHttpRequest` / `GM_xmlhttpRequest` | Conditional | Requires `IHttpRequestService`; initial and redirected URLs must satisfy `@connect`. The modern method returns a Promise; the legacy method returns `{ abort() }` and supports load/error/timeout/progress callbacks. |
+| `GM.registerMenuCommand`, `GM_registerMenuCommand`, `unregisterMenuCommand` | Conditional | Requires `IMenuService`; the legacy form allocates its ID synchronously and registers asynchronously. |
 | `GM.notification` | Conditional | Requires `INotificationService`. |
 | `GM.setClipboard` | Conditional | Requires `IClipboardService`. |
 | `GM.openInTab` | Conditional | Requires `ITabService`. |
 | `GM.download` | Conditional | Requires `IDownloadService`. |
-| `GM.getTab`, `saveTab`, `getTabs` | Conditional | Requires `ITabStateService`. |
+| `GM.getTab`, `GM_getTab`, `saveTab`, `getTabs`, `GM_getTabs` | Conditional | Requires `ITabStateService`; legacy tab methods use callbacks. |
 | `unsafeWindow` | Trusted page world only | Bound only for the exact `@grant unsafeWindow`. |
 | `GM.cookie`, `GM.webRequest` | Not implemented | Requires dedicated Chromium semantics; no placeholder functions are exposed. |
 
@@ -211,12 +252,11 @@ Default bridge limits are 1 MiB per request, 1 MiB per response, 10 MiB per reso
 | `IDataStore` / `MemDataStore` | `IUserScriptValueStore` / `InMemoryUserScriptValueStore` |
 | `Injector.AttachBrowser` | Build `CefSharpUserScriptHost`, then `Attach` before browser initialization |
 | Synchronous Messenger/WCF | Versioned JSON protocol through an asynchronous string binding |
-| `GM_getValue` and other `GM_*` | Promise-based `GM.getValue` and `GM.*` only |
+| `GM_getValue` and other `GM_*` | `LegacyCompatible` aliases over the v2 bridge; storage/resource reads use a synchronous execution snapshot and writes are ordered asynchronously |
 | `ForceUseStrict` and `with(window)` | Strict `Function` scope with explicit `GM`, `unsafeWindow`, and `window` parameters |
 | `IScriptVerifier` character scanner | Strict metadata diagnostics; Chromium reports JavaScript syntax/runtime errors |
 
-There is no default compatibility package. Migrate storage keys explicitly if existing v1 data must be retained.
-Legacy grant aliases are not translated: update metadata to the exact, case-sensitive `GM.*` names shown in the support table.
+Compatibility is built into the default profile; there is no separate transport or WCF package. Migrate storage keys explicitly if existing v1 data must be retained. Applications that require strict language semantics can select `ModernStrict` and update metadata grants to canonical `GM.*` names.
 
 ## Build and Test
 
@@ -236,6 +276,18 @@ dotnet pack Mzying2001.MonkeySharp.Core/Mzying2001.MonkeySharp.Core.csproj -c Re
 dotnet pack Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj -c Release -p:Platform=x64 -o artifacts/packages/x64
 dotnet pack Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj -c Release -p:Platform=x86 -o artifacts/packages/x86
 ```
+
+The optional WinForms smoke host is intentionally outside `MonkeySharp.slnx` and CI because it requires a desktop renderer. Build and run it locally for each architecture (a Windows desktop session with CefSharp native binaries is required):
+
+```powershell
+dotnet build Mzying2001.MonkeySharp.CefSharp.SmokeHost/Mzying2001.MonkeySharp.CefSharp.SmokeHost.csproj -c Release -p:Platform=x64
+dotnet run --project Mzying2001.MonkeySharp.CefSharp.SmokeHost/Mzying2001.MonkeySharp.CefSharp.SmokeHost.csproj -c Release -p:Platform=x64 --no-build
+
+dotnet build Mzying2001.MonkeySharp.CefSharp.SmokeHost/Mzying2001.MonkeySharp.CefSharp.SmokeHost.csproj -c Release -p:Platform=x86
+dotnet run --project Mzying2001.MonkeySharp.CefSharp.SmokeHost/Mzying2001.MonkeySharp.CefSharp.SmokeHost.csproj -c Release -p:Platform=x86 --no-build
+```
+
+The smoke host uses `TrustedPageWorld`, a licensed legacy fixture, a loopback HTTP document server, delayed bridge attachment, an in-process XHR provider, and a child frame. Its JSON-lines output records main/subframe lifecycle events, storage mirror values, XHR progress/load callbacks, navigation, context release, and final host disposal. It is a manual compatibility check, not a security sandbox; page-world code can observe and invoke granted capabilities.
 
 ## License
 
