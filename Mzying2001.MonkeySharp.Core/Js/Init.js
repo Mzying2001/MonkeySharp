@@ -450,6 +450,32 @@
                         }
                     });
                 }
+                if (enabled("GM.webRequest")) {
+                    api.webRequest = Object.freeze({
+                        addRule: rule => call(record, "GM.webRequest", { operation: "addRule", rule: serializableValue(rule || {}) }),
+                        removeRule: id => call(record, "GM.webRequest", { operation: "removeRule", id: id }),
+                        listRules: () => call(record, "GM.webRequest", { operation: "listRules" }),
+                        addListener: function (filter, callback) {
+                            if (typeof filter === "function") { callback = filter; filter = {}; }
+                            if (typeof callback !== "function") throw new TypeError("callback must be a function.");
+                            const listenerId = nextListenerId++;
+                            record.webRequestHandlers.set(listenerId, callback);
+                            call(record, "GM.webRequest", {
+                                operation: "addListener", listenerId: listenerId,
+                                filter: serializableValue(filter || {})
+                            }).catch(error => {
+                                record.webRequestHandlers.delete(listenerId);
+                                console.error("[MonkeySharp] webRequest listener registration failed", error);
+                            });
+                            return listenerId;
+                        },
+                        removeListener: async function (listenerId) {
+                            const removed = await call(record, "GM.webRequest", { operation: "removeListener", listenerId: listenerId });
+                            if (removed) record.webRequestHandlers.delete(listenerId);
+                            return removed;
+                        }
+                    });
+                }
                 return Object.freeze(api);
             };
 
@@ -459,7 +485,7 @@
                 "GM_getResourceText", "GM_getResourceURL", "GM_xmlhttpRequest", "GM_registerMenuCommand",
                 "GM_unregisterMenuCommand", "GM_notification", "GM_setClipboard", "GM_openInTab",
                 "GM_download", "GM_getTab", "GM_saveTab", "GM_getTabs"
-                , "GM_cookie"
+                , "GM_cookie", "GM_webRequest"
             ];
 
             const createLegacyFacade = function (record, invocation, api) {
@@ -706,6 +732,21 @@
                         api.cookie.removeListener(listenerId).catch(error => console.error("[MonkeySharp] legacy cookie listener removal failed", error));
                     }
                 };
+                if (api.webRequest) facade.GM_webRequest = function (rules, listener) {
+                    if (!Array.isArray(rules)) rules = [rules];
+                    const listenerId = typeof listener === "function" ? api.webRequest.addListener({}, listener) : null;
+                    const ids = [];
+                    rules.forEach(rule => api.webRequest.addRule(rule).then(id => ids.push(id))
+                        .catch(error => console.error("[MonkeySharp] legacy webRequest rule failed", error)));
+                    return {
+                        remove: function () {
+                            ids.splice(0).forEach(id => api.webRequest.removeRule(id)
+                                .catch(error => console.error("[MonkeySharp] legacy webRequest removal failed", error)));
+                            if (listenerId) api.webRequest.removeListener(listenerId)
+                                .catch(error => console.error("[MonkeySharp] legacy webRequest listener removal failed", error));
+                        }
+                    };
+                };
                 return facade;
             };
 
@@ -723,6 +764,7 @@
                     notificationHandlers: new Map(),
                     tabHandlers: [],
                     cookieHandlers: new Map(),
+                    webRequestHandlers: new Map(),
                     valueListenerKeys: new Map(),
                     mutationTail: Promise.resolve(),
                     storageMirror: null,
@@ -852,6 +894,12 @@
                         const callback = record.cookieHandlers.get(data.listenerId);
                         if (!callback) return false;
                         callback(data.cookie, data.cause, Boolean(data.removed));
+                        return true;
+                    }
+                    if (notification.event === "webrequest-event") {
+                        const callback = record.webRequestHandlers.get(data.listenerId);
+                        if (!callback) return false;
+                        callback(data);
                         return true;
                     }
                     if (notification.event === "xhr-progress") {

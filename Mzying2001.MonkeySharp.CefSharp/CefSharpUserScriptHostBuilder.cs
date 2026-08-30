@@ -1,3 +1,4 @@
+using CefSharp;
 using Mzying2001.MonkeySharp.Core.Apis;
 using Mzying2001.MonkeySharp.Core.Bridge;
 using Mzying2001.MonkeySharp.Core.Compatibility;
@@ -30,6 +31,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
         private IDownloadService _downloads;
         private ITabStateService _tabState;
         private ICookieService _cookies;
+        private IWebRequestService _webRequests;
         private IUserScriptDependencyProvider _dependencies;
         private bool _built;
 
@@ -157,6 +159,13 @@ namespace Mzying2001.MonkeySharp.CefSharp
             return this;
         }
 
+        /// <summary>Enables <c>GM.webRequest</c> with a host web request service.</summary>
+        public CefSharpUserScriptHostBuilder UseWebRequestService(IWebRequestService webRequests)
+        {
+            _webRequests = webRequests ?? throw new ArgumentNullException(nameof(webRequests));
+            return this;
+        }
+
         /// <summary>Routes <c>GM.log</c> values to a host callback.</summary>
         /// <param name="log">The callback that receives log entries.</param>
         /// <returns>This builder.</returns>
@@ -223,6 +232,8 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 }
                 if (_cookies != null)
                     providers.Add(new CookieApiProvider(_cookies));
+                if (_webRequests != null)
+                    providers.Add(new WebRequestApiProvider(_webRequests));
                 var gateway = new UserScriptBridgeGateway(
                     engine,
                     store,
@@ -234,7 +245,8 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     engine,
                     gateway,
                     _options,
-                    ownsStore ? store as IDisposable : null);
+                    ownsStore ? store as IDisposable : null,
+                    _webRequests == null ? null : (IRequestHandler)new CefSharpWebRequestHandler(_webRequests));
             }
             catch
             {
