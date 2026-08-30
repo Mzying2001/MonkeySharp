@@ -187,7 +187,7 @@ Both canonical `GM.*` methods and the legacy facade are available when the corre
 | `GM.addValueChangeListener`, `removeValueChangeListener` | Core | Notifications go only to active executions of the same installation. |
 | `GM.addStyle`, `addElement` | Bootstrap | Page-local implementation; still requires the exact grant. |
 | `GM.getResourceText`, `getResourceURL` and `GM_getResourceText`/`GM_getResourceURL` | Conditional | Requires `IResourceProvider` and a declared `@resource`; legacy reads use the bounded bootstrap snapshot. |
-| `GM.xmlHttpRequest` / `GM_xmlhttpRequest` | Conditional | CefSharp hosts create a default `CefSharpHttpRequestService`; applications can override it with `UseHttpRequestService`. Initial and redirected URLs must satisfy `@connect`. |
+| `GM.xmlHttpRequest` / `GM_xmlhttpRequest` | Conditional | CefSharp hosts create a default `CefSharpHttpRequestService`; applications can override it with `UseHttpRequestService`. Supports binary and multipart request bodies, redirects, credentials, progress, abort, and text/JSON/binary/blob/stream responses. Initial and redirected URLs must satisfy `@connect`. |
 | `GM.registerMenuCommand`, `GM_registerMenuCommand`, `unregisterMenuCommand` | Conditional | Requires `IMenuService`; the legacy form allocates its ID synchronously and registers asynchronously. |
 | `GM.notification` / `GM_notification` | Conditional | Requires `INotificationService`; legacy callbacks receive click/done lifecycle notifications. |
 | `GM.setClipboard` | Conditional | Requires `IClipboardService`. |
@@ -202,9 +202,27 @@ If a script directly requests a declared API that has no provider, protocol erro
 
 In the default unverified mode, a script with host-backed grants is skipped entirely, so it cannot inspect `GM`. In `TrustedPageWorld`, an exact grant without a registered capability leaves that method undefined; a direct bridge request still receives `MSP006_NOT_SUPPORTED`. An undeclared method receives `MSP004_GRANT_DENIED`.
 
+### HTTP Request API
+
+Declare `@grant GM.xmlHttpRequest` or `@grant GM_xmlhttpRequest` and an `@connect` entry for every destination. `details.url` accepts a string or `URL`. Methods are case-insensitive and otherwise unrestricted when they are valid HTTP tokens, except for `CONNECT`, `TRACE`, and `TRACK`.
+
+Request bodies support strings, `ArrayBuffer`, typed arrays and `DataView`, `Blob`/`File`, `FormData`, `URLSearchParams`, plain objects, and arrays. Plain objects and arrays use JSON; `URLSearchParams` uses form encoding; `FormData` retains its generated multipart boundary, file name, and media type. Request data crosses the bridge in 64 KiB chunks instead of one complete Base64 message.
+
+The supported controls are `headers`, `cookie`, `user`, `password`, `anonymous`, `overrideMimeType`, `signal`, `redirect`, `nocache`, `revalidate`, `fetch`, `timeout`, and `context`. Redirect mode is `follow` by default and also accepts `error` and `manual`. Follow mode applies Chromium's 301/302/303 method conversion and preserves the method and body for 307/308. Every redirect target is checked again against the grant, `@connect`, and the host permission policy; explicit cookies and authorization are removed on a cross-origin redirect.
+
+Compatibility headers including `User-Agent`, `Referer`, `Origin`, and `Cookie` may be set. MonkeySharp rejects `Host`, `Content-Length`, connection and transfer-control headers, and all `Sec-*` and `Proxy-*` headers. `anonymous:true` disables the CefSharp request context's stored cookies and credentials. `fetch:true` ignores timeout and progress and reports only readyState 4, matching Tampermonkey's documented fetch-mode restrictions.
+
+`responseType` accepts `text` (the default), `json`, `arraybuffer`, `blob`, and `stream`. A stream response exposes a cancelable `ReadableStream`; the other types are assembled from 64 KiB host reads. The response object contains `readyState` 1 through 4, `status`, `statusText`, `finalUrl`, `responseHeaders`, `response`, `responseText` where applicable, and the original JavaScript `context` reference. `responseHeaders` is the raw CRLF-separated header string and retains repeated fields; the earlier non-standard `responseBase64` field is removed. HTTP 4xx and 5xx responses call `onload`; network, permission, body serialization, and bridge failures call `onerror`.
+
+Lifecycle callbacks are `onloadstart`, `onreadystatechange`, `onprogress`, `onuploadprogress` (or `upload.onprogress`), `onload`, `onerror`, `ontimeout`, `onabort`, and `onloadend`. Callbacks run with the stable response object as `this`; an exception in one callback is reported to the console but does not change the terminal result or prevent cleanup. `GM.xmlHttpRequest` returns a Promise with `.abort()`, while `GM_xmlhttpRequest` immediately returns an abort handle and delivers its result through callbacks. An `AbortSignal` and stream cancellation both propagate to the host request.
+
+Request and response sizes are unlimited by default. Each direction stays in memory through 256 KiB and then spills to a temporary file that is deleted on completion, abort, failure, navigation, or host disposal. HTTP body transfer and the long-running `execute` operation are independent of the bridge's general 1 MiB message and 30-second request limits; `details.timeout`, explicit abort, and page teardown still cancel the request.
+
+`proxy`, `cookiePartition`, and a `Blob`/`File` used as the URL fail with `MSP006_NOT_SUPPORTED`. Partitioned-cookie keys are browser-extension manager state that CefSharp's public request-context API does not expose. CefSharp `84.4.10` uses the legacy request/post-data factories and 121/151 use the current factories; all three builds share the same documented HTTP behavior. Run real-browser tests on every exact CefSharp version shipped by the application.
+
 ### Cookie API
 
-Declare `@grant GM.cookie` (or the legacy alias `GM_cookie`). CefSharp hosts use the currently attached browser request context automatically; an explicit `UseCookieService` still takes precedence. URLs must be absolute HTTP or HTTPS URLs; domain, path, secure, SameSite, and expiration fields are validated by Core. Cookie headers cannot be injected through `GM.xmlHttpRequest` to bypass this policy, and `httpOnly` visibility is decided by the service rather than `document.cookie`.
+Declare `@grant GM.cookie` (or the legacy alias `GM_cookie`). CefSharp hosts use the currently attached browser request context automatically; an explicit `UseCookieService` still takes precedence. URLs must be absolute HTTP or HTTPS URLs; domain, path, secure, SameSite, and expiration fields are validated by Core. `GM.xmlHttpRequest` has its own compatibility-oriented explicit Cookie header support; `GM.cookie` remains the structured browser-store API, and `httpOnly` visibility is decided by that service rather than `document.cookie`.
 
 ```csharp
 var host = new CefSharpUserScriptHostBuilder(repository)
@@ -283,8 +301,8 @@ Important service requirements:
 - `IUserScriptValueStore` operations for one `ScriptKey` must be linearizable. Cancellation before commit makes no change; cancellation after commit still completes successfully and emits one notification.
 - `IUserScriptDependencyProvider` is responsible for trusted download, caching, HTTPS policy, and optional hash/signature validation of `@require`. `ResourceScriptSourceResolver` preserves declaration order and enforces the configured byte limit.
 - `@require` is resolved before the main source is planned and does not use a GM grant. A resolution failure skips that invocation and emits `MSR400_DEPENDENCY_RESOLUTION_FAILED`.
-- `IResourceProvider` must return previously authorized content for the named declaration. Resource and HTTP responses are capped by `BridgeOptions.MaxResourceBytes`.
-- `IHttpRequestService` must respect `UserScriptHttpRequest.MaxResponseBytes` and call `RedirectAllowed` before following every redirect. It must report followed redirects in `UserScriptHttpResponse.RedirectUrls`; Core rechecks that chain and the final URL against `@connect`.
+- `IResourceProvider` must return previously authorized content for the named declaration. Resources are capped by `BridgeOptions.MaxResourceBytes`; HTTP request and response bodies are not subject to that resource limit.
+- `IHttpRequestService` receives a repeatable `IUserScriptHttpBody` and an observer before execution starts. It must respect `UserScriptHttpRequest.MaxResponseBytes` when non-null, report response metadata before body data, and call `RedirectAllowed` before following every redirect. It must report followed redirects in `UserScriptHttpResponse.RedirectUrls`; Core rechecks that chain and the final URL against `@connect`.
 - `IUserScriptPermissionPolicy` receives the installation, frame, method, target summary, and current host capabilities for every host-backed request.
 
 ## Lifecycle and Diagnostics
@@ -302,7 +320,7 @@ host.Diagnostic += (_, diagnostic) =>
 
 Protocol errors use stable codes `MSP001` through `MSP010` and `MSP999`. Diagnostics never include capability tokens or stored values.
 
-Default bridge limits are 1 MiB per request, 1 MiB per response, 10 MiB per resource, 30 seconds per request, and 64 pending requests per document. Configure them through `CefSharpHostOptions.Bridge`.
+Default bridge limits are 1 MiB per request, 1 MiB per response, 10 MiB per resource, 30 seconds per ordinary request, and 64 pending requests per document. Configure them through `CefSharpHostOptions.Bridge`. XHR body chunks remain below the message limits, and XHR `execute` is exempt from the ordinary request timeout because it has its own lifecycle and `details.timeout`.
 
 ## Migrating to 3.0
 
@@ -315,12 +333,13 @@ Default bridge limits are 1 MiB per request, 1 MiB per response, 10 MiB per reso
 | `Injector.AttachBrowser` | Build `CefSharpUserScriptHost`, then `Attach` before browser initialization |
 | Synchronous Messenger/WCF | Versioned JSON protocol through an asynchronous string binding |
 | `GM_getValue` and other `GM_*` | `LegacyCompatible` aliases over the version 1 bridge; storage/resource reads use a synchronous execution snapshot and writes are ordered asynchronously |
+| One-shot `GM_xmlhttpRequest` payload/result | Lifecycle session using `create`, `appendBody`, `execute`, `readBody`, `abort`, and `release`; update custom HTTP services to the observer/operation contract |
 | `ForceUseStrict` and `with(window)` | Strict `Function` scope with explicit `GM`, `unsafeWindow`, and `window` parameters |
 | `IScriptVerifier` character scanner | Strict metadata diagnostics; Chromium reports JavaScript syntax/runtime errors |
 
 Compatibility is built into the default profile; there is no separate transport or WCF package. Migrate storage keys explicitly if existing v1 data must be retained. Applications that require strict language semantics can select `ModernStrict` and update metadata grants to canonical `GM.*` names.
 
-The 3.0 host contract changes are source-breaking for service implementations. `IHttpRequestService.SendAsync` now returns `IHttpRequestOperation`; notification, tab, and download services return lifecycle handles/operations with completion and cancellation members. Existing adapters should wrap their old task/future in these interfaces and forward progress and terminal events. `ITabStateService` accepts JSON objects only. The new `UseCookieService` and `UseWebRequestService` builder methods are optional and do not change hosts that do not register those providers.
+The 3.0 host contract changes are source-breaking for service implementations. `IHttpRequestService.SendAsync` receives `IUserScriptHttpObserver` before starting and returns `IHttpRequestOperation`; request bodies are repeatable streams, response data is delivered incrementally, and redirect authorization is asynchronous. Existing adapters should wrap their old task/future in the operation, attach the observer before work begins, and forward response start, data, progress, completion, and abort. Notification, tab, and download services likewise return lifecycle handles/operations with completion and cancellation members. `ITabStateService` accepts JSON objects only. The new `UseCookieService` and `UseWebRequestService` builder methods are optional and do not change hosts that do not register those providers.
 
 ## Build and Test
 
@@ -342,7 +361,7 @@ dotnet pack Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.cspr
 dotnet pack Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj -c Release -p:Platform=x86 -o artifacts/packages/x86
 ```
 
-The WinForms smoke host is a real Chromium compatibility gate. It requires a Windows desktop session with CefSharp native binaries; `Run-E2E.ps1` builds, runs, parses the JSON Lines output, and fails unless storage, XHR, notification, tab, download, cookie, webRequest, navigation, frame lifecycle, and final disposal checks all pass:
+The WinForms smoke host is a real Chromium compatibility gate. It requires a Windows desktop session with CefSharp native binaries; `Run-E2E.ps1` builds, runs, parses the JSON Lines output, and fails unless storage, XHR (including credentials, redirects, binary and large bodies, repeated headers, streaming, timeout, and abort), notification, tab, download, cookie, webRequest, navigation, frame lifecycle, and final disposal checks all pass:
 
 ```powershell
 dotnet build Mzying2001.MonkeySharp.CefSharp.SmokeHost/Mzying2001.MonkeySharp.CefSharp.SmokeHost.csproj -c Release -p:Platform=x64
