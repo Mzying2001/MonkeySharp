@@ -79,6 +79,31 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             }
         }
 
+        [Fact]
+        public void RequestAndResponseHeaderRulesAreScopedToTheirPhases()
+        {
+            using (var service = new InMemoryWebRequestService())
+            {
+                service.AddRule(new WebRequestRule("request", new WebRequestFilter(),
+                    WebRequestPhase.OnBeforeSendHeaders, 0,
+                    new WebRequestAction(WebRequestActionKind.ModifyRequestHeaders,
+                        headers: new Dictionary<string, string> { ["X-Request"] = "yes" })));
+                service.AddRule(new WebRequestRule("response", new WebRequestFilter(),
+                    WebRequestPhase.OnHeadersReceived, 0,
+                    new WebRequestAction(WebRequestActionKind.ModifyResponseHeaders,
+                        headers: new Dictionary<string, string> { ["X-Response"] = "yes" })));
+
+                var request = service.Evaluate(new WebRequestEvent(WebRequestPhase.OnBeforeSendHeaders, 1,
+                    "https://example.test/"));
+                var response = service.Evaluate(new WebRequestEvent(WebRequestPhase.OnHeadersReceived, 1,
+                    "https://example.test/"));
+                Assert.True(request.Headers.ContainsKey("X-Request"));
+                Assert.False(request.Headers.ContainsKey("X-Response"));
+                Assert.True(response.Headers.ContainsKey("X-Response"));
+                Assert.False(response.Headers.ContainsKey("X-Request"));
+            }
+        }
+
         private static async Task<UserScriptInstallation> InstallAsync(string grant)
         {
             var repository = new InMemoryUserScriptRepository();

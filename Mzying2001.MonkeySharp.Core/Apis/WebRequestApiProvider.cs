@@ -215,7 +215,18 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         private readonly List<Tuple<WebRequestRule, long, IWebRequestRegistration>> _rules = new List<Tuple<WebRequestRule, long, IWebRequestRegistration>>();
         private readonly List<Tuple<WebRequestFilter, EventHandler<WebRequestEvent>, IWebRequestRegistration>> _listeners = new List<Tuple<WebRequestFilter, EventHandler<WebRequestEvent>, IWebRequestRegistration>>();
         private long _sequence;
-        public IWebRequestRegistration AddRule(WebRequestRule rule) { lock (_sync) { var r = new Registration(rule.Id, () => RemoveRule(rule.Id)); _rules.Add(Tuple.Create(rule, ++_sequence, (IWebRequestRegistration)r)); return r; } }
+        private bool _disposed;
+        public IWebRequestRegistration AddRule(WebRequestRule rule)
+        {
+            if (rule == null) throw new ArgumentNullException(nameof(rule));
+            lock (_sync)
+            {
+                ThrowIfDisposed();
+                var r = new Registration(rule.Id, () => RemoveRule(rule.Id));
+                _rules.Add(Tuple.Create(rule, ++_sequence, (IWebRequestRegistration)r));
+                return r;
+            }
+        }
         public bool RemoveRule(string id) { lock (_sync) { var item = _rules.FirstOrDefault(x => x.Item1.Id == id); if (item == null) return false; _rules.Remove(item); item.Item3.Dispose(); return true; } }
         public IReadOnlyList<WebRequestRule> ListRules() { lock (_sync) return new ReadOnlyCollection<WebRequestRule>(_rules.OrderByDescending(x => x.Item1.Priority).ThenBy(x => x.Item2).Select(x => x.Item1).ToList()); }
         public IWebRequestRegistration AddListener(WebRequestFilter filter, EventHandler<WebRequestEvent> listener)
@@ -223,6 +234,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             if (listener == null) throw new ArgumentNullException(nameof(listener));
             lock (_sync)
             {
+                ThrowIfDisposed();
                 Registration registration = null;
                 registration = new Registration(Guid.NewGuid().ToString("D"), () =>
                 {
@@ -235,8 +247,14 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         public WebRequestDecision Evaluate(WebRequestEvent request)
         {
             Tuple<WebRequestRule, long, IWebRequestRegistration>[] rules; Tuple<WebRequestFilter, EventHandler<WebRequestEvent>, IWebRequestRegistration>[] listeners;
-            lock (_sync) { rules = _rules.Where(x => x.Item1.Phase == request.Phase && x.Item1.Filter.Matches(request)).OrderByDescending(x => x.Item1.Priority).ThenBy(x => x.Item2).ToArray(); listeners = _listeners.Where(x => x.Item1.Matches(request)).ToArray(); }
-            foreach (var listener in listeners) listener.Item2(this, request);
+            lock (_sync) { ThrowIfDisposed(); rules = _rules.Where(x => x.Item1.Phase == request.Phase && x.Item1.Filter.Matches(request)).OrderByDescending(x => x.Item1.Priority).ThenBy(x => x.Item2).ToArray(); listeners = _listeners.Where(x => x.Item1.Matches(request)).ToArray(); }
+            foreach (var listener in listeners)
+            {
+                // Observers must never be able to delay or change the host's
+                // synchronous network decision.
+                try { listener.Item2(this, request); }
+                catch { }
+            }
             var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase); WebRequestActionKind kind = WebRequestActionKind.Allow; string redirect = null, user = null, password = null;
             foreach (var item in rules)
             {
@@ -247,11 +265,39 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 { kind = action.Kind; user = action.Username; password = action.Password; break; }
             }
             foreach (var item in rules.OrderBy(x => x.Item2))
-                if (item.Item1.Action.Kind == WebRequestActionKind.ModifyRequestHeaders || item.Item1.Action.Kind == WebRequestActionKind.ModifyResponseHeaders)
+            {
+                // Header mutations are phase-specific. Keeping this filtering in
+                // the service prevents a request rule from accidentally changing
+                // response headers (and vice versa) for every adapter.
+                var isRequestPhase = request.Phase == WebRequestPhase.OnBeforeRequest ||
+                    request.Phase == WebRequestPhase.OnBeforeSendHeaders;
+                var isResponsePhase = request.Phase == WebRequestPhase.OnHeadersReceived;
+                if ((isRequestPhase && item.Item1.Action.Kind == WebRequestActionKind.ModifyRequestHeaders) ||
+                    (isResponsePhase && item.Item1.Action.Kind == WebRequestActionKind.ModifyResponseHeaders))
                     foreach (var h in item.Item1.Action.Headers) headers[h.Key] = h.Value;
+            }
             return new WebRequestDecision(kind, redirect, headers, user, password);
         }
-        public void Dispose() { lock (_sync) { foreach (var item in _rules) item.Item3.Dispose(); foreach (var item in _listeners) item.Item3.Dispose(); _rules.Clear(); _listeners.Clear(); } }
+        public void Dispose()
+        {
+            IWebRequestRegistration[] rules;
+            IWebRequestRegistration[] listeners;
+            lock (_sync)
+            {
+                if (_disposed) return;
+                rules = _rules.Select(item => item.Item3).ToArray();
+                listeners = _listeners.Select(item => item.Item3).ToArray();
+                _rules.Clear();
+                _listeners.Clear();
+                _disposed = true;
+            }
+            foreach (var registration in rules) registration.Dispose();
+            foreach (var registration in listeners) registration.Dispose();
+        }
+        private void ThrowIfDisposed()
+        {
+            if (_disposed) throw new ObjectDisposedException(nameof(InMemoryWebRequestService));
+        }
         private sealed class Registration : IWebRequestRegistration { private readonly Action _dispose; private int _disposed; public Registration(string id, Action dispose) { Id = id; _dispose = dispose; } public string Id { get; } public void Dispose() { if (Interlocked.Exchange(ref _disposed, 1) == 0) _dispose(); } }
     }
 }

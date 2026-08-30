@@ -7,7 +7,9 @@ using Mzying2001.MonkeySharp.Core.Runtime;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -29,6 +31,13 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
                 var occupied = new BrowserFixture();
                 occupied.Browser.Object.RenderProcessMessageHandler = Mock.Of<IRenderProcessMessageHandler>();
                 Assert.Throws<InvalidOperationException>(() => host.Attach(occupied.Browser.Object));
+
+                var occupiedRequest = new BrowserFixture();
+                var existingRequestHandler = Mock.Of<IRequestHandler>();
+                occupiedRequest.Browser.Object.RequestHandler = existingRequestHandler;
+                Assert.Throws<InvalidOperationException>(() => host.Attach(occupiedRequest.Browser.Object));
+                Assert.Null(occupiedRequest.Browser.Object.RenderProcessMessageHandler);
+                Assert.Same(existingRequestHandler, occupiedRequest.Browser.Object.RequestHandler);
             }
         }
 
@@ -278,6 +287,197 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
             }
         }
 
+        [Fact]
+        public async Task DefaultNetworkServicesAreExposedAndCanBeDisabled()
+        {
+            var repository = new InMemoryUserScriptRepository();
+            await repository.InstallAsync(
+                Script("GM.xmlHttpRequest\n// @grant GM.webRequest\n// @grant GM.cookie", "document-end"),
+                "test", true, CancellationToken.None);
+
+            async Task<IReadOnlyCollection<string>> CapabilitiesAsync(CefSharpHostOptions options)
+            {
+                using (var host = new CefSharpUserScriptHostBuilder(repository)
+                    .Configure(options)
+                    .Build())
+                {
+                    var frame = new DocumentFrame("browser", Guid.NewGuid().ToString("D"), "main",
+                        new Uri("https://example.com/page"), true,
+                        TimingGuarantee.BestEffortDocumentStart, host.BridgeIntegrity);
+                    var plan = await host.Engine.ProcessLifecycleAsync(
+                        new DocumentLifecycleEventArgs(DocumentLifecycleKind.DomContentLoaded, frame),
+                        CancellationToken.None);
+                    var invocation = Assert.Single(plan.Invocations);
+                    var json = await host.Gateway.DispatchAsync(JsonSerializer.Serialize(new
+                    {
+                        type = "hello", protocol = 1, documentId = frame.DocumentId,
+                        scriptKey = invocation.ScriptKey.ToString(), capability = invocation.Capability
+                    }), CancellationToken.None);
+                    using (var response = JsonDocument.Parse(json))
+                    {
+                        return response.RootElement.GetProperty("apis").EnumerateArray()
+                            .Select(item => item.GetString()).ToArray();
+                    }
+                }
+            }
+
+            var defaults = await CapabilitiesAsync(new CefSharpHostOptions { TrustedPageWorld = true });
+            Assert.Contains("GM.xmlHttpRequest", defaults);
+            Assert.Contains("GM.webRequest", defaults);
+            Assert.Contains("GM.cookie", defaults);
+
+            var disabled = await CapabilitiesAsync(new CefSharpHostOptions
+            {
+                TrustedPageWorld = true,
+                EnableDefaultNetworkServices = false
+            });
+            Assert.DoesNotContain("GM.xmlHttpRequest", disabled);
+            Assert.DoesNotContain("GM.webRequest", disabled);
+            Assert.DoesNotContain("GM.cookie", disabled);
+        }
+
+        [Fact]
+        public void WebRequestHandlerPublishesResponseHeadersForResponseLifecycleEvents()
+        {
+            var events = new ConcurrentQueue<WebRequestEvent>();
+            using (var service = new InMemoryWebRequestService())
+            using (service.AddListener(new WebRequestFilter(), (_, item) => events.Enqueue(item)))
+            {
+                var requestHeaders = new NameValueCollection { ["X-Request"] = "request" };
+                var responseHeaders = new NameValueCollection { ["X-Response"] = "response" };
+                var request = new Mock<IRequest>();
+                request.SetupGet(item => item.Identifier).Returns(7UL);
+                request.SetupGet(item => item.Url).Returns("https://example.test/data");
+                request.SetupGet(item => item.Method).Returns("GET");
+                request.SetupGet(item => item.ResourceType).Returns(ResourceType.Xhr);
+                request.SetupGet(item => item.Headers).Returns(requestHeaders);
+                var response = new Mock<IResponse>();
+                response.SetupGet(item => item.Headers).Returns(responseHeaders);
+                response.SetupGet(item => item.StatusCode).Returns(200);
+
+                var handler = new CefSharpWebRequestHandler(service);
+                var disableDefaultHandling = false;
+                using (var resource = handler.GetResourceRequestHandler(null, null, null, request.Object,
+                    false, false, string.Empty, ref disableDefaultHandling))
+                {
+                    Assert.Equal(CefReturnValue.Continue,
+                        resource.OnBeforeResourceLoad(null, null, null, request.Object, null));
+                    Assert.False(resource.OnResourceResponse(null, null, null, request.Object, response.Object));
+                    resource.OnResourceLoadComplete(null, null, null, request.Object, response.Object,
+                        UrlRequestStatus.Success, 1);
+                }
+
+                Assert.Equal(new[]
+                {
+                    WebRequestPhase.OnBeforeRequest,
+                    WebRequestPhase.OnBeforeSendHeaders,
+                    WebRequestPhase.OnHeadersReceived,
+                    WebRequestPhase.OnResponseStarted,
+                    WebRequestPhase.OnCompleted
+                }, events.Select(item => item.Phase));
+                foreach (var item in events.Where(item => item.Phase == WebRequestPhase.OnHeadersReceived ||
+                    item.Phase == WebRequestPhase.OnResponseStarted || item.Phase == WebRequestPhase.OnCompleted))
+                {
+                    Assert.Equal("response", item.Headers["X-Response"]);
+                    Assert.False(item.Headers.ContainsKey("X-Request"));
+                }
+            }
+        }
+
+        [Fact]
+        public void RequestHandlerMultiplexerCombinesResourceHandlers()
+        {
+            var firstEvents = new ConcurrentQueue<WebRequestEvent>();
+            var secondEvents = new ConcurrentQueue<WebRequestEvent>();
+            using (var first = new InMemoryWebRequestService())
+            using (var second = new InMemoryWebRequestService())
+            using (first.AddListener(new WebRequestFilter(), (_, item) => firstEvents.Enqueue(item)))
+            using (second.AddListener(new WebRequestFilter(), (_, item) => secondEvents.Enqueue(item)))
+            {
+                var multiplexer = new CefSharpWebRequestHandlerMultiplexer();
+                multiplexer.Add(new CefSharpWebRequestHandler(first));
+                multiplexer.Add(new CefSharpWebRequestHandler(second));
+                var request = new Mock<IRequest>();
+                request.SetupGet(item => item.Identifier).Returns(8UL);
+                request.SetupGet(item => item.Url).Returns("https://example.test/data");
+                request.SetupGet(item => item.Method).Returns("GET");
+                request.SetupGet(item => item.ResourceType).Returns(ResourceType.Xhr);
+                request.SetupGet(item => item.Headers).Returns(new NameValueCollection());
+                var disableDefaultHandling = false;
+
+                using (var resource = multiplexer.GetResourceRequestHandler(null, null, null, request.Object,
+                    false, false, string.Empty, ref disableDefaultHandling))
+                {
+                    Assert.Equal(CefReturnValue.Continue,
+                        resource.OnBeforeResourceLoad(null, null, null, request.Object, null));
+                }
+
+                Assert.Equal(new[] { WebRequestPhase.OnBeforeRequest, WebRequestPhase.OnBeforeSendHeaders },
+                    firstEvents.Select(item => item.Phase));
+                Assert.Equal(new[] { WebRequestPhase.OnBeforeRequest, WebRequestPhase.OnBeforeSendHeaders },
+                    secondEvents.Select(item => item.Phase));
+            }
+        }
+
+        [Fact]
+        public async Task DetachAndReattachSwitchTheDefaultRequestContext()
+        {
+            using (var host = await CreateHostAsync(Script("none", "document-end")))
+            {
+                var firstContext = Mock.Of<IRequestContext>();
+                var secondContext = Mock.Of<IRequestContext>();
+                var first = new BrowserFixture(requestContext: firstContext);
+                var second = new BrowserFixture(requestContext: secondContext);
+
+                host.Attach(first.Browser.Object);
+                Assert.Same(firstContext, GetCurrentRequestContext(host));
+                await host.DetachAsync(CancellationToken.None);
+                Assert.Null(GetCurrentRequestContext(host));
+
+                host.Attach(second.Browser.Object);
+                Assert.Same(secondContext, GetCurrentRequestContext(host));
+                await host.DetachAsync(CancellationToken.None);
+                Assert.Null(GetCurrentRequestContext(host));
+            }
+        }
+
+        [Fact]
+        public async Task ExplicitNetworkServicesRemainApplicationOwned()
+        {
+            var repository = new InMemoryUserScriptRepository();
+            await repository.InstallAsync(Script("none", "document-end"), "test", true,
+                CancellationToken.None);
+            var httpDisposed = false;
+            var cookiesDisposed = false;
+            var webRequestsDisposed = false;
+            var http = new Mock<IHttpRequestService>();
+            http.As<IDisposable>().Setup(item => item.Dispose()).Callback(() => httpDisposed = true);
+            var cookies = new Mock<ICookieService>();
+            cookies.As<IDisposable>().Setup(item => item.Dispose()).Callback(() => cookiesDisposed = true);
+            var webRequests = new Mock<IWebRequestService>();
+            webRequests.As<IDisposable>().Setup(item => item.Dispose()).Callback(() => webRequestsDisposed = true);
+
+            using (var host = new CefSharpUserScriptHostBuilder(repository)
+                .UseHttpRequestService(http.Object)
+                .UseCookieService(cookies.Object)
+                .UseWebRequestService(webRequests.Object)
+                .Configure(new CefSharpHostOptions { EnableDefaultNetworkServices = false })
+                .Build())
+            {
+            }
+
+            Assert.False(httpDisposed);
+            Assert.False(cookiesDisposed);
+            Assert.False(webRequestsDisposed);
+        }
+
+        private static IRequestContext GetCurrentRequestContext(CefSharpUserScriptHost host)
+        {
+            return (IRequestContext)typeof(CefSharpUserScriptHost)
+                .GetProperty("CurrentRequestContext", BindingFlags.Instance | BindingFlags.NonPublic)
+                .GetValue(host);
+        }
+
         private static async Task<CefSharpUserScriptHost> CreateHostAsync(
             string source,
             CefSharpHostOptions options = null)
@@ -305,7 +505,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
         {
             private bool _bound;
 
-            public BrowserFixture(bool initialized = false)
+            public BrowserFixture(bool initialized = false, IRequestContext requestContext = null)
             {
                 Repository = new Mock<IJavascriptObjectRepository>();
                 Repository.Setup(item => item.IsBound(It.IsAny<string>())).Returns(() => _bound);
@@ -324,7 +524,9 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
                 Browser.SetupGet(item => item.IsBrowserInitialized).Returns(initialized);
                 Browser.SetupGet(item => item.IsDisposed).Returns(false);
                 Browser.SetupGet(item => item.JavascriptObjectRepository).Returns(Repository.Object);
+                Browser.SetupGet(item => item.RequestContext).Returns(requestContext);
                 Browser.SetupProperty(item => item.RenderProcessMessageHandler);
+                Browser.SetupProperty(item => item.RequestHandler);
 
                 CefBrowser = new Mock<IBrowser>();
                 Frame = new Mock<IFrame>();

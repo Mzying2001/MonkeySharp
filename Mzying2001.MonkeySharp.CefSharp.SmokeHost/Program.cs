@@ -5,7 +5,6 @@ using Mzying2001.MonkeySharp.CefSharp;
 using Mzying2001.MonkeySharp.Core.Repository;
 using Mzying2001.MonkeySharp.Core.Runtime;
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -54,16 +53,11 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                     true,
                     CancellationToken.None);
 
-                using (var cookies = new CefSharpCookieService(Cef.GetGlobalRequestContext()))
-                using (var webRequests = new InMemoryWebRequestService())
                 {
                     var host = new CefSharpUserScriptHostBuilder(repository)
-                        .UseHttpRequestService(new FixtureHttpRequestService())
                         .UseNotificationService(new SmokeNotificationService())
                         .UseTabService(new SmokeTabService())
                         .UseDownloadService(new SmokeDownloadService())
-                        .UseCookieService(cookies)
-                        .UseWebRequestService(webRequests)
                         .Configure(new CefSharpHostOptions
                         {
                             TrustedPageWorld = true
@@ -109,7 +103,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             "// @grant GM.download\n" +
             "// @grant GM.cookie\n" +
             "// @grant GM.webRequest\n" +
-            "// @connect api.example.com\n" +
+            "// @connect 127.0.0.1\n" +
             "// @run-at document-end\n" +
             "// ==/UserScript==\n" +
             "var mainFrame = window.top === window;\n" +
@@ -131,7 +125,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             "    smoke.tab = await GM.openInTab(location.href, { active: false });\n" +
             "    var legacyTab = GM_openInTab(location.href, { active: false }); setTimeout(function () { legacyTab.close(); }, 25);\n" +
             "    GM_download({ url: location.href, name: 'smoke.txt', onprogress: function () { smoke.downloadProgress = true; }, onload: function () { smoke.downloadCompleted = true; } });\n" +
-            "    GM_xmlhttpRequest({ url: 'https://api.example.com/smoke', onprogress: function (progress) { smoke.xhr.push('progress'); }, onload: function (response) { smoke.xhr.push('load'); smoke.responseText = response.responseText; } });\n" +
+            "    GM_xmlhttpRequest({ url: location.origin + '/xhr', onprogress: function (progress) { smoke.xhr.push('progress'); }, onload: function (response) { smoke.xhr.push('load'); smoke.responseText = response.responseText; } });\n" +
             "    await new Promise(function (resolve) { setTimeout(resolve, 350); });\n" +
             "    smoke.apis.notification = smoke.notificationDone === true;\n" +
             "    smoke.apis.tab = Boolean(smoke.tab && smoke.tab.id);\n" +
@@ -141,7 +135,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             "    window.__monkeySharpSmokeResult = smoke; document.documentElement.dataset.monkeySharpSmoke = JSON.stringify(smoke);\n" +
             "  })().catch(function (error) { smoke.error = String(error && error.message || error); window.__monkeySharpSmokeResult = smoke; });\n" +
             "} else if (mainFrame) {\n" +
-            "  GM_xmlhttpRequest({ url: 'https://api.example.com/smoke', onprogress: function (progress) { smoke.xhr.push('progress'); }, onload: function (response) { smoke.xhr.push('load'); smoke.responseText = response.responseText; window.__monkeySharpSmokeResult = smoke; } });\n" +
+            "  GM_xmlhttpRequest({ url: location.origin + '/xhr', onprogress: function (progress) { smoke.xhr.push('progress'); }, onload: function (response) { smoke.xhr.push('load'); smoke.responseText = response.responseText; window.__monkeySharpSmokeResult = smoke; } });\n" +
             "}\n" +
             "window.__monkeySharpSmokeResult = smoke;\n" +
             "if (window.top === window) { var child = document.createElement('iframe'); child.src = location.href + '#child'; document.body.appendChild(child); }";
@@ -299,7 +293,8 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                         return false;
                     var callbacks = root.GetProperty("xhr").EnumerateArray()
                         .Select(item => item.GetString()).ToList();
-                    _xhrVerified = callbacks.SequenceEqual(new[] { "progress", "load" }) &&
+                    _xhrVerified = callbacks.Count >= 2 && callbacks.Last() == "load" &&
+                        callbacks.Take(callbacks.Count - 1).All(item => item == "progress") &&
                         root.GetProperty("responseText").GetString() == "legacy xhr ok";
                     if (!_xhrVerified)
                         return false;
@@ -467,11 +462,15 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                 try
                 {
                     await stream.ReadAsync(requestBuffer, 0, requestBuffer.Length).ConfigureAwait(false);
-                    var body = Encoding.UTF8.GetBytes(
-                        "<!doctype html><html><head><title>MonkeySharp smoke</title></head>" +
-                        "<body><main id='smoke-fixture'>loopback fixture</main></body></html>");
+                    var requestText = Encoding.ASCII.GetString(requestBuffer);
+                    var isXhr = requestText.StartsWith("GET /xhr", StringComparison.OrdinalIgnoreCase);
+                    var body = isXhr
+                        ? Encoding.UTF8.GetBytes("legacy xhr ok")
+                        : Encoding.UTF8.GetBytes(
+                            "<!doctype html><html><head><title>MonkeySharp smoke</title></head>" +
+                            "<body><main id='smoke-fixture'>loopback fixture</main></body></html>");
                     var header = Encoding.ASCII.GetBytes(
-                        "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n" +
+                        "HTTP/1.1 200 OK\r\nContent-Type: " + (isXhr ? "text/plain" : "text/html") + "; charset=utf-8\r\n" +
                         "Content-Length: " + body.Length + "\r\nConnection: close\r\n\r\n");
                     await stream.WriteAsync(header, 0, header.Length).ConfigureAwait(false);
                     await stream.WriteAsync(body, 0, body.Length).ConfigureAwait(false);
@@ -630,35 +629,4 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
     }
 #pragma warning restore CS0067
 
-    internal sealed class FixtureHttpRequestService : IHttpRequestService
-    {
-        public IHttpRequestOperation SendAsync(
-            UserScriptHttpRequest request,
-            CancellationToken cancellationToken)
-        {
-            var body = Encoding.UTF8.GetBytes("legacy xhr ok");
-            return new FixtureHttpOperation(new UserScriptHttpResponse(
-                    200,
-                    "OK",
-                    request.Url,
-                    new Dictionary<string, string> { ["Content-Type"] = "text/plain" },
-                    body,
-                    "legacy xhr ok"));
-        }
-    }
-
-    internal sealed class FixtureHttpOperation : IHttpRequestOperation
-    {
-        private readonly UserScriptHttpResponse _response;
-        public FixtureHttpOperation(UserScriptHttpResponse response) { _response = response; }
-        public IProgress<UserScriptHttpProgress> Progress { get; set; }
-        public Task<UserScriptHttpResponse> Completion => CompleteAsync();
-        private async Task<UserScriptHttpResponse> CompleteAsync()
-        {
-            await Task.Delay(50).ConfigureAwait(false);
-            Progress?.Report(new UserScriptHttpProgress(1, 1));
-            return _response;
-        }
-        public void Abort() { }
-    }
 }

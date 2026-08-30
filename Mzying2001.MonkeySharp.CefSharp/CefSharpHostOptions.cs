@@ -13,6 +13,12 @@ namespace Mzying2001.MonkeySharp.CefSharp
         /// </summary>
         public bool TrustedPageWorld { get; set; }
 
+        /// <summary>
+        /// Gets or sets whether the CefSharp adapter creates its built-in HTTP,
+        /// webRequest, and cookie services when no explicit service is supplied.
+        /// </summary>
+        public bool EnableDefaultNetworkServices { get; set; } = true;
+
         /// <summary>Gets or sets whether document-start userscripts require guaranteed pre-page execution.</summary>
         public bool RequireGuaranteedDocumentStart { get; set; }
 

@@ -14,28 +14,57 @@ namespace Mzying2001.MonkeySharp.CefSharp
     /// <summary>Maps MonkeySharp cookie operations to a CefSharp request context cookie manager.</summary>
     public sealed class CefSharpCookieService : ICookieService, IDisposable
     {
-        private readonly IRequestContext _context;
+        private readonly Func<IRequestContext> _contextAccessor;
         private readonly object _sync = new object();
         private readonly Dictionary<Guid, Listener> _listeners = new Dictionary<Guid, Listener>();
+        private readonly HashSet<IPendingOperation> _pending = new HashSet<IPendingOperation>();
         private long _sequence;
         private bool _disposed;
 
         /// <summary>Initializes a cookie service for an initialized browser request context.</summary>
         public CefSharpCookieService(IRequestContext context)
         {
-            _context = context ?? throw new ArgumentNullException(nameof(context));
+            if (context == null) throw new ArgumentNullException(nameof(context));
+            _contextAccessor = () => context;
+        }
+
+        /// <summary>
+        /// Initializes a cookie service that resolves the current browser context for
+        /// each operation. This supports hosts that detach and attach to another browser.
+        /// </summary>
+        public CefSharpCookieService(Func<IRequestContext> contextAccessor)
+        {
+            _contextAccessor = contextAccessor ?? throw new ArgumentNullException(nameof(contextAccessor));
         }
 
         public Task<IReadOnlyList<UserScriptCookie>> ListAsync(UserScriptCookieQuery query, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            var manager = _context.GetCookieManager(null);
+            var manager = GetCookieManager();
             if (manager == null || manager.IsDisposed)
                 throw new ObjectDisposedException(nameof(ICookieManager));
             var source = new CookieVisitor(query, cancellationToken);
-            if (!manager.VisitUrlCookies(query.Url.AbsoluteUri, true, source))
-                return Task.FromResult<IReadOnlyList<UserScriptCookie>>(new ReadOnlyCollection<UserScriptCookie>(new List<UserScriptCookie>()));
+            AddPending(source);
+            var cancellation = cancellationToken.Register(source.Cancel);
+            source.Completion.ContinueWith(_ =>
+            {
+                cancellation.Dispose();
+                RemovePending(source);
+            }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
+            try
+            {
+                if (!manager.VisitUrlCookies(query.Url.AbsoluteUri, true, source))
+                {
+                    source.Complete();
+                    return source.Completion;
+                }
+            }
+            catch
+            {
+                source.Cancel();
+                throw;
+            }
             return source.Completion;
         }
 
@@ -43,10 +72,12 @@ namespace Mzying2001.MonkeySharp.CefSharp
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            var manager = _context.GetCookieManager(null);
+            var manager = GetCookieManager();
             if (manager == null || manager.IsDisposed)
                 throw new ObjectDisposedException(nameof(ICookieManager));
             var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var pending = new PendingCompletion<bool>(completion);
+            AddPending(pending);
             var cookie = new Cookie
             {
                 Name = mutation.Name,
@@ -56,12 +87,19 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 Secure = mutation.Secure,
                 Expires = mutation.Expiration
             };
-            if (!manager.SetCookie(mutation.Url.AbsoluteUri, cookie, new SetCallback(completion)))
-                throw new InvalidOperationException("CefSharp rejected the cookie mutation.");
-            using (cancellationToken.Register(() => completion.TrySetCanceled()))
+            try
             {
-                if (!await completion.Task.ConfigureAwait(false))
+                if (!manager.SetCookie(mutation.Url.AbsoluteUri, cookie, new SetCallback(completion)))
                     throw new InvalidOperationException("CefSharp rejected the cookie mutation.");
+                using (cancellationToken.Register(pending.Cancel))
+                {
+                    if (!await completion.Task.ConfigureAwait(false))
+                        throw new InvalidOperationException("CefSharp rejected the cookie mutation.");
+                }
+            }
+            finally
+            {
+                RemovePending(pending);
             }
             var result = new UserScriptCookie(mutation.Name, mutation.Value, mutation.Domain, mutation.Path,
                 mutation.Expiration, mutation.Secure, false, mutation.SameSite);
@@ -73,20 +111,29 @@ namespace Mzying2001.MonkeySharp.CefSharp
         {
             cancellationToken.ThrowIfCancellationRequested();
             ThrowIfDisposed();
-            var manager = _context.GetCookieManager(null);
+            var manager = GetCookieManager();
             if (manager == null || manager.IsDisposed)
                 throw new ObjectDisposedException(nameof(ICookieManager));
             var completion = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
-            if (!manager.DeleteCookies(mutation.Url.AbsoluteUri, mutation.Name, new DeleteCallback(completion)))
-                return false;
-            using (cancellationToken.Register(() => completion.TrySetCanceled()))
+            var pending = new PendingCompletion<int>(completion);
+            AddPending(pending);
+            try
             {
-                var deleted = await completion.Task.ConfigureAwait(false) > 0;
-                if (deleted)
-                    Publish(new UserScriptCookie(mutation.Name, mutation.Value, mutation.Domain, mutation.Path,
-                        mutation.Expiration, mutation.Secure, false, mutation.SameSite), "explicit", true,
-                        mutation.OriginExecutionId);
-                return deleted;
+                if (!manager.DeleteCookies(mutation.Url.AbsoluteUri, mutation.Name, new DeleteCallback(completion)))
+                    return false;
+                using (cancellationToken.Register(pending.Cancel))
+                {
+                    var deleted = await completion.Task.ConfigureAwait(false) > 0;
+                    if (deleted)
+                        Publish(new UserScriptCookie(mutation.Name, mutation.Value, mutation.Domain, mutation.Path,
+                            mutation.Expiration, mutation.Secure, false, mutation.SameSite), "explicit", true,
+                            mutation.OriginExecutionId);
+                    return deleted;
+                }
+            }
+            finally
+            {
+                RemovePending(pending);
             }
         }
 
@@ -125,21 +172,70 @@ namespace Mzying2001.MonkeySharp.CefSharp
             lock (_sync) _listeners.Remove(id);
         }
 
+        private void AddPending(IPendingOperation operation)
+        {
+            lock (_sync)
+            {
+                ThrowIfDisposed();
+                _pending.Add(operation);
+            }
+        }
+
+        private void RemovePending(IPendingOperation operation)
+        {
+            lock (_sync) _pending.Remove(operation);
+        }
+
         private void ThrowIfDisposed()
         {
             if (_disposed) throw new ObjectDisposedException(nameof(CefSharpCookieService));
         }
 
-        public void Dispose()
+        private ICookieManager GetCookieManager()
         {
-            lock (_sync)
-            {
-                _disposed = true;
-                _listeners.Clear();
-            }
+            var context = _contextAccessor();
+            if (context == null)
+                throw new InvalidOperationException("No active CefSharp request context is attached.");
+            return context.GetCookieManager(null);
         }
 
-        private sealed class CookieVisitor : ICookieVisitor
+        public void Dispose()
+        {
+            IPendingOperation[] pending;
+            lock (_sync)
+            {
+                if (_disposed) return;
+                _disposed = true;
+                _listeners.Clear();
+                pending = _pending.ToArray();
+                _pending.Clear();
+            }
+            foreach (var operation in pending)
+                operation.Cancel();
+        }
+
+        private interface IPendingOperation
+        {
+            void Cancel();
+        }
+
+        private sealed class PendingCompletion<T> : IPendingOperation
+        {
+            private readonly TaskCompletionSource<T> _completion;
+
+            public PendingCompletion(TaskCompletionSource<T> completion)
+            {
+                _completion = completion;
+            }
+
+            public void Cancel()
+            {
+                _completion.TrySetCanceled();
+            }
+
+        }
+
+        private sealed class CookieVisitor : ICookieVisitor, IPendingOperation
         {
             private readonly UserScriptCookieQuery _query;
             private readonly CancellationToken _cancellationToken;
@@ -151,22 +247,36 @@ namespace Mzying2001.MonkeySharp.CefSharp
             { _query = query; _cancellationToken = cancellationToken; }
             public Task<IReadOnlyList<UserScriptCookie>> Completion => _completion.Task;
 
+            public void Cancel()
+            {
+                _completion.TrySetCanceled();
+            }
+
+            public void Complete()
+            {
+                _completion.TrySetResult(new ReadOnlyCollection<UserScriptCookie>(_cookies));
+            }
+
             public bool Visit(Cookie cookie, int count, int total, ref bool deleteCookie)
             {
-                if (_cancellationToken.IsCancellationRequested)
+                if (_completion.Task.IsCompleted || _cancellationToken.IsCancellationRequested)
                 {
-                    _completion.TrySetCanceled();
+                    Cancel();
                     return false;
                 }
+                var sameSite = cookie.GetType().GetProperty("SameSite")?.GetValue(cookie, null)?.ToString();
                 var value = new UserScriptCookie(cookie.Name, cookie.Value, cookie.Domain, cookie.Path,
-                    cookie.Expires, cookie.Secure, cookie.HttpOnly, cookie.SameSite.ToString());
+                    cookie.Expires, cookie.Secure, cookie.HttpOnly, sameSite);
                 if (_query.Matches(value)) _cookies.Add(value);
                 if (total <= 0 || count + 1 >= total)
                     _completion.TrySetResult(new ReadOnlyCollection<UserScriptCookie>(_cookies));
                 return total <= 0 || count + 1 < total;
             }
 
-            public void Dispose() { }
+            public void Dispose()
+            {
+                Complete();
+            }
         }
 
         private sealed class SetCallback : ISetCookieCallback

@@ -71,6 +71,8 @@ form.Controls.Add(browser);
 
 The `true` argument enables the installation. This minimal example deliberately uses `@grant none`; scripts with host-backed grants also require the registrations and trust opt-in described below.
 
+`CefSharpUserScriptHostBuilder` enables default `GM.xmlHttpRequest`, `GM.webRequest`, and `GM.cookie` services. Set `EnableDefaultNetworkServices = false` to retain the explicit-injection behavior, or call the corresponding `Use...Service` method to override one service. Default services follow the currently attached browser request context and are disposed with the host; application-supplied services remain application-owned.
+
 Dispose the host when the browser closes. `Dispose` is idempotent and cancels document sessions and pending API requests.
 
 ```csharp
@@ -185,7 +187,7 @@ Both canonical `GM.*` methods and the legacy facade are available when the corre
 | `GM.addValueChangeListener`, `removeValueChangeListener` | Core | Notifications go only to active executions of the same installation. |
 | `GM.addStyle`, `addElement` | Bootstrap | Page-local implementation; still requires the exact grant. |
 | `GM.getResourceText`, `getResourceURL` and `GM_getResourceText`/`GM_getResourceURL` | Conditional | Requires `IResourceProvider` and a declared `@resource`; legacy reads use the bounded bootstrap snapshot. |
-| `GM.xmlHttpRequest` / `GM_xmlhttpRequest` | Conditional | Requires `IHttpRequestService`; initial and redirected URLs must satisfy `@connect`. The modern method returns a Promise; the legacy method returns `{ abort() }` and supports load/error/timeout/progress callbacks. |
+| `GM.xmlHttpRequest` / `GM_xmlhttpRequest` | Conditional | CefSharp hosts create a default `CefSharpHttpRequestService`; applications can override it with `UseHttpRequestService`. Initial and redirected URLs must satisfy `@connect`. |
 | `GM.registerMenuCommand`, `GM_registerMenuCommand`, `unregisterMenuCommand` | Conditional | Requires `IMenuService`; the legacy form allocates its ID synchronously and registers asynchronously. |
 | `GM.notification` / `GM_notification` | Conditional | Requires `INotificationService`; legacy callbacks receive click/done lifecycle notifications. |
 | `GM.setClipboard` | Conditional | Requires `IClipboardService`. |
@@ -193,8 +195,8 @@ Both canonical `GM.*` methods and the legacy facade are available when the corre
 | `GM.download` / `GM_download` | Conditional | Requires `IDownloadService`; legacy callbacks receive progress, success, failure, and abort events. |
 | `GM.getTab`, `GM_getTab`, `saveTab`, `getTabs`, `GM_getTabs` | Conditional | Requires `ITabStateService`; legacy tab methods use callbacks. |
 | `unsafeWindow` | Trusted page world only | Bound only for the exact `@grant unsafeWindow`. |
-| `GM.cookie` / `GM_cookie` | Conditional | Requires `ICookieService`; list/set/delete and service-originated change listeners use the browser request context, with URL and permission checks. Hosts may forward external context changes through the same contract. |
-| `GM.webRequest` / `GM_webRequest` | Conditional | Requires `IWebRequestService`; host-side synchronous rules cover request/response/auth phases, while callbacks observe events. |
+| `GM.cookie` / `GM_cookie` | Conditional | CefSharp hosts create a context-backed `CefSharpCookieService`; applications can override it with `UseCookieService`. List/set/delete and service-originated change listeners use the browser request context. |
+| `GM.webRequest` / `GM_webRequest` | Conditional | CefSharp hosts create an `InMemoryWebRequestService` and attach `CefSharpWebRequestHandler`; applications can override it with `UseWebRequestService`. Rules cover request/response/auth phases, while callbacks observe events. |
 
 If a script directly requests a declared API that has no provider, protocol error `MSP006_NOT_SUPPORTED` is returned. Capability discovery prevents the bootstrap from exposing that method in normal use.
 
@@ -202,13 +204,14 @@ In the default unverified mode, a script with host-backed grants is skipped enti
 
 ### Cookie API
 
-Declare `@grant GM.cookie` (or the legacy alias `GM_cookie`) and register a cookie service. URLs must be absolute HTTP or HTTPS URLs; domain, path, secure, SameSite, and expiration fields are validated by Core. Cookie headers cannot be injected through `GM.xmlHttpRequest` to bypass this policy, and `httpOnly` visibility is decided by the service rather than `document.cookie`.
+Declare `@grant GM.cookie` (or the legacy alias `GM_cookie`). CefSharp hosts use the currently attached browser request context automatically; an explicit `UseCookieService` still takes precedence. URLs must be absolute HTTP or HTTPS URLs; domain, path, secure, SameSite, and expiration fields are validated by Core. Cookie headers cannot be injected through `GM.xmlHttpRequest` to bypass this policy, and `httpOnly` visibility is decided by the service rather than `document.cookie`.
 
 ```csharp
 var host = new CefSharpUserScriptHostBuilder(repository)
-    .UseCookieService(new CefSharpCookieService(browser.GetBrowser().RequestContext))
     .Configure(new CefSharpHostOptions { TrustedPageWorld = true })
     .Build();
+
+// For an application-owned implementation, call UseCookieService(...) here.
 ```
 
 Modern calls return Promises:
@@ -224,7 +227,7 @@ const listenerId = GM.cookie.addListener({ url: location.href }, change => conso
 
 ### Web Request API
 
-Declare `@grant GM.webRequest` (or `GM_webRequest`) and register an `IWebRequestService`. Rules are validated when registered and rechecked against the permission policy for each request. Blocking, redirect, header modification, and auth decisions are pre-registered host rules; a userscript callback never runs on the network thread and cannot delay a request.
+Declare `@grant GM.webRequest` (or `GM_webRequest`). CefSharp automatically uses an `InMemoryWebRequestService` and mounts a `CefSharpWebRequestHandler`; call `UseWebRequestService(...)` to supply an application-owned implementation. Rules are validated when registered and rechecked against the permission policy for each request. Blocking, redirect, header modification, and auth decisions are pre-registered host rules; a userscript callback never runs on the network thread and cannot delay a request.
 
 ```javascript
 const ruleId = await GM.webRequest.addRule({
@@ -241,7 +244,7 @@ const listenerId = GM.webRequest.addListener({}, event => console.log(event.phas
 
 ## Host Services
 
-Register only the capabilities the application implements:
+Register application-owned capabilities (network services are provided by default unless disabled):
 
 ```csharp
 var host = new CefSharpUserScriptHostBuilder(repository)
@@ -249,25 +252,27 @@ var host = new CefSharpUserScriptHostBuilder(repository)
     .UsePermissionPolicy(permissionPolicy)
     .UseDependencyProvider(cachedDependencyProvider)
     .UseResourceProvider(resourceProvider)
-    .UseHttpRequestService(httpService)
+    .UseHttpRequestService(httpService) // optional override of the CefSharp default
     .UseMenuService(menuService)
     .UseNotificationService(notificationService)
     .UseClipboardService(clipboardService)
     .UseTabService(tabService)
     .UseDownloadService(downloadService)
     .UseTabStateService(tabStateService)
-    .UseCookieService(cookieService)
-    .UseWebRequestService(webRequestService)
+    .UseCookieService(cookieService) // optional override of the CefSharp default
+    .UseWebRequestService(webRequestService) // optional override of the in-memory default
     .LogTo(entry => applicationLog.Write(entry.JsonValue))
     .Configure(new CefSharpHostOptions { TrustedPageWorld = true })
     .Build();
+
+// Set EnableDefaultNetworkServices = false to require explicit network services.
 ```
 
 The builder is single-use. Ownership is explicit:
 
 | Object | Owner and disposal rule |
 | --- | --- |
-| `CefSharpUserScriptHost` | Application; dispose it before the browser. It owns its engine, gateway, internally created API providers, and default in-memory store. |
+| `CefSharpUserScriptHost` | Application; dispose it before the browser. It owns its engine, gateway, internally created API providers, default network services, and default in-memory store. |
 | `IUserScriptRepository` and CefSharp browser | Application; the host never disposes them. |
 | Objects passed to `UseValueStore`, `UsePermissionPolicy`, or any `Use...Service` / `Use...Provider` method | Application; the host never disposes these service objects. This includes `IResourceProvider` and `IUserScriptDependencyProvider`. |
 | Objects passed to `AddApiProvider` | Ownership transfers to the gateway; it calls `Dispose` when the object implements `IDisposable`. |
