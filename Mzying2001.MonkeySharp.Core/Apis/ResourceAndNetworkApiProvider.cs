@@ -198,6 +198,8 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             var xhrId = ProviderParameters.RequiredInt32(context.Parameters, "xhrId");
             if (xhrId <= 0)
                 throw ProviderParameters.Invalid("xhrId must be positive.");
+            var fetch = OptionalBoolean(context.Parameters, "fetch");
+            if (fetch) timeout = null;
 
             var sessionId = Guid.NewGuid().ToString("D");
             var session = new HttpSession(
@@ -212,14 +214,24 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                     null,
                     timeout,
                     null,
-                    redirect => ConnectAllows(context.Installation.Definition.Metadata.Connects, context.Frame.Url, redirect),
+                    async (redirect, token) =>
+                    {
+                        if (!ConnectAllows(context.Installation.Definition.Metadata.Connects, context.Frame.Url, redirect))
+                            return false;
+                        return context.AuthorizeTargetAsync == null ||
+                            await context.AuthorizeTargetAsync(redirect.AbsoluteUri, token).ConfigureAwait(false);
+                    },
                     new UserScriptHttpRequestOptions
                     {
                         Cookie = OptionalSafeString(context.Parameters, "cookie"),
                         Username = OptionalSafeString(context.Parameters, "user"),
                         Password = OptionalSafeString(context.Parameters, "password"),
                         Anonymous = OptionalBoolean(context.Parameters, "anonymous"),
-                        OverrideMimeType = OptionalSafeString(context.Parameters, "overrideMimeType")
+                        OverrideMimeType = OptionalSafeString(context.Parameters, "overrideMimeType"),
+                        Redirect = ReadRedirectMode(context.Parameters),
+                        NoCache = OptionalBoolean(context.Parameters, "nocache"),
+                        Revalidate = OptionalBoolean(context.Parameters, "revalidate"),
+                        Fetch = fetch
                     }),
                 RaiseHttpNotification);
             lock (_sessionLock)
@@ -468,11 +480,13 @@ namespace Mzying2001.MonkeySharp.Core.Apis
 
             public void OnUploadProgress(long loaded, long? total)
             {
+                if (Request.Options.Fetch) return;
                 Notify("xhr-upload-progress", new { xhrId = XhrId, loaded, total });
             }
 
             public void OnDownloadProgress(long loaded, long? total)
             {
+                if (Request.Options.Fetch) return;
                 Notify("xhr-progress", new { xhrId = XhrId, loaded, total });
             }
 
@@ -517,6 +531,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
 
             public void ReportReadyState(int readyState, UserScriptHttpResponse response = null)
             {
+                if (Request.Options.Fetch && readyState != 4) return;
                 Notify("xhr-state", new
                 {
                     xhrId = XhrId,
@@ -592,6 +607,18 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             if (value.ValueKind != JsonValueKind.True && value.ValueKind != JsonValueKind.False)
                 throw ProviderParameters.Invalid(name + " must be a boolean.");
             return value.GetBoolean();
+        }
+
+        private static UserScriptHttpRedirectMode ReadRedirectMode(JsonElement parameters)
+        {
+            var value = ProviderParameters.OptionalString(parameters, "redirect") ?? "follow";
+            switch (value)
+            {
+                case "follow": return UserScriptHttpRedirectMode.Follow;
+                case "error": return UserScriptHttpRedirectMode.Error;
+                case "manual": return UserScriptHttpRedirectMode.Manual;
+                default: throw ProviderParameters.Invalid("redirect must be 'follow', 'error', or 'manual'.");
+            }
         }
 
         private static bool IsHeaderName(string name)

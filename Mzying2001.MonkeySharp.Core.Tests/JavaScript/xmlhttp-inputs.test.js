@@ -34,7 +34,8 @@ test("XHR serializes Tampermonkey request inputs and exposes abort", async () =>
                 "  const request = GM.xmlHttpRequest({",
                 "    url: new URL('https://api.example.com/data'), method: 'PROPFIND',",
                 "    data: { answer: 42 }, cookie: 'a=b', user: 'alice', password: 'secret',",
-                "    anonymous: true, overrideMimeType: 'application/json'",
+                "    anonymous: true, overrideMimeType: 'application/json',",
+                "    redirect: 'manual', nocache: true, revalidate: true, fetch: true, timeout: 10",
                 "  });",
                 "  globalThis.__abortType = typeof request.abort;",
                 "  await request;",
@@ -65,6 +66,11 @@ test("XHR serializes Tampermonkey request inputs and exposes abort", async () =>
     assert.equal(creates[0].params.method, "PROPFIND");
     assert.equal(creates[0].params.cookie, "a=b");
     assert.equal(creates[0].params.anonymous, true);
+    assert.equal(creates[0].params.redirect, "manual");
+    assert.equal(creates[0].params.nocache, true);
+    assert.equal(creates[0].params.revalidate, true);
+    assert.equal(creates[0].params.fetch, true);
+    assert.equal(creates[0].params.timeout, undefined);
     assert.equal(creates[0].params.headers["Content-Type"], "application/json;charset=UTF-8");
     const appends = requests.filter(value => value.params && value.params.operation === "appendBody");
     assert.equal(Buffer.from(appends[0].params.chunk, "base64").toString(), '{"answer":42}');

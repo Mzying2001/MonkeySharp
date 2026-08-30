@@ -388,7 +388,6 @@
                         parameters.headers = headers;
                         if (typeof details.timeout !== "undefined") {
                             if (!Number.isInteger(details.timeout) || details.timeout < 0) throw new TypeError("timeout must not be negative.");
-                            if (details.timeout > 0) parameters.timeout = details.timeout;
                         }
                         ["cookie", "user", "password", "overrideMimeType"].forEach(name => {
                             if (typeof details[name] === "undefined") return;
@@ -398,6 +397,18 @@
                         if (typeof details.anonymous !== "undefined") {
                             if (typeof details.anonymous !== "boolean") throw new TypeError("anonymous must be a boolean.");
                             parameters.anonymous = details.anonymous;
+                        }
+                        ["nocache", "revalidate", "fetch"].forEach(name => {
+                            if (typeof details[name] === "undefined") return;
+                            if (typeof details[name] !== "boolean") throw new TypeError(name + " must be a boolean.");
+                            parameters[name] = details[name];
+                        });
+                        if (!details.fetch && details.timeout > 0) parameters.timeout = details.timeout;
+                        if (typeof details.redirect !== "undefined") {
+                            if (!["follow", "error", "manual"].includes(details.redirect)) {
+                                throw new TypeError("redirect must be 'follow', 'error', or 'manual'.");
+                            }
+                            parameters.redirect = details.redirect;
                         }
                         if (details.signal && (typeof details.signal.addEventListener !== "function" ||
                             typeof details.signal.removeEventListener !== "function")) {

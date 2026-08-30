@@ -104,8 +104,10 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             using (var stream = service.Request.Body.OpenRead())
             using (var reader = new StreamReader(stream, Encoding.UTF8))
                 Assert.Equal("body", reader.ReadToEnd());
-            Assert.True(service.Request.RedirectAllowed(new Uri("https://api.example.com/next")));
-            Assert.False(service.Request.RedirectAllowed(new Uri("https://escape.example/")));
+            Assert.True(await service.Request.RedirectAllowed(
+                new Uri("https://api.example.com/next"), CancellationToken.None));
+            Assert.False(await service.Request.RedirectAllowed(
+                new Uri("https://escape.example/"), CancellationToken.None));
             Assert.NotNull(progress);
             Assert.Equal("xhr-progress", progress.EventName);
             Assert.Equal(7, Json(progress.DataJson).GetProperty("xhrId").GetInt32());
@@ -163,6 +165,8 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 new Dictionary<string, string>(), string.Empty, null, null);
             var service = new FakeHttpService(response, null);
             var provider = new ResourceAndNetworkApiProvider(http: service);
+            var notifications = new List<ApiNotificationEventArgs>();
+            provider.Notification += (_, item) => notifications.Add(item);
 
             var created = await provider.InvokeAsync(Context(installation, "GM.xmlHttpRequest", new
             {
@@ -181,7 +185,12 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 user = "alice",
                 password = "secret",
                 anonymous = true,
-                overrideMimeType = "text/plain;charset=iso-8859-1"
+                overrideMimeType = "text/plain;charset=iso-8859-1",
+                redirect = "manual",
+                nocache = true,
+                revalidate = true,
+                fetch = true,
+                timeout = 10
             }), CancellationToken.None);
             var sessionId = Json(created.Json).GetProperty("sessionId").GetString();
             await provider.InvokeAsync(Context(installation, "GM.xmlHttpRequest", new
@@ -196,6 +205,14 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             Assert.Equal("secret", service.Request.Options.Password);
             Assert.True(service.Request.Options.Anonymous);
             Assert.Equal("text/plain;charset=iso-8859-1", service.Request.Options.OverrideMimeType);
+            Assert.Equal(UserScriptHttpRedirectMode.Manual, service.Request.Options.Redirect);
+            Assert.True(service.Request.Options.NoCache);
+            Assert.True(service.Request.Options.Revalidate);
+            Assert.True(service.Request.Options.Fetch);
+            Assert.Null(service.Request.Timeout);
+            Assert.Single(notifications);
+            Assert.Equal("xhr-state", notifications[0].EventName);
+            Assert.Equal(4, Json(notifications[0].DataJson).GetProperty("readyState").GetInt32());
 
             foreach (var method in new[] { "CONNECT", "TRACE", "TRACK" })
             {
@@ -213,6 +230,43 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                     operation = "create", xhrId = 15, url = "https://api.example.com/", proxy = new { }
                 }), CancellationToken.None));
             Assert.Equal(BridgeErrorCodes.NotSupported, unsupported.Code);
+        }
+
+        [Fact]
+        public async Task HttpRedirectsRecheckConnectAndHostPermissionPolicy()
+        {
+            var installation = await InstallAsync("// @grant GM.xmlHttpRequest\n// @connect *.example.com");
+            var response = new UserScriptHttpResponse(
+                200, "OK", new Uri("https://api.example.com/"),
+                new Dictionary<string, string>(), string.Empty, null, null);
+            var service = new FakeHttpService(response, null);
+            var provider = new ResourceAndNetworkApiProvider(http: service);
+            var authorized = new List<string>();
+            var created = await provider.InvokeAsync(Context(
+                installation,
+                "GM.xmlHttpRequest",
+                new { operation = "create", xhrId = 16, url = "https://api.example.com/" },
+                (target, _) =>
+                {
+                    authorized.Add(target);
+                    return Task.FromResult(!target.Contains("denied"));
+                }), CancellationToken.None);
+            var sessionId = Json(created.Json).GetProperty("sessionId").GetString();
+            await provider.InvokeAsync(Context(installation, "GM.xmlHttpRequest", new
+            {
+                operation = "execute", sessionId
+            }), CancellationToken.None);
+
+            Assert.True(await service.Request.RedirectAllowed(
+                new Uri("https://allowed.example.com/next"), CancellationToken.None));
+            Assert.False(await service.Request.RedirectAllowed(
+                new Uri("https://denied.example.com/next"), CancellationToken.None));
+            Assert.False(await service.Request.RedirectAllowed(
+                new Uri("https://outside.test/next"), CancellationToken.None));
+            Assert.Equal(new[]
+            {
+                "https://allowed.example.com/next", "https://denied.example.com/next"
+            }, authorized);
         }
 
         [Fact]
@@ -354,7 +408,8 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         private static ApiInvocationContext Context(
             UserScriptInstallation installation,
             string method,
-            object parameters)
+            object parameters,
+            Func<string, CancellationToken, Task<bool>> authorizeTargetAsync = null)
         {
             return new ApiInvocationContext(
                 installation,
@@ -364,7 +419,8 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 "execution",
                 Guid.NewGuid().ToString("D"),
                 method,
-                Json(JsonSerializer.Serialize(parameters)));
+                Json(JsonSerializer.Serialize(parameters)),
+                authorizeTargetAsync);
         }
 
         private static JsonElement Json(string json)

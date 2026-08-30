@@ -424,7 +424,9 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                                 execution.Invocation.ExecutionId,
                                 requestId,
                                 method,
-                                parameters), linked.Token).ConfigureAwait(false);
+                                parameters,
+                                (target, token) => ReauthorizeTargetAsync(
+                                    execution, method, parameters, target, token)), linked.Token).ConfigureAwait(false);
                         }
                         finally
                         {
@@ -481,6 +483,27 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             if (!IsValueMutation(method)) tokens.Add(execution.Cancellation.Token);
             if (timeout != null) tokens.Add(timeout.Token);
             return tokens.ToArray();
+        }
+
+        private async Task<bool> ReauthorizeTargetAsync(
+            UserScriptEngine.ExecutionRecord execution,
+            string method,
+            JsonElement parameters,
+            string target,
+            CancellationToken cancellationToken)
+        {
+            if (execution.Cancellation.IsCancellationRequested ||
+                !execution.Installation.Definition.Metadata.Grants.Contains(method))
+                return false;
+            var authorization = new ApiAuthorizationRequest(
+                execution.Installation,
+                execution.Frame,
+                method,
+                target,
+                Summarize(parameters),
+                SupportedApis());
+            return await _permissionPolicy.AuthorizeAsync(authorization, cancellationToken)
+                .ConfigureAwait(false) == PermissionDecision.Allow;
         }
 
         private static bool IsLongRunningHttpExecute(string method, JsonElement parameters)

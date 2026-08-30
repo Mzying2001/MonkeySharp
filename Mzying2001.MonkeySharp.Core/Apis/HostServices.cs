@@ -10,6 +10,19 @@ using System.Threading.Tasks;
 
 namespace Mzying2001.MonkeySharp.Core.Apis
 {
+    /// <summary>Controls how a userscript HTTP request handles redirects.</summary>
+    public enum UserScriptHttpRedirectMode
+    {
+        /// <summary>Follows redirects after authorization.</summary>
+        Follow,
+
+        /// <summary>Fails when a redirect response is received.</summary>
+        Error,
+
+        /// <summary>Returns the redirect response without following it.</summary>
+        Manual
+    }
+
     /// <summary>
     /// Contains the binary and optional decoded text returned for a declared userscript resource.
     /// </summary>
@@ -97,6 +110,18 @@ namespace Mzying2001.MonkeySharp.Core.Apis
 
         /// <summary>Gets or sets the MIME type used to interpret the response.</summary>
         public string OverrideMimeType { get; set; }
+
+        /// <summary>Gets or sets redirect handling.</summary>
+        public UserScriptHttpRedirectMode Redirect { get; set; }
+
+        /// <summary>Gets or sets whether the request bypasses cached content.</summary>
+        public bool NoCache { get; set; }
+
+        /// <summary>Gets or sets whether cached content must be revalidated.</summary>
+        public bool Revalidate { get; set; }
+
+        /// <summary>Gets or sets whether Tampermonkey fetch restrictions apply.</summary>
+        public bool Fetch { get; set; }
     }
 
     /// <summary>Describes a validated HTTP request initiated by a userscript.</summary>
@@ -110,7 +135,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             IUserScriptHttpBody body,
             TimeSpan? timeout,
             long? maxResponseBytes,
-            Func<Uri, bool> redirectAllowed,
+            Func<Uri, CancellationToken, Task<bool>> redirectAllowed,
             UserScriptHttpRequestOptions options = null)
         {
             if (string.IsNullOrWhiteSpace(method)) throw new ArgumentException("The HTTP method is required.", nameof(method));
@@ -146,7 +171,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         public long? MaxResponseBytes { get; }
 
         /// <summary>Gets the callback that must authorize every redirect target before it is followed.</summary>
-        public Func<Uri, bool> RedirectAllowed { get; }
+        public Func<Uri, CancellationToken, Task<bool>> RedirectAllowed { get; }
 
         /// <summary>Gets optional request controls.</summary>
         public UserScriptHttpRequestOptions Options { get; }

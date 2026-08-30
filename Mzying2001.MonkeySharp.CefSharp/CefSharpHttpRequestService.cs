@@ -24,6 +24,10 @@ namespace Mzying2001.MonkeySharp.CefSharp
             "Host", "Content-Length", "Connection", "Proxy-Connection",
             "Transfer-Encoding", "Upgrade", "Keep-Alive", "TE", "Trailer"
         };
+        private static readonly HashSet<string> BodyHeaders = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "Content-Type", "Content-Encoding", "Content-Language", "Content-Location", "Digest"
+        };
         private readonly Func<IRequestContext> _contextAccessor;
         private readonly IWebRequestService _webRequestService;
         private readonly object _sync = new object();
@@ -126,6 +130,9 @@ namespace Mzying2001.MonkeySharp.CefSharp
             private int _completed;
             private UserScriptHttpResponse _responseMetadata;
             private long _downloaded;
+            private string _currentMethod;
+            private bool _sendBody;
+            private bool _allowExplicitCredentials;
 
             public Operation(CefSharpHttpRequestService owner, UserScriptHttpRequest request,
                 IUserScriptHttpObserver observer,
@@ -138,6 +145,9 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 _contextAccessor = contextAccessor;
                 _webRequests = webRequests;
                 _cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                _currentMethod = request.Method;
+                _sendBody = request.Body != null && request.Body.Length != 0;
+                _allowExplicitCredentials = !request.Options.Anonymous;
                 Completion = _completion.Task;
             }
 
@@ -178,23 +188,29 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     _cefRequest = cefRequest;
                     _currentUrl = url;
                     cefRequest.Url = url.AbsoluteUri;
-                    cefRequest.Method = _request.Method;
+                    cefRequest.Method = _currentMethod;
                     cefRequest.Flags = UrlRequestFlags.StopOnRedirect | UrlRequestFlags.ReportUploadProgress;
                     if (!_request.Options.Anonymous)
                         cefRequest.Flags |= UrlRequestFlags.AllowStoredCredentials;
+                    if (_request.Options.NoCache)
+                        cefRequest.Flags |= UrlRequestFlags.DisableCache;
+                    else if (_request.Options.Revalidate)
+                        cefRequest.Flags |= UrlRequestFlags.SkipCache;
                     foreach (var header in _request.Headers)
                     {
-                        if (!string.Equals(header.Key, "Cookie", StringComparison.OrdinalIgnoreCase))
+                        if (!string.Equals(header.Key, "Cookie", StringComparison.OrdinalIgnoreCase) &&
+                            (_sendBody || !BodyHeaders.Contains(header.Key)) &&
+                            (_allowExplicitCredentials || !string.Equals(header.Key, "Authorization", StringComparison.OrdinalIgnoreCase)))
                             cefRequest.SetHeaderByName(header.Key, header.Value, true);
                     }
-                    if (!_request.Options.Anonymous)
+                    if (_allowExplicitCredentials)
                     {
                         _request.Headers.TryGetValue("Cookie", out var cookieHeader);
                         var cookie = string.Join("; ", new[] { cookieHeader, _request.Options.Cookie }
                             .Where(value => !string.IsNullOrEmpty(value)));
                         if (cookie.Length != 0) cefRequest.SetHeaderByName("Cookie", cookie, true);
                     }
-                    if (_request.Body != null && _request.Body.Length != 0)
+                    if (_sendBody)
                     {
                         cefRequest.InitializePostData();
                         using (var body = _request.Body.OpenRead())
@@ -257,18 +273,46 @@ namespace Mzying2001.MonkeySharp.CefSharp
             {
                 if (target == null || (target.Scheme != Uri.UriSchemeHttp && target.Scheme != Uri.UriSchemeHttps))
                     throw new BridgeProtocolException(BridgeErrorCodes.PermissionDenied, "The redirect target is invalid.");
-                if (!_request.RedirectAllowed(target))
-                    throw new BridgeProtocolException(BridgeErrorCodes.PermissionDenied, "A redirect escaped the @connect allowlist.");
-                if (++_redirectCount > _owner.MaximumRedirects)
-                    throw new BridgeProtocolException(BridgeErrorCodes.Internal, "The HTTP request exceeded the maximum redirect count.");
-                _redirects.Add(target);
-                DisposeRequestOnUi(oldRequest, oldUrlRequest);
-                BeginOnUi(target);
+                Task<bool> authorization;
+                try { authorization = _request.RedirectAllowed(target, _cancellation.Token); }
+                catch (Exception exception) { throw MapException(exception); }
+                if (authorization == null)
+                    throw new InvalidOperationException("The redirect authorization callback returned no task.");
+                authorization.ContinueWith(task => QueueUi(() =>
+                {
+                    if (IsCompleted) return;
+                    if (task.IsCanceled)
+                    {
+                        Fail(new OperationCanceledException("Redirect authorization was canceled."), true);
+                        return;
+                    }
+                    if (task.IsFaulted)
+                    {
+                        Fail(MapException(task.Exception.InnerException), true);
+                        return;
+                    }
+                    if (!task.Result)
+                    {
+                        Fail(new BridgeProtocolException(BridgeErrorCodes.PermissionDenied,
+                            "A redirect target was denied by @connect or the host permission policy."), true);
+                        return;
+                    }
+                    if (++_redirectCount > _owner.MaximumRedirects)
+                    {
+                        Fail(new BridgeProtocolException(BridgeErrorCodes.Internal,
+                            "The HTTP request exceeded the maximum redirect count."), true);
+                        return;
+                    }
+                    if (!SameOrigin(_currentUrl, target)) _allowExplicitCredentials = false;
+                    _redirects.Add(target);
+                    DisposeRequestOnUi(oldRequest, oldUrlRequest);
+                    BeginOnUi(target);
+                }), TaskScheduler.Default);
             }
 
             public bool GetAuthCredentials(bool isProxy, string host, int port, string realm, string scheme, IAuthCallback callback)
             {
-                if (!isProxy && !_request.Options.Anonymous && _request.Options.Username != null)
+                if (!isProxy && _allowExplicitCredentials && _request.Options.Username != null)
                 {
                     callback.Continue(_request.Options.Username, _request.Options.Password ?? string.Empty);
                     return true;
@@ -277,7 +321,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 var url = _currentUrl?.AbsoluteUri ?? _request.Url.AbsoluteUri;
                 var requestId = responseIdentifier(null);
                 var decision = _webRequests.Evaluate(new WebRequestEvent(
-                    WebRequestPhase.OnAuthRequired, requestId, url, _request.Method, HttpResourceType));
+                    WebRequestPhase.OnAuthRequired, requestId, url, _currentMethod, HttpResourceType));
                 if (decision.Kind != WebRequestActionKind.AuthResponse) return false;
                 callback.Continue(decision.Username, decision.Password);
                 return true;
@@ -291,6 +335,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
 
             public void OnDownloadProgress(IUrlRequest request, long current, long total)
             {
+                if (IsFollowedRedirect(request?.Response)) return;
                 try { _observer.OnDownloadProgress(current, total > 0 ? (long?)total : null); }
                 catch { }
             }
@@ -300,6 +345,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 if (data == null || IsCompleted) return;
                 try
                 {
+                    if (IsFollowedRedirect(request?.Response)) return;
                     EnsureResponseStarted(request);
                     var buffer = new byte[64 * 1024];
                     int count;
@@ -338,20 +384,27 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 {
                     var status = request?.RequestStatus ?? UrlRequestStatus.Unknown;
                     response = request?.Response;
-                    if (status != UrlRequestStatus.Success)
+                    if (response == null)
+                        throw new InvalidOperationException("CefSharp returned no HTTP response.");
+
+                    var location = response.Headers == null ? null : response.Headers["Location"];
+                    var isRedirect = response.StatusCode >= 300 && response.StatusCode < 400 &&
+                        !string.IsNullOrEmpty(location);
+                    if (status != UrlRequestStatus.Success && !isRedirect)
                     {
                         var message = "CefSharp URL request failed: " + status;
                         throw new BridgeProtocolException(status == UrlRequestStatus.Canceled
                             ? BridgeErrorCodes.Canceled : BridgeErrorCodes.Internal, message);
                     }
-                    if (response == null)
-                        throw new InvalidOperationException("CefSharp returned no HTTP response.");
 
                     var responseHeaders = ToHeaders(response.Headers);
-                    var location = response.Headers == null ? null : response.Headers["Location"];
-                    if (response.StatusCode >= 300 && response.StatusCode < 400 && !string.IsNullOrEmpty(location))
+                    if (isRedirect && _request.Options.Redirect != UserScriptHttpRedirectMode.Manual)
                     {
+                        if (_request.Options.Redirect == UserScriptHttpRedirectMode.Error)
+                            throw new BridgeProtocolException(BridgeErrorCodes.Internal,
+                                "The HTTP request was redirected while redirect mode was 'error'.");
                         var redirect = Resolve(_currentUrl, location);
+                        ApplyRedirectMethod(response.StatusCode);
                         lock (_sync)
                         {
                             _responseMetadata = null;
@@ -366,7 +419,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     {
                         var headersDecision = _webRequests.Evaluate(new WebRequestEvent(
                             WebRequestPhase.OnHeadersReceived, responseIdentifier(request), _currentUrl.AbsoluteUri,
-                            _request.Method, HttpResourceType, responseHeaders, response.StatusCode));
+                            _currentMethod, HttpResourceType, responseHeaders, response.StatusCode));
                         if (headersDecision.Kind == WebRequestActionKind.Block)
                             throw new BridgeProtocolException(BridgeErrorCodes.PermissionDenied,
                                 "The HTTP response was blocked by a webRequest rule.");
@@ -374,13 +427,13 @@ namespace Mzying2001.MonkeySharp.CefSharp
                             responseHeaders[header.Key] = header.Value;
                         _webRequests.Evaluate(new WebRequestEvent(
                             WebRequestPhase.OnResponseStarted, responseIdentifier(request), _currentUrl.AbsoluteUri,
-                            _request.Method, HttpResourceType, responseHeaders, response.StatusCode));
+                            _currentMethod, HttpResourceType, responseHeaders, response.StatusCode));
                     }
 
                     var result = EnsureResponseStarted(request, response, responseHeaders);
                     if (_webRequests != null)
                         _webRequests.Evaluate(new WebRequestEvent(WebRequestPhase.OnCompleted,
-                            responseIdentifier(request), _currentUrl.AbsoluteUri, _request.Method, HttpResourceType,
+                            responseIdentifier(request), _currentUrl.AbsoluteUri, _currentMethod, HttpResourceType,
                             responseHeaders, response.StatusCode));
                     DisposeResponseOnUi(response);
                     DisposeRequestOnUi(_cefRequest, request);
@@ -401,7 +454,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 {
                     _webRequests.Evaluate(new WebRequestEvent(WebRequestPhase.OnErrorOccurred,
                         responseIdentifier(null), _currentUrl?.AbsoluteUri ?? _request.Url.AbsoluteUri,
-                        _request.Method, HttpResourceType, null, null, exception?.Message));
+                        _currentMethod, HttpResourceType, null, null, exception?.Message));
                 }
                 catch { }
             }
@@ -500,6 +553,32 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 if (Uri.TryCreate(value, UriKind.Absolute, out var absolute)) return absolute;
                 if (Uri.TryCreate(baseUri, value, out var relative)) return relative;
                 throw new BridgeProtocolException(BridgeErrorCodes.PermissionDenied, "The redirect target is invalid.");
+            }
+
+            private bool IsFollowedRedirect(IResponse response)
+            {
+                return _request.Options.Redirect != UserScriptHttpRedirectMode.Manual &&
+                    response != null && response.StatusCode >= 300 && response.StatusCode < 400 &&
+                    response.Headers != null && !string.IsNullOrEmpty(response.Headers["Location"]);
+            }
+
+            private void ApplyRedirectMethod(int statusCode)
+            {
+                if ((statusCode == 303 && !string.Equals(_currentMethod, "HEAD", StringComparison.OrdinalIgnoreCase)) ||
+                    ((statusCode == 301 || statusCode == 302) &&
+                     string.Equals(_currentMethod, "POST", StringComparison.OrdinalIgnoreCase)))
+                {
+                    _currentMethod = "GET";
+                    _sendBody = false;
+                }
+            }
+
+            private static bool SameOrigin(Uri first, Uri second)
+            {
+                return first != null && second != null &&
+                    string.Equals(first.Scheme, second.Scheme, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(first.IdnHost, second.IdnHost, StringComparison.OrdinalIgnoreCase) &&
+                    first.Port == second.Port;
             }
 
             private UserScriptHttpResponse EnsureResponseStarted(

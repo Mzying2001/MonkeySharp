@@ -60,13 +60,15 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         /// <param name="requestId">The bridge request identifier.</param>
         /// <param name="method">The requested API method.</param>
         /// <param name="parameters">The request parameters.</param>
+        /// <param name="authorizeTargetAsync">An optional callback that reauthorizes changed targets.</param>
         public ApiInvocationContext(
             UserScriptInstallation installation,
             DocumentFrame frame,
             string executionId,
             string requestId,
             string method,
-            JsonElement parameters)
+            JsonElement parameters,
+            Func<string, CancellationToken, Task<bool>> authorizeTargetAsync = null)
         {
             Installation = installation;
             Frame = frame;
@@ -74,6 +76,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             RequestId = requestId;
             Method = method;
             Parameters = parameters;
+            AuthorizeTargetAsync = authorizeTargetAsync;
         }
 
         /// <summary>Gets the userscript installation making the request.</summary>
@@ -93,6 +96,9 @@ namespace Mzying2001.MonkeySharp.Core.Apis
 
         /// <summary>Gets the request parameters.</summary>
         public JsonElement Parameters { get; }
+
+        /// <summary>Gets an optional callback that reauthorizes a changed security-sensitive target.</summary>
+        public Func<string, CancellationToken, Task<bool>> AuthorizeTargetAsync { get; }
     }
 
     /// <summary>
