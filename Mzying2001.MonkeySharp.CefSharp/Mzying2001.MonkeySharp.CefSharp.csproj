@@ -1,0 +1,61 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net462</TargetFramework>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <Title>Mzying2001.MonkeySharp.CefSharp</Title>
+    <AssemblyName>Mzying2001.MonkeySharp.CefSharp</AssemblyName>
+    <RootNamespace>Mzying2001.MonkeySharp.CefSharp</RootNamespace>
+    <PackageId>Mzying2001.MonkeySharp.CefSharp</PackageId>
+    <Authors>Mzying2001</Authors>
+    <Platforms>x64;x86</Platforms>
+    <Version>2.0.0</Version>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+    <CefSharpBuildAction>NoAction</CefSharpBuildAction>
+    <!--
+      CefSharp is selected by the host application. Keep a known-good default
+      for deterministic repository builds, while allowing source consumers to
+      compile the adapter against the exact CefSharp version they run.
+      Example: dotnet build -p:CefSharpVersion=121.3.70
+    -->
+    <CefSharpVersion Condition="'$(CefSharpVersion)' == ''">121.3.70</CefSharpVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Platform)' == 'x64'">
+    <PlatformTarget>x64</PlatformTarget>
+    <PackageId>Mzying2001.MonkeySharp.CefSharp.x64</PackageId>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Platform)' == 'x86'">
+    <PlatformTarget>x86</PlatformTarget>
+    <PackageId>Mzying2001.MonkeySharp.CefSharp.x86</PackageId>
+  </PropertyGroup>
+  <PropertyGroup>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <RepositoryUrl>https://github.com/Mzying2001/MonkeySharp.git</RepositoryUrl>
+    <Description>CefSharp host adapter for MonkeySharp userscripts.</Description>
+    <PackageProjectUrl>https://github.com/Mzying2001/MonkeySharp</PackageProjectUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Js\Lifecycle.js" />
+    <None Include="..\README.md">
+      <Pack>true</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The host must own CefSharp.Common so its UI package and native CEF
+         binaries stay on one exact version. The adapter still compiles
+         against the selected version, but does not impose one transitively. -->
+    <PackageReference Include="CefSharp.Common" Version="$(CefSharpVersion)" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
+    <PackageReference Include="System.Text.Json" Version="9.0.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Mzying2001.MonkeySharp.Core\Mzying2001.MonkeySharp.Core.csproj" />
+  </ItemGroup>
+</Project>
