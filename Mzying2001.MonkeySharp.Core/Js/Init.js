@@ -517,10 +517,14 @@
                         handler.cleanup = release;
                         record.xhrHandlers.set(xhrId, handler);
                         const abortRequest = function () {
-                            if (controller) controller.abort();
                             if (sessionId) call(record, "GM.xmlHttpRequest", {
                                 operation: "abort", sessionId: sessionId
-                            }).catch(error => console.warn("[MonkeySharp] XHR abort failed", error));
+                            }).catch(error => {
+                                if (!error || error.code !== "MSP003_SESSION_EXPIRED") {
+                                    console.warn("[MonkeySharp] XHR abort failed", error);
+                                }
+                            });
+                            if (controller) controller.abort();
                         };
                         let responseStream = null;
                         if (responseType === "stream") {
