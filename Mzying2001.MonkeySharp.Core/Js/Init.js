@@ -73,6 +73,11 @@
             };
 
             const call = async function (record, method, parameters, signal) {
+                if (signal && signal.aborted) {
+                    const error = new Error("The request was canceled.");
+                    error.name = "AbortError";
+                    throw error;
+                }
                 const requestId = uuid();
                 const envelope = Object.assign({
                     type: "request",
