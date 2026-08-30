@@ -81,6 +81,24 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Fact]
+        public async Task CookieAndWebRequestRemainUnsupportedWithoutProviders()
+        {
+            using (var fixture = await BridgeFixture.CreateAsync("GM.cookie", "GM.webRequest"))
+            {
+                var hello = await fixture.HelloAsync();
+                var capabilities = hello.GetProperty("apis").EnumerateArray()
+                    .Select(item => item.GetString()).ToList();
+                Assert.DoesNotContain("GM.cookie", capabilities);
+                Assert.DoesNotContain("GM.webRequest", capabilities);
+
+                var cookie = await fixture.RequestAsync("GM.cookie", new { });
+                var webRequest = await fixture.RequestAsync("GM.webRequest", new { });
+                AssertError(cookie, BridgeErrorCodes.NotSupported);
+                AssertError(webRequest, BridgeErrorCodes.NotSupported);
+            }
+        }
+
+        [Fact]
         public async Task BasicStorageApiPreservesJsonNullAndMissing()
         {
             using (var fixture = await BridgeFixture.CreateAsync(

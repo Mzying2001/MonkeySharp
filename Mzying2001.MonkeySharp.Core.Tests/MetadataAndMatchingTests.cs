@@ -50,6 +50,18 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Fact]
+        public void CookieAndWebRequestLegacyGrantsNormalizeToCanonicalCapabilities()
+        {
+            var result = new UserScriptMetadataParser().Parse(
+                Script("// @name advanced legacy\n// @match https://example.com/*\n" +
+                    "// @grant GM_cookie\n// @grant GM_webRequest"));
+
+            Assert.True(result.CanEnable);
+            Assert.Equal(new[] { "GM_cookie", "GM_webRequest" }, result.Metadata.DeclaredGrants);
+            Assert.Equal(new[] { "GM.cookie", "GM.webRequest" }, result.Metadata.Grants);
+        }
+
+        [Fact]
         public void StrictParserCanRejectLegacyAliases()
         {
             var result = new UserScriptMetadataParser(new UserScriptMetadataParserOptions

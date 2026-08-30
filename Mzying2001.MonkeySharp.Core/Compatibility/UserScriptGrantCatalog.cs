@@ -32,7 +32,9 @@ namespace Mzying2001.MonkeySharp.Core.Compatibility
                 ["GM_download"] = "GM.download",
                 ["GM_getTab"] = "GM.getTab",
                 ["GM_saveTab"] = "GM.saveTab",
-                ["GM_getTabs"] = "GM.getTabs"
+                ["GM_getTabs"] = "GM.getTabs",
+                ["GM_cookie"] = "GM.cookie",
+                ["GM_webRequest"] = "GM.webRequest"
             });
 
         private static readonly IReadOnlyCollection<string> CanonicalGrants =
@@ -43,7 +45,7 @@ namespace Mzying2001.MonkeySharp.Core.Compatibility
                 "GM.removeValueChangeListener", "GM.addStyle", "GM.addElement", "GM.getResourceText",
                 "GM.getResourceURL", "GM.xmlHttpRequest", "GM.registerMenuCommand",
                 "GM.unregisterMenuCommand", "GM.notification", "GM.setClipboard", "GM.openInTab",
-                "GM.download", "GM.getTab", "GM.saveTab", "GM.getTabs"
+                "GM.download", "GM.getTab", "GM.saveTab", "GM.getTabs", "GM.cookie", "GM.webRequest"
             });
 
         /// <summary>Gets all canonical grant names understood by MonkeySharp.</summary>
