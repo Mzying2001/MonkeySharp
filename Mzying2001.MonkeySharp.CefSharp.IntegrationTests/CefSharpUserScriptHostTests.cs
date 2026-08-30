@@ -328,7 +328,11 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
 
                 CefBrowser = new Mock<IBrowser>();
                 Frame = new Mock<IFrame>();
+#if CEF_SHARP_STRING_FRAME_IDS
+                Frame.SetupGet(item => item.Identifier).Returns("42");
+#else
                 Frame.SetupGet(item => item.Identifier).Returns(42);
+#endif
                 Frame.SetupGet(item => item.Url).Returns("https://example.com/page");
                 Frame.SetupGet(item => item.IsMain).Returns(true);
                 Frame.SetupGet(item => item.IsValid).Returns(true);
@@ -361,7 +365,11 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
             {
                 Frame.SetupGet(item => item.IsDisposed).Returns(true);
                 var refreshed = new Mock<IFrame>();
+#if CEF_SHARP_STRING_FRAME_IDS
+                refreshed.SetupGet(item => item.Identifier).Returns("42");
+#else
                 refreshed.SetupGet(item => item.Identifier).Returns(42);
+#endif
                 refreshed.SetupGet(item => item.Url).Returns("https://example.com/page");
                 refreshed.SetupGet(item => item.IsMain).Returns(true);
                 refreshed.SetupGet(item => item.IsValid).Returns(true);
@@ -369,7 +377,11 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
                 refreshed.Setup(item => item.ExecuteJavaScriptAsync(
                         It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>()))
                     .Callback<string, string, int>((script, _, __) => Scripts.Enqueue(script));
+#if CEF_SHARP_STRING_FRAME_IDS
+                CefBrowser.Setup(item => item.GetFrameByIdentifier("42")).Returns(refreshed.Object);
+#else
                 CefBrowser.Setup(item => item.GetFrame(42)).Returns(refreshed.Object);
+#endif
                 Browser.Setup(item => item.GetBrowser()).Returns(CefBrowser.Object);
             }
 

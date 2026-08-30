@@ -9,9 +9,10 @@
     <RootNamespace>Mzying2001.MonkeySharp.CefSharp.SmokeHost</RootNamespace>
     <AssemblyName>MonkeySharp.CefSharp.SmokeHost</AssemblyName>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <CefSharpVersion Condition="'$(CefSharpVersion)' == ''">121.3.70</CefSharpVersion>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="CefSharp.WinForms" Version="121.3.70" />
+    <PackageReference Include="CefSharp.WinForms" Version="$(CefSharpVersion)" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Mzying2001.MonkeySharp.CefSharp\Mzying2001.MonkeySharp.CefSharp.csproj" />

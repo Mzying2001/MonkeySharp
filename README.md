@@ -9,7 +9,7 @@ Version 2 is a breaking rewrite of the host architecture, but its default `Legac
 | Package | Target frameworks | Purpose |
 | --- | --- | --- |
 | `Mzying2001.MonkeySharp.Core` | `net462`, `netstandard2.0`, `net8.0` | Metadata, matching, repository, engine, storage, permissions, bridge, and host service contracts. No CefSharp dependency. |
-| `Mzying2001.MonkeySharp.CefSharp.x64` | `net462` x64 | CefSharp 121.3.70 frame lifecycle, asynchronous binding, script execution, and diagnostics. |
+| `Mzying2001.MonkeySharp.CefSharp.x64` | `net462` x64 | CefSharp frame lifecycle, asynchronous binding, script execution, and diagnostics. The adapter is compiled against the selected `CefSharpVersion` (default `121.3.70`). |
 | `Mzying2001.MonkeySharp.CefSharp.x86` | `net462` x86 | The same adapter compiled explicitly for 32-bit processes. |
 
 Both adapter packages expose the `Mzying2001.MonkeySharp.CefSharp` assembly and namespace. Separate package IDs prevent x64 and x86 artifacts with the same version from overwriting each other.
@@ -23,6 +23,21 @@ The packages are versioned `2.0.0`. Until they are published, add a project refe
 ```
 
 Build the consuming application and project reference with the same `Platform=x64` or `Platform=x86` as its process. CefSharp does not support this adapter as `AnyCPU`.
+
+### CefSharp Version Compatibility
+
+The adapter cannot support an arbitrary CefSharp version from one binary. CefSharp assemblies are strong-named and their public interfaces have changed between releases (for example, `IBrowser.GetFrame(long)` became `GetFrameByIdentifier(string)`, and `IFrame.Identifier` changed from `long` to `string`). A package compiled against one version therefore must not be assumed to run with every other version.
+
+The adapter project keeps a deterministic default (`121.3.70`) but lets the host select the exact CefSharp version it uses. Set `CefSharpVersion` before restoring/building the adapter (the property also flows through a `ProjectReference`):
+
+```powershell
+dotnet restore Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj -p:Platform=x64 -p:CefSharpVersion=151.3.240
+dotnet build Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj -c Release -p:Platform=x64 -p:CefSharpVersion=151.3.240 --no-restore
+```
+
+The source adapter has compatibility shims for the old and new frame lookup/identifier APIs and is verified against `84.4.10`, `121.3.70`, and `151.3.240`. This is a tested compatibility set, not a promise that every future CefSharp release is binary-compatible; compile and test against each version you ship.
+
+The adapter's `CefSharp.Common` reference is private to its NuGet package so it cannot force a conflicting CefSharp version into the application. A package consumer must reference the matching `CefSharp.WinForms`, `CefSharp.Wpf`, or `CefSharp.Common` package itself, and for .NET Framework applications must allow the normal CefSharp binding redirects. Keep all CefSharp packages, native CEF binaries, and the MonkeySharp adapter on the same version.
 
 ## Minimal Setup
 
@@ -260,12 +275,13 @@ Compatibility is built into the default profile; there is no separate transport 
 
 ## Build and Test
 
-The repository pins exactly .NET SDK 9.0.315 and CefSharp 121.3.70.
+The repository uses .NET SDK 9.0.315 and defaults to CefSharp 121.3.70. To build and test another supported CefSharp version, pass the same `CefSharpVersion` property to restore, build, test, and pack:
 
 ```powershell
 dotnet restore MonkeySharp.slnx -p:Platform=x64
 dotnet build MonkeySharp.slnx -c Release -p:Platform=x64 --no-restore
 dotnet test MonkeySharp.slnx -c Release -p:Platform=x64 --no-build
+# Example: -p:CefSharpVersion=151.3.240 on every command above
 node --test Mzying2001.MonkeySharp.Core.Tests/JavaScript/*.test.js
 ```
 
