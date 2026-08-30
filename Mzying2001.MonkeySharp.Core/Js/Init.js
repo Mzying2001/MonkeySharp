@@ -112,12 +112,36 @@
                 return decodeResult(response.result);
             };
 
+            const reportMutationFailure = async function (record, method, error) {
+                record.storageMirrorStale = true;
+                try {
+                    const snapshot = await call(record, "runtime.getStorageSnapshot", {});
+                    if (snapshot && snapshot.complete && snapshot.values) {
+                        record.storageMirror = Object.assign({}, snapshot.values);
+                        record.storageMirrorStale = false;
+                    }
+                } catch (snapshotError) {
+                    if (root.console && typeof root.console.warn === "function") {
+                        root.console.warn("[MonkeySharp] compatibility storage reconcile failed", snapshotError);
+                    }
+                }
+                try {
+                    await call(record, "runtime.reportError", {
+                        code: "MSC413_COMPATIBILITY_MUTATION_FAILED",
+                        operation: method,
+                        message: String(error && error.message || error)
+                    });
+                } catch (diagnosticError) {
+                    if (root.console && typeof root.console.warn === "function") {
+                        root.console.warn("[MonkeySharp] compatibility storage diagnostic failed", diagnosticError);
+                    }
+                }
+            };
+
             const enqueueMutation = function (record, method, parameters) {
                 const operation = record.mutationTail.then(() => call(record, method, parameters));
                 record.mutationTail = operation.catch(error => {
-                    if (root.console && typeof root.console.error === "function") {
-                        root.console.error("[MonkeySharp] compatibility storage write failed", error);
-                    }
+                    return reportMutationFailure(record, method, error);
                 });
                 return operation;
             };
@@ -622,6 +646,8 @@
                     valueListenerKeys: new Map(),
                     mutationTail: Promise.resolve(),
                     storageMirror: null,
+                    storageMirrorStale: false,
+                    lastStorageSequence: 0,
                     resourceMirror: null
                 };
                 executions.set(invocation.executionId, record);
@@ -682,11 +708,24 @@
                 if (!record || record.deliveryToken !== notification.deliveryToken) return false;
                 const data = notification.data || {};
                 try {
+                    if (notification.event === "storage-sync") {
+                        if (record.storageMirror && data.key) {
+                            if (data.sequence && data.sequence <= record.lastStorageSequence) return true;
+                            const incoming = decodeResult(data.newValue);
+                            if (typeof incoming === "undefined") delete record.storageMirror[data.key];
+                            else record.storageMirror[data.key] = cloneValue(incoming);
+                            if (data.sequence) record.lastStorageSequence = data.sequence;
+                        }
+                        return true;
+                    }
                     if (notification.event === "value-change") {
                         if (record.storageMirror && data.key) {
                             const incoming = decodeResult(data.newValue);
                             if (typeof incoming === "undefined") delete record.storageMirror[data.key];
                             else record.storageMirror[data.key] = cloneValue(incoming);
+                            if (data.sequence && data.sequence > record.lastStorageSequence) {
+                                record.lastStorageSequence = data.sequence;
+                            }
                         }
                         if (data.originExecutionId === record.executionId) return true;
                         const handler = record.handlers.get(data.listenerId);

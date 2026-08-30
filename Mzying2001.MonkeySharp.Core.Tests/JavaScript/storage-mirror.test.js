@@ -63,6 +63,8 @@ test("legacy storage APIs read and mutate the execution-local mirror synchronous
                 "globalThis.__storageListener = GM_addValueChangeListener('count', (...args) => globalThis.__storageChange = args);",
                 "GM_setValue('count', globalThis.__storageBefore + 1);",
                 "globalThis.__storageAfter = GM_getValue('count', 0);",
+                "globalThis.__storageSyncHandlerCalls = 0;",
+                "globalThis.__readStorageRemote = () => GM_getValue('remote');",
                 "globalThis.__storageKeys = GM_listValues();"
             ].join("\n"),
             declaredGrants: ["GM_getValue", "GM_setValue", "GM_listValues", "GM_addValueChangeListener"],
@@ -83,6 +85,21 @@ test("legacy storage APIs read and mutate the execution-local mirror synchronous
     assert.equal(globalThis.__storageNull, null);
     assert.deepEqual(globalThis.__storageKeys, ["count", "nullable"]);
     await waitFor(() => methods.includes("GM.setValue"));
+
+    assert.equal(globalThis.__MonkeySharpRuntime.receive({
+        type: "notification", protocol: 1, executionId: "storage-execution",
+        deliveryToken: "storage-delivery", event: "storage-sync",
+        data: { key: "remote", oldValue: { $monkeySharpType: "undefined" }, newValue: 4, sequence: 2 }
+    }), true);
+    assert.equal(globalThis.__readStorageRemote(), 4);
+    assert.equal(globalThis.__storageSyncHandlerCalls, 0);
+
+    assert.equal(globalThis.__MonkeySharpRuntime.receive({
+        type: "notification", protocol: 1, executionId: "storage-execution",
+        deliveryToken: "storage-delivery", event: "storage-sync",
+        data: { key: "remote", oldValue: 4, newValue: 5, sequence: 1 }
+    }), true);
+    assert.equal(globalThis.__readStorageRemote(), 4);
 
     assert.equal(globalThis.__MonkeySharpRuntime.receive({
         type: "notification", protocol: 1, executionId: "storage-execution",

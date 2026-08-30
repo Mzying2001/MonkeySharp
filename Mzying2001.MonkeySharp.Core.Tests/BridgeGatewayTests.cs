@@ -260,9 +260,18 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                     new { listenerId = 1, key = "theme" });
                 await fixture.Store.SetAsync(fixture.Invocation.ScriptKey.ToString(), "theme", "\"dark\"", CancellationToken.None);
 
-                Assert.Equal(2, notifications.Count);
-                Assert.All(notifications, item => Assert.Equal("value-change", item.EventName));
+                Assert.Equal(4, notifications.Count);
+                Assert.Equal(2, notifications.Count(item => item.EventName == "storage-sync"));
+                Assert.Equal(2, notifications.Count(item => item.EventName == "value-change"));
                 Assert.Equal(2, notifications.Select(item => item.ExecutionId).Distinct().Count());
+                Assert.All(notifications.Where(item => item.EventName == "storage-sync"), item =>
+                {
+                    using (var data = JsonDocument.Parse(item.DataJson))
+                    {
+                        Assert.Equal(1, data.RootElement.GetProperty("sequence").GetInt64());
+                        Assert.Equal("theme", data.RootElement.GetProperty("key").GetString());
+                    }
+                });
 
                 await fixture.RequestAsync("GM.removeValueChangeListener", new { listenerId = 1 });
                 await fixture.RequestAsync(
@@ -272,7 +281,53 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                     new { listenerId = 1 });
                 notifications.Clear();
                 await fixture.Store.SetAsync(fixture.Invocation.ScriptKey.ToString(), "theme", "\"light\"", CancellationToken.None);
-                Assert.Empty(notifications);
+                Assert.Equal(2, notifications.Count(item => item.EventName == "storage-sync"));
+                Assert.DoesNotContain(notifications, item => item.EventName == "value-change");
+            }
+        }
+
+        [Fact]
+        public async Task StorageSyncReachesExecutionWithoutListenerAndPreservesOriginMetadata()
+        {
+            using (var fixture = await BridgeFixture.CreateAsync("GM.setValue"))
+            {
+                var secondFrame = BridgeFixture.CreateFrame("doc-two");
+                var secondPlan = await fixture.Engine.ProcessLifecycleAsync(
+                    new DocumentLifecycleEventArgs(DocumentLifecycleKind.DomContentLoaded, secondFrame),
+                    CancellationToken.None);
+                var secondInvocation = Assert.Single(secondPlan.Invocations);
+                var notifications = new List<BridgeNotificationEventArgs>();
+                fixture.Gateway.Notification += (_, item) => notifications.Add(item);
+
+                await fixture.RequestAsync("GM.setValue", new { key = "count", value = 4 });
+
+                Assert.Equal(2, notifications.Count);
+                Assert.All(notifications, item => Assert.Equal("storage-sync", item.EventName));
+                Assert.Contains(notifications, item => item.ExecutionId == fixture.Invocation.ExecutionId);
+                Assert.Contains(notifications, item => item.ExecutionId == secondInvocation.ExecutionId);
+                using (var data = JsonDocument.Parse(notifications[0].DataJson))
+                {
+                    Assert.Equal(fixture.Invocation.ExecutionId,
+                        data.RootElement.GetProperty("originExecutionId").GetString());
+                    Assert.False(string.IsNullOrEmpty(data.RootElement.GetProperty("mutationId").GetString()));
+                }
+            }
+        }
+
+        [Fact]
+        public async Task AcceptedStorageMutationCompletesAfterExecutionEnds()
+        {
+            var store = new DelayedCommitStore();
+            using (var fixture = await BridgeFixture.CreateWithStoreAsync(store, "GM.setValue"))
+            {
+                var request = fixture.RequestAsync("GM.setValue", new { key = "count", value = 1 });
+                await store.Started.Task;
+                await fixture.Engine.InvalidateDocumentAsync(fixture.Frame.DocumentId, CancellationToken.None);
+                store.Release.TrySetResult(null);
+                var response = await request;
+                Assert.True(response.GetProperty("ok").GetBoolean());
+                Assert.Equal("1", (await store.GetAsync(
+                    fixture.Invocation.ScriptKey.ToString(), "count", CancellationToken.None)).JsonValue);
             }
         }
 
@@ -394,6 +449,22 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             }
         }
 
+        private sealed class DelayedCommitStore : InMemoryUserScriptValueStore
+        {
+            public TaskCompletionSource<object> Started { get; } =
+                new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
+            public TaskCompletionSource<object> Release { get; } =
+                new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+            protected override async Task BeforeCommitAsync(
+                string scriptKey, string key, ValueChangeKind kind, CancellationToken cancellationToken)
+            {
+                Started.TrySetResult(null);
+                await Release.Task.ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+        }
+
         private sealed class NotificationProvider :
             IUserScriptApiProvider,
             IUserScriptNotificationSource,
@@ -451,6 +522,24 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             public static Task<BridgeFixture> CreateAsync(params string[] grants)
             {
                 return CreateAsync(null, null, null, grants);
+            }
+
+            public static async Task<BridgeFixture> CreateWithStoreAsync(
+                InMemoryUserScriptValueStore store, params string[] grants)
+            {
+                var repository = new InMemoryUserScriptRepository();
+                var grantLines = string.Join("\n", grants.Select(item => "// @grant " + item));
+                var source = MetadataAndMatchingTests.Script(
+                    "// @name bridge\n// @match https://example.com/*\n// @run-at document-end\n" + grantLines,
+                    "window.bridgeTest = \"'</script>\";");
+                await repository.InstallAsync(source, "test", true, CancellationToken.None);
+                var engine = new UserScriptEngine(repository);
+                var frame = CreateFrame("doc-one");
+                var plan = await engine.ProcessLifecycleAsync(
+                    new DocumentLifecycleEventArgs(DocumentLifecycleKind.DomContentLoaded, frame),
+                    CancellationToken.None);
+                var gateway = new UserScriptBridgeGateway(engine, store, options: null);
+                return new BridgeFixture(store, engine, gateway, frame, plan);
             }
 
             public static async Task<BridgeFixture> CreateAsync(

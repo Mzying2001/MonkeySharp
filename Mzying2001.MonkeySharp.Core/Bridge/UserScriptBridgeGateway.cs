@@ -373,11 +373,16 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                 return Limit(ProtocolJson.Error(requestId, beginError, "The request cannot be started."));
 
             using (var timeout = new CancellationTokenSource(_options.RequestTimeout))
-            using (var linked = CancellationTokenSource.CreateLinkedTokenSource(
-                cancellationToken,
-                execution.Cancellation.Token,
-                pending.Cancellation.Token,
-                timeout.Token))
+            using (var linked = IsValueMutation(method)
+                ? CancellationTokenSource.CreateLinkedTokenSource(
+                    cancellationToken,
+                    pending.Cancellation.Token,
+                    timeout.Token)
+                : CancellationTokenSource.CreateLinkedTokenSource(
+                    cancellationToken,
+                    execution.Cancellation.Token,
+                    pending.Cancellation.Token,
+                    timeout.Token))
             {
                 try
                 {
@@ -385,6 +390,13 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                     {
                         HandleRuntimeError(execution, requestId, parameters);
                         return Limit(ProtocolJson.Success(requestId, ApiResult.Undefined.Json));
+                    }
+
+                    if (method == "runtime.getStorageSnapshot")
+                    {
+                        var snapshot = await BuildStorageBootstrapAsync(execution, linked.Token)
+                            .ConfigureAwait(false);
+                        return Limit(ProtocolJson.Success(requestId, JsonSerializer.Serialize(snapshot)));
                     }
 
                     if (!execution.Installation.Definition.Metadata.Grants.Contains(method))
@@ -572,9 +584,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             var mutation = TakeMutation(args.ScriptKey, args.Key);
             var originExecutionId = args.OriginExecutionId ?? mutation?.OriginExecutionId;
             var mutationId = args.MutationId ?? mutation?.MutationId;
-            var executions = _engine.GetExecutionsForScript(scriptKey)
-                .Where(item => item.Invocation.ExecutionId != originExecutionId)
-                .ToList();
+            var executions = _engine.GetExecutionsForScript(scriptKey).ToList();
             var deliveries = new List<Tuple<UserScriptEngine.ExecutionRecord, ValueListener>>();
             lock (_stateLock)
             {
@@ -595,7 +605,17 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                 args.OldValue.Exists ? args.OldValue.JsonValue : null,
                 args.NewValue.Exists ? args.NewValue.JsonValue : null,
                 mutationId,
-                originExecutionId);
+                originExecutionId,
+                args.Sequence);
+            foreach (var execution in executions)
+            {
+                Notification?.Invoke(this, new BridgeNotificationEventArgs(
+                    execution.Frame,
+                    execution.Invocation.ExecutionId,
+                    execution.Invocation.DeliveryToken,
+                    "storage-sync",
+                    data));
+            }
             foreach (var delivery in deliveries)
             {
                 var listenerData = ReplaceListenerId(data, delivery.Item2.Id);
@@ -677,6 +697,8 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                     values["mutationId"] = mutationId.GetString();
                 if (root.TryGetProperty("originExecutionId", out var origin))
                     values["originExecutionId"] = origin.GetString();
+                if (root.TryGetProperty("sequence", out var sequence))
+                    values["sequence"] = sequence.GetInt64();
                 return JsonSerializer.Serialize(values);
             }
         }
@@ -772,7 +794,10 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
         {
             EnsureObject(parameters);
             var message = ReadOptionalString(parameters, "message") ?? "The userscript failed.";
-            EmitDiagnostic("MSR300_SCRIPT_EXCEPTION", message, null, execution, requestId);
+            var code = ReadOptionalString(parameters, "code");
+            if (!string.Equals(code, "MSC413_COMPATIBILITY_MUTATION_FAILED", StringComparison.Ordinal))
+                code = "MSR300_SCRIPT_EXCEPTION";
+            EmitDiagnostic(code, message, null, execution, requestId);
         }
 
         private void EmitDiagnostic(
