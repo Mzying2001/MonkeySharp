@@ -424,6 +424,32 @@
                     api.saveTab = async value => call(record, "GM.saveTab", { value: serializableValue(value) });
                 }
                 if (enabled("GM.getTabs")) api.getTabs = async () => call(record, "GM.getTabs", {});
+                if (enabled("GM.cookie")) {
+                    api.cookie = Object.freeze({
+                        list: details => call(record, "GM.cookie", { operation: "list", details: serializableValue(details || {}) }),
+                        set: details => call(record, "GM.cookie", { operation: "set", details: serializableValue(details || {}) }),
+                        delete: details => call(record, "GM.cookie", { operation: "delete", details: serializableValue(details || {}) }),
+                        addListener: function (details, callback) {
+                            if (typeof details === "function") { callback = details; details = {}; }
+                            if (typeof callback !== "function") throw new TypeError("callback must be a function.");
+                            const listenerId = nextListenerId++;
+                            record.cookieHandlers.set(listenerId, callback);
+                            call(record, "GM.cookie", {
+                                operation: "addListener", listenerId: listenerId,
+                                details: serializableValue(details || {})
+                            }).catch(error => {
+                                record.cookieHandlers.delete(listenerId);
+                                console.error("[MonkeySharp] cookie listener registration failed", error);
+                            });
+                            return listenerId;
+                        },
+                        removeListener: async function (listenerId) {
+                            const removed = await call(record, "GM.cookie", { operation: "removeListener", listenerId: listenerId });
+                            if (removed) record.cookieHandlers.delete(listenerId);
+                            return removed;
+                        }
+                    });
+                }
                 return Object.freeze(api);
             };
 
@@ -433,6 +459,7 @@
                 "GM_getResourceText", "GM_getResourceURL", "GM_xmlhttpRequest", "GM_registerMenuCommand",
                 "GM_unregisterMenuCommand", "GM_notification", "GM_setClipboard", "GM_openInTab",
                 "GM_download", "GM_getTab", "GM_saveTab", "GM_getTabs"
+                , "GM_cookie"
             ];
 
             const createLegacyFacade = function (record, invocation, api) {
@@ -660,6 +687,25 @@
                     });
                     return handle;
                 };
+                if (api.cookie) facade.GM_cookie = {
+                    list: function (details, callback) {
+                        if (typeof details === "function") { callback = details; details = {}; }
+                        api.cookie.list(details).then(value => { if (typeof callback === "function") callback(value); })
+                            .catch(error => console.error("[MonkeySharp] legacy cookie list failed", error));
+                    },
+                    set: function (details, callback) {
+                        api.cookie.set(details).then(value => { if (typeof callback === "function") callback(value); })
+                            .catch(error => console.error("[MonkeySharp] legacy cookie set failed", error));
+                    },
+                    delete: function (details, callback) {
+                        api.cookie.delete(details).then(value => { if (typeof callback === "function") callback(value); })
+                            .catch(error => console.error("[MonkeySharp] legacy cookie delete failed", error));
+                    },
+                    addListener: function (details, callback) { return api.cookie.addListener(details, callback); },
+                    removeListener: function (listenerId) {
+                        api.cookie.removeListener(listenerId).catch(error => console.error("[MonkeySharp] legacy cookie listener removal failed", error));
+                    }
+                };
                 return facade;
             };
 
@@ -676,6 +722,7 @@
                     downloadHandlers: new Map(),
                     notificationHandlers: new Map(),
                     tabHandlers: [],
+                    cookieHandlers: new Map(),
                     valueListenerKeys: new Map(),
                     mutationTail: Promise.resolve(),
                     storageMirror: null,
@@ -799,6 +846,12 @@
                             if (state.callbacks.onerror) state.callbacks.onerror(new Error(data.message || "The download failed."));
                             record.downloadHandlers.delete(data.downloadId);
                         }
+                        return true;
+                    }
+                    if (notification.event === "cookie-change") {
+                        const callback = record.cookieHandlers.get(data.listenerId);
+                        if (!callback) return false;
+                        callback(data.cookie, data.cause, Boolean(data.removed));
                         return true;
                     }
                     if (notification.event === "xhr-progress") {

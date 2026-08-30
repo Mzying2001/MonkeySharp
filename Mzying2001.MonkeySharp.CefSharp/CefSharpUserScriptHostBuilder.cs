@@ -29,6 +29,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
         private ITabService _tabs;
         private IDownloadService _downloads;
         private ITabStateService _tabState;
+        private ICookieService _cookies;
         private IUserScriptDependencyProvider _dependencies;
         private bool _built;
 
@@ -147,6 +148,15 @@ namespace Mzying2001.MonkeySharp.CefSharp
             return this;
         }
 
+        /// <summary>Enables <c>GM.cookie</c> with a host cookie service.</summary>
+        /// <param name="cookies">The cookie service to use.</param>
+        /// <returns>This builder.</returns>
+        public CefSharpUserScriptHostBuilder UseCookieService(ICookieService cookies)
+        {
+            _cookies = cookies ?? throw new ArgumentNullException(nameof(cookies));
+            return this;
+        }
+
         /// <summary>Routes <c>GM.log</c> values to a host callback.</summary>
         /// <param name="log">The callback that receives log entries.</param>
         /// <returns>This builder.</returns>
@@ -211,6 +221,8 @@ namespace Mzying2001.MonkeySharp.CefSharp
                         _downloads,
                         _tabState));
                 }
+                if (_cookies != null)
+                    providers.Add(new CookieApiProvider(_cookies));
                 var gateway = new UserScriptBridgeGateway(
                     engine,
                     store,
