@@ -23,6 +23,25 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         Manual
     }
 
+    /// <summary>Identifies the JavaScript representation requested for an HTTP response body.</summary>
+    public enum UserScriptHttpResponseType
+    {
+        /// <summary>Decodes the response as text.</summary>
+        Text,
+
+        /// <summary>Decodes and parses the response as JSON.</summary>
+        Json,
+
+        /// <summary>Returns an ArrayBuffer.</summary>
+        ArrayBuffer,
+
+        /// <summary>Returns a Blob.</summary>
+        Blob,
+
+        /// <summary>Returns a ReadableStream backed by host response chunks.</summary>
+        Stream
+    }
+
     /// <summary>
     /// Contains the binary and optional decoded text returned for a declared userscript resource.
     /// </summary>
@@ -122,6 +141,9 @@ namespace Mzying2001.MonkeySharp.Core.Apis
 
         /// <summary>Gets or sets whether Tampermonkey fetch restrictions apply.</summary>
         public bool Fetch { get; set; }
+
+        /// <summary>Gets or sets the requested response representation.</summary>
+        public UserScriptHttpResponseType ResponseType { get; set; }
     }
 
     /// <summary>Describes a validated HTTP request initiated by a userscript.</summary>

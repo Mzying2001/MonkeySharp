@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.IO;
 using System.Linq;
+using System.Net.Mime;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -593,14 +594,29 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     if (response == null)
                         throw new InvalidOperationException("CefSharp returned no HTTP response metadata.");
                     headers = headers ?? ToHeaders(response.Headers);
+                    var mimeType = response.MimeType;
+                    var charset = response.Charset;
+                    if (!string.IsNullOrWhiteSpace(_request.Options.OverrideMimeType))
+                    {
+                        try
+                        {
+                            var contentType = new ContentType(_request.Options.OverrideMimeType);
+                            mimeType = contentType.MediaType;
+                            if (!string.IsNullOrWhiteSpace(contentType.CharSet)) charset = contentType.CharSet;
+                        }
+                        catch (FormatException)
+                        {
+                            mimeType = _request.Options.OverrideMimeType;
+                        }
+                    }
                     _responseMetadata = new UserScriptHttpResponse(
                         response.StatusCode,
                         response.StatusText,
                         _currentUrl,
                         headers,
                         ToRawHeaders(response.Headers),
-                        _request.Options.OverrideMimeType ?? response.MimeType,
-                        response.Charset,
+                        mimeType,
+                        charset,
                         _redirects);
                 }
                 try { _observer.OnResponseStarted(_responseMetadata); }

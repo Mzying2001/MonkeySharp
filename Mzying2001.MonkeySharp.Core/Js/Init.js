@@ -225,6 +225,41 @@
                 throw new TypeError("details.data has an unsupported type.");
             };
 
+            const decodeHttpChunk = function (encoded) {
+                const binary = atob(encoded || "");
+                const bytes = new Uint8Array(binary.length);
+                for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+                return bytes;
+            };
+
+            const invokeHttpCallback = function (handler, name, value) {
+                const callback = handler.callbacks[name];
+                if (typeof callback !== "function") return;
+                try {
+                    callback.call(handler.state, typeof value === "undefined" ? handler.state : value);
+                } catch (error) {
+                    if (root.console && typeof root.console.error === "function") {
+                        root.console.error("[MonkeySharp] XHR callback failed", error);
+                    }
+                }
+            };
+
+            const httpProgress = function (handler, data) {
+                return Object.assign({}, handler.state, {
+                    lengthComputable: data.total !== null && typeof data.total !== "undefined",
+                    loaded: data.loaded,
+                    total: data.total === null || typeof data.total === "undefined" ? 0 : data.total
+                });
+            };
+
+            const updateHttpState = function (handler, data) {
+                handler.state.readyState = data.readyState;
+                handler.state.status = data.status;
+                handler.state.statusText = data.statusText;
+                if (data.finalUrl) handler.state.finalUrl = data.finalUrl;
+                handler.state.responseHeaders = data.responseHeaders || "";
+            };
+
             const createApi = function (record, invocation, availableApis) {
                 const grants = new Set(invocation.grants);
                 const enabled = name => grants.has(name) && availableApis.has(name);
@@ -366,11 +401,24 @@
                         const xhrId = Number.isInteger(details.__monkeySharpXhrId)
                             ? details.__monkeySharpXhrId : nextListenerId++;
                         const callbacks = {
+                            onloadstart: details.onloadstart,
+                            onreadystatechange: details.onreadystatechange,
                             onload: details.onload,
                             onerror: details.onerror,
                             ontimeout: details.ontimeout,
-                            onprogress: details.onprogress
+                            onabort: details.onabort,
+                            onloadend: details.onloadend,
+                            onprogress: details.onprogress,
+                            onuploadprogress: details.onuploadprogress
                         };
+                        if (typeof details.upload !== "undefined") {
+                            if (!details.upload || typeof details.upload !== "object") {
+                                throw new TypeError("upload must be an object.");
+                            }
+                            if (typeof details.upload.onprogress !== "undefined") {
+                                callbacks.onuploadprogress = details.upload.onprogress;
+                            }
+                        }
                         Object.keys(callbacks).forEach(name => {
                             if (typeof callbacks[name] !== "undefined" && typeof callbacks[name] !== "function") {
                                 throw new TypeError(name + " must be a function.");
@@ -410,6 +458,12 @@
                             }
                             parameters.redirect = details.redirect;
                         }
+                        const responseType = typeof details.responseType === "undefined" || details.responseType === ""
+                            ? "text" : details.responseType;
+                        if (!["text", "json", "arraybuffer", "blob", "stream"].includes(responseType)) {
+                            throw new TypeError("responseType is not supported.");
+                        }
+                        parameters.responseType = responseType;
                         if (details.signal && (typeof details.signal.addEventListener !== "function" ||
                             typeof details.signal.removeEventListener !== "function")) {
                             throw new TypeError("signal must be an AbortSignal.");
@@ -423,7 +477,60 @@
                             else details.signal.addEventListener("abort", externalAbort, { once: true });
                         }
                         const signal = controller ? controller.signal : details.signal;
-                        record.xhrHandlers.set(xhrId, callbacks);
+                        const state = {
+                            context: details.context,
+                            finalUrl: requestUrl,
+                            readyState: 0,
+                            response: null,
+                            responseHeaders: "",
+                            responseText: "",
+                            status: 0,
+                            statusText: ""
+                        };
+                        const handler = {
+                            callbacks: callbacks,
+                            state: state,
+                            responseType: responseType,
+                            deferState4: responseType !== "stream",
+                            pendingState4: false,
+                            streamController: null,
+                            streamChunks: [],
+                            streamClosed: false,
+                            terminal: false,
+                            cleanup: null
+                        };
+                        let released = false;
+                        const release = function () {
+                            if (released) return;
+                            released = true;
+                            if (details.signal && externalAbort) details.signal.removeEventListener("abort", externalAbort);
+                            if (sessionId) call(record, "GM.xmlHttpRequest", {
+                                operation: "release", sessionId: sessionId
+                            }).catch(error => console.warn("[MonkeySharp] XHR release failed", error));
+                            record.xhrHandlers.delete(xhrId);
+                        };
+                        handler.cleanup = release;
+                        record.xhrHandlers.set(xhrId, handler);
+                        const abortRequest = function () {
+                            if (controller) controller.abort();
+                            if (sessionId) call(record, "GM.xmlHttpRequest", {
+                                operation: "abort", sessionId: sessionId
+                            }).catch(error => console.warn("[MonkeySharp] XHR abort failed", error));
+                        };
+                        let responseStream = null;
+                        if (responseType === "stream") {
+                            if (typeof ReadableStream !== "function") throw notSupported("ReadableStream is unavailable.");
+                            responseStream = new ReadableStream({
+                                start: function (streamController) {
+                                    handler.streamController = streamController;
+                                    handler.streamChunks.splice(0).forEach(chunk => streamController.enqueue(chunk));
+                                    if (handler.streamClosed) streamController.close();
+                                },
+                                cancel: function () { abortRequest(); }
+                            });
+                            state.response = responseStream;
+                            state.responseText = undefined;
+                        }
                         const operation = (async function () {
                             try {
                                 const body = await serializeHttpBody(details.data);
@@ -444,15 +551,18 @@
                                 const response = await call(record, "GM.xmlHttpRequest", {
                                     operation: "execute", sessionId: sessionId
                                 }, signal);
+                                state.status = response.status;
+                                state.statusText = response.statusText;
+                                state.finalUrl = response.finalUrl || state.finalUrl;
+                                state.responseHeaders = response.responseHeaders || "";
+                                if (responseType === "stream") return state;
                                 const chunks = [];
                                 let length = 0;
                                 while (length < response.bodyLength) {
                                     const result = await call(record, "GM.xmlHttpRequest", {
                                         operation: "readBody", sessionId: sessionId, offset: length
                                     }, signal);
-                                    const binary = atob(result.chunk);
-                                    const chunk = new Uint8Array(binary.length);
-                                    for (let index = 0; index < binary.length; index += 1) chunk[index] = binary.charCodeAt(index);
+                                    const chunk = decodeHttpChunk(result.chunk);
                                     chunks.push(chunk);
                                     length += chunk.length;
                                     if (result.done) break;
@@ -460,36 +570,44 @@
                                 const responseBytes = new Uint8Array(length);
                                 let bodyOffset = 0;
                                 chunks.forEach(chunk => { responseBytes.set(chunk, bodyOffset); bodyOffset += chunk.length; });
-                                try {
-                                    response.responseText = new TextDecoder(response.charset || "utf-8").decode(responseBytes);
-                                } catch (_) {
-                                    response.responseText = new TextDecoder().decode(responseBytes);
+                                let responseText;
+                                try { responseText = new TextDecoder(response.charset || "utf-8").decode(responseBytes); }
+                                catch (_) { responseText = new TextDecoder().decode(responseBytes); }
+                                if (responseType === "json") {
+                                    state.responseText = responseText;
+                                    try { state.response = responseText.length === 0 ? null : JSON.parse(responseText); }
+                                    catch (_) { state.response = null; }
+                                } else if (responseType === "arraybuffer") {
+                                    state.responseText = undefined;
+                                    state.response = responseBytes.buffer;
+                                } else if (responseType === "blob") {
+                                    state.responseText = undefined;
+                                    state.response = new Blob([responseBytes], {
+                                        type: response.mimeType || "application/octet-stream"
+                                    });
+                                } else {
+                                    state.responseText = responseText;
+                                    state.response = responseText;
                                 }
-                                delete response.bodyLength;
-                                delete response.mimeType;
-                                delete response.charset;
-                                if (!details.__monkeySharpLegacy && callbacks.onload) callbacks.onload(response);
-                                return response;
+                                if (handler.pendingState4) invokeHttpCallback(handler, "onreadystatechange");
+                                invokeHttpCallback(handler, "onload");
+                                invokeHttpCallback(handler, "onloadend");
+                                handler.terminal = true;
+                                return state;
                             } catch (error) {
-                                if (!details.__monkeySharpLegacy) {
-                                    if (error.code === "MSP009_TIMEOUT" && callbacks.ontimeout) callbacks.ontimeout(error);
-                                    else if (callbacks.onerror) callbacks.onerror(error);
-                                }
+                                if (error && (error.name === "AbortError" || error.code === "MSP010_CANCELED")) {
+                                    invokeHttpCallback(handler, "onabort", error);
+                                } else if (error && error.code === "MSP009_TIMEOUT") {
+                                    invokeHttpCallback(handler, "ontimeout", error);
+                                } else invokeHttpCallback(handler, "onerror", error);
+                                invokeHttpCallback(handler, "onloadend", error);
+                                handler.terminal = true;
                                 throw error;
                             } finally {
-                                if (details.signal && externalAbort) details.signal.removeEventListener("abort", externalAbort);
-                                if (sessionId) call(record, "GM.xmlHttpRequest", {
-                                    operation: "release", sessionId: sessionId
-                                }).catch(error => console.warn("[MonkeySharp] XHR release failed", error));
-                                record.xhrHandlers.delete(xhrId);
+                                if (responseType !== "stream" || handler.terminal) release();
                             }
                         })();
-                        operation.abort = function () {
-                            if (controller) controller.abort();
-                            if (sessionId) call(record, "GM.xmlHttpRequest", {
-                                operation: "abort", sessionId: sessionId
-                            }).catch(error => console.warn("[MonkeySharp] XHR abort failed", error));
-                        };
+                        operation.abort = abortRequest;
                         return operation;
                     };
                 }
@@ -762,11 +880,11 @@
                     }));
                     const handle = { abort: function () { request.abort(); } };
                     request
-                        .then(response => { if (callbacks.onload) callbacks.onload(response); })
                         .catch(error => {
                             if (error && error.name === "AbortError") return;
-                            if (error && error.code === "MSP009_TIMEOUT" && callbacks.ontimeout) callbacks.ontimeout(error);
-                            else if (callbacks.onerror) callbacks.onerror(error);
+                            if (!callbacks.onerror && !callbacks.ontimeout) {
+                                console.error("[MonkeySharp] legacy XHR failed", error);
+                            }
                         });
                     return handle;
                 };
@@ -1039,10 +1157,50 @@
                         callback(data);
                         return true;
                     }
-                    if (notification.event === "xhr-progress") {
-                        const handlers = record.xhrHandlers.get(data.xhrId);
-                        if (!handlers || !handlers.onprogress) return false;
-                        handlers.onprogress({ loaded: data.loaded, total: data.total });
+                    if (notification.event.indexOf("xhr-") === 0) {
+                        const handler = record.xhrHandlers.get(data.xhrId);
+                        if (!handler) return false;
+                        if (notification.event === "xhr-state") {
+                            updateHttpState(handler, data);
+                            if (data.readyState === 4 && handler.deferState4) handler.pendingState4 = true;
+                            else invokeHttpCallback(handler, "onreadystatechange");
+                            if (data.readyState === 1) invokeHttpCallback(handler, "onloadstart");
+                        } else if (notification.event === "xhr-progress") {
+                            invokeHttpCallback(handler, "onprogress", httpProgress(handler, data));
+                        } else if (notification.event === "xhr-upload-progress") {
+                            invokeHttpCallback(handler, "onuploadprogress", httpProgress(handler, data));
+                        } else if (notification.event === "xhr-chunk") {
+                            const chunk = decodeHttpChunk(data.chunk);
+                            if (handler.streamController) {
+                                try { handler.streamController.enqueue(chunk); } catch (_) { }
+                            }
+                            else handler.streamChunks.push(chunk);
+                        } else if (notification.event === "xhr-complete") {
+                            if (handler.terminal) return true;
+                            handler.streamClosed = true;
+                            if (handler.streamController) {
+                                try { handler.streamController.close(); } catch (_) { }
+                            }
+                            if (handler.pendingState4) invokeHttpCallback(handler, "onreadystatechange");
+                            invokeHttpCallback(handler, "onload");
+                            invokeHttpCallback(handler, "onloadend");
+                            handler.terminal = true;
+                            handler.cleanup();
+                        } else if (notification.event === "xhr-error") {
+                            if (handler.terminal) return true;
+                            const error = new Error(data.message || "The HTTP request failed.");
+                            error.code = data.code;
+                            if (data.code === "MSP010_CANCELED") error.name = "AbortError";
+                            if (handler.streamController) {
+                                try { handler.streamController.error(error); } catch (_) { }
+                            }
+                            if (error.name === "AbortError") invokeHttpCallback(handler, "onabort", error);
+                            else if (error.code === "MSP009_TIMEOUT") invokeHttpCallback(handler, "ontimeout", error);
+                            else invokeHttpCallback(handler, "onerror", error);
+                            invokeHttpCallback(handler, "onloadend", error);
+                            handler.terminal = true;
+                            handler.cleanup();
+                        }
                         return true;
                     }
                     return false;

@@ -5,6 +5,7 @@ using Mzying2001.MonkeySharp.Core.Repository;
 using Mzying2001.MonkeySharp.Core.Runtime;
 using Mzying2001.MonkeySharp.Core.Parsing;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -267,6 +268,40 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             {
                 "https://allowed.example.com/next", "https://denied.example.com/next"
             }, authorized);
+        }
+
+        [Fact]
+        public async Task HttpStreamPublishesRawChunksAndCompletesWithoutBuffering()
+        {
+            var installation = await InstallAsync("// @grant GM.xmlHttpRequest\n// @connect api.example.com");
+            var response = new UserScriptHttpResponse(
+                200, "OK", new Uri("https://api.example.com/stream"),
+                new Dictionary<string, string> { ["Content-Type"] = "text/plain" },
+                "Content-Type: text/plain\r\n", "text/plain", "utf-8");
+            var service = new FakeHttpService(response, Encoding.UTF8.GetBytes("stream body"));
+            var provider = new ResourceAndNetworkApiProvider(http: service);
+            var notifications = new ConcurrentQueue<ApiNotificationEventArgs>();
+            provider.Notification += (_, item) => notifications.Enqueue(item);
+            var created = await provider.InvokeAsync(Context(installation, "GM.xmlHttpRequest", new
+            {
+                operation = "create", xhrId = 17, url = "https://api.example.com/stream", responseType = "stream"
+            }), CancellationToken.None);
+            var sessionId = Json(created.Json).GetProperty("sessionId").GetString();
+
+            var result = await provider.InvokeAsync(Context(installation, "GM.xmlHttpRequest", new
+            {
+                operation = "execute", sessionId
+            }), CancellationToken.None);
+
+            Assert.True(Json(result.Json).GetProperty("streaming").GetBoolean());
+            Assert.Equal(JsonValueKind.Null, Json(result.Json).GetProperty("bodyLength").ValueKind);
+            var deadline = DateTime.UtcNow.AddSeconds(1);
+            while (!notifications.Any(item => item.EventName == "xhr-complete") && DateTime.UtcNow < deadline)
+                await Task.Delay(1);
+            var chunk = Assert.Single(notifications, item => item.EventName == "xhr-chunk");
+            Assert.Equal("stream body", Encoding.UTF8.GetString(Convert.FromBase64String(
+                Json(chunk.DataJson).GetProperty("chunk").GetString())));
+            Assert.Single(notifications, item => item.EventName == "xhr-complete");
         }
 
         [Fact]

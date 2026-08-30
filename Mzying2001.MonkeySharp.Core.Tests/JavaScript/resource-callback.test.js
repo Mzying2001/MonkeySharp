@@ -95,7 +95,8 @@ test("legacy resource and XHR facades use snapshots and abort handles", async ()
     assert.equal(globalThis.__resourceText, "fixture text");
     assert.equal(globalThis.__resourceUrl, "data:text/plain;base64,ZA==");
     assert.equal(globalThis.__handleType, "function");
-    assert.deepEqual(globalThis.__callbackProgress, { loaded: 4, total: 8 });
+    assert.equal(globalThis.__callbackProgress.loaded, 4);
+    assert.equal(globalThis.__callbackProgress.total, 8);
     assert.equal(globalThis.__callbackLoaded.status, 200);
 });
 

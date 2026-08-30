@@ -231,7 +231,8 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                         Redirect = ReadRedirectMode(context.Parameters),
                         NoCache = OptionalBoolean(context.Parameters, "nocache"),
                         Revalidate = OptionalBoolean(context.Parameters, "revalidate"),
-                        Fetch = fetch
+                        Fetch = fetch,
+                        ResponseType = ReadResponseType(context.Parameters)
                     }),
                 RaiseHttpNotification);
             lock (_sessionLock)
@@ -266,6 +267,25 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             if (operation == null)
                 throw new BridgeProtocolException(BridgeErrorCodes.Internal, "The HTTP service returned no operation.");
             session.Start(operation);
+            var completion = CompleteHttpSessionAsync(context, session, operation);
+            if (session.Request.Options.ResponseType == UserScriptHttpResponseType.Stream)
+            {
+                var winner = await Task.WhenAny(session.ResponseStarted, completion).ConfigureAwait(false);
+                if (winner == completion)
+                    await completion.ConfigureAwait(false);
+                var started = await session.ResponseStarted.ConfigureAwait(false);
+                ObserveStreamCompletion(session, completion);
+                return ResponseResult(session, started, true);
+            }
+            var response = await completion.ConfigureAwait(false);
+            return ResponseResult(session, response, false);
+        }
+
+        private async Task<UserScriptHttpResponse> CompleteHttpSessionAsync(
+            ApiInvocationContext context,
+            HttpSession session,
+            IHttpRequestOperation operation)
+        {
             UserScriptHttpResponse response;
             try
             {
@@ -284,6 +304,14 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             if (!ConnectAllows(context.Installation.Definition.Metadata.Connects, context.Frame.Url, response.FinalUrl))
                 throw new BridgeProtocolException(BridgeErrorCodes.PermissionDenied, "A redirect escaped the @connect allowlist.");
             session.Complete(response);
+            return response;
+        }
+
+        private static ApiResult ResponseResult(
+            HttpSession session,
+            UserScriptHttpResponse response,
+            bool streaming)
+        {
             return ApiResult.FromValue(new
             {
                 status = response.Status,
@@ -292,8 +320,15 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 responseHeaders = response.RawHeaders,
                 mimeType = response.MimeType,
                 charset = response.Charset,
-                bodyLength = session.ResponseBodyLength
+                bodyLength = streaming ? (long?)null : session.ResponseBodyLength,
+                streaming
             });
+        }
+
+        private static async void ObserveStreamCompletion(HttpSession session, Task<UserScriptHttpResponse> completion)
+        {
+            try { await completion.ConfigureAwait(false); }
+            catch (Exception exception) { session.Fail(exception); }
         }
 
         private ApiResult ReadHttpBody(ApiInvocationContext context)
@@ -396,11 +431,14 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             private readonly HttpSpoolingBuffer _requestBody = new HttpSpoolingBuffer();
             private readonly HttpSpoolingBuffer _responseBody = new HttpSpoolingBuffer();
             private readonly Action<HttpSession, string, object> _notify;
+            private readonly TaskCompletionSource<UserScriptHttpResponse> _responseStartedTask =
+                new TaskCompletionSource<UserScriptHttpResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
             private IHttpRequestOperation _operation;
             private bool _started;
             private bool _responseStarted;
             private bool _loadingReported;
             private bool _disposed;
+            private UserScriptHttpResponse _response;
 
             public HttpSession(
                 string sessionId,
@@ -425,6 +463,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             public UserScriptHttpRequest Request { get; private set; }
             public long RequestBodyLength => _requestBody.Length;
             public long ResponseBodyLength => _responseBody.Length;
+            public Task<UserScriptHttpResponse> ResponseStarted => _responseStartedTask.Task;
 
             public void AppendRequestBody(byte[] chunk)
             {
@@ -474,8 +513,10 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 {
                     if (_disposed || _responseStarted) return;
                     _responseStarted = true;
+                    _response = response;
                 }
                 ReportReadyState(2, response);
+                _responseStartedTask.TrySetResult(response);
             }
 
             public void OnUploadProgress(long loaded, long? total)
@@ -496,11 +537,20 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 lock (_sync)
                 {
                     ThrowIfDisposed();
-                    _responseBody.Append(buffer, offset, count);
+                    if (Request.Options.ResponseType == UserScriptHttpResponseType.Stream)
+                    {
+                        var chunk = new byte[count];
+                        Buffer.BlockCopy(buffer, offset, chunk, 0, count);
+                        Notify("xhr-chunk", new { xhrId = XhrId, chunk = Convert.ToBase64String(chunk) });
+                    }
+                    else
+                    {
+                        _responseBody.Append(buffer, offset, count);
+                    }
                     if (_loadingReported) return;
                     _loadingReported = true;
                 }
-                ReportReadyState(3);
+                ReportReadyState(3, _response);
             }
 
             public byte[] ReadResponseBody(long offset)
@@ -516,6 +566,22 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             {
                 OnResponseStarted(response);
                 ReportReadyState(4, response);
+                if (Request.Options.ResponseType == UserScriptHttpResponseType.Stream)
+                    Notify("xhr-complete", new { xhrId = XhrId });
+            }
+
+            public void Fail(Exception exception)
+            {
+                var error = exception as BridgeProtocolException;
+                var code = error?.Code ?? (exception is OperationCanceledException
+                    ? BridgeErrorCodes.Canceled : BridgeErrorCodes.Internal);
+                _responseStartedTask.TrySetException(exception);
+                Notify("xhr-error", new
+                {
+                    xhrId = XhrId,
+                    code,
+                    message = exception?.Message ?? "The HTTP request failed."
+                });
             }
 
             public void Abort()
@@ -554,6 +620,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                     _operation = null;
                 }
                 operation?.Abort();
+                _responseStartedTask.TrySetCanceled();
                 _requestBody.Dispose();
                 _responseBody.Dispose();
             }
@@ -618,6 +685,21 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 case "error": return UserScriptHttpRedirectMode.Error;
                 case "manual": return UserScriptHttpRedirectMode.Manual;
                 default: throw ProviderParameters.Invalid("redirect must be 'follow', 'error', or 'manual'.");
+            }
+        }
+
+        private static UserScriptHttpResponseType ReadResponseType(JsonElement parameters)
+        {
+            var value = ProviderParameters.OptionalString(parameters, "responseType") ?? "text";
+            switch (value)
+            {
+                case "":
+                case "text": return UserScriptHttpResponseType.Text;
+                case "json": return UserScriptHttpResponseType.Json;
+                case "arraybuffer": return UserScriptHttpResponseType.ArrayBuffer;
+                case "blob": return UserScriptHttpResponseType.Blob;
+                case "stream": return UserScriptHttpResponseType.Stream;
+                default: throw ProviderParameters.Invalid("responseType is not supported.");
             }
         }
 

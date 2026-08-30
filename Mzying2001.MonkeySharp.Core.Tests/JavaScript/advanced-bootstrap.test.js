@@ -110,8 +110,11 @@ test("advanced APIs use promises, progress notifications, and capability discove
     await globalThis.__advancedPromise;
 
     assert.equal(globalThis.__resource, "resource text");
-    assert.deepEqual(globalThis.__progress, { loaded: 5, total: 10 });
-    assert.deepEqual(globalThis.__loaded, { status: 200, responseText: "done" });
+    assert.equal(globalThis.__progress.loaded, 5);
+    assert.equal(globalThis.__progress.total, 10);
+    assert.equal(globalThis.__progress.lengthComputable, true);
+    assert.equal(globalThis.__loaded.status, 200);
+    assert.equal(globalThis.__loaded.responseText, "done");
     assert.equal(globalThis.__xhr.status, 200);
     assert.equal(globalThis.__signalAdds, 1);
     assert.equal(globalThis.__signalRemoves, 1);
