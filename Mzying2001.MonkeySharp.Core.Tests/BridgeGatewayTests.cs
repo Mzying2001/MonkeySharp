@@ -207,6 +207,43 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Fact]
+        public async Task XmlHttpExecuteIsExemptFromGenericBridgeTimeoutButStillCancelable()
+        {
+            var provider = new BlockingProvider("GM.xmlHttpRequest");
+            using (var fixture = await BridgeFixture.CreateAsync(
+                null,
+                new[] { provider },
+                new BridgeOptions(requestTimeout: TimeSpan.FromMilliseconds(30)),
+                "GM.xmlHttpRequest"))
+            {
+                var requestId = Guid.NewGuid().ToString("D");
+                var request = fixture.RequestAsync(
+                    "GM.xmlHttpRequest",
+                    new { operation = "execute", sessionId = "session" },
+                    requestId: requestId);
+                await provider.Entered.Task;
+                await Task.Delay(80);
+                Assert.False(request.IsCompleted);
+
+                await fixture.CancelAsync(requestId);
+                AssertError(await request, BridgeErrorCodes.Canceled);
+            }
+
+            provider = new BlockingProvider("GM.xmlHttpRequest");
+            using (var fixture = await BridgeFixture.CreateAsync(
+                null,
+                new[] { provider },
+                new BridgeOptions(requestTimeout: TimeSpan.FromMilliseconds(30)),
+                "GM.xmlHttpRequest"))
+            {
+                var timedOut = await fixture.RequestAsync(
+                    "GM.xmlHttpRequest",
+                    new { operation = "create", url = "https://example.com/" });
+                AssertError(timedOut, BridgeErrorCodes.Timeout);
+            }
+        }
+
+        [Fact]
         public async Task PendingAndPayloadLimitsRejectExcessWork()
         {
             var provider = new BlockingProvider();
@@ -425,10 +462,14 @@ namespace Mzying2001.MonkeySharp.Core.Tests
 
         private sealed class BlockingProvider : IUserScriptApiProvider
         {
+            public BlockingProvider(string method = "GM.download")
+            {
+                Methods = new ReadOnlyCollection<string>(new[] { method });
+            }
+
             public TaskCompletionSource<object> Entered { get; } =
                 new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
-            public IReadOnlyCollection<string> Methods { get; } =
-                new ReadOnlyCollection<string>(new[] { "GM.download" });
+            public IReadOnlyCollection<string> Methods { get; }
 
             public async Task<ApiResult> InvokeAsync(ApiInvocationContext context, CancellationToken cancellationToken)
             {

@@ -40,7 +40,7 @@ if ($null -eq $final -or !$final.disposed) {
     Write-Error 'SmokeHost did not report final disposal.'
     exit 1
 }
-foreach ($name in @('storageMirror', 'xhr', 'notification', 'tab', 'download', 'cookie', 'webRequest')) {
+foreach ($name in @('storageMirror', 'xhr', 'xhrExtended', 'notification', 'tab', 'download', 'cookie', 'webRequest')) {
     if (!$summary.$name) {
         Write-Error "SmokeHost API check failed: $name"
         exit 1

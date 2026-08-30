@@ -26,6 +26,16 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             }
         }
 
+        internal bool IsFileBacked
+        {
+            get { lock (_sync) { ThrowIfDisposed(); return _file != null; } }
+        }
+
+        internal string TemporaryPath
+        {
+            get { lock (_sync) { ThrowIfDisposed(); return _path; } }
+        }
+
         public void Append(byte[] buffer, int offset, int count)
         {
             if (buffer == null) throw new ArgumentNullException(nameof(buffer));

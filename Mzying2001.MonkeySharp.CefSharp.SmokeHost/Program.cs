@@ -5,6 +5,7 @@ using Mzying2001.MonkeySharp.CefSharp;
 using Mzying2001.MonkeySharp.Core.Repository;
 using Mzying2001.MonkeySharp.Core.Runtime;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -126,6 +127,21 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             "    var legacyTab = GM_openInTab(location.href, { active: false }); setTimeout(function () { legacyTab.close(); }, 25);\n" +
             "    GM_download({ url: location.href, name: 'smoke.txt', onprogress: function () { smoke.downloadProgress = true; }, onload: function () { smoke.downloadCompleted = true; } });\n" +
             "    GM_xmlhttpRequest({ url: location.origin + '/xhr', onprogress: function (progress) { smoke.xhr.push('progress'); }, onload: function (response) { smoke.xhr.push('load'); smoke.responseText = response.responseText; } });\n" +
+            "    smoke.extended = {};\n" +
+            "    var echo = await GM.xmlHttpRequest({ url: location.origin + '/echo', method: 'PROPFIND', data: new Uint8Array([65, 0, 66]), responseType: 'arraybuffer', headers: { 'X-Smoke': 'echo' } });\n" +
+            "    var echoBytes = new Uint8Array(echo.response); smoke.extended.echo = echo.status === 200 && echoBytes.length === 3 && echoBytes[0] === 65 && echoBytes[1] === 0 && echoBytes[2] === 66 && echo.responseHeaders.indexOf('X-Echo-Method: PROPFIND') >= 0;\n" +
+            "    var cookieXhr = await GM.xmlHttpRequest({ url: location.origin + '/cookie' });\n" +
+            "    var anonymousXhr = await GM.xmlHttpRequest({ url: location.origin + '/cookie', anonymous: true });\n" +
+            "    smoke.extended.cookies = cookieXhr.responseText.indexOf('smoke-cookie=changed') >= 0 && anonymousXhr.responseText.indexOf('smoke-cookie') < 0;\n" +
+            "    var auth = await GM.xmlHttpRequest({ url: location.origin + '/auth', user: 'alice', password: 'secret' }); smoke.extended.auth = auth.status === 200 && auth.responseText === 'auth ok';\n" +
+            "    var redirect = await GM.xmlHttpRequest({ url: location.origin + '/redirect' }); smoke.extended.redirect = redirect.status === 200 && /redirect-target$/.test(redirect.finalUrl) && redirect.responseText === 'redirect ok';\n" +
+            "    var binary = await GM.xmlHttpRequest({ url: location.origin + '/binary', responseType: 'arraybuffer' }); var binaryBytes = new Uint8Array(binary.response); smoke.extended.binary = binaryBytes.length === 4 && binaryBytes[3] === 255;\n" +
+            "    var large = await GM.xmlHttpRequest({ url: location.origin + '/large' }); smoke.extended.large = large.responseText.length === 1200000;\n" +
+            "    var duplicate = await GM.xmlHttpRequest({ url: location.origin + '/headers' }); smoke.extended.headers = duplicate.responseHeaders.indexOf('X-Duplicate: one') >= 0 && duplicate.responseHeaders.indexOf('X-Duplicate: two') >= 0;\n" +
+            "    var streamed = await GM.xmlHttpRequest({ url: location.origin + '/stream', responseType: 'stream' }); var reader = streamed.response.getReader(); var streamText = ''; while (true) { var part = await reader.read(); if (part.done) break; streamText += new TextDecoder().decode(part.value); } smoke.extended.stream = streamText === 'stream body';\n" +
+            "    try { await GM.xmlHttpRequest({ url: location.origin + '/slow', timeout: 50, ontimeout: function () { smoke.extended.timeout = true; } }); } catch (ignore) {}\n" +
+            "    await new Promise(function (resolve) { var pending = GM.xmlHttpRequest({ url: location.origin + '/slow', onabort: function () { smoke.extended.abort = true; resolve(); }, onerror: resolve }); pending.catch(function () {}); setTimeout(function () { pending.abort(); }, 20); });\n" +
+            "    smoke.apis.xmlhttpExtended = Object.keys(smoke.extended).length === 10 && Object.keys(smoke.extended).every(function (key) { return smoke.extended[key] === true; });\n" +
             "    await new Promise(function (resolve) { setTimeout(resolve, 350); });\n" +
             "    smoke.apis.notification = smoke.notificationDone === true;\n" +
             "    smoke.apis.tab = Boolean(smoke.tab && smoke.tab.id);\n" +
@@ -156,6 +172,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
         private string _initialFixtureJson;
         private bool _storageMirrorVerified;
         private bool _xhrVerified;
+        private bool _xhrExtendedVerified;
         private bool _notificationVerified;
         private bool _tabVerified;
         private bool _downloadVerified;
@@ -308,8 +325,9 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                         _downloadVerified = apis.GetProperty("download").GetBoolean();
                         _cookieVerified = apis.GetProperty("cookie").GetBoolean();
                         _webRequestVerified = apis.GetProperty("webRequest").GetBoolean();
+                        _xhrExtendedVerified = apis.GetProperty("xmlhttpExtended").GetBoolean();
                         return _notificationVerified && _tabVerified && _downloadVerified &&
-                            _cookieVerified && _webRequestVerified;
+                            _cookieVerified && _webRequestVerified && _xhrExtendedVerified;
                     }
                     return true;
                 }
@@ -359,6 +377,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                 fixtureResult = fixture,
                 storageMirror = _storageMirrorVerified,
                 xhr = _xhrVerified,
+                xhrExtended = _xhrExtendedVerified,
                 notification = _notificationVerified,
                 tab = _tabVerified,
                 download = _downloadVerified,
@@ -458,22 +477,79 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             using (client)
             using (var stream = client.GetStream())
             {
-                var requestBuffer = new byte[4096];
                 try
                 {
-                    await stream.ReadAsync(requestBuffer, 0, requestBuffer.Length).ConfigureAwait(false);
-                    var requestText = Encoding.ASCII.GetString(requestBuffer);
-                    var isXhr = requestText.StartsWith("GET /xhr", StringComparison.OrdinalIgnoreCase);
-                    var body = isXhr
-                        ? Encoding.UTF8.GetBytes("legacy xhr ok")
-                        : Encoding.UTF8.GetBytes(
-                            "<!doctype html><html><head><title>MonkeySharp smoke</title></head>" +
-                            "<body><main id='smoke-fixture'>loopback fixture</main></body></html>");
-                    var header = Encoding.ASCII.GetBytes(
-                        "HTTP/1.1 200 OK\r\nContent-Type: " + (isXhr ? "text/plain" : "text/html") + "; charset=utf-8\r\n" +
-                        "Content-Length: " + body.Length + "\r\nConnection: close\r\n\r\n");
-                    await stream.WriteAsync(header, 0, header.Length).ConfigureAwait(false);
-                    await stream.WriteAsync(body, 0, body.Length).ConfigureAwait(false);
+                    var request = await ReadRequestAsync(stream).ConfigureAwait(false);
+                    if (request == null) return;
+                    if (request.Path == "/stream")
+                    {
+                        await WriteChunkedAsync(stream).ConfigureAwait(false);
+                        return;
+                    }
+                    if (request.Path == "/slow") await Task.Delay(500).ConfigureAwait(false);
+
+                    var status = 200;
+                    var statusText = "OK";
+                    var contentType = "text/plain; charset=utf-8";
+                    var headers = new List<KeyValuePair<string, string>>();
+                    byte[] body;
+                    switch (request.Path)
+                    {
+                        case "/xhr":
+                            body = Encoding.UTF8.GetBytes("legacy xhr ok");
+                            break;
+                        case "/echo":
+                            body = request.Body;
+                            headers.Add(new KeyValuePair<string, string>("X-Echo-Method", request.Method));
+                            break;
+                        case "/cookie":
+                            request.Headers.TryGetValue("Cookie", out var cookie);
+                            body = Encoding.UTF8.GetBytes(cookie ?? string.Empty);
+                            break;
+                        case "/auth":
+                            request.Headers.TryGetValue("Authorization", out var authorization);
+                            if (authorization != "Basic " + Convert.ToBase64String(Encoding.UTF8.GetBytes("alice:secret")))
+                            {
+                                status = 401;
+                                statusText = "Unauthorized";
+                                headers.Add(new KeyValuePair<string, string>("WWW-Authenticate", "Basic realm=\"MonkeySharp\""));
+                                body = Encoding.UTF8.GetBytes("auth required");
+                            }
+                            else body = Encoding.UTF8.GetBytes("auth ok");
+                            break;
+                        case "/redirect":
+                            status = 302;
+                            statusText = "Found";
+                            headers.Add(new KeyValuePair<string, string>("Location", "/redirect-target"));
+                            body = new byte[0];
+                            break;
+                        case "/redirect-target":
+                            body = Encoding.UTF8.GetBytes("redirect ok");
+                            break;
+                        case "/binary":
+                            contentType = "application/octet-stream";
+                            body = new byte[] { 0, 1, 2, 255 };
+                            break;
+                        case "/large":
+                            body = Enumerable.Repeat((byte)'x', 1200000).ToArray();
+                            break;
+                        case "/headers":
+                            headers.Add(new KeyValuePair<string, string>("X-Duplicate", "one"));
+                            headers.Add(new KeyValuePair<string, string>("X-Duplicate", "two"));
+                            body = Encoding.UTF8.GetBytes("headers");
+                            break;
+                        case "/slow":
+                            body = Encoding.UTF8.GetBytes("too slow");
+                            break;
+                        default:
+                            contentType = "text/html; charset=utf-8";
+                            body = Encoding.UTF8.GetBytes(
+                                "<!doctype html><html><head><title>MonkeySharp smoke</title></head>" +
+                                "<body><main id='smoke-fixture'>loopback fixture</main></body></html>");
+                            break;
+                    }
+                    await WriteResponseAsync(stream, status, statusText, contentType, headers, body)
+                        .ConfigureAwait(false);
                 }
                 catch (IOException)
                 {
@@ -482,6 +558,113 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                 {
                 }
             }
+        }
+
+        private static async Task<HttpRequestData> ReadRequestAsync(NetworkStream stream)
+        {
+            var buffer = new byte[4096];
+            using (var received = new MemoryStream())
+            {
+                var headerEnd = -1;
+                while (headerEnd < 0)
+                {
+                    var count = await stream.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false);
+                    if (count == 0) return null;
+                    received.Write(buffer, 0, count);
+                    if (received.Length > 64 * 1024) throw new IOException("HTTP request headers are too large.");
+                    headerEnd = FindHeaderEnd(received.GetBuffer(), (int)received.Length);
+                }
+                var all = received.ToArray();
+                var headerText = Encoding.ASCII.GetString(all, 0, headerEnd);
+                var lines = headerText.Split(new[] { "\r\n" }, StringSplitOptions.None);
+                var requestLine = lines[0].Split(' ');
+                var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var line in lines.Skip(1))
+                {
+                    var separator = line.IndexOf(':');
+                    if (separator > 0)
+                        headers[line.Substring(0, separator).Trim()] = line.Substring(separator + 1).Trim();
+                }
+                var contentLength = 0;
+                if (headers.TryGetValue("Content-Length", out var lengthText)) int.TryParse(lengthText, out contentLength);
+                var body = new byte[contentLength];
+                var available = Math.Min(contentLength, all.Length - headerEnd - 4);
+                if (available > 0) Buffer.BlockCopy(all, headerEnd + 4, body, 0, available);
+                var offset = available;
+                while (offset < contentLength)
+                {
+                    var count = await stream.ReadAsync(body, offset, contentLength - offset).ConfigureAwait(false);
+                    if (count == 0) break;
+                    offset += count;
+                }
+                return new HttpRequestData(requestLine[0], requestLine[1].Split('?')[0], headers, body);
+            }
+        }
+
+        private static int FindHeaderEnd(byte[] buffer, int length)
+        {
+            for (var index = 0; index <= length - 4; index++)
+            {
+                if (buffer[index] == 13 && buffer[index + 1] == 10 &&
+                    buffer[index + 2] == 13 && buffer[index + 3] == 10)
+                    return index;
+            }
+            return -1;
+        }
+
+        private static async Task WriteResponseAsync(
+            NetworkStream stream,
+            int status,
+            string statusText,
+            string contentType,
+            IEnumerable<KeyValuePair<string, string>> headers,
+            byte[] body)
+        {
+            var builder = new StringBuilder()
+                .Append("HTTP/1.1 ").Append(status).Append(' ').Append(statusText).Append("\r\n")
+                .Append("Content-Type: ").Append(contentType).Append("\r\n")
+                .Append("Content-Length: ").Append(body.Length).Append("\r\n");
+            foreach (var header in headers)
+                builder.Append(header.Key).Append(": ").Append(header.Value).Append("\r\n");
+            builder.Append("Connection: close\r\n\r\n");
+            var headerBytes = Encoding.ASCII.GetBytes(builder.ToString());
+            await stream.WriteAsync(headerBytes, 0, headerBytes.Length).ConfigureAwait(false);
+            await stream.WriteAsync(body, 0, body.Length).ConfigureAwait(false);
+        }
+
+        private static async Task WriteChunkedAsync(NetworkStream stream)
+        {
+            var header = Encoding.ASCII.GetBytes(
+                "HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\n" +
+                "Transfer-Encoding: chunked\r\nConnection: close\r\n\r\n");
+            await stream.WriteAsync(header, 0, header.Length).ConfigureAwait(false);
+            foreach (var text in new[] { "stream ", "body" })
+            {
+                var body = Encoding.UTF8.GetBytes(text);
+                var prefix = Encoding.ASCII.GetBytes(body.Length.ToString("X") + "\r\n");
+                await stream.WriteAsync(prefix, 0, prefix.Length).ConfigureAwait(false);
+                await stream.WriteAsync(body, 0, body.Length).ConfigureAwait(false);
+                await stream.WriteAsync(new byte[] { 13, 10 }, 0, 2).ConfigureAwait(false);
+                await Task.Delay(40).ConfigureAwait(false);
+            }
+            var end = Encoding.ASCII.GetBytes("0\r\n\r\n");
+            await stream.WriteAsync(end, 0, end.Length).ConfigureAwait(false);
+        }
+
+        private sealed class HttpRequestData
+        {
+            public HttpRequestData(string method, string path, IDictionary<string, string> headers, byte[] body)
+            {
+                Method = method;
+                Path = path;
+                Headers = headers;
+                Body = body;
+            }
+
+            public string Method { get; }
+            public string Path { get; }
+            public IDictionary<string, string> Headers { get; }
+            public byte[] Body { get; }
         }
     }
 

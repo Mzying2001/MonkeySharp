@@ -385,6 +385,44 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
         }
 
         [Fact]
+        public void HttpRequestPolicyMapsCacheCredentialsAndChromiumRedirects()
+        {
+            var defaults = CefSharpHttpRequestPolicy.RequestFlags(new UserScriptHttpRequestOptions());
+            Assert.True(defaults.HasFlag(UrlRequestFlags.AllowStoredCredentials));
+            Assert.True(defaults.HasFlag(UrlRequestFlags.StopOnRedirect));
+            Assert.True(defaults.HasFlag(UrlRequestFlags.ReportUploadProgress));
+
+            var anonymous = CefSharpHttpRequestPolicy.RequestFlags(new UserScriptHttpRequestOptions
+            {
+                Anonymous = true,
+                NoCache = true,
+                Revalidate = true
+            });
+            Assert.False(anonymous.HasFlag(UrlRequestFlags.AllowStoredCredentials));
+            Assert.True(anonymous.HasFlag(UrlRequestFlags.DisableCache));
+            Assert.False(anonymous.HasFlag(UrlRequestFlags.SkipCache));
+            var revalidate = CefSharpHttpRequestPolicy.RequestFlags(new UserScriptHttpRequestOptions
+            {
+                Revalidate = true
+            });
+            Assert.True(revalidate.HasFlag(UrlRequestFlags.SkipCache));
+
+            Assert.True(CefSharpHttpRequestPolicy.DropsBodyOnRedirect(301, "POST"));
+            Assert.True(CefSharpHttpRequestPolicy.DropsBodyOnRedirect(302, "post"));
+            Assert.True(CefSharpHttpRequestPolicy.DropsBodyOnRedirect(303, "PUT"));
+            Assert.False(CefSharpHttpRequestPolicy.DropsBodyOnRedirect(303, "HEAD"));
+            Assert.False(CefSharpHttpRequestPolicy.DropsBodyOnRedirect(307, "POST"));
+            Assert.False(CefSharpHttpRequestPolicy.DropsBodyOnRedirect(308, "POST"));
+
+            Assert.True(CefSharpHttpRequestPolicy.SameOrigin(
+                new Uri("https://example.com/a"), new Uri("https://example.com/b")));
+            Assert.False(CefSharpHttpRequestPolicy.SameOrigin(
+                new Uri("https://example.com/"), new Uri("http://example.com/")));
+            Assert.False(CefSharpHttpRequestPolicy.SameOrigin(
+                new Uri("https://example.com/"), new Uri("https://example.com:444/")));
+        }
+
+        [Fact]
         public void RequestHandlerMultiplexerCombinesResourceHandlers()
         {
             var firstEvents = new ConcurrentQueue<WebRequestEvent>();

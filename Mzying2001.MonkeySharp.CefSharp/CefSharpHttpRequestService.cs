@@ -14,6 +14,34 @@ using System.Threading.Tasks;
 
 namespace Mzying2001.MonkeySharp.CefSharp
 {
+    internal static class CefSharpHttpRequestPolicy
+    {
+        internal static UrlRequestFlags RequestFlags(UserScriptHttpRequestOptions options)
+        {
+            if (options == null) throw new ArgumentNullException(nameof(options));
+            var flags = UrlRequestFlags.StopOnRedirect | UrlRequestFlags.ReportUploadProgress;
+            if (!options.Anonymous) flags |= UrlRequestFlags.AllowStoredCredentials;
+            if (options.NoCache) flags |= UrlRequestFlags.DisableCache;
+            else if (options.Revalidate) flags |= UrlRequestFlags.SkipCache;
+            return flags;
+        }
+
+        internal static bool DropsBodyOnRedirect(int statusCode, string method)
+        {
+            return statusCode == 303 && !string.Equals(method, "HEAD", StringComparison.OrdinalIgnoreCase) ||
+                (statusCode == 301 || statusCode == 302) &&
+                string.Equals(method, "POST", StringComparison.OrdinalIgnoreCase);
+        }
+
+        internal static bool SameOrigin(Uri first, Uri second)
+        {
+            return first != null && second != null &&
+                string.Equals(first.Scheme, second.Scheme, StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(first.IdnHost, second.IdnHost, StringComparison.OrdinalIgnoreCase) &&
+                first.Port == second.Port;
+        }
+    }
+
     /// <summary>
     /// Executes userscript HTTP requests through CefSharp's URL request API.
     /// </summary>
@@ -190,13 +218,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     _currentUrl = url;
                     cefRequest.Url = url.AbsoluteUri;
                     cefRequest.Method = _currentMethod;
-                    cefRequest.Flags = UrlRequestFlags.StopOnRedirect | UrlRequestFlags.ReportUploadProgress;
-                    if (!_request.Options.Anonymous)
-                        cefRequest.Flags |= UrlRequestFlags.AllowStoredCredentials;
-                    if (_request.Options.NoCache)
-                        cefRequest.Flags |= UrlRequestFlags.DisableCache;
-                    else if (_request.Options.Revalidate)
-                        cefRequest.Flags |= UrlRequestFlags.SkipCache;
+                    cefRequest.Flags = CefSharpHttpRequestPolicy.RequestFlags(_request.Options);
                     foreach (var header in _request.Headers)
                     {
                         if (!string.Equals(header.Key, "Cookie", StringComparison.OrdinalIgnoreCase) &&
@@ -304,7 +326,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                             "The HTTP request exceeded the maximum redirect count."), true);
                         return;
                     }
-                    if (!SameOrigin(_currentUrl, target)) _allowExplicitCredentials = false;
+                    if (!CefSharpHttpRequestPolicy.SameOrigin(_currentUrl, target)) _allowExplicitCredentials = false;
                     _redirects.Add(target);
                     DisposeRequestOnUi(oldRequest, oldUrlRequest);
                     BeginOnUi(target);
@@ -565,21 +587,11 @@ namespace Mzying2001.MonkeySharp.CefSharp
 
             private void ApplyRedirectMethod(int statusCode)
             {
-                if ((statusCode == 303 && !string.Equals(_currentMethod, "HEAD", StringComparison.OrdinalIgnoreCase)) ||
-                    ((statusCode == 301 || statusCode == 302) &&
-                     string.Equals(_currentMethod, "POST", StringComparison.OrdinalIgnoreCase)))
+                if (CefSharpHttpRequestPolicy.DropsBodyOnRedirect(statusCode, _currentMethod))
                 {
                     _currentMethod = "GET";
                     _sendBody = false;
                 }
-            }
-
-            private static bool SameOrigin(Uri first, Uri second)
-            {
-                return first != null && second != null &&
-                    string.Equals(first.Scheme, second.Scheme, StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(first.IdnHost, second.IdnHost, StringComparison.OrdinalIgnoreCase) &&
-                    first.Port == second.Port;
             }
 
             private UserScriptHttpResponse EnsureResponseStarted(
