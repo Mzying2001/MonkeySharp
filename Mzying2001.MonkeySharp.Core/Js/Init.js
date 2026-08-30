@@ -298,7 +298,7 @@
                     };
                 }
                 if (enabled("GM.xmlHttpRequest")) {
-                    api.xmlHttpRequest = async function (details) {
+                    api.xmlHttpRequest = function (details) {
                         if (!details || typeof details !== "object" || typeof details.url !== "string") {
                             throw new TypeError("details.url must be a string.");
                         }
@@ -315,32 +315,94 @@
                                 throw new TypeError(name + " must be a function.");
                             }
                         });
-                        const parameters = { xhrId: xhrId, url: details.url };
-                        ["method", "data"].forEach(name => {
-                            if (typeof details[name] !== "undefined") {
-                                if (typeof details[name] !== "string") throw new TypeError(name + " must be a string.");
-                                parameters[name] = details[name];
-                            }
-                        });
+                        const parameters = { operation: "create", xhrId: xhrId, url: details.url };
+                        if (typeof details.method !== "undefined") {
+                            if (typeof details.method !== "string") throw new TypeError("method must be a string.");
+                            parameters.method = details.method;
+                        }
+                        if (typeof details.data !== "undefined" && typeof details.data !== "string") {
+                            throw new TypeError("data must be a string.");
+                        }
                         if (typeof details.headers !== "undefined") parameters.headers = serializableValue(details.headers);
                         if (typeof details.timeout !== "undefined") {
                             if (!Number.isInteger(details.timeout) || details.timeout <= 0) throw new TypeError("timeout must be positive.");
                             parameters.timeout = details.timeout;
                         }
-                        record.xhrHandlers.set(xhrId, callbacks);
-                        try {
-                            const response = await call(record, "GM.xmlHttpRequest", parameters, details.signal);
-                            if (!details.__monkeySharpLegacy && callbacks.onload) callbacks.onload(response);
-                            return response;
-                        } catch (error) {
-                            if (!details.__monkeySharpLegacy) {
-                                if (error.code === "MSP009_TIMEOUT" && callbacks.ontimeout) callbacks.ontimeout(error);
-                                else if (callbacks.onerror) callbacks.onerror(error);
-                            }
-                            throw error;
-                        } finally {
-                            record.xhrHandlers.delete(xhrId);
+                        const controller = typeof AbortController === "function" ? new AbortController() : null;
+                        let sessionId = null;
+                        let externalAbort;
+                        if (details.signal && controller) {
+                            externalAbort = () => controller.abort();
+                            if (details.signal.aborted) externalAbort();
+                            else details.signal.addEventListener("abort", externalAbort, { once: true });
                         }
+                        const signal = controller ? controller.signal : details.signal;
+                        record.xhrHandlers.set(xhrId, callbacks);
+                        const operation = (async function () {
+                            try {
+                                const created = await call(record, "GM.xmlHttpRequest", parameters, signal);
+                                sessionId = created.sessionId;
+                                if (typeof details.data === "string" && details.data.length !== 0) {
+                                    const bytes = new TextEncoder().encode(details.data);
+                                    for (let offset = 0; offset < bytes.length; offset += 65536) {
+                                        const segment = bytes.subarray(offset, Math.min(offset + 65536, bytes.length));
+                                        let binary = "";
+                                        for (let index = 0; index < segment.length; index += 1) binary += String.fromCharCode(segment[index]);
+                                        await call(record, "GM.xmlHttpRequest", {
+                                            operation: "appendBody", sessionId: sessionId, chunk: btoa(binary)
+                                        }, signal);
+                                    }
+                                }
+                                const response = await call(record, "GM.xmlHttpRequest", {
+                                    operation: "execute", sessionId: sessionId
+                                }, signal);
+                                const chunks = [];
+                                let length = 0;
+                                while (length < response.bodyLength) {
+                                    const result = await call(record, "GM.xmlHttpRequest", {
+                                        operation: "readBody", sessionId: sessionId, offset: length
+                                    }, signal);
+                                    const binary = atob(result.chunk);
+                                    const chunk = new Uint8Array(binary.length);
+                                    for (let index = 0; index < binary.length; index += 1) chunk[index] = binary.charCodeAt(index);
+                                    chunks.push(chunk);
+                                    length += chunk.length;
+                                    if (result.done) break;
+                                }
+                                const body = new Uint8Array(length);
+                                let bodyOffset = 0;
+                                chunks.forEach(chunk => { body.set(chunk, bodyOffset); bodyOffset += chunk.length; });
+                                try {
+                                    response.responseText = new TextDecoder(response.charset || "utf-8").decode(body);
+                                } catch (_) {
+                                    response.responseText = new TextDecoder().decode(body);
+                                }
+                                delete response.bodyLength;
+                                delete response.mimeType;
+                                delete response.charset;
+                                if (!details.__monkeySharpLegacy && callbacks.onload) callbacks.onload(response);
+                                return response;
+                            } catch (error) {
+                                if (!details.__monkeySharpLegacy) {
+                                    if (error.code === "MSP009_TIMEOUT" && callbacks.ontimeout) callbacks.ontimeout(error);
+                                    else if (callbacks.onerror) callbacks.onerror(error);
+                                }
+                                throw error;
+                            } finally {
+                                if (details.signal && externalAbort) details.signal.removeEventListener("abort", externalAbort);
+                                if (sessionId) call(record, "GM.xmlHttpRequest", {
+                                    operation: "release", sessionId: sessionId
+                                }).catch(error => console.warn("[MonkeySharp] XHR release failed", error));
+                                record.xhrHandlers.delete(xhrId);
+                            }
+                        })();
+                        operation.abort = function () {
+                            if (controller) controller.abort();
+                            if (sessionId) call(record, "GM.xmlHttpRequest", {
+                                operation: "abort", sessionId: sessionId
+                            }).catch(error => console.warn("[MonkeySharp] XHR abort failed", error));
+                        };
+                        return operation;
                     };
                 }
                 if (enabled("GM.registerMenuCommand")) {

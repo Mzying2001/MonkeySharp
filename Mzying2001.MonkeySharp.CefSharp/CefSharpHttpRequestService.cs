@@ -8,7 +8,6 @@ using System.Collections.Specialized;
 using System.IO;
 using System.Linq;
 using System.Text;
-using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -60,12 +59,16 @@ namespace Mzying2001.MonkeySharp.CefSharp
         public int MaximumRedirects { get; } = 20;
 
         /// <inheritdoc />
-        public IHttpRequestOperation SendAsync(UserScriptHttpRequest request, CancellationToken cancellationToken)
+        public IHttpRequestOperation SendAsync(
+            UserScriptHttpRequest request,
+            IUserScriptHttpObserver observer,
+            CancellationToken cancellationToken)
         {
             if (request == null) throw new ArgumentNullException(nameof(request));
+            if (observer == null) throw new ArgumentNullException(nameof(observer));
             ThrowIfDisposed();
             cancellationToken.ThrowIfCancellationRequested();
-            var operation = new Operation(this, request, cancellationToken, _contextAccessor, _webRequestService);
+            var operation = new Operation(this, request, observer, cancellationToken, _contextAccessor, _webRequestService);
             lock (_sync)
             {
                 if (_disposed) throw new ObjectDisposedException(nameof(CefSharpHttpRequestService));
@@ -106,12 +109,12 @@ namespace Mzying2001.MonkeySharp.CefSharp
         {
             private readonly CefSharpHttpRequestService _owner;
             private readonly UserScriptHttpRequest _request;
+            private readonly IUserScriptHttpObserver _observer;
             private readonly CancellationTokenSource _cancellation;
             private readonly Func<IRequestContext> _contextAccessor;
             private readonly IWebRequestService _webRequests;
             private readonly TaskCompletionSource<UserScriptHttpResponse> _completion =
                 new TaskCompletionSource<UserScriptHttpResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
-            private readonly MemoryStream _body = new MemoryStream();
             private readonly List<Uri> _redirects = new List<Uri>();
             private readonly object _sync = new object();
             private IUrlRequest _urlRequest;
@@ -121,14 +124,17 @@ namespace Mzying2001.MonkeySharp.CefSharp
             private CancellationTokenRegistration _cancellationRegistration;
             private int _redirectCount;
             private int _completed;
-            private IProgress<UserScriptHttpProgress> _progress;
+            private UserScriptHttpResponse _responseMetadata;
+            private long _downloaded;
 
             public Operation(CefSharpHttpRequestService owner, UserScriptHttpRequest request,
+                IUserScriptHttpObserver observer,
                 CancellationToken cancellationToken, Func<IRequestContext> contextAccessor,
                 IWebRequestService webRequests)
             {
                 _owner = owner;
                 _request = request;
+                _observer = observer;
                 _contextAccessor = contextAccessor;
                 _webRequests = webRequests;
                 _cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -136,12 +142,6 @@ namespace Mzying2001.MonkeySharp.CefSharp
             }
 
             public Task<UserScriptHttpResponse> Completion { get; }
-
-            public IProgress<UserScriptHttpProgress> Progress
-            {
-                get { lock (_sync) return _progress; }
-                set { lock (_sync) _progress = value; }
-            }
 
             public void Start()
             {
@@ -183,17 +183,27 @@ namespace Mzying2001.MonkeySharp.CefSharp
                         UrlRequestFlags.StopOnRedirect | UrlRequestFlags.ReportUploadProgress;
                     foreach (var header in _request.Headers)
                         cefRequest.SetHeaderByName(header.Key, header.Value, true);
-                    if (!string.IsNullOrEmpty(_request.Body))
+                    if (_request.Body != null && _request.Body.Length != 0)
                     {
                         cefRequest.InitializePostData();
-                        IPostDataElement element;
+                        using (var body = _request.Body.OpenRead())
+                        {
+                            var buffer = new byte[64 * 1024];
+                            int count;
+                            while ((count = body.Read(buffer, 0, buffer.Length)) > 0)
+                            {
+                                IPostDataElement element;
 #if CEF_SHARP_LEGACY_REQUEST_FACTORY
-                        element = new PostDataElement();
+                                element = new PostDataElement();
 #else
-                        element = PostDataElement.Create();
+                                element = PostDataElement.Create();
 #endif
-                        element.Bytes = Encoding.UTF8.GetBytes(_request.Body);
-                        cefRequest.PostData.AddElement(element);
+                                var bytes = new byte[count];
+                                Buffer.BlockCopy(buffer, 0, bytes, 0, count);
+                                element.Bytes = bytes;
+                                cefRequest.PostData.AddElement(element);
+                            }
+                        }
                     }
 
                     if (_webRequests != null)
@@ -257,13 +267,16 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 return true;
             }
 
-            public void OnUploadProgress(IUrlRequest request, long current, long total) { }
+            public void OnUploadProgress(IUrlRequest request, long current, long total)
+            {
+                try { _observer.OnUploadProgress(current, total > 0 ? (long?)total : null); }
+                catch { }
+            }
 
             public void OnDownloadProgress(IUrlRequest request, long current, long total)
             {
-                IProgress<UserScriptHttpProgress> progress;
-                lock (_sync) progress = _progress;
-                progress?.Report(new UserScriptHttpProgress(current, total > 0 ? (long?)total : null));
+                try { _observer.OnDownloadProgress(current, total > 0 ? (long?)total : null); }
+                catch { }
             }
 
             public void OnDownloadData(IUrlRequest request, Stream data)
@@ -271,20 +284,23 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 if (data == null || IsCompleted) return;
                 try
                 {
-                    var buffer = new byte[81920];
+                    EnsureResponseStarted(request);
+                    var buffer = new byte[64 * 1024];
                     int count;
-                    lock (_sync)
+                    while ((count = data.Read(buffer, 0, buffer.Length)) > 0)
                     {
-                        while ((count = data.Read(buffer, 0, buffer.Length)) > 0)
+                        lock (_sync)
                         {
-                            if (_body.Length + count > _request.MaxResponseBytes)
+                            if (_request.MaxResponseBytes.HasValue &&
+                                _downloaded + count > _request.MaxResponseBytes.Value)
                             {
                                 Fail(new BridgeProtocolException(BridgeErrorCodes.PayloadTooLarge,
                                     "The HTTP response exceeds the configured limit."), true);
                                 return;
                             }
-                            _body.Write(buffer, 0, count);
+                            _downloaded += count;
                         }
+                        _observer.OnResponseData(buffer, 0, count);
                     }
                 }
                 catch (Exception exception)
@@ -320,7 +336,11 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     if (response.StatusCode >= 300 && response.StatusCode < 400 && !string.IsNullOrEmpty(location))
                     {
                         var redirect = Resolve(_currentUrl, location);
-                        lock (_sync) _body.SetLength(0);
+                        lock (_sync)
+                        {
+                            _responseMetadata = null;
+                            _downloaded = 0;
+                        }
                         DisposeResponseOnUi(response);
                         FollowRedirectOnUi(redirect, _cefRequest, request);
                         return;
@@ -341,10 +361,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                             _request.Method, HttpResourceType, responseHeaders, response.StatusCode));
                     }
 
-                    byte[] body;
-                    lock (_sync) body = _body.ToArray();
-                    var result = new UserScriptHttpResponse(response.StatusCode, response.StatusText,
-                        _currentUrl, responseHeaders, body, Decode(response, responseHeaders, body), _redirects);
+                    var result = EnsureResponseStarted(request, response, responseHeaders);
                     if (_webRequests != null)
                         _webRequests.Evaluate(new WebRequestEvent(WebRequestPhase.OnCompleted,
                             responseIdentifier(request), _currentUrl.AbsoluteUri, _request.Method, HttpResourceType,
@@ -400,7 +417,6 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 _timeout?.Dispose();
                 _cancellationRegistration.Dispose();
                 _cancellation.Dispose();
-                _body.Dispose();
                 PublishError(exception);
                 if (abort)
                     QueueUi(() => DisposeRequestOnUi(_cefRequest, _urlRequest));
@@ -414,7 +430,6 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 _timeout?.Dispose();
                 _cancellationRegistration.Dispose();
                 _cancellation.Dispose();
-                _body.Dispose();
                 _completion.TrySetResult(response);
                 _owner.Remove(this);
             }
@@ -471,38 +486,42 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 throw new BridgeProtocolException(BridgeErrorCodes.PermissionDenied, "The redirect target is invalid.");
             }
 
-            private static string Decode(IResponse response, IDictionary<string, string> headers, byte[] body)
+            private UserScriptHttpResponse EnsureResponseStarted(
+                IUrlRequest request,
+                IResponse response = null,
+                IDictionary<string, string> headers = null)
             {
-                if (body.Length == 0) return string.Empty;
-                var charset = response.Charset;
-                headers.TryGetValue("Content-Type", out var contentType);
-                if (string.IsNullOrWhiteSpace(charset) && !string.IsNullOrWhiteSpace(contentType))
+                lock (_sync)
                 {
-                    var match = Regex.Match(contentType, @"charset\s*=\s*([\w-]+)", RegexOptions.IgnoreCase);
-                    if (match.Success) charset = match.Groups[1].Value;
+                    if (_responseMetadata != null) return _responseMetadata;
+                    response = response ?? request?.Response;
+                    if (response == null)
+                        throw new InvalidOperationException("CefSharp returned no HTTP response metadata.");
+                    headers = headers ?? ToHeaders(response.Headers);
+                    _responseMetadata = new UserScriptHttpResponse(
+                        response.StatusCode,
+                        response.StatusText,
+                        _currentUrl,
+                        headers,
+                        ToRawHeaders(response.Headers),
+                        response.MimeType,
+                        response.Charset,
+                        _redirects);
                 }
-                var mediaType = response.MimeType;
-                if (string.IsNullOrWhiteSpace(mediaType) && !string.IsNullOrWhiteSpace(contentType))
-                    mediaType = contentType.Split(';')[0].Trim();
-                if (string.IsNullOrWhiteSpace(charset) && !IsTextMediaType(mediaType))
-                    return null;
-                try
-                {
-                    var encoding = string.IsNullOrWhiteSpace(charset)
-                        ? Encoding.UTF8 : Encoding.GetEncoding(charset);
-                    return encoding.GetString(body);
-                }
-                catch { return Encoding.UTF8.GetString(body); }
+                try { _observer.OnResponseStarted(_responseMetadata); }
+                catch { }
+                return _responseMetadata;
             }
 
-            private static bool IsTextMediaType(string mediaType)
+            private static string ToRawHeaders(NameValueCollection headers)
             {
-                if (string.IsNullOrWhiteSpace(mediaType)) return true;
-                return mediaType.StartsWith("text/", StringComparison.OrdinalIgnoreCase) ||
-                    mediaType.IndexOf("json", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                    mediaType.IndexOf("javascript", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                    mediaType.IndexOf("xml", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                    mediaType.IndexOf("form-urlencoded", StringComparison.OrdinalIgnoreCase) >= 0;
+                var builder = new StringBuilder();
+                foreach (var name in headers?.AllKeys ?? new string[0])
+                {
+                    foreach (var value in headers.GetValues(name) ?? new string[0])
+                        builder.Append(name).Append(": ").Append(value).Append("\r\n");
+                }
+                return builder.ToString();
             }
 
             private static Exception MapException(Exception exception)

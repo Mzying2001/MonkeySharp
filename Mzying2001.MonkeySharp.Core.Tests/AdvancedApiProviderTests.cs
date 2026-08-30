@@ -6,6 +6,7 @@ using Mzying2001.MonkeySharp.Core.Runtime;
 using Mzying2001.MonkeySharp.Core.Parsing;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
@@ -60,27 +61,49 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 "OK",
                 new Uri("https://api.example.com/final"),
                 new Dictionary<string, string> { ["Content-Type"] = "text/plain" },
-                Encoding.UTF8.GetBytes("done"),
-                "done"));
+                "Content-Type: text/plain\r\n",
+                "text/plain",
+                "utf-8"), Encoding.UTF8.GetBytes("done"));
             var provider = new ResourceAndNetworkApiProvider(http: service);
             ApiNotificationEventArgs progress = null;
-            provider.Notification += (_, item) => progress = item;
+            provider.Notification += (_, item) =>
+            {
+                if (item.EventName == "xhr-progress") progress = item;
+            };
 
-            var result = await provider.InvokeAsync(Context(
+            var created = await provider.InvokeAsync(Context(
                 installation,
                 "GM.xmlHttpRequest",
                 new
                 {
+                    operation = "create",
                     xhrId = 7,
                     url = "https://api.example.com/start",
                     method = "post",
-                    headers = new { Accept = "text/plain" },
-                    data = "body"
+                    headers = new { Accept = "text/plain" }
                 }), CancellationToken.None);
+            var sessionId = Json(created.Json).GetProperty("sessionId").GetString();
+            await provider.InvokeAsync(Context(installation, "GM.xmlHttpRequest", new
+            {
+                operation = "appendBody", sessionId, chunk = Convert.ToBase64String(Encoding.UTF8.GetBytes("body"))
+            }), CancellationToken.None);
+            var result = await provider.InvokeAsync(Context(installation, "GM.xmlHttpRequest", new
+            {
+                operation = "execute", sessionId
+            }), CancellationToken.None);
+            var body = await provider.InvokeAsync(Context(installation, "GM.xmlHttpRequest", new
+            {
+                operation = "readBody", sessionId, offset = 0
+            }), CancellationToken.None);
 
-            Assert.Equal("done", Json(result.Json).GetProperty("responseText").GetString());
+            Assert.Equal(4, Json(result.Json).GetProperty("bodyLength").GetInt64());
+            Assert.Equal("done", Encoding.UTF8.GetString(Convert.FromBase64String(
+                Json(body.Json).GetProperty("chunk").GetString())));
             Assert.Equal("POST", service.Request.Method);
-            Assert.Equal(10 * 1024 * 1024, service.Request.MaxResponseBytes);
+            Assert.Null(service.Request.MaxResponseBytes);
+            using (var stream = service.Request.Body.OpenRead())
+            using (var reader = new StreamReader(stream, Encoding.UTF8))
+                Assert.Equal("body", reader.ReadToEnd());
             Assert.True(service.Request.RedirectAllowed(new Uri("https://api.example.com/next")));
             Assert.False(service.Request.RedirectAllowed(new Uri("https://escape.example/")));
             Assert.NotNull(progress);
@@ -90,44 +113,40 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             var denied = await Assert.ThrowsAsync<BridgeProtocolException>(() => provider.InvokeAsync(Context(
                 installation,
                 "GM.xmlHttpRequest",
-                new { xhrId = 8, url = "https://other.example/" }), CancellationToken.None));
+                new { operation = "create", xhrId = 8, url = "https://other.example/" }), CancellationToken.None));
             Assert.Equal(BridgeErrorCodes.PermissionDenied, denied.Code);
 
             service.Response = new UserScriptHttpResponse(
                 200, "OK", new Uri("https://api.example.com/final"),
-                new Dictionary<string, string>(), new byte[0], string.Empty,
+                new Dictionary<string, string>(), string.Empty, null, null,
                 new[] { new Uri("https://escape.example/intermediate") });
+            created = await provider.InvokeAsync(Context(installation, "GM.xmlHttpRequest",
+                new { operation = "create", xhrId = 9, url = "https://api.example.com/" }), CancellationToken.None);
+            sessionId = Json(created.Json).GetProperty("sessionId").GetString();
             var intermediateRedirect = await Assert.ThrowsAsync<BridgeProtocolException>(() => provider.InvokeAsync(Context(
                 installation,
                 "GM.xmlHttpRequest",
-                new { xhrId = 9, url = "https://api.example.com/" }), CancellationToken.None));
+                new { operation = "execute", sessionId }), CancellationToken.None));
             Assert.Equal(BridgeErrorCodes.PermissionDenied, intermediateRedirect.Code);
 
             service.Response = new UserScriptHttpResponse(
                 200, "OK", new Uri("https://escape.example/"),
-                new Dictionary<string, string>(), new byte[0], string.Empty);
+                new Dictionary<string, string>(), string.Empty, null, null);
+            created = await provider.InvokeAsync(Context(installation, "GM.xmlHttpRequest",
+                new { operation = "create", xhrId = 10, url = "https://api.example.com/" }), CancellationToken.None);
+            sessionId = Json(created.Json).GetProperty("sessionId").GetString();
             var redirect = await Assert.ThrowsAsync<BridgeProtocolException>(() => provider.InvokeAsync(Context(
                 installation,
                 "GM.xmlHttpRequest",
-                new { xhrId = 10, url = "https://api.example.com/" }), CancellationToken.None));
+                new { operation = "execute", sessionId }), CancellationToken.None));
             Assert.Equal(BridgeErrorCodes.PermissionDenied, redirect.Code);
-
-            service.Response = new UserScriptHttpResponse(
-                200, "OK", new Uri("https://api.example.com/"),
-                new Dictionary<string, string>(), new byte[0], "123456789");
-            var oversizedResponse = await Assert.ThrowsAsync<BridgeProtocolException>(() =>
-                new ResourceAndNetworkApiProvider(http: service, options: new BridgeOptions(maxResourceBytes: 8))
-                    .InvokeAsync(Context(
-                        installation,
-                        "GM.xmlHttpRequest",
-                        new { xhrId = 11, url = "https://api.example.com/" }), CancellationToken.None));
-            Assert.Equal(BridgeErrorCodes.PayloadTooLarge, oversizedResponse.Code);
 
             var invalidHeader = await Assert.ThrowsAsync<BridgeProtocolException>(() => provider.InvokeAsync(Context(
                 installation,
                 "GM.xmlHttpRequest",
                 new
                 {
+                    operation = "create",
                     xhrId = 12,
                     url = "https://api.example.com/",
                     headers = new Dictionary<string, string> { ["X-Test"] = "value\r\ninjected" }
@@ -303,27 +322,36 @@ namespace Mzying2001.MonkeySharp.Core.Tests
 
         private sealed class FakeHttpService : IHttpRequestService
         {
-            public FakeHttpService(UserScriptHttpResponse response) { Response = response; }
+            public FakeHttpService(UserScriptHttpResponse response, byte[] body) { Response = response; Body = body; }
             public UserScriptHttpRequest Request { get; private set; }
             public UserScriptHttpResponse Response { get; set; }
-            public IHttpRequestOperation SendAsync(UserScriptHttpRequest request, CancellationToken cancellationToken)
+            public byte[] Body { get; set; }
+            public IHttpRequestOperation SendAsync(
+                UserScriptHttpRequest request,
+                IUserScriptHttpObserver observer,
+                CancellationToken cancellationToken)
             {
                 Request = request;
-                return new FakeHttpOperation(Response);
+                return new FakeHttpOperation(Response, Body, observer);
             }
         }
 
         private sealed class FakeHttpOperation : IHttpRequestOperation
         {
             private readonly UserScriptHttpResponse _response;
-            public FakeHttpOperation(UserScriptHttpResponse response) { _response = response; }
-            public IProgress<UserScriptHttpProgress> Progress { get; set; }
+            private readonly byte[] _body;
+            private readonly IUserScriptHttpObserver _observer;
+            public FakeHttpOperation(UserScriptHttpResponse response, byte[] body, IUserScriptHttpObserver observer)
+            { _response = response; _body = body ?? new byte[0]; _observer = observer; }
             public Task<UserScriptHttpResponse> Completion => CompleteAsync();
             public void Abort() { }
             private async Task<UserScriptHttpResponse> CompleteAsync()
             {
                 await Task.Yield();
-                Progress?.Report(new UserScriptHttpProgress(4, 4));
+                _observer.OnResponseStarted(_response);
+                _observer.OnUploadProgress(4, 4);
+                _observer.OnResponseData(_body, 0, _body.Length);
+                _observer.OnDownloadProgress(_body.Length, _body.Length);
                 return _response;
             }
         }

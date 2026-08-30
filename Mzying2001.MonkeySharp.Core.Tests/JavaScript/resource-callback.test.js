@@ -23,6 +23,7 @@ function waitFor(predicate) {
 }
 
 test("legacy resource and XHR facades use snapshots and abort handles", async () => {
+    let xhrId;
     globalThis.__MonkeySharpBridge = {
         dispatch: async requestJson => {
             const request = JSON.parse(requestJson);
@@ -40,18 +41,28 @@ test("legacy resource and XHR facades use snapshots and abort handles", async ()
                 });
             }
             if (request.method === "GM.xmlHttpRequest") {
-                globalThis.__MonkeySharpRuntime.receive({
-                    type: "notification", protocol: 1,
-                    executionId: "callback-execution", deliveryToken: "callback-delivery",
-                    event: "xhr-progress",
-                    data: { xhrId: request.params.xhrId, loaded: 4, total: 8 }
+                let result = true;
+                if (request.params.operation === "create") {
+                    xhrId = request.params.xhrId;
+                    result = { sessionId: "callback-xhr" };
+                } else if (request.params.operation === "execute") {
+                    globalThis.__MonkeySharpRuntime.receive({
+                        type: "notification", protocol: 1,
+                        executionId: "callback-execution", deliveryToken: "callback-delivery",
+                        event: "xhr-progress",
+                        data: { xhrId, loaded: 4, total: 8 }
+                    });
+                    result = { status: 200, bodyLength: 4 };
+                } else if (request.params.operation === "readBody") {
+                    result = { chunk: Buffer.from("done").toString("base64"), done: true };
+                }
+                return JSON.stringify({
+                    type: "response", protocol: 1, requestId: request.requestId, ok: true, result
                 });
             }
             return JSON.stringify({
                 type: "response", protocol: 1, requestId: request.requestId, ok: true,
-                result: request.method === "GM.xmlHttpRequest"
-                    ? { status: 200, responseText: "done" }
-                    : { $monkeySharpType: "undefined" }
+                result: { $monkeySharpType: "undefined" }
             });
         }
     };

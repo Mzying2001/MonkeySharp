@@ -3,6 +3,7 @@ using Mzying2001.MonkeySharp.Core.Runtime;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -69,36 +70,38 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             CancellationToken cancellationToken);
     }
 
-    /// <summary>
-    /// Describes a validated HTTP request initiated by a userscript.
-    /// </summary>
+    /// <summary>Provides repeatable access to a userscript HTTP request body.</summary>
+    public interface IUserScriptHttpBody
+    {
+        /// <summary>Gets the body length in bytes.</summary>
+        long Length { get; }
+
+        /// <summary>Opens the body for reading from its beginning.</summary>
+        Stream OpenRead();
+    }
+
+    /// <summary>Describes a validated HTTP request initiated by a userscript.</summary>
     public sealed class UserScriptHttpRequest
     {
         /// <summary>Initializes a userscript HTTP request.</summary>
-        /// <param name="method">The HTTP method.</param>
-        /// <param name="url">The absolute HTTP or HTTPS URL.</param>
-        /// <param name="headers">The request headers.</param>
-        /// <param name="body">The optional request body.</param>
-        /// <param name="timeout">The optional host request timeout.</param>
-        /// <param name="maxResponseBytes">The maximum accepted response body size.</param>
-        /// <param name="redirectAllowed">A callback that authorizes each redirect target.</param>
         public UserScriptHttpRequest(
             string method,
             Uri url,
             IDictionary<string, string> headers,
-            string body,
+            IUserScriptHttpBody body,
             TimeSpan? timeout,
-            int maxResponseBytes,
+            long? maxResponseBytes,
             Func<Uri, bool> redirectAllowed)
         {
             if (string.IsNullOrWhiteSpace(method)) throw new ArgumentException("The HTTP method is required.", nameof(method));
+            if (maxResponseBytes.HasValue && maxResponseBytes.Value <= 0)
+                throw new ArgumentOutOfRangeException(nameof(maxResponseBytes));
             Method = method;
             Url = url ?? throw new ArgumentNullException(nameof(url));
             Headers = new ReadOnlyDictionary<string, string>(
                 new Dictionary<string, string>(headers ?? throw new ArgumentNullException(nameof(headers)), StringComparer.OrdinalIgnoreCase));
             Body = body;
             Timeout = timeout;
-            if (maxResponseBytes <= 0) throw new ArgumentOutOfRangeException(nameof(maxResponseBytes));
             MaxResponseBytes = maxResponseBytes;
             RedirectAllowed = redirectAllowed ?? throw new ArgumentNullException(nameof(redirectAllowed));
         }
@@ -112,39 +115,31 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         /// <summary>Gets the case-insensitive request headers.</summary>
         public IReadOnlyDictionary<string, string> Headers { get; }
 
-        /// <summary>Gets the optional request body.</summary>
-        public string Body { get; }
+        /// <summary>Gets the optional binary request body.</summary>
+        public IUserScriptHttpBody Body { get; }
 
         /// <summary>Gets the optional host request timeout.</summary>
         public TimeSpan? Timeout { get; }
 
-        /// <summary>Gets the maximum accepted response body size in bytes.</summary>
-        public int MaxResponseBytes { get; }
+        /// <summary>Gets the optional response body limit. A null value means unlimited.</summary>
+        public long? MaxResponseBytes { get; }
 
         /// <summary>Gets the callback that must authorize every redirect target before it is followed.</summary>
         public Func<Uri, bool> RedirectAllowed { get; }
     }
 
-    /// <summary>
-    /// Contains an HTTP response returned by a userscript host service.
-    /// </summary>
+    /// <summary>Contains HTTP response metadata returned by a userscript host service.</summary>
     public sealed class UserScriptHttpResponse
     {
-        /// <summary>Initializes a userscript HTTP response.</summary>
-        /// <param name="status">The numeric HTTP status code.</param>
-        /// <param name="statusText">The HTTP reason phrase.</param>
-        /// <param name="finalUrl">The final response URL after redirects.</param>
-        /// <param name="headers">The response headers.</param>
-        /// <param name="body">The response body bytes.</param>
-        /// <param name="responseText">An optional host-decoded text representation.</param>
-        /// <param name="redirectUrls">The redirect targets followed in order.</param>
+        /// <summary>Initializes userscript HTTP response metadata.</summary>
         public UserScriptHttpResponse(
             int status,
             string statusText,
             Uri finalUrl,
             IDictionary<string, string> headers,
-            byte[] body,
-            string responseText,
+            string rawHeaders,
+            string mimeType,
+            string charset,
             IEnumerable<Uri> redirectUrls = null)
         {
             Status = status;
@@ -152,8 +147,9 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             FinalUrl = finalUrl ?? throw new ArgumentNullException(nameof(finalUrl));
             Headers = new ReadOnlyDictionary<string, string>(
                 new Dictionary<string, string>(headers ?? throw new ArgumentNullException(nameof(headers)), StringComparer.OrdinalIgnoreCase));
-            Body = body != null ? (byte[])body.Clone() : new byte[0];
-            ResponseText = responseText;
+            RawHeaders = rawHeaders ?? string.Empty;
+            MimeType = mimeType;
+            Charset = charset;
             RedirectUrls = new ReadOnlyCollection<Uri>((redirectUrls ?? Enumerable.Empty<Uri>()).ToList());
         }
 
@@ -169,59 +165,50 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         /// <summary>Gets the case-insensitive response headers.</summary>
         public IReadOnlyDictionary<string, string> Headers { get; }
 
-        /// <summary>Gets a copy of the response body bytes supplied at construction.</summary>
-        public byte[] Body { get; }
+        /// <summary>Gets the raw CRLF-separated response headers.</summary>
+        public string RawHeaders { get; }
 
-        /// <summary>Gets the optional host-decoded response text.</summary>
-        public string ResponseText { get; }
+        /// <summary>Gets the response MIME type, if reported.</summary>
+        public string MimeType { get; }
+
+        /// <summary>Gets the response character set, if reported.</summary>
+        public string Charset { get; }
 
         /// <summary>Gets the redirect targets followed in order.</summary>
         public IReadOnlyList<Uri> RedirectUrls { get; }
     }
 
-    /// <summary>
-    /// Reports HTTP response download progress in bytes.
-    /// </summary>
-    public sealed class UserScriptHttpProgress
+    /// <summary>Receives HTTP lifecycle events before request execution starts.</summary>
+    public interface IUserScriptHttpObserver
     {
-        /// <summary>Initializes an HTTP progress update.</summary>
-        /// <param name="loaded">The number of response bytes received.</param>
-        /// <param name="total">The expected total response size, if known.</param>
-        public UserScriptHttpProgress(long loaded, long? total)
-        {
-            Loaded = loaded;
-            Total = total;
-        }
+        /// <summary>Reports response metadata before response body data.</summary>
+        void OnResponseStarted(UserScriptHttpResponse response);
 
-        /// <summary>Gets the number of response bytes received.</summary>
-        public long Loaded { get; }
+        /// <summary>Reports request body upload progress.</summary>
+        void OnUploadProgress(long loaded, long? total);
 
-        /// <summary>Gets the expected total response size in bytes, if known.</summary>
-        public long? Total { get; }
+        /// <summary>Reports response body download progress.</summary>
+        void OnDownloadProgress(long loaded, long? total);
+
+        /// <summary>Reports one response body data segment.</summary>
+        void OnResponseData(byte[] buffer, int offset, int count);
     }
 
-    /// <summary>
-    /// Sends validated HTTP requests on behalf of userscripts.
-    /// </summary>
+    /// <summary>Sends validated HTTP requests on behalf of userscripts.</summary>
     public interface IHttpRequestService
     {
-        /// <summary>Starts an HTTP request while enforcing its redirect and response-size constraints.</summary>
-        /// <param name="request">The validated HTTP request.</param>
-        /// <param name="cancellationToken">A token that cancels the request.</param>
-        /// <returns>A cancellable operation whose completion task yields the response.</returns>
+        /// <summary>Starts an HTTP request with its observer attached before any events can occur.</summary>
         IHttpRequestOperation SendAsync(
             UserScriptHttpRequest request,
+            IUserScriptHttpObserver observer,
             CancellationToken cancellationToken);
     }
 
     /// <summary>Represents a running userscript HTTP request.</summary>
     public interface IHttpRequestOperation
     {
-        /// <summary>Gets the task completed with the HTTP response.</summary>
+        /// <summary>Gets the task completed with final response metadata.</summary>
         Task<UserScriptHttpResponse> Completion { get; }
-
-        /// <summary>Gets or sets the progress receiver.</summary>
-        IProgress<UserScriptHttpProgress> Progress { get; set; }
 
         /// <summary>Aborts the request.</summary>
         void Abort();

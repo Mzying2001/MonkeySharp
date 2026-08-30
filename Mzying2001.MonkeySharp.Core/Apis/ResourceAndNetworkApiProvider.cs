@@ -19,7 +19,9 @@ namespace Mzying2001.MonkeySharp.Core.Apis
     public sealed class ResourceAndNetworkApiProvider :
         IUserScriptApiProvider,
         IUserScriptNotificationSource,
-        IUserScriptCompatibilityBootstrapProvider
+        IUserScriptCompatibilityBootstrapProvider,
+        IUserScriptExecutionObserver,
+        IDisposable
     {
         private static readonly HashSet<string> AllowedMethods = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
@@ -35,6 +37,9 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         private readonly IHttpRequestService _http;
         private readonly BridgeOptions _options;
         private readonly IReadOnlyCollection<string> _methods;
+        private readonly object _sessionLock = new object();
+        private readonly Dictionary<string, HttpSession> _sessions = new Dictionary<string, HttpSession>(StringComparer.Ordinal);
+        private bool _disposed;
 
         /// <summary>Initializes a resource and network API provider.</summary>
         /// <param name="resources">The optional declared-resource provider.</param>
@@ -143,6 +148,28 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             CancellationToken cancellationToken)
         {
             ProviderParameters.RequireObject(context.Parameters);
+            var operation = ProviderParameters.RequiredString(context.Parameters, "operation");
+            switch (operation)
+            {
+                case "create":
+                    return CreateHttpSession(context);
+                case "appendBody":
+                    return AppendHttpBody(context);
+                case "execute":
+                    return await ExecuteHttpSessionAsync(context, cancellationToken).ConfigureAwait(false);
+                case "readBody":
+                    return ReadHttpBody(context);
+                case "abort":
+                    return AbortHttpSession(context);
+                case "release":
+                    return ReleaseHttpSession(context);
+                default:
+                    throw ProviderParameters.Invalid("Unknown HTTP request operation.");
+            }
+        }
+
+        private ApiResult CreateHttpSession(ApiInvocationContext context)
+        {
             var urlText = ProviderParameters.RequiredString(context.Parameters, "url");
             if (!Uri.TryCreate(urlText, UriKind.Absolute, out var url) ||
                 (url.Scheme != Uri.UriSchemeHttp && url.Scheme != Uri.UriSchemeHttps))
@@ -155,7 +182,6 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             if (!AllowedMethods.Contains(method))
                 throw ProviderParameters.Invalid("The HTTP method is not allowed.");
             var headers = ReadHeaders(context.Parameters);
-            var body = ProviderParameters.OptionalString(context.Parameters, "data");
             TimeSpan? timeout = null;
             if (context.Parameters.TryGetProperty("timeout", out var timeoutValue))
             {
@@ -168,33 +194,53 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             if (xhrId <= 0)
                 throw ProviderParameters.Invalid("xhrId must be positive.");
 
-            var progress = new CallbackProgress<UserScriptHttpProgress>(value =>
-            {
-                var data = JsonSerializer.Serialize(new
-                {
-                    xhrId,
-                    loaded = value.Loaded,
-                    total = value.Total
-                });
-                Notification?.Invoke(this, new ApiNotificationEventArgs(
-                    context.Installation.ScriptKey,
-                    context.ExecutionId,
-                    "xhr-progress",
-                    data));
-            });
-            var operation = _http.SendAsync(
+            var sessionId = Guid.NewGuid().ToString("D");
+            var session = new HttpSession(
+                sessionId,
+                context.Installation.ScriptKey,
+                context.ExecutionId,
+                xhrId,
                 new UserScriptHttpRequest(
                     method,
                     url,
                     headers,
-                    body,
+                    null,
                     timeout,
-                    _options.MaxResourceBytes,
+                    null,
                     redirect => ConnectAllows(context.Installation.Definition.Metadata.Connects, context.Frame.Url, redirect)),
-                cancellationToken);
+                RaiseHttpNotification);
+            lock (_sessionLock)
+            {
+                ThrowIfDisposed();
+                _sessions.Add(SessionKey(context.ExecutionId, sessionId), session);
+            }
+            session.ReportReadyState(1);
+            return ApiResult.FromValue(new { sessionId });
+        }
+
+        private ApiResult AppendHttpBody(ApiInvocationContext context)
+        {
+            var session = GetSession(context);
+            var encoded = ProviderParameters.RequiredString(context.Parameters, "chunk");
+            byte[] chunk;
+            try { chunk = Convert.FromBase64String(encoded); }
+            catch (FormatException) { throw ProviderParameters.Invalid("chunk must be valid Base64."); }
+            if (chunk.Length > HttpSpoolingBuffer.BridgeChunkSize)
+                throw ProviderParameters.Invalid("The HTTP body chunk exceeds 64 KiB.");
+            session.AppendRequestBody(chunk);
+            return ApiResult.FromValue(new { length = session.RequestBodyLength });
+        }
+
+        private async Task<ApiResult> ExecuteHttpSessionAsync(
+            ApiInvocationContext context,
+            CancellationToken cancellationToken)
+        {
+            var session = GetSession(context);
+            session.PrepareRequestBody();
+            var operation = _http.SendAsync(session.Request, session, cancellationToken);
             if (operation == null)
                 throw new BridgeProtocolException(BridgeErrorCodes.Internal, "The HTTP service returned no operation.");
-            operation.Progress = progress;
+            session.Start(operation);
             UserScriptHttpResponse response;
             try
             {
@@ -212,19 +258,287 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 throw new BridgeProtocolException(BridgeErrorCodes.PermissionDenied, "A redirect escaped the @connect allowlist.");
             if (!ConnectAllows(context.Installation.Definition.Metadata.Connects, context.Frame.Url, response.FinalUrl))
                 throw new BridgeProtocolException(BridgeErrorCodes.PermissionDenied, "A redirect escaped the @connect allowlist.");
-            if (response.Body.Length > _options.MaxResourceBytes ||
-                (response.ResponseText != null && Encoding.UTF8.GetByteCount(response.ResponseText) > _options.MaxResourceBytes))
-                throw new BridgeProtocolException(BridgeErrorCodes.PayloadTooLarge, "The HTTP response exceeds the configured limit.");
-
+            session.Complete(response);
             return ApiResult.FromValue(new
             {
                 status = response.Status,
                 statusText = response.StatusText,
                 finalUrl = response.FinalUrl.AbsoluteUri,
-                responseHeaders = response.Headers,
-                responseText = response.ResponseText,
-                responseBase64 = response.ResponseText == null ? Convert.ToBase64String(response.Body) : null
+                responseHeaders = response.RawHeaders,
+                mimeType = response.MimeType,
+                charset = response.Charset,
+                bodyLength = session.ResponseBodyLength
             });
+        }
+
+        private ApiResult ReadHttpBody(ApiInvocationContext context)
+        {
+            var session = GetSession(context);
+            if (!context.Parameters.TryGetProperty("offset", out var value) ||
+                value.ValueKind != JsonValueKind.Number || !value.TryGetInt64(out var offset) || offset < 0)
+                throw ProviderParameters.Invalid("offset must be a non-negative integer.");
+            var chunk = session.ReadResponseBody(offset);
+            return ApiResult.FromValue(new
+            {
+                chunk = Convert.ToBase64String(chunk),
+                offset,
+                done = offset + chunk.Length >= session.ResponseBodyLength
+            });
+        }
+
+        private ApiResult AbortHttpSession(ApiInvocationContext context)
+        {
+            GetSession(context).Abort();
+            return ApiResult.FromValue(true);
+        }
+
+        private ApiResult ReleaseHttpSession(ApiInvocationContext context)
+        {
+            var sessionId = ProviderParameters.RequiredString(context.Parameters, "sessionId");
+            HttpSession session;
+            lock (_sessionLock)
+            {
+                if (!_sessions.TryGetValue(SessionKey(context.ExecutionId, sessionId), out session))
+                    return ApiResult.FromValue(false);
+                _sessions.Remove(SessionKey(context.ExecutionId, sessionId));
+            }
+            session.Dispose();
+            return ApiResult.FromValue(true);
+        }
+
+        /// <inheritdoc />
+        public void OnExecutionEnded(string executionId)
+        {
+            HttpSession[] sessions;
+            lock (_sessionLock)
+            {
+                var prefix = executionId + ":";
+                var keys = _sessions.Keys.Where(key => key.StartsWith(prefix, StringComparison.Ordinal)).ToArray();
+                sessions = keys.Select(key => _sessions[key]).ToArray();
+                foreach (var key in keys) _sessions.Remove(key);
+            }
+            foreach (var session in sessions) session.Dispose();
+        }
+
+        /// <inheritdoc />
+        public void Dispose()
+        {
+            HttpSession[] sessions;
+            lock (_sessionLock)
+            {
+                if (_disposed) return;
+                _disposed = true;
+                sessions = _sessions.Values.ToArray();
+                _sessions.Clear();
+            }
+            foreach (var session in sessions) session.Dispose();
+        }
+
+        private HttpSession GetSession(ApiInvocationContext context)
+        {
+            var sessionId = ProviderParameters.RequiredString(context.Parameters, "sessionId");
+            lock (_sessionLock)
+            {
+                ThrowIfDisposed();
+                if (_sessions.TryGetValue(SessionKey(context.ExecutionId, sessionId), out var session))
+                    return session;
+            }
+            throw new BridgeProtocolException(BridgeErrorCodes.SessionExpired, "The HTTP request session is not active.");
+        }
+
+        private void RaiseHttpNotification(HttpSession session, string eventName, object value)
+        {
+            Notification?.Invoke(this, new ApiNotificationEventArgs(
+                session.ScriptKey,
+                session.ExecutionId,
+                eventName,
+                JsonSerializer.Serialize(value)));
+        }
+
+        private void ThrowIfDisposed()
+        {
+            if (_disposed) throw new ObjectDisposedException(nameof(ResourceAndNetworkApiProvider));
+        }
+
+        private static string SessionKey(string executionId, string sessionId)
+        {
+            return executionId + ":" + sessionId;
+        }
+
+        private sealed class HttpSession : IUserScriptHttpObserver, IDisposable
+        {
+            private readonly object _sync = new object();
+            private readonly HttpSpoolingBuffer _requestBody = new HttpSpoolingBuffer();
+            private readonly HttpSpoolingBuffer _responseBody = new HttpSpoolingBuffer();
+            private readonly Action<HttpSession, string, object> _notify;
+            private IHttpRequestOperation _operation;
+            private bool _started;
+            private bool _responseStarted;
+            private bool _loadingReported;
+            private bool _disposed;
+
+            public HttpSession(
+                string sessionId,
+                ScriptKey scriptKey,
+                string executionId,
+                int xhrId,
+                UserScriptHttpRequest request,
+                Action<HttpSession, string, object> notify)
+            {
+                SessionId = sessionId;
+                ScriptKey = scriptKey;
+                ExecutionId = executionId;
+                XhrId = xhrId;
+                Request = request;
+                _notify = notify;
+            }
+
+            public string SessionId { get; }
+            public ScriptKey ScriptKey { get; }
+            public string ExecutionId { get; }
+            public int XhrId { get; }
+            public UserScriptHttpRequest Request { get; private set; }
+            public long RequestBodyLength => _requestBody.Length;
+            public long ResponseBodyLength => _responseBody.Length;
+
+            public void AppendRequestBody(byte[] chunk)
+            {
+                lock (_sync)
+                {
+                    ThrowIfDisposed();
+                    if (_started) throw ProviderParameters.Invalid("The HTTP request has already started.");
+                    _requestBody.Append(chunk, 0, chunk.Length);
+                }
+            }
+
+            public void PrepareRequestBody()
+            {
+                lock (_sync)
+                {
+                    ThrowIfDisposed();
+                    if (_started) throw ProviderParameters.Invalid("The HTTP request has already started.");
+                    _started = true;
+                    if (_requestBody.Length != 0)
+                    {
+                        Request = new UserScriptHttpRequest(
+                            Request.Method,
+                            Request.Url,
+                            Request.Headers.ToDictionary(item => item.Key, item => item.Value, StringComparer.OrdinalIgnoreCase),
+                            _requestBody,
+                            Request.Timeout,
+                            Request.MaxResponseBytes,
+                            Request.RedirectAllowed);
+                    }
+                }
+            }
+
+            public void Start(IHttpRequestOperation operation)
+            {
+                if (operation == null) throw new ArgumentNullException(nameof(operation));
+                lock (_sync)
+                {
+                    ThrowIfDisposed();
+                    _operation = operation;
+                }
+            }
+
+            public void OnResponseStarted(UserScriptHttpResponse response)
+            {
+                lock (_sync)
+                {
+                    if (_disposed || _responseStarted) return;
+                    _responseStarted = true;
+                }
+                ReportReadyState(2, response);
+            }
+
+            public void OnUploadProgress(long loaded, long? total)
+            {
+                Notify("xhr-upload-progress", new { xhrId = XhrId, loaded, total });
+            }
+
+            public void OnDownloadProgress(long loaded, long? total)
+            {
+                Notify("xhr-progress", new { xhrId = XhrId, loaded, total });
+            }
+
+            public void OnResponseData(byte[] buffer, int offset, int count)
+            {
+                if (count <= 0) return;
+                lock (_sync)
+                {
+                    ThrowIfDisposed();
+                    _responseBody.Append(buffer, offset, count);
+                    if (_loadingReported) return;
+                    _loadingReported = true;
+                }
+                ReportReadyState(3);
+            }
+
+            public byte[] ReadResponseBody(long offset)
+            {
+                lock (_sync)
+                {
+                    ThrowIfDisposed();
+                    return _responseBody.Read(offset, HttpSpoolingBuffer.BridgeChunkSize);
+                }
+            }
+
+            public void Complete(UserScriptHttpResponse response)
+            {
+                OnResponseStarted(response);
+                ReportReadyState(4, response);
+            }
+
+            public void Abort()
+            {
+                IHttpRequestOperation operation;
+                lock (_sync)
+                {
+                    if (_disposed) return;
+                    operation = _operation;
+                }
+                operation?.Abort();
+            }
+
+            public void ReportReadyState(int readyState, UserScriptHttpResponse response = null)
+            {
+                Notify("xhr-state", new
+                {
+                    xhrId = XhrId,
+                    readyState,
+                    status = response?.Status ?? 0,
+                    statusText = response?.StatusText ?? string.Empty,
+                    finalUrl = response?.FinalUrl?.AbsoluteUri,
+                    responseHeaders = response?.RawHeaders ?? string.Empty
+                });
+            }
+
+            public void Dispose()
+            {
+                IHttpRequestOperation operation;
+                lock (_sync)
+                {
+                    if (_disposed) return;
+                    _disposed = true;
+                    operation = _operation;
+                    _operation = null;
+                }
+                operation?.Abort();
+                _requestBody.Dispose();
+                _responseBody.Dispose();
+            }
+
+            private void Notify(string eventName, object value)
+            {
+                try { _notify(this, eventName, value); }
+                catch { }
+            }
+
+            private void ThrowIfDisposed()
+            {
+                if (_disposed) throw new ObjectDisposedException(nameof(HttpSession));
+            }
         }
 
         private static IDictionary<string, string> ReadHeaders(JsonElement parameters)
@@ -302,20 +616,6 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             return false;
         }
 
-        private sealed class CallbackProgress<T> : IProgress<T>
-        {
-            private readonly Action<T> _callback;
-
-            public CallbackProgress(Action<T> callback)
-            {
-                _callback = callback;
-            }
-
-            public void Report(T value)
-            {
-                _callback(value);
-            }
-        }
     }
 
     internal static class ProviderParameters

@@ -372,17 +372,10 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             if (!TryBeginRequest(execution, requestId, out var pending, out var beginError))
                 return Limit(ProtocolJson.Error(requestId, beginError, "The request cannot be started."));
 
-            using (var timeout = new CancellationTokenSource(_options.RequestTimeout))
-            using (var linked = IsValueMutation(method)
-                ? CancellationTokenSource.CreateLinkedTokenSource(
-                    cancellationToken,
-                    pending.Cancellation.Token,
-                    timeout.Token)
-                : CancellationTokenSource.CreateLinkedTokenSource(
-                    cancellationToken,
-                    execution.Cancellation.Token,
-                    pending.Cancellation.Token,
-                    timeout.Token))
+            var longRunningHttp = IsLongRunningHttpExecute(method, parameters);
+            using (var timeout = longRunningHttp ? null : new CancellationTokenSource(_options.RequestTimeout))
+            using (var linked = CancellationTokenSource.CreateLinkedTokenSource(
+                RequestTokens(method, execution, pending, cancellationToken, timeout)))
             {
                 try
                 {
@@ -457,7 +450,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                 {
                     if (execution.Cancellation.IsCancellationRequested)
                         return Limit(ProtocolJson.Error(requestId, BridgeErrorCodes.SessionExpired, "The document session expired."));
-                    if (timeout.IsCancellationRequested)
+                    if (timeout != null && timeout.IsCancellationRequested)
                         return Limit(ProtocolJson.Error(requestId, BridgeErrorCodes.Timeout, "The request timed out."));
                     return Limit(ProtocolJson.Error(requestId, BridgeErrorCodes.Canceled, "The request was canceled."));
                 }
@@ -475,6 +468,29 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                     EndRequest(execution.Invocation.ExecutionId, requestId);
                 }
             }
+        }
+
+        private static CancellationToken[] RequestTokens(
+            string method,
+            UserScriptEngine.ExecutionRecord execution,
+            PendingRequest pending,
+            CancellationToken cancellationToken,
+            CancellationTokenSource timeout)
+        {
+            var tokens = new List<CancellationToken> { cancellationToken, pending.Cancellation.Token };
+            if (!IsValueMutation(method)) tokens.Add(execution.Cancellation.Token);
+            if (timeout != null) tokens.Add(timeout.Token);
+            return tokens.ToArray();
+        }
+
+        private static bool IsLongRunningHttpExecute(string method, JsonElement parameters)
+        {
+            if (!string.Equals(method, "GM.xmlHttpRequest", StringComparison.Ordinal) ||
+                parameters.ValueKind != JsonValueKind.Object ||
+                !parameters.TryGetProperty("operation", out var operation) ||
+                operation.ValueKind != JsonValueKind.String)
+                return false;
+            return string.Equals(operation.GetString(), "execute", StringComparison.Ordinal);
         }
 
         private string HandleCancel(JsonElement root)

@@ -627,9 +627,14 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
 
             public IHttpRequestOperation SendAsync(
                 UserScriptHttpRequest request,
+                IUserScriptHttpObserver observer,
                 CancellationToken cancellationToken)
-                => new CompletedHttpOperation(new UserScriptHttpResponse(
-                    200, "OK", request.Url, new Dictionary<string, string>(), new byte[0], string.Empty));
+            {
+                var response = new UserScriptHttpResponse(
+                    200, "OK", request.Url, new Dictionary<string, string>(), string.Empty, null, null);
+                observer.OnResponseStarted(response);
+                return new CompletedHttpOperation(response);
+            }
 
             public Task<IMenuRegistration> RegisterAsync(
                 MenuCommandRequest request,
@@ -681,7 +686,6 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
             private readonly UserScriptHttpResponse _response;
             public CompletedHttpOperation(UserScriptHttpResponse response) { _response = response; }
             public Task<UserScriptHttpResponse> Completion => Task.FromResult(_response);
-            public IProgress<UserScriptHttpProgress> Progress { get; set; }
             public void Abort() { }
         }
 
