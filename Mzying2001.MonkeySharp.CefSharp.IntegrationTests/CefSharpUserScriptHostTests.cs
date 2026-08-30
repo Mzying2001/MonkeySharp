@@ -423,11 +423,10 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
                 CancellationToken cancellationToken)
                 => Task.FromResult(new ResourceContent(Encoding.UTF8.GetBytes("resource"), "text/plain", "resource"));
 
-            public Task<UserScriptHttpResponse> SendAsync(
+            public IHttpRequestOperation SendAsync(
                 UserScriptHttpRequest request,
-                IProgress<UserScriptHttpProgress> progress,
                 CancellationToken cancellationToken)
-                => Task.FromResult(new UserScriptHttpResponse(
+                => new CompletedHttpOperation(new UserScriptHttpResponse(
                     200, "OK", request.Url, new Dictionary<string, string>(), new byte[0], string.Empty));
 
             public Task<IMenuRegistration> RegisterAsync(
@@ -436,17 +435,17 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
                 CancellationToken cancellationToken)
                 => Task.FromResult<IMenuRegistration>(new NoopMenuRegistration());
 
-            public Task ShowAsync(UserScriptNotificationRequest request, CancellationToken cancellationToken)
-                => Task.CompletedTask;
+            public INotificationHandle ShowAsync(UserScriptNotificationRequest request, CancellationToken cancellationToken)
+                => new NoopNotificationHandle();
 
             public Task SetTextAsync(string text, string mediaType, CancellationToken cancellationToken)
                 => Task.CompletedTask;
 
-            public Task<OpenTabResult> OpenAsync(OpenTabRequest request, CancellationToken cancellationToken)
-                => Task.FromResult(new OpenTabResult("tab"));
+            public Task<ITabHandle> OpenAsync(OpenTabRequest request, CancellationToken cancellationToken)
+                => Task.FromResult<ITabHandle>(new NoopTabHandle("tab"));
 
-            public Task<DownloadResult> DownloadAsync(DownloadRequest request, CancellationToken cancellationToken)
-                => Task.FromResult(new DownloadResult("download"));
+            public Task<IDownloadOperation> DownloadAsync(DownloadRequest request, CancellationToken cancellationToken)
+                => Task.FromResult<IDownloadOperation>(new NoopDownloadOperation("download"));
 
             public Task<string> GetAsync(
                 ScriptKey scriptKey,
@@ -473,6 +472,46 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
             public void Dispose()
             {
             }
+        }
+
+        private sealed class CompletedHttpOperation : IHttpRequestOperation
+        {
+            private readonly UserScriptHttpResponse _response;
+            public CompletedHttpOperation(UserScriptHttpResponse response) { _response = response; }
+            public Task<UserScriptHttpResponse> Completion => Task.FromResult(_response);
+            public IProgress<UserScriptHttpProgress> Progress { get; set; }
+            public void Abort() { }
+        }
+
+        private sealed class NoopNotificationHandle : INotificationHandle
+        {
+            public Task Completion { get; } = Task.CompletedTask;
+            public event EventHandler Clicked;
+            public event EventHandler Closed;
+            public void Dispose() { }
+        }
+
+        private sealed class NoopTabHandle : ITabHandle
+        {
+            public NoopTabHandle(string id) { TabId = id; }
+            public string TabId { get; }
+            public bool Closed { get; private set; }
+            public event EventHandler OnClose;
+            public Task CloseAsync(CancellationToken cancellationToken) { Closed = true; return Task.CompletedTask; }
+            public void Dispose() { }
+        }
+
+        private sealed class NoopDownloadOperation : IDownloadOperation
+        {
+            public NoopDownloadOperation(string id) { DownloadId = id; }
+            public string DownloadId { get; }
+            public Task Completion { get; } = Task.CompletedTask;
+            public event EventHandler<UserScriptDownloadProgress> Progress;
+            public event EventHandler Completed;
+            public event EventHandler<UserScriptDownloadFailure> Failed;
+            public event EventHandler Aborted;
+            public void Abort() { }
+            public void Dispose() { }
         }
     }
 }

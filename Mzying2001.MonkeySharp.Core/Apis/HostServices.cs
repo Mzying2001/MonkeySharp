@@ -205,15 +205,26 @@ namespace Mzying2001.MonkeySharp.Core.Apis
     /// </summary>
     public interface IHttpRequestService
     {
-        /// <summary>Sends an HTTP request while enforcing its redirect and response-size constraints.</summary>
+        /// <summary>Starts an HTTP request while enforcing its redirect and response-size constraints.</summary>
         /// <param name="request">The validated HTTP request.</param>
-        /// <param name="progress">The receiver for response download progress.</param>
         /// <param name="cancellationToken">A token that cancels the request.</param>
-        /// <returns>The completed HTTP response.</returns>
-        Task<UserScriptHttpResponse> SendAsync(
+        /// <returns>A cancellable operation whose completion task yields the response.</returns>
+        IHttpRequestOperation SendAsync(
             UserScriptHttpRequest request,
-            IProgress<UserScriptHttpProgress> progress,
             CancellationToken cancellationToken);
+    }
+
+    /// <summary>Represents a running userscript HTTP request.</summary>
+    public interface IHttpRequestOperation
+    {
+        /// <summary>Gets the task completed with the HTTP response.</summary>
+        Task<UserScriptHttpResponse> Completion { get; }
+
+        /// <summary>Gets or sets the progress receiver.</summary>
+        IProgress<UserScriptHttpProgress> Progress { get; set; }
+
+        /// <summary>Aborts the request.</summary>
+        void Abort();
     }
 
     /// <summary>
@@ -303,11 +314,24 @@ namespace Mzying2001.MonkeySharp.Core.Apis
     /// </summary>
     public interface INotificationService
     {
-        /// <summary>Displays a notification.</summary>
+        /// <summary>Displays a notification and returns its lifecycle handle.</summary>
         /// <param name="request">The notification to display.</param>
         /// <param name="cancellationToken">A token that cancels the operation.</param>
-        /// <returns>A task that completes after the host accepts the notification.</returns>
-        Task ShowAsync(UserScriptNotificationRequest request, CancellationToken cancellationToken);
+        /// <returns>A handle that reports click, close, and completion state.</returns>
+        INotificationHandle ShowAsync(UserScriptNotificationRequest request, CancellationToken cancellationToken);
+    }
+
+    /// <summary>Represents a host notification and its lifecycle.</summary>
+    public interface INotificationHandle : IDisposable
+    {
+        /// <summary>Completes when the notification is closed or otherwise finished.</summary>
+        Task Completion { get; }
+
+        /// <summary>Occurs when the notification is clicked.</summary>
+        event EventHandler Clicked;
+
+        /// <summary>Occurs when the notification is closed.</summary>
+        event EventHandler Closed;
     }
 
     /// <summary>
@@ -375,11 +399,27 @@ namespace Mzying2001.MonkeySharp.Core.Apis
     /// </summary>
     public interface ITabService
     {
-        /// <summary>Opens a browser tab.</summary>
+        /// <summary>Opens a browser tab and returns a lifecycle handle.</summary>
         /// <param name="request">The tab request.</param>
         /// <param name="cancellationToken">A token that cancels the operation.</param>
-        /// <returns>The opened tab identifier, if supplied by the host.</returns>
-        Task<OpenTabResult> OpenAsync(OpenTabRequest request, CancellationToken cancellationToken);
+        /// <returns>The opened tab handle.</returns>
+        Task<ITabHandle> OpenAsync(OpenTabRequest request, CancellationToken cancellationToken);
+    }
+
+    /// <summary>Represents a browser tab opened for a userscript.</summary>
+    public interface ITabHandle : IDisposable
+    {
+        /// <summary>Gets the host-defined tab identifier.</summary>
+        string TabId { get; }
+
+        /// <summary>Gets whether the tab has closed.</summary>
+        bool Closed { get; }
+
+        /// <summary>Occurs when the tab closes.</summary>
+        event EventHandler OnClose;
+
+        /// <summary>Closes the tab.</summary>
+        Task CloseAsync(CancellationToken cancellationToken);
     }
 
     /// <summary>
@@ -434,11 +474,61 @@ namespace Mzying2001.MonkeySharp.Core.Apis
     /// </summary>
     public interface IDownloadService
     {
-        /// <summary>Starts a file download.</summary>
+        /// <summary>Starts a file download and returns its lifecycle operation.</summary>
         /// <param name="request">The download request.</param>
         /// <param name="cancellationToken">A token that cancels the operation.</param>
-        /// <returns>The download identifier, if supplied by the host.</returns>
-        Task<DownloadResult> DownloadAsync(DownloadRequest request, CancellationToken cancellationToken);
+        /// <returns>The running download operation.</returns>
+        Task<IDownloadOperation> DownloadAsync(DownloadRequest request, CancellationToken cancellationToken);
+    }
+
+    /// <summary>Represents a running userscript download.</summary>
+    public interface IDownloadOperation : IDisposable
+    {
+        /// <summary>Gets the host-defined download identifier.</summary>
+        string DownloadId { get; }
+
+        /// <summary>Gets a task completed when the download reaches a terminal state.</summary>
+        Task Completion { get; }
+
+        /// <summary>Occurs as bytes are downloaded.</summary>
+        event EventHandler<UserScriptDownloadProgress> Progress;
+
+        /// <summary>Occurs when the download completes successfully.</summary>
+        event EventHandler Completed;
+
+        /// <summary>Occurs when the download fails.</summary>
+        event EventHandler<UserScriptDownloadFailure> Failed;
+
+        /// <summary>Occurs when the download is aborted.</summary>
+        event EventHandler Aborted;
+
+        /// <summary>Aborts the download.</summary>
+        void Abort();
+    }
+
+    /// <summary>Reports userscript download progress.</summary>
+    public sealed class UserScriptDownloadProgress : EventArgs
+    {
+        /// <summary>Initializes a download progress update.</summary>
+        public UserScriptDownloadProgress(long loaded, long? total)
+        {
+            Loaded = loaded;
+            Total = total;
+        }
+
+        /// <summary>Gets the number of downloaded bytes.</summary>
+        public long Loaded { get; }
+        /// <summary>Gets the expected total bytes, if known.</summary>
+        public long? Total { get; }
+    }
+
+    /// <summary>Describes a userscript download failure.</summary>
+    public sealed class UserScriptDownloadFailure : EventArgs
+    {
+        /// <summary>Initializes a download failure.</summary>
+        public UserScriptDownloadFailure(Exception error) { Error = error; }
+        /// <summary>Gets the underlying failure.</summary>
+        public Exception Error { get; }
     }
 
     /// <summary>

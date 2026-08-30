@@ -375,11 +375,18 @@
                     api.notification = async function (details) {
                         if (typeof details === "string") details = { text: details };
                         if (!details || typeof details !== "object") throw new TypeError("details must be an object.");
-                        return call(record, "GM.notification", {
+                        const result = await call(record, "GM.notification", {
                             title: details.title || null,
                             text: details.text,
                             imageUrl: details.imageUrl || details.image || null
                         });
+                        if (result && result.id) {
+                            record.notificationHandlers.set(result.id, {
+                                onclick: typeof details.onclick === "function" ? details.onclick : null,
+                                ondone: typeof details.ondone === "function" ? details.ondone : null
+                            });
+                        }
+                        return result;
                     };
                 }
                 if (enabled("GM.setClipboard")) {
@@ -595,6 +602,9 @@
                     api.unregisterMenuCommand(commandId).catch(error => console.error("[MonkeySharp] legacy menu removal failed", error));
                     return removed;
                 };
+                if (api.saveTab) facade.GM_saveTab = function (value) {
+                    api.saveTab(value).catch(error => console.error("[MonkeySharp] legacy saveTab failed", error));
+                };
                 if (api.getTab) facade.GM_getTab = function (callback) {
                     if (typeof callback !== "function") throw new TypeError("callback must be a function.");
                     api.getTab().then(callback).catch(error => console.error("[MonkeySharp] legacy getTab failed", error));
@@ -607,28 +617,48 @@
                     api.setClipboard(text, type).catch(error => console.error("[MonkeySharp] legacy clipboard failed", error));
                 };
                 if (api.notification) facade.GM_notification = function (details, ondone) {
-                    api.notification(details).then(() => {
-                        if (typeof ondone === "function") ondone();
-                    }).catch(error => console.error("[MonkeySharp] legacy notification failed", error));
+                    if (typeof details === "string") details = { text: details };
+                    details = Object.assign({}, details || {}, { ondone: ondone });
+                    api.notification(details).catch(error => console.error("[MonkeySharp] legacy notification failed", error));
                 };
                 if (api.openInTab) facade.GM_openInTab = function (url, options) {
-                    const state = { closed: false, id: null };
+                    const state = { closed: false, id: null, closeRequested: false };
                     const handle = {
-                        close: function () { state.closed = true; },
+                        close: function () {
+                            state.closeRequested = true;
+                            if (!state.id) return;
+                            call(record, "GM.openInTab", { close: true, tabId: state.id })
+                                .then(() => { state.closed = true; })
+                                .catch(error => console.error("[MonkeySharp] legacy tab close failed", error));
+                        },
                         get closed() { return state.closed; }
                     };
-                    api.openInTab(url, options).then(result => { state.id = result && result.id; })
+                    api.openInTab(url, options).then(result => {
+                        state.id = result && result.id;
+                        if (state.closeRequested && state.id) handle.close();
+                    })
                         .catch(error => console.error("[MonkeySharp] legacy tab open failed", error));
+                    record.tabHandlers.push(state);
                     return handle;
                 };
                 if (api.download) facade.GM_download = function (details, onload, onerror) {
                     if (typeof details === "string") details = { url: details };
+                    if (!details || typeof details !== "object") throw new TypeError("details must be an object.");
+                    ["onload", "onerror", "onprogress"].forEach(name => {
+                        if (typeof details[name] !== "undefined" && typeof details[name] !== "function") {
+                            throw new TypeError(name + " must be a function.");
+                        }
+                    });
+                    const state = { id: null, callbacks: { onload: onload || details.onload, onerror: onerror || details.onerror, onprogress: details.onprogress }, aborted: false };
+                    const handle = { abort: function () { state.aborted = true; if (state.id) record.downloadHandlers.get(state.id)?.abort(); } };
                     api.download(details).then(result => {
-                        if (typeof onload === "function") onload(result);
+                        state.id = result && result.id;
+                        if (state.id) record.downloadHandlers.set(state.id, state);
                     }).catch(error => {
-                        if (typeof onerror === "function") onerror(error);
+                        if (typeof state.callbacks.onerror === "function") state.callbacks.onerror(error);
                         else console.error("[MonkeySharp] legacy download failed", error);
                     });
+                    return handle;
                 };
                 return facade;
             };
@@ -643,6 +673,9 @@
                     handlers: new Map(),
                     menuHandlers: new Map(),
                     xhrHandlers: new Map(),
+                    downloadHandlers: new Map(),
+                    notificationHandlers: new Map(),
+                    tabHandlers: [],
                     valueListenerKeys: new Map(),
                     mutationTail: Promise.resolve(),
                     storageMirror: null,
@@ -737,6 +770,35 @@
                         const handler = record.menuHandlers.get(data.commandId);
                         if (!handler) return false;
                         handler();
+                        return true;
+                    }
+                    if (notification.event === "notification-click" || notification.event === "notification-done") {
+                        const handler = record.notificationHandlers.get(data.notificationId);
+                        if (!handler) return false;
+                        const callback = notification.event === "notification-click" ? handler.onclick : handler.ondone;
+                        if (callback) callback();
+                        if (notification.event === "notification-done") record.notificationHandlers.delete(data.notificationId);
+                        return true;
+                    }
+                    if (notification.event === "tab-closed") {
+                        record.tabHandlers.forEach(state => {
+                            if (state.id === data.tabId) state.closed = true;
+                        });
+                        return true;
+                    }
+                    if (notification.event === "download-progress" || notification.event === "download-complete" ||
+                        notification.event === "download-error" || notification.event === "download-aborted") {
+                        const state = record.downloadHandlers.get(data.downloadId);
+                        if (!state) return false;
+                        if (notification.event === "download-progress") {
+                            if (state.callbacks.onprogress) state.callbacks.onprogress({ loaded: data.loaded, total: data.total });
+                        } else if (notification.event === "download-complete") {
+                            if (state.callbacks.onload) state.callbacks.onload({ id: data.downloadId });
+                            record.downloadHandlers.delete(data.downloadId);
+                        } else {
+                            if (state.callbacks.onerror) state.callbacks.onerror(new Error(data.message || "The download failed."));
+                            record.downloadHandlers.delete(data.downloadId);
+                        }
                         return true;
                     }
                     if (notification.event === "xhr-progress") {

@@ -123,7 +123,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             var content = await _resources.GetAsync(
                 context.Installation,
                 declaration,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken);
             if (content == null)
                 throw new BridgeProtocolException(BridgeErrorCodes.Internal, "The resource provider returned no content.");
             if (content.Bytes.Length > _options.MaxResourceBytes ||
@@ -182,7 +182,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                     "xhr-progress",
                     data));
             });
-            var response = await _http.SendAsync(
+            var operation = _http.SendAsync(
                 new UserScriptHttpRequest(
                     method,
                     url,
@@ -191,8 +191,20 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                     timeout,
                     _options.MaxResourceBytes,
                     redirect => ConnectAllows(context.Installation.Definition.Metadata.Connects, context.Frame.Url, redirect)),
-                progress,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken);
+            if (operation == null)
+                throw new BridgeProtocolException(BridgeErrorCodes.Internal, "The HTTP service returned no operation.");
+            operation.Progress = progress;
+            UserScriptHttpResponse response;
+            try
+            {
+                response = await operation.Completion.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                operation.Abort();
+                throw;
+            }
             if (response == null)
                 throw new BridgeProtocolException(BridgeErrorCodes.Internal, "The HTTP service returned no response.");
             if (response.RedirectUrls.Any(redirect =>

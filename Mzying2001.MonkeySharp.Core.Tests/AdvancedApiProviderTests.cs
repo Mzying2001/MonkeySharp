@@ -306,14 +306,25 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             public FakeHttpService(UserScriptHttpResponse response) { Response = response; }
             public UserScriptHttpRequest Request { get; private set; }
             public UserScriptHttpResponse Response { get; set; }
-            public Task<UserScriptHttpResponse> SendAsync(
-                UserScriptHttpRequest request,
-                IProgress<UserScriptHttpProgress> progress,
-                CancellationToken cancellationToken)
+            public IHttpRequestOperation SendAsync(UserScriptHttpRequest request, CancellationToken cancellationToken)
             {
                 Request = request;
-                progress.Report(new UserScriptHttpProgress(4, 4));
-                return Task.FromResult(Response);
+                return new FakeHttpOperation(Response);
+            }
+        }
+
+        private sealed class FakeHttpOperation : IHttpRequestOperation
+        {
+            private readonly UserScriptHttpResponse _response;
+            public FakeHttpOperation(UserScriptHttpResponse response) { _response = response; }
+            public IProgress<UserScriptHttpProgress> Progress { get; set; }
+            public Task<UserScriptHttpResponse> Completion => CompleteAsync();
+            public void Abort() { }
+            private async Task<UserScriptHttpResponse> CompleteAsync()
+            {
+                await Task.Yield();
+                Progress?.Report(new UserScriptHttpProgress(4, 4));
+                return _response;
             }
         }
 
@@ -339,19 +350,55 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 return Task.FromResult<IMenuRegistration>(MenuRegistration);
             }
             public void InvokeMenu() => _menuCallback();
-            public Task ShowAsync(UserScriptNotificationRequest request, CancellationToken cancellationToken) => Task.CompletedTask;
+            public INotificationHandle ShowAsync(UserScriptNotificationRequest request, CancellationToken cancellationToken)
+                => new FakeNotificationHandle();
             public Task SetTextAsync(string text, string mediaType, CancellationToken cancellationToken)
             {
                 ClipboardText = text;
                 return Task.CompletedTask;
             }
-            public Task<OpenTabResult> OpenAsync(OpenTabRequest request, CancellationToken cancellationToken)
+            public Task<ITabHandle> OpenAsync(OpenTabRequest request, CancellationToken cancellationToken)
             {
                 OpenTab = request;
-                return Task.FromResult(new OpenTabResult("tab"));
+                return Task.FromResult<ITabHandle>(new FakeTabHandle("tab"));
             }
-            public Task<DownloadResult> DownloadAsync(DownloadRequest request, CancellationToken cancellationToken)
-                => Task.FromResult(new DownloadResult("download"));
+            public Task<IDownloadOperation> DownloadAsync(DownloadRequest request, CancellationToken cancellationToken)
+                => Task.FromResult<IDownloadOperation>(new FakeDownloadOperation("download"));
+        }
+
+        private sealed class FakeNotificationHandle : INotificationHandle
+        {
+            public Task Completion { get; } = Task.CompletedTask;
+            public event EventHandler Clicked;
+            public event EventHandler Closed;
+            public void Dispose() { }
+        }
+
+        private sealed class FakeTabHandle : ITabHandle
+        {
+            public FakeTabHandle(string id) { TabId = id; }
+            public string TabId { get; }
+            public bool Closed { get; private set; }
+            public event EventHandler OnClose;
+            public Task CloseAsync(CancellationToken cancellationToken)
+            {
+                if (!Closed) { Closed = true; OnClose?.Invoke(this, EventArgs.Empty); }
+                return Task.CompletedTask;
+            }
+            public void Dispose() { }
+        }
+
+        private sealed class FakeDownloadOperation : IDownloadOperation
+        {
+            public FakeDownloadOperation(string id) { DownloadId = id; }
+            public string DownloadId { get; }
+            public Task Completion { get; } = Task.CompletedTask;
+            public event EventHandler<UserScriptDownloadProgress> Progress;
+            public event EventHandler Completed;
+            public event EventHandler<UserScriptDownloadFailure> Failed;
+            public event EventHandler Aborted;
+            public void Abort() { Aborted?.Invoke(this, EventArgs.Empty); }
+            public void Dispose() { }
         }
 
         private sealed class FakeMenuRegistration : IMenuRegistration

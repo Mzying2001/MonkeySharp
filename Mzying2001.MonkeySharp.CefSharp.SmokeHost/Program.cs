@@ -395,21 +395,33 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
 
     internal sealed class FixtureHttpRequestService : IHttpRequestService
     {
-        public async Task<UserScriptHttpResponse> SendAsync(
+        public IHttpRequestOperation SendAsync(
             UserScriptHttpRequest request,
-            IProgress<UserScriptHttpProgress> progress,
             CancellationToken cancellationToken)
         {
-            await Task.Delay(50, cancellationToken).ConfigureAwait(false);
-            progress?.Report(new UserScriptHttpProgress(1, 1));
             var body = Encoding.UTF8.GetBytes("legacy xhr ok");
-            return new UserScriptHttpResponse(
-                200,
-                "OK",
-                request.Url,
-                new Dictionary<string, string> { ["Content-Type"] = "text/plain" },
-                body,
-                "legacy xhr ok");
+            return new FixtureHttpOperation(new UserScriptHttpResponse(
+                    200,
+                    "OK",
+                    request.Url,
+                    new Dictionary<string, string> { ["Content-Type"] = "text/plain" },
+                    body,
+                    "legacy xhr ok"));
         }
+    }
+
+    internal sealed class FixtureHttpOperation : IHttpRequestOperation
+    {
+        private readonly UserScriptHttpResponse _response;
+        public FixtureHttpOperation(UserScriptHttpResponse response) { _response = response; }
+        public IProgress<UserScriptHttpProgress> Progress { get; set; }
+        public Task<UserScriptHttpResponse> Completion => CompleteAsync();
+        private async Task<UserScriptHttpResponse> CompleteAsync()
+        {
+            await Task.Delay(50).ConfigureAwait(false);
+            Progress?.Report(new UserScriptHttpProgress(1, 1));
+            return _response;
+        }
+        public void Abort() { }
     }
 }
