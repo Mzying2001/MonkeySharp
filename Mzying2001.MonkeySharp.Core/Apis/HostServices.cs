@@ -80,6 +80,25 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         Stream OpenRead();
     }
 
+    /// <summary>Contains optional Tampermonkey-compatible HTTP request controls.</summary>
+    public sealed class UserScriptHttpRequestOptions
+    {
+        /// <summary>Gets or sets cookies appended to the outgoing Cookie header.</summary>
+        public string Cookie { get; set; }
+
+        /// <summary>Gets or sets the user name supplied to an HTTP authentication challenge.</summary>
+        public string Username { get; set; }
+
+        /// <summary>Gets or sets the password supplied to an HTTP authentication challenge.</summary>
+        public string Password { get; set; }
+
+        /// <summary>Gets or sets whether stored cookies and credentials are disabled.</summary>
+        public bool Anonymous { get; set; }
+
+        /// <summary>Gets or sets the MIME type used to interpret the response.</summary>
+        public string OverrideMimeType { get; set; }
+    }
+
     /// <summary>Describes a validated HTTP request initiated by a userscript.</summary>
     public sealed class UserScriptHttpRequest
     {
@@ -91,7 +110,8 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             IUserScriptHttpBody body,
             TimeSpan? timeout,
             long? maxResponseBytes,
-            Func<Uri, bool> redirectAllowed)
+            Func<Uri, bool> redirectAllowed,
+            UserScriptHttpRequestOptions options = null)
         {
             if (string.IsNullOrWhiteSpace(method)) throw new ArgumentException("The HTTP method is required.", nameof(method));
             if (maxResponseBytes.HasValue && maxResponseBytes.Value <= 0)
@@ -104,6 +124,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             Timeout = timeout;
             MaxResponseBytes = maxResponseBytes;
             RedirectAllowed = redirectAllowed ?? throw new ArgumentNullException(nameof(redirectAllowed));
+            Options = options ?? new UserScriptHttpRequestOptions();
         }
 
         /// <summary>Gets the HTTP method.</summary>
@@ -126,6 +147,9 @@ namespace Mzying2001.MonkeySharp.Core.Apis
 
         /// <summary>Gets the callback that must authorize every redirect target before it is followed.</summary>
         public Func<Uri, bool> RedirectAllowed { get; }
+
+        /// <summary>Gets optional request controls.</summary>
+        public UserScriptHttpRequestOptions Options { get; }
     }
 
     /// <summary>Contains HTTP response metadata returned by a userscript host service.</summary>

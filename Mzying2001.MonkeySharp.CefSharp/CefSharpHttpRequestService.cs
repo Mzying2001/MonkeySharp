@@ -21,7 +21,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
         private const string HttpResourceType = "XHR";
         private static readonly HashSet<string> RestrictedRequestHeaders = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "Host", "Content-Length", "Cookie", "Origin", "Referer", "Connection", "Proxy-Connection",
+            "Host", "Content-Length", "Connection", "Proxy-Connection",
             "Transfer-Encoding", "Upgrade", "Keep-Alive", "TE", "Trailer"
         };
         private readonly Func<IRequestContext> _contextAccessor;
@@ -179,10 +179,21 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     _currentUrl = url;
                     cefRequest.Url = url.AbsoluteUri;
                     cefRequest.Method = _request.Method;
-                    cefRequest.Flags = UrlRequestFlags.AllowStoredCredentials |
-                        UrlRequestFlags.StopOnRedirect | UrlRequestFlags.ReportUploadProgress;
+                    cefRequest.Flags = UrlRequestFlags.StopOnRedirect | UrlRequestFlags.ReportUploadProgress;
+                    if (!_request.Options.Anonymous)
+                        cefRequest.Flags |= UrlRequestFlags.AllowStoredCredentials;
                     foreach (var header in _request.Headers)
-                        cefRequest.SetHeaderByName(header.Key, header.Value, true);
+                    {
+                        if (!string.Equals(header.Key, "Cookie", StringComparison.OrdinalIgnoreCase))
+                            cefRequest.SetHeaderByName(header.Key, header.Value, true);
+                    }
+                    if (!_request.Options.Anonymous)
+                    {
+                        _request.Headers.TryGetValue("Cookie", out var cookieHeader);
+                        var cookie = string.Join("; ", new[] { cookieHeader, _request.Options.Cookie }
+                            .Where(value => !string.IsNullOrEmpty(value)));
+                        if (cookie.Length != 0) cefRequest.SetHeaderByName("Cookie", cookie, true);
+                    }
                     if (_request.Body != null && _request.Body.Length != 0)
                     {
                         cefRequest.InitializePostData();
@@ -257,6 +268,11 @@ namespace Mzying2001.MonkeySharp.CefSharp
 
             public bool GetAuthCredentials(bool isProxy, string host, int port, string realm, string scheme, IAuthCallback callback)
             {
+                if (!isProxy && !_request.Options.Anonymous && _request.Options.Username != null)
+                {
+                    callback.Continue(_request.Options.Username, _request.Options.Password ?? string.Empty);
+                    return true;
+                }
                 if (_webRequests == null) return false;
                 var url = _currentUrl?.AbsoluteUri ?? _request.Url.AbsoluteUri;
                 var requestId = responseIdentifier(null);
@@ -504,7 +520,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                         _currentUrl,
                         headers,
                         ToRawHeaders(response.Headers),
-                        response.MimeType,
+                        _request.Options.OverrideMimeType ?? response.MimeType,
                         response.Charset,
                         _redirects);
                 }

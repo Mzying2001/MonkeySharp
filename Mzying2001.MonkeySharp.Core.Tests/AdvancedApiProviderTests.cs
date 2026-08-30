@@ -155,6 +155,67 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Fact]
+        public async Task HttpApiAcceptsExtensionMethodsSpecialHeadersAndRequestOptions()
+        {
+            var installation = await InstallAsync("// @grant GM.xmlHttpRequest\n// @connect api.example.com");
+            var response = new UserScriptHttpResponse(
+                204, "No Content", new Uri("https://api.example.com/"),
+                new Dictionary<string, string>(), string.Empty, null, null);
+            var service = new FakeHttpService(response, null);
+            var provider = new ResourceAndNetworkApiProvider(http: service);
+
+            var created = await provider.InvokeAsync(Context(installation, "GM.xmlHttpRequest", new
+            {
+                operation = "create",
+                xhrId = 13,
+                url = "https://api.example.com/",
+                method = "PROPFIND",
+                headers = new Dictionary<string, string>
+                {
+                    ["User-Agent"] = "MonkeySharp",
+                    ["Referer"] = "https://example.com/",
+                    ["Origin"] = "https://example.com",
+                    ["Cookie"] = "from=header"
+                },
+                cookie = "from=option",
+                user = "alice",
+                password = "secret",
+                anonymous = true,
+                overrideMimeType = "text/plain;charset=iso-8859-1"
+            }), CancellationToken.None);
+            var sessionId = Json(created.Json).GetProperty("sessionId").GetString();
+            await provider.InvokeAsync(Context(installation, "GM.xmlHttpRequest", new
+            {
+                operation = "execute", sessionId
+            }), CancellationToken.None);
+
+            Assert.Equal("PROPFIND", service.Request.Method);
+            Assert.Equal("MonkeySharp", service.Request.Headers["User-Agent"]);
+            Assert.Equal("from=option", service.Request.Options.Cookie);
+            Assert.Equal("alice", service.Request.Options.Username);
+            Assert.Equal("secret", service.Request.Options.Password);
+            Assert.True(service.Request.Options.Anonymous);
+            Assert.Equal("text/plain;charset=iso-8859-1", service.Request.Options.OverrideMimeType);
+
+            foreach (var method in new[] { "CONNECT", "TRACE", "TRACK" })
+            {
+                var error = await Assert.ThrowsAsync<BridgeProtocolException>(() => provider.InvokeAsync(
+                    Context(installation, "GM.xmlHttpRequest", new
+                    {
+                        operation = "create", xhrId = 14, url = "https://api.example.com/", method
+                    }), CancellationToken.None));
+                Assert.Equal(BridgeErrorCodes.InvalidParams, error.Code);
+            }
+
+            var unsupported = await Assert.ThrowsAsync<BridgeProtocolException>(() => provider.InvokeAsync(
+                Context(installation, "GM.xmlHttpRequest", new
+                {
+                    operation = "create", xhrId = 15, url = "https://api.example.com/", proxy = new { }
+                }), CancellationToken.None));
+            Assert.Equal(BridgeErrorCodes.NotSupported, unsupported.Code);
+        }
+
+        [Fact]
         public async Task DependencyResolverPreservesRequireOrderAndLimit()
         {
             var installation = await InstallAsync(

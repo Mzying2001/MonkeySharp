@@ -161,10 +161,68 @@
                 });
             };
 
-            const detailsWithSignal = function (details, signal, xhrId) {
-                const copy = Object.assign({}, details, { __monkeySharpXhrId: xhrId, __monkeySharpLegacy: true });
-                if (signal) copy.signal = signal;
-                return copy;
+            const notSupported = function (message) {
+                const error = new Error(message);
+                error.code = "MSP006_NOT_SUPPORTED";
+                return error;
+            };
+
+            const objectTag = value => Object.prototype.toString.call(value);
+
+            const normalizeHttpUrl = function (value) {
+                const tag = objectTag(value);
+                if (tag === "[object Blob]" || tag === "[object File]") {
+                    throw notSupported("Blob and File request URLs are not supported.");
+                }
+                if (typeof value === "string") return value;
+                if (tag === "[object URL]") return value.href;
+                throw new TypeError("details.url must be a string or URL.");
+            };
+
+            const setDefaultHeader = function (headers, name, value) {
+                if (!value) return;
+                const exists = Object.keys(headers).some(header => header.toLowerCase() === name.toLowerCase());
+                if (!exists) headers[name] = value;
+            };
+
+            const serializeHttpBody = async function (value) {
+                if (typeof value === "undefined" || value === null) return { bytes: null, contentType: null };
+                if (typeof value === "string") return { bytes: new TextEncoder().encode(value), contentType: null };
+                const tag = objectTag(value);
+                if (tag === "[object ArrayBuffer]") {
+                    return { bytes: new Uint8Array(value.slice(0)), contentType: null };
+                }
+                if (ArrayBuffer.isView(value)) {
+                    return {
+                        bytes: new Uint8Array(value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength)),
+                        contentType: null
+                    };
+                }
+                if (tag === "[object Blob]" || tag === "[object File]") {
+                    return { bytes: new Uint8Array(await value.arrayBuffer()), contentType: value.type || null };
+                }
+                if (tag === "[object FormData]") {
+                    if (typeof root.Response !== "function") throw notSupported("This browser cannot serialize FormData.");
+                    const encoded = new root.Response(value);
+                    return {
+                        bytes: new Uint8Array(await encoded.arrayBuffer()),
+                        contentType: encoded.headers.get("content-type")
+                    };
+                }
+                if (tag === "[object URLSearchParams]") {
+                    return {
+                        bytes: new TextEncoder().encode(value.toString()),
+                        contentType: "application/x-www-form-urlencoded;charset=UTF-8"
+                    };
+                }
+                const prototype = Object.getPrototypeOf(value);
+                if (Array.isArray(value) || prototype === Object.prototype || prototype === null) {
+                    return {
+                        bytes: new TextEncoder().encode(JSON.stringify(value)),
+                        contentType: "application/json;charset=UTF-8"
+                    };
+                }
+                throw new TypeError("details.data has an unsupported type.");
             };
 
             const createApi = function (record, invocation, availableApis) {
@@ -299,8 +357,11 @@
                 }
                 if (enabled("GM.xmlHttpRequest")) {
                     api.xmlHttpRequest = function (details) {
-                        if (!details || typeof details !== "object" || typeof details.url !== "string") {
-                            throw new TypeError("details.url must be a string.");
+                        if (!details || typeof details !== "object") throw new TypeError("details must be an object.");
+                        const requestUrl = normalizeHttpUrl(details.url);
+                        if (typeof details.proxy !== "undefined") throw notSupported("proxy is not supported by CefSharp.");
+                        if (typeof details.cookiePartition !== "undefined") {
+                            throw notSupported("cookiePartition is not supported by CefSharp.");
                         }
                         const xhrId = Number.isInteger(details.__monkeySharpXhrId)
                             ? details.__monkeySharpXhrId : nextListenerId++;
@@ -315,18 +376,32 @@
                                 throw new TypeError(name + " must be a function.");
                             }
                         });
-                        const parameters = { operation: "create", xhrId: xhrId, url: details.url };
+                        const parameters = { operation: "create", xhrId: xhrId, url: requestUrl };
                         if (typeof details.method !== "undefined") {
                             if (typeof details.method !== "string") throw new TypeError("method must be a string.");
                             parameters.method = details.method;
                         }
-                        if (typeof details.data !== "undefined" && typeof details.data !== "string") {
-                            throw new TypeError("data must be a string.");
+                        const headers = typeof details.headers === "undefined" ? {} : serializableValue(details.headers);
+                        if (!headers || typeof headers !== "object" || Array.isArray(headers)) {
+                            throw new TypeError("headers must be an object.");
                         }
-                        if (typeof details.headers !== "undefined") parameters.headers = serializableValue(details.headers);
+                        parameters.headers = headers;
                         if (typeof details.timeout !== "undefined") {
-                            if (!Number.isInteger(details.timeout) || details.timeout <= 0) throw new TypeError("timeout must be positive.");
-                            parameters.timeout = details.timeout;
+                            if (!Number.isInteger(details.timeout) || details.timeout < 0) throw new TypeError("timeout must not be negative.");
+                            if (details.timeout > 0) parameters.timeout = details.timeout;
+                        }
+                        ["cookie", "user", "password", "overrideMimeType"].forEach(name => {
+                            if (typeof details[name] === "undefined") return;
+                            if (typeof details[name] !== "string") throw new TypeError(name + " must be a string.");
+                            parameters[name] = details[name];
+                        });
+                        if (typeof details.anonymous !== "undefined") {
+                            if (typeof details.anonymous !== "boolean") throw new TypeError("anonymous must be a boolean.");
+                            parameters.anonymous = details.anonymous;
+                        }
+                        if (details.signal && (typeof details.signal.addEventListener !== "function" ||
+                            typeof details.signal.removeEventListener !== "function")) {
+                            throw new TypeError("signal must be an AbortSignal.");
                         }
                         const controller = typeof AbortController === "function" ? new AbortController() : null;
                         let sessionId = null;
@@ -340,10 +415,12 @@
                         record.xhrHandlers.set(xhrId, callbacks);
                         const operation = (async function () {
                             try {
+                                const body = await serializeHttpBody(details.data);
+                                setDefaultHeader(parameters.headers, "Content-Type", body.contentType);
                                 const created = await call(record, "GM.xmlHttpRequest", parameters, signal);
                                 sessionId = created.sessionId;
-                                if (typeof details.data === "string" && details.data.length !== 0) {
-                                    const bytes = new TextEncoder().encode(details.data);
+                                if (body.bytes && body.bytes.length !== 0) {
+                                    const bytes = body.bytes;
                                     for (let offset = 0; offset < bytes.length; offset += 65536) {
                                         const segment = bytes.subarray(offset, Math.min(offset + 65536, bytes.length));
                                         let binary = "";
@@ -369,13 +446,13 @@
                                     length += chunk.length;
                                     if (result.done) break;
                                 }
-                                const body = new Uint8Array(length);
+                                const responseBytes = new Uint8Array(length);
                                 let bodyOffset = 0;
-                                chunks.forEach(chunk => { body.set(chunk, bodyOffset); bodyOffset += chunk.length; });
+                                chunks.forEach(chunk => { responseBytes.set(chunk, bodyOffset); bodyOffset += chunk.length; });
                                 try {
-                                    response.responseText = new TextDecoder(response.charset || "utf-8").decode(body);
+                                    response.responseText = new TextDecoder(response.charset || "utf-8").decode(responseBytes);
                                 } catch (_) {
-                                    response.responseText = new TextDecoder().decode(body);
+                                    response.responseText = new TextDecoder().decode(responseBytes);
                                 }
                                 delete response.bodyLength;
                                 delete response.mimeType;
@@ -655,9 +732,7 @@
                     return element;
                 };
                 if (api.xmlHttpRequest) facade.GM_xmlhttpRequest = function (details) {
-                    if (!details || typeof details !== "object" || typeof details.url !== "string") {
-                        throw new TypeError("details.url must be a string.");
-                    }
+                    if (!details || typeof details !== "object") throw new TypeError("details must be an object.");
                     const xhrId = nextListenerId++;
                     const callbacks = {
                         onload: details.onload,
@@ -670,29 +745,18 @@
                             throw new TypeError(name + " must be a function.");
                         }
                     });
-                    const parameters = { xhrId: xhrId, url: details.url };
-                    ["method", "data"].forEach(name => {
-                        if (typeof details[name] !== "undefined") {
-                            if (typeof details[name] !== "string") throw new TypeError(name + " must be a string.");
-                            parameters[name] = details[name];
-                        }
-                    });
-                    if (typeof details.headers !== "undefined") parameters.headers = serializableValue(details.headers);
-                    if (typeof details.timeout !== "undefined") {
-                        if (!Number.isInteger(details.timeout) || details.timeout <= 0) throw new TypeError("timeout must be positive.");
-                        parameters.timeout = details.timeout;
-                    }
-                    const controller = typeof AbortController === "function" ? new AbortController() : null;
-                    const handle = { abort: function () { if (controller) controller.abort(); } };
-                    record.xhrHandlers.set(xhrId, callbacks);
-                    api.xmlHttpRequest(detailsWithSignal(details, controller && controller.signal, xhrId))
+                    const request = api.xmlHttpRequest(Object.assign({}, details, {
+                        __monkeySharpXhrId: xhrId,
+                        __monkeySharpLegacy: true
+                    }));
+                    const handle = { abort: function () { request.abort(); } };
+                    request
                         .then(response => { if (callbacks.onload) callbacks.onload(response); })
                         .catch(error => {
                             if (error && error.name === "AbortError") return;
                             if (error && error.code === "MSP009_TIMEOUT" && callbacks.ontimeout) callbacks.ontimeout(error);
                             else if (callbacks.onerror) callbacks.onerror(error);
-                        })
-                        .finally(() => record.xhrHandlers.delete(xhrId));
+                        });
                     return handle;
                 };
                 if (api.registerMenuCommand) facade.GM_registerMenuCommand = function (name, callback, accessKey) {

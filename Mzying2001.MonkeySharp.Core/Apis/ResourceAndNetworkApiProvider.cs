@@ -23,13 +23,13 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         IUserScriptExecutionObserver,
         IDisposable
     {
-        private static readonly HashSet<string> AllowedMethods = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        private static readonly HashSet<string> BlockedMethods = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"
+            "CONNECT", "TRACE", "TRACK"
         };
         private static readonly HashSet<string> BlockedHeaders = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "Host", "Content-Length", "Cookie", "Origin", "Referer", "Connection", "Proxy-Connection",
+            "Host", "Content-Length", "Connection", "Proxy-Connection",
             "Transfer-Encoding", "Upgrade", "Keep-Alive", "TE", "Trailer"
         };
 
@@ -170,6 +170,11 @@ namespace Mzying2001.MonkeySharp.Core.Apis
 
         private ApiResult CreateHttpSession(ApiInvocationContext context)
         {
+            if (context.Parameters.TryGetProperty("proxy", out _) ||
+                context.Parameters.TryGetProperty("cookiePartition", out _))
+                throw new BridgeProtocolException(
+                    BridgeErrorCodes.NotSupported,
+                    "proxy and cookiePartition are not supported by this host.");
             var urlText = ProviderParameters.RequiredString(context.Parameters, "url");
             if (!Uri.TryCreate(urlText, UriKind.Absolute, out var url) ||
                 (url.Scheme != Uri.UriSchemeHttp && url.Scheme != Uri.UriSchemeHttps))
@@ -179,7 +184,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
 
             var method = ProviderParameters.OptionalString(context.Parameters, "method") ?? "GET";
             method = method.ToUpperInvariant();
-            if (!AllowedMethods.Contains(method))
+            if (!IsHeaderName(method) || BlockedMethods.Contains(method))
                 throw ProviderParameters.Invalid("The HTTP method is not allowed.");
             var headers = ReadHeaders(context.Parameters);
             TimeSpan? timeout = null;
@@ -207,7 +212,15 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                     null,
                     timeout,
                     null,
-                    redirect => ConnectAllows(context.Installation.Definition.Metadata.Connects, context.Frame.Url, redirect)),
+                    redirect => ConnectAllows(context.Installation.Definition.Metadata.Connects, context.Frame.Url, redirect),
+                    new UserScriptHttpRequestOptions
+                    {
+                        Cookie = OptionalSafeString(context.Parameters, "cookie"),
+                        Username = OptionalSafeString(context.Parameters, "user"),
+                        Password = OptionalSafeString(context.Parameters, "password"),
+                        Anonymous = OptionalBoolean(context.Parameters, "anonymous"),
+                        OverrideMimeType = OptionalSafeString(context.Parameters, "overrideMimeType")
+                    }),
                 RaiseHttpNotification);
             lock (_sessionLock)
             {
@@ -427,7 +440,8 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                             _requestBody,
                             Request.Timeout,
                             Request.MaxResponseBytes,
-                            Request.RedirectAllowed);
+                            Request.RedirectAllowed,
+                            Request.Options);
                     }
                 }
             }
@@ -561,6 +575,23 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 result.Add(header.Name, header.Value.GetString());
             }
             return result;
+        }
+
+        private static string OptionalSafeString(JsonElement parameters, string name)
+        {
+            var value = ProviderParameters.OptionalString(parameters, name);
+            if (value != null && value.IndexOfAny(new[] { '\r', '\n' }) >= 0)
+                throw ProviderParameters.Invalid(name + " cannot contain line breaks.");
+            return value;
+        }
+
+        private static bool OptionalBoolean(JsonElement parameters, string name)
+        {
+            if (!parameters.TryGetProperty(name, out var value) || value.ValueKind == JsonValueKind.Null)
+                return false;
+            if (value.ValueKind != JsonValueKind.True && value.ValueKind != JsonValueKind.False)
+                throw ProviderParameters.Invalid(name + " must be a boolean.");
+            return value.GetBoolean();
         }
 
         private static bool IsHeaderName(string name)
