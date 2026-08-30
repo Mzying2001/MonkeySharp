@@ -35,7 +35,11 @@ namespace Mzying2001.MonkeySharp.CefSharp
         public bool OnCertificateError(IWebBrowser chromiumWebBrowser, IBrowser browser, CefErrorCode errorCode, string requestUrl, ISslInfo sslInfo, IRequestCallback callback) { return false; }
         public bool OnSelectClientCertificate(IWebBrowser chromiumWebBrowser, IBrowser browser, bool isProxy, string host, int port, X509Certificate2Collection certificates, ISelectClientCertificateCallback callback) { return false; }
         public void OnRenderViewReady(IWebBrowser chromiumWebBrowser, IBrowser browser) { }
+#if CEF_SHARP_EXTENDED_RENDER_TERMINATED
+        public void OnRenderProcessTerminated(IWebBrowser chromiumWebBrowser, IBrowser browser, CefTerminationStatus status, int errorCode, string errorMessage) { }
+#else
         public void OnRenderProcessTerminated(IWebBrowser chromiumWebBrowser, IBrowser browser, CefTerminationStatus status) { }
+#endif
 
         private sealed class ResourceHandler : IResourceRequestHandler
         {
@@ -103,6 +107,10 @@ namespace Mzying2001.MonkeySharp.CefSharp
         public bool OnCertificateError(IWebBrowser a, IBrowser b, CefErrorCode c, string d, ISslInfo e, IRequestCallback f) => _handlers.Any(x => x.OnCertificateError(a, b, c, d, e, f));
         public bool OnSelectClientCertificate(IWebBrowser a, IBrowser b, bool c, string d, int e, X509Certificate2Collection f, ISelectClientCertificateCallback g) => _handlers.Any(x => x.OnSelectClientCertificate(a, b, c, d, e, f, g));
         public void OnRenderViewReady(IWebBrowser a, IBrowser b) { foreach (var x in _handlers) x.OnRenderViewReady(a, b); }
+#if CEF_SHARP_EXTENDED_RENDER_TERMINATED
+        public void OnRenderProcessTerminated(IWebBrowser a, IBrowser b, CefTerminationStatus c, int d, string e) { foreach (var x in _handlers) x.OnRenderProcessTerminated(a, b, c, d, e); }
+#else
         public void OnRenderProcessTerminated(IWebBrowser a, IBrowser b, CefTerminationStatus c) { foreach (var x in _handlers) x.OnRenderProcessTerminated(a, b, c); }
+#endif
     }
 }

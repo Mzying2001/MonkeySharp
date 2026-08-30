@@ -483,6 +483,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
             public void Abort() { }
         }
 
+#pragma warning disable CS0067
         private sealed class NoopNotificationHandle : INotificationHandle
         {
             public Task Completion { get; } = Task.CompletedTask;
@@ -513,5 +514,6 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
             public void Abort() { }
             public void Dispose() { }
         }
+#pragma warning restore CS0067
     }
 }
