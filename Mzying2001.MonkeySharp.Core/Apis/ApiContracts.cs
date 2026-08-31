@@ -161,6 +161,13 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         event EventHandler<ApiNotificationEventArgs> Notification;
     }
 
+    /// <summary>Exposes non-fatal diagnostics produced by an API provider or service.</summary>
+    public interface IUserScriptDiagnosticSource
+    {
+        /// <summary>Occurs when a provider callback fails without aborting its host thread.</summary>
+        event EventHandler<UserScriptDiagnostic> Diagnostic;
+    }
+
     /// <summary>
     /// Receives notification when a userscript execution ends.
     /// </summary>

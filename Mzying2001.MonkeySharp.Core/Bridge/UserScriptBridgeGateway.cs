@@ -232,6 +232,8 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
         {
             foreach (var source in _providerInstances.OfType<IUserScriptNotificationSource>())
                 source.Notification -= ProviderNotification;
+            foreach (var source in _providerInstances.OfType<IUserScriptDiagnosticSource>())
+                source.Diagnostic -= ProviderDiagnostic;
             foreach (var disposable in _providerInstances.OfType<IDisposable>())
                 disposable.Dispose();
         }
@@ -837,6 +839,13 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             }
             if (_providerInstances.Add(provider) && provider is IUserScriptNotificationSource source)
                 source.Notification += ProviderNotification;
+            if (provider is IUserScriptDiagnosticSource diagnosticSource)
+                diagnosticSource.Diagnostic += ProviderDiagnostic;
+        }
+
+        private void ProviderDiagnostic(object sender, UserScriptDiagnostic diagnostic)
+        {
+            Diagnostic?.Invoke(this, diagnostic);
         }
 
         private void ProviderNotification(object sender, ApiNotificationEventArgs notification)

@@ -45,7 +45,10 @@ namespace Mzying2001.MonkeySharp.CefSharp
     /// <summary>
     /// Executes userscript HTTP requests through CefSharp's URL request API.
     /// </summary>
-    public sealed class CefSharpHttpRequestService : IHttpRequestService, IDisposable
+    public sealed class CefSharpHttpRequestService :
+        IHttpRequestService,
+        IUserScriptDiagnosticSource,
+        IDisposable
     {
         private const string HttpResourceType = "XHR";
         private static readonly HashSet<string> RestrictedRequestHeaders = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -92,6 +95,9 @@ namespace Mzying2001.MonkeySharp.CefSharp
         public int MaximumRedirects { get; } = 20;
 
         /// <inheritdoc />
+        public event EventHandler<UserScriptDiagnostic> Diagnostic;
+
+        /// <inheritdoc />
         public IHttpRequestOperation SendAsync(
             UserScriptHttpRequest request,
             IUserScriptHttpObserver observer,
@@ -114,6 +120,34 @@ namespace Mzying2001.MonkeySharp.CefSharp
         private void Remove(Operation operation)
         {
             lock (_sync) _operations.Remove(operation);
+        }
+
+        private void ReportCallbackFailure(string callback, Exception exception)
+        {
+            var diagnostic = new UserScriptDiagnostic(
+                "MSC600_HTTP_CALLBACK_FAILED",
+                DiagnosticSeverity.Error,
+                "A CefSharp HTTP callback failed while reporting " + callback + ".",
+                exception);
+            var handlers = Diagnostic;
+            if (handlers == null)
+            {
+                System.Diagnostics.Trace.TraceError(
+                    "MonkeySharp diagnostic {0}: {1}", diagnostic.Code, diagnostic.Message);
+                return;
+            }
+            foreach (EventHandler<UserScriptDiagnostic> handler in handlers.GetInvocationList())
+            {
+                try
+                {
+                    handler(this, diagnostic);
+                }
+                catch (Exception observerException)
+                {
+                    System.Diagnostics.Trace.TraceError(
+                        "MonkeySharp diagnostic observer failed: {0}", observerException);
+                }
+            }
         }
 
         private void ThrowIfDisposed()
@@ -353,14 +387,14 @@ namespace Mzying2001.MonkeySharp.CefSharp
             public void OnUploadProgress(IUrlRequest request, long current, long total)
             {
                 try { _observer.OnUploadProgress(current, total > 0 ? (long?)total : null); }
-                catch { }
+                catch (Exception exception) { _owner.ReportCallbackFailure("upload progress", exception); }
             }
 
             public void OnDownloadProgress(IUrlRequest request, long current, long total)
             {
                 if (IsFollowedRedirect(request?.Response)) return;
                 try { _observer.OnDownloadProgress(current, total > 0 ? (long?)total : null); }
-                catch { }
+                catch (Exception exception) { _owner.ReportCallbackFailure("download progress", exception); }
             }
 
             public void OnDownloadData(IUrlRequest request, Stream data)
@@ -479,7 +513,10 @@ namespace Mzying2001.MonkeySharp.CefSharp
                         responseIdentifier(null), _currentUrl?.AbsoluteUri ?? _request.Url.AbsoluteUri,
                         _currentMethod, HttpResourceType, null, null, exception?.Message));
                 }
-                catch { }
+                catch (Exception callbackException)
+                {
+                    _owner.ReportCallbackFailure("webRequest failure", callbackException);
+                }
             }
 
             private ulong responseIdentifier(IUrlRequest request)
@@ -632,7 +669,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                         _redirects);
                 }
                 try { _observer.OnResponseStarted(_responseMetadata); }
-                catch { }
+                catch (Exception exception) { _owner.ReportCallbackFailure("response metadata", exception); }
                 return _responseMetadata;
             }
 

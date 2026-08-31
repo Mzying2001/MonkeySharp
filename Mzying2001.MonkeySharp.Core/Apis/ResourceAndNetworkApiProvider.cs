@@ -19,6 +19,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
     public sealed class ResourceAndNetworkApiProvider :
         IUserScriptApiProvider,
         IUserScriptNotificationSource,
+        IUserScriptDiagnosticSource,
         IUserScriptCompatibilityBootstrapProvider,
         IUserScriptExecutionObserver,
         IDisposable
@@ -54,6 +55,8 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 throw new ArgumentException("At least one resource or HTTP service is required.");
             _resources = resources;
             _http = http;
+            if (_http is IUserScriptDiagnosticSource diagnosticSource)
+                diagnosticSource.Diagnostic += HttpDiagnostic;
             _options = options ?? new BridgeOptions();
             var methods = new List<string>();
             if (resources != null)
@@ -68,6 +71,9 @@ namespace Mzying2001.MonkeySharp.Core.Apis
 
         /// <inheritdoc />
         public event EventHandler<ApiNotificationEventArgs> Notification;
+
+        /// <inheritdoc />
+        public event EventHandler<UserScriptDiagnostic> Diagnostic;
 
         /// <inheritdoc />
         public IReadOnlyCollection<string> Methods => _methods;
@@ -206,6 +212,8 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 sessionId,
                 context.Installation.ScriptKey,
                 context.ExecutionId,
+                context.Frame,
+                context.RequestId,
                 xhrId,
                 new UserScriptHttpRequest(
                     method,
@@ -234,7 +242,8 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                         Fetch = fetch,
                         ResponseType = ReadResponseType(context.Parameters)
                     }),
-                RaiseHttpNotification);
+                RaiseHttpNotification,
+                ReportHttpNotificationFailure);
             lock (_sessionLock)
             {
                 ThrowIfDisposed();
@@ -391,6 +400,8 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 sessions = _sessions.Values.ToArray();
                 _sessions.Clear();
             }
+            if (_http is IUserScriptDiagnosticSource diagnosticSource)
+                diagnosticSource.Diagnostic -= HttpDiagnostic;
             foreach (var session in sessions) session.Dispose();
         }
 
@@ -415,6 +426,50 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 JsonSerializer.Serialize(value)));
         }
 
+        private void ReportHttpNotificationFailure(
+            HttpSession session,
+            string eventName,
+            Exception exception)
+        {
+            RaiseDiagnostic(new UserScriptDiagnostic(
+                "MSA300_NOTIFICATION_CALLBACK_FAILED",
+                DiagnosticSeverity.Error,
+                "An HTTP notification callback failed for '" + eventName + "'.",
+                exception,
+                session.ScriptKey,
+                session.Frame.DocumentId,
+                session.Frame.FrameId,
+                session.RequestId));
+        }
+
+        private void HttpDiagnostic(object sender, UserScriptDiagnostic diagnostic)
+        {
+            RaiseDiagnostic(diagnostic);
+        }
+
+        private void RaiseDiagnostic(UserScriptDiagnostic diagnostic)
+        {
+            var handlers = Diagnostic;
+            if (handlers == null)
+            {
+                System.Diagnostics.Trace.TraceError(
+                    "MonkeySharp diagnostic {0}: {1}", diagnostic.Code, diagnostic.Message);
+                return;
+            }
+            foreach (EventHandler<UserScriptDiagnostic> handler in handlers.GetInvocationList())
+            {
+                try
+                {
+                    handler(this, diagnostic);
+                }
+                catch (Exception exception)
+                {
+                    System.Diagnostics.Trace.TraceError(
+                        "MonkeySharp diagnostic observer failed: {0}", exception);
+                }
+            }
+        }
+
         private void ThrowIfDisposed()
         {
             if (_disposed) throw new ObjectDisposedException(nameof(ResourceAndNetworkApiProvider));
@@ -431,6 +486,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             private readonly HttpSpoolingBuffer _requestBody = new HttpSpoolingBuffer();
             private readonly HttpSpoolingBuffer _responseBody = new HttpSpoolingBuffer();
             private readonly Action<HttpSession, string, object> _notify;
+            private readonly Action<HttpSession, string, Exception> _reportNotificationFailure;
             private readonly TaskCompletionSource<UserScriptHttpResponse> _responseStartedTask =
                 new TaskCompletionSource<UserScriptHttpResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
             private IHttpRequestOperation _operation;
@@ -444,21 +500,29 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 string sessionId,
                 ScriptKey scriptKey,
                 string executionId,
+                DocumentFrame frame,
+                string requestId,
                 int xhrId,
                 UserScriptHttpRequest request,
-                Action<HttpSession, string, object> notify)
+                Action<HttpSession, string, object> notify,
+                Action<HttpSession, string, Exception> reportNotificationFailure)
             {
                 SessionId = sessionId;
                 ScriptKey = scriptKey;
                 ExecutionId = executionId;
+                Frame = frame;
+                RequestId = requestId;
                 XhrId = xhrId;
                 Request = request;
                 _notify = notify;
+                _reportNotificationFailure = reportNotificationFailure;
             }
 
             public string SessionId { get; }
             public ScriptKey ScriptKey { get; }
             public string ExecutionId { get; }
+            public DocumentFrame Frame { get; }
+            public string RequestId { get; }
             public int XhrId { get; }
             public UserScriptHttpRequest Request { get; private set; }
             public long RequestBodyLength => _requestBody.Length;
@@ -628,7 +692,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             private void Notify(string eventName, object value)
             {
                 try { _notify(this, eventName, value); }
-                catch { }
+                catch (Exception exception) { _reportNotificationFailure(this, eventName, exception); }
             }
 
             private void ThrowIfDisposed()

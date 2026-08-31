@@ -204,6 +204,27 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Fact]
+        public async Task ProviderDiagnosticsAreForwardedByTheGateway()
+        {
+            var provider = new DiagnosticProvider();
+            using (var fixture = await BridgeFixture.CreateAsync(
+                null,
+                new[] { provider },
+                null,
+                "GM.download"))
+            {
+                UserScriptDiagnostic observed = null;
+                fixture.Gateway.Diagnostic += (_, diagnostic) => observed = diagnostic;
+
+                var response = await fixture.RequestAsync("GM.download", new { });
+
+                Assert.True(response.GetProperty("ok").GetBoolean());
+                Assert.NotNull(observed);
+                Assert.Equal("MSA_TEST_DIAGNOSTIC", observed.Code);
+            }
+        }
+
+        [Fact]
         public async Task TimeoutAndCancelReturnStableErrors()
         {
             var provider = new BlockingProvider();
@@ -529,6 +550,24 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 Entered.TrySetResult(null);
                 await Task.Delay(Timeout.Infinite, cancellationToken);
                 return ApiResult.Undefined;
+            }
+        }
+
+        private sealed class DiagnosticProvider : IUserScriptApiProvider, IUserScriptDiagnosticSource
+        {
+            public IReadOnlyCollection<string> Methods { get; } =
+                new ReadOnlyCollection<string>(new[] { "GM.download" });
+            public event EventHandler<UserScriptDiagnostic> Diagnostic;
+
+            public Task<ApiResult> InvokeAsync(
+                ApiInvocationContext context,
+                CancellationToken cancellationToken)
+            {
+                Diagnostic?.Invoke(this, new UserScriptDiagnostic(
+                    "MSA_TEST_DIAGNOSTIC",
+                    DiagnosticSeverity.Warning,
+                    "Test diagnostic."));
+                return Task.FromResult(ApiResult.Undefined);
             }
         }
 

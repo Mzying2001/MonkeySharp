@@ -305,6 +305,32 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Fact]
+        public async Task HttpNotificationCallbackFailuresProduceDiagnostics()
+        {
+            var installation = await InstallAsync("// @grant GM.xmlHttpRequest\n// @connect api.example.com");
+            var service = new FakeHttpService(null, null);
+            using (var provider = new ResourceAndNetworkApiProvider(http: service))
+            {
+                var diagnostics = new List<UserScriptDiagnostic>();
+                provider.Notification += (_, __) => throw new InvalidOperationException("observer failed");
+                provider.Diagnostic += (_, diagnostic) => diagnostics.Add(diagnostic);
+
+                await provider.InvokeAsync(Context(installation, "GM.xmlHttpRequest", new
+                {
+                    operation = "create",
+                    xhrId = 18,
+                    url = "https://api.example.com/"
+                }), CancellationToken.None);
+
+                var diagnostic = Assert.Single(diagnostics);
+                Assert.Equal("MSA300_NOTIFICATION_CALLBACK_FAILED", diagnostic.Code);
+                Assert.Equal(installation.ScriptKey, diagnostic.ScriptKey);
+                Assert.Equal("document", diagnostic.DocumentId);
+                Assert.IsType<InvalidOperationException>(diagnostic.Exception);
+            }
+        }
+
+        [Fact]
         public async Task DependencyResolverPreservesRequireOrderAndLimit()
         {
             var installation = await InstallAsync(
