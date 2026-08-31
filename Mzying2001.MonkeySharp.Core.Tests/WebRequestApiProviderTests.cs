@@ -1,4 +1,5 @@
 using Mzying2001.MonkeySharp.Core.Apis;
+using Mzying2001.MonkeySharp.Core.Bridge;
 using Mzying2001.MonkeySharp.Core.Domain;
 using Mzying2001.MonkeySharp.Core.Repository;
 using Mzying2001.MonkeySharp.Core.Runtime;
@@ -76,6 +77,43 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 Assert.Equal("webrequest-event", notification.EventName);
                 provider.OnExecutionEnded("execution");
                 Assert.Empty(service.ListRules());
+            }
+        }
+
+        [Fact]
+        public async Task ListenerIdsAreUniqueAndRegisteredListenersCanBeRemoved()
+        {
+            var installation = await InstallAsync("// @grant GM.webRequest");
+            using (var service = new InMemoryWebRequestService())
+            using (var provider = new WebRequestApiProvider(service))
+            {
+                var notifications = 0;
+                provider.Notification += (_, __) => notifications++;
+                var add = new
+                {
+                    operation = "addListener",
+                    listenerId = 7,
+                    filter = new { urlPatterns = new[] { "https://example.com/*" } }
+                };
+
+                await provider.InvokeAsync(Context(installation, add), CancellationToken.None);
+                await Assert.ThrowsAsync<BridgeProtocolException>(() =>
+                    provider.InvokeAsync(Context(installation, add), CancellationToken.None));
+
+                service.Evaluate(new WebRequestEvent(
+                    WebRequestPhase.OnBeforeRequest, 1, "https://example.com/first"));
+                Assert.Equal(1, notifications);
+
+                var removed = await provider.InvokeAsync(Context(installation, new
+                {
+                    operation = "removeListener",
+                    listenerId = 7
+                }), CancellationToken.None);
+                Assert.True(JsonSerializer.Deserialize<bool>(removed.Json));
+
+                service.Evaluate(new WebRequestEvent(
+                    WebRequestPhase.OnBeforeRequest, 2, "https://example.com/second"));
+                Assert.Equal(1, notifications);
             }
         }
 

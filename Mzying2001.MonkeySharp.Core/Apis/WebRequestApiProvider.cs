@@ -144,6 +144,9 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             if (operation == "addListener")
             {
                 var listenerId = ProviderParameters.RequiredInt32(context.Parameters, "listenerId");
+                var registrationKey = ListenerKey(context.ExecutionId, listenerId);
+                if (_registrations.ContainsKey(registrationKey))
+                    throw ProviderParameters.Invalid("listenerId is already registered.");
                 var filter = ReadFilter(context.Parameters.GetProperty("filter"));
                 var registration = _service.AddListener(filter, (_, item) => Notification?.Invoke(this, new ApiNotificationEventArgs(
                     context.Installation.ScriptKey, context.ExecutionId, "webrequest-event", JsonSerializer.Serialize(new
@@ -152,13 +155,13 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                         method = item.Method, resourceType = item.ResourceType, headers = item.Headers,
                         statusCode = item.StatusCode, error = item.Error
                     }))));
-                Track(context, registration);
+                Track(registrationKey, registration);
                 return ApiResult.FromValue(listenerId);
             }
             if (operation == "removeListener")
             {
                 var id = ProviderParameters.RequiredInt32(context.Parameters, "listenerId");
-                var key = context.ExecutionId + ":listener:" + id;
+                var key = ListenerKey(context.ExecutionId, id);
                 if (!_registrations.TryGetValue(key, out var registration)) return ApiResult.FromValue(false);
                 _registrations.Remove(key); registration.Dispose(); return ApiResult.FromValue(true);
             }
@@ -179,6 +182,16 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             if (registration == null || string.IsNullOrEmpty(registration.Id)) throw new InvalidOperationException("The webRequest service returned no registration.");
             var key = context.ExecutionId + ":" + registration.Id;
             _registrations[key] = registration;
+        }
+        private void Track(string key, IWebRequestRegistration registration)
+        {
+            if (registration == null || string.IsNullOrEmpty(registration.Id))
+                throw new InvalidOperationException("The webRequest service returned no registration.");
+            _registrations.Add(key, registration);
+        }
+        private static string ListenerKey(string executionId, int listenerId)
+        {
+            return executionId + ":listener:" + listenerId;
         }
         private static WebRequestRule ReadRule(JsonElement value)
         {
