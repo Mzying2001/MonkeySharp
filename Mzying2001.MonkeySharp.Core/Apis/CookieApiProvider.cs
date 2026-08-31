@@ -376,7 +376,8 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         {
             ProviderParameters.RequireObject(details);
             var urlText = ProviderParameters.RequiredString(details, "url");
-            if (!Uri.TryCreate(urlText, UriKind.Absolute, out var url))
+            if (!Uri.TryCreate(urlText, UriKind.Absolute, out var url) ||
+                (url.Scheme != Uri.UriSchemeHttp && url.Scheme != Uri.UriSchemeHttps))
                 throw ProviderParameters.Invalid("url must be an absolute HTTP or HTTPS URL.");
             try
             {
@@ -407,7 +408,14 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             if (!details.TryGetProperty("expiration", out var value) && !details.TryGetProperty("expirationDate", out value))
                 return null;
             if (value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out var seconds))
+            {
+                if (double.IsNaN(seconds) || double.IsInfinity(seconds) ||
+                    seconds != Math.Truncate(seconds) ||
+                    seconds < DateTimeOffset.MinValue.ToUnixTimeSeconds() ||
+                    seconds > DateTimeOffset.MaxValue.ToUnixTimeSeconds())
+                    throw ProviderParameters.Invalid("expiration must be an integral Unix timestamp in range.");
                 return DateTimeOffset.FromUnixTimeSeconds((long)seconds).UtcDateTime;
+            }
             if (value.ValueKind == JsonValueKind.String && DateTime.TryParse(value.GetString(), out var date))
                 return date.ToUniversalTime();
             throw ProviderParameters.Invalid("expiration must be Unix seconds or an ISO date.");
