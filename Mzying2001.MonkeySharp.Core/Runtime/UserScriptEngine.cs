@@ -190,7 +190,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                     continue;
 
                 var onceKey = installation.ScriptKey + ":" + runAt;
-                if (!document.Executed.Add(onceKey))
+                if (document.Executed.Contains(onceKey))
                     continue;
 
                 if (runAt == UserScriptRunAt.DocumentStart)
@@ -307,6 +307,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                     _executions.Add(invocation.ExecutionId, execution);
                 document.ExecutionIds.Add(invocation.ExecutionId);
                 invocations.Add(invocation);
+                document.Executed.Add(onceKey);
             }
 
             return new InjectionPlan(frame, runAt, invocations);

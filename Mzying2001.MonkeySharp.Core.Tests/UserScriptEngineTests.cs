@@ -107,6 +107,51 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Fact]
+        public async Task CanceledSourceResolutionCanBeRetriedForTheSameDocument()
+        {
+            var repository = new InMemoryUserScriptRepository();
+            await repository.InstallAsync(Script("document-end"), "test", true, CancellationToken.None);
+            var resolver = new CancelingOnceSourceResolver();
+            using (var engine = new UserScriptEngine(repository, sourceResolver: resolver))
+            using (var cancellation = new CancellationTokenSource())
+            {
+                resolver.Cancellation = cancellation;
+                var lifecycle = new DocumentLifecycleEventArgs(
+                    DocumentLifecycleKind.DomContentLoaded, Frame("retry-canceled", true));
+
+                await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+                    engine.ProcessLifecycleAsync(lifecycle, cancellation.Token));
+                var retry = await engine.ProcessLifecycleAsync(lifecycle, CancellationToken.None);
+                var duplicate = await engine.ProcessLifecycleAsync(lifecycle, CancellationToken.None);
+
+                Assert.Single(retry.Invocations);
+                Assert.Empty(duplicate.Invocations);
+            }
+        }
+
+        [Fact]
+        public async Task FailedSourceResolutionCanBeRetriedForTheSameDocument()
+        {
+            var repository = new InMemoryUserScriptRepository();
+            await repository.InstallAsync(Script("document-end"), "test", true, CancellationToken.None);
+            using (var engine = new UserScriptEngine(
+                repository,
+                sourceResolver: new FailingOnceSourceResolver()))
+            {
+                var lifecycle = new DocumentLifecycleEventArgs(
+                    DocumentLifecycleKind.DomContentLoaded, Frame("retry-failed", true));
+
+                var failed = await engine.ProcessLifecycleAsync(lifecycle, CancellationToken.None);
+                var retry = await engine.ProcessLifecycleAsync(lifecycle, CancellationToken.None);
+                var duplicate = await engine.ProcessLifecycleAsync(lifecycle, CancellationToken.None);
+
+                Assert.Empty(failed.Invocations);
+                Assert.Single(retry.Invocations);
+                Assert.Empty(duplicate.Invocations);
+            }
+        }
+
+        [Fact]
         public async Task MissingDependencyProviderSkipsLegacyInvocation()
         {
             var repository = new InMemoryUserScriptRepository();
@@ -174,6 +219,39 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 CancellationToken cancellationToken)
             {
                 throw new InvalidOperationException("Dependency fixture failure.");
+            }
+        }
+
+        private sealed class CancelingOnceSourceResolver : IUserScriptSourceResolver
+        {
+            private int _calls;
+
+            public CancellationTokenSource Cancellation { get; set; }
+
+            public Task<string> ResolveSourceAsync(
+                UserScriptInstallation installation,
+                CancellationToken cancellationToken)
+            {
+                if (Interlocked.Increment(ref _calls) == 1)
+                {
+                    Cancellation.Cancel();
+                    cancellationToken.ThrowIfCancellationRequested();
+                }
+                return Task.FromResult(installation.Definition.Source);
+            }
+        }
+
+        private sealed class FailingOnceSourceResolver : IUserScriptSourceResolver
+        {
+            private int _calls;
+
+            public Task<string> ResolveSourceAsync(
+                UserScriptInstallation installation,
+                CancellationToken cancellationToken)
+            {
+                if (Interlocked.Increment(ref _calls) == 1)
+                    throw new InvalidOperationException("Transient source resolution failure.");
+                return Task.FromResult(installation.Definition.Source);
             }
         }
     }
