@@ -118,12 +118,13 @@
             };
 
             const reportMutationFailure = async function (record, method, error) {
-                record.storageMirrorStale = true;
                 try {
                     const snapshot = await call(record, "runtime.getStorageSnapshot", {});
                     if (snapshot && snapshot.complete && snapshot.values) {
                         record.storageMirror = Object.assign({}, snapshot.values);
-                        record.storageMirrorStale = false;
+                        record.pendingStorageMutations.forEach(mutation => {
+                            applyStorageMutation(record, mutation);
+                        });
                     }
                 } catch (snapshotError) {
                     if (root.console && typeof root.console.warn === "function") {
@@ -143,8 +144,28 @@
                 }
             };
 
-            const enqueueMutation = function (record, method, parameters) {
-                const operation = record.mutationTail.then(() => call(record, method, parameters));
+            const enqueueMutation = function (record, method, parameters, storageMutation) {
+                const operation = record.mutationTail
+                    .then(() => call(record, method, parameters))
+                    .then(result => {
+                        if (storageMutation) {
+                            removePendingStorageMutation(record, storageMutation);
+                            if (storageMutation.operation === "set" || storageMutation.existed) {
+                                notifyLocalValueChange(
+                                    record,
+                                    storageMutation.key,
+                                    cloneOptionalValue(storageMutation.oldValue),
+                                    cloneOptionalValue(storageMutation.newValue));
+                            }
+                        }
+                        return result;
+                    }, error => {
+                        if (storageMutation) {
+                            removePendingStorageMutation(record, storageMutation);
+                            rollbackStorageMutation(record, storageMutation);
+                        }
+                        throw error;
+                    });
                 record.mutationTail = operation.catch(error => {
                     return reportMutationFailure(record, method, error);
                 });
@@ -163,6 +184,43 @@
                             root.console.error("[MonkeySharp] callback failed", error);
                         }
                     }
+                });
+            };
+
+            const cloneOptionalValue = function (value) {
+                return typeof value === "undefined" ? undefined : cloneValue(value);
+            };
+
+            const applyStorageMutation = function (record, mutation) {
+                const existed = Object.prototype.hasOwnProperty.call(record.storageMirror, mutation.key);
+                mutation.oldValue = existed ? cloneValue(record.storageMirror[mutation.key]) : undefined;
+                if (mutation.operation === "set") {
+                    record.storageMirror[mutation.key] = cloneValue(mutation.value);
+                    mutation.newValue = cloneValue(mutation.value);
+                } else {
+                    if (existed) delete record.storageMirror[mutation.key];
+                    mutation.newValue = undefined;
+                }
+                mutation.existed = existed;
+            };
+
+            const beginStorageMutation = function (record, operation, key, value) {
+                const mutation = { operation: operation, key: key, value: value };
+                applyStorageMutation(record, mutation);
+                record.pendingStorageMutations.push(mutation);
+                return mutation;
+            };
+
+            const removePendingStorageMutation = function (record, mutation) {
+                const index = record.pendingStorageMutations.indexOf(mutation);
+                if (index >= 0) record.pendingStorageMutations.splice(index, 1);
+            };
+
+            const rollbackStorageMutation = function (record, mutation) {
+                if (typeof mutation.oldValue === "undefined") delete record.storageMirror[mutation.key];
+                else record.storageMirror[mutation.key] = cloneValue(mutation.oldValue);
+                record.pendingStorageMutations.forEach(pending => {
+                    if (pending.key === mutation.key) applyStorageMutation(record, pending);
                 });
             };
 
@@ -295,11 +353,8 @@
                         if (typeof key !== "string" || key.length === 0) throw new TypeError("key must be a non-empty string.");
                         const cloned = cloneValue(value);
                         if (record.storageMirror) {
-                            const oldValue = Object.prototype.hasOwnProperty.call(record.storageMirror, key)
-                                ? cloneValue(record.storageMirror[key]) : undefined;
-                            record.storageMirror[key] = cloned;
-                            notifyLocalValueChange(record, key, oldValue, cloneValue(cloned));
-                            await enqueueMutation(record, "GM.setValue", { key: key, value: cloned });
+                            const mutation = beginStorageMutation(record, "set", key, cloned);
+                            await enqueueMutation(record, "GM.setValue", { key: key, value: cloned }, mutation);
                             return;
                         }
                         await call(record, "GM.setValue", { key: key, value: cloned });
@@ -309,12 +364,9 @@
                     api.deleteValue = async function (key) {
                         if (typeof key !== "string" || key.length === 0) throw new TypeError("key must be a non-empty string.");
                         if (record.storageMirror) {
-                            const existed = Object.prototype.hasOwnProperty.call(record.storageMirror, key);
-                            const oldValue = existed ? cloneValue(record.storageMirror[key]) : undefined;
-                            if (existed) delete record.storageMirror[key];
-                            if (existed) notifyLocalValueChange(record, key, oldValue, undefined);
-                            await enqueueMutation(record, "GM.deleteValue", { key: key });
-                            return existed;
+                            const mutation = beginStorageMutation(record, "delete", key);
+                            await enqueueMutation(record, "GM.deleteValue", { key: key }, mutation);
+                            return mutation.existed;
                         }
                         return call(record, "GM.deleteValue", { key: key });
                     };
@@ -803,19 +855,13 @@
                     if (api.setValue) facade.GM_setValue = function (key, value) {
                         key = requireKey(key);
                         const cloned = cloneValue(value);
-                        const oldValue = Object.prototype.hasOwnProperty.call(record.storageMirror, key)
-                            ? cloneValue(record.storageMirror[key]) : undefined;
-                        record.storageMirror[key] = cloned;
-                        notifyLocalValueChange(record, key, oldValue, cloneValue(cloned));
-                        enqueueMutation(record, "GM.setValue", { key: key, value: cloned });
+                        const mutation = beginStorageMutation(record, "set", key, cloned);
+                        enqueueMutation(record, "GM.setValue", { key: key, value: cloned }, mutation);
                     };
                     if (api.deleteValue) facade.GM_deleteValue = function (key) {
                         key = requireKey(key);
-                        const existed = Object.prototype.hasOwnProperty.call(record.storageMirror, key);
-                        const oldValue = existed ? cloneValue(record.storageMirror[key]) : undefined;
-                        if (existed) delete record.storageMirror[key];
-                        if (existed) notifyLocalValueChange(record, key, oldValue, undefined);
-                        enqueueMutation(record, "GM.deleteValue", { key: key });
+                        const mutation = beginStorageMutation(record, "delete", key);
+                        enqueueMutation(record, "GM.deleteValue", { key: key }, mutation);
                     };
                     if (api.listValues) facade.GM_listValues = function () {
                         return Object.keys(record.storageMirror).sort();
@@ -1032,7 +1078,7 @@
                     valueListenerKeys: new Map(),
                     mutationTail: Promise.resolve(),
                     storageMirror: null,
-                    storageMirrorStale: false,
+                    pendingStorageMutations: [],
                     lastStorageSequence: 0,
                     resourceMirror: null
                 };
