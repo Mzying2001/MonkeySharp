@@ -42,6 +42,8 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             new Dictionary<string, Dictionary<int, ValueListener>>(StringComparer.Ordinal);
         private readonly Dictionary<string, Queue<MutationOrigin>> _mutationOrigins =
             new Dictionary<string, Queue<MutationOrigin>>(StringComparer.Ordinal);
+        private int _activeDispatches;
+        private bool _providerResourcesDisposed;
         private bool _disposed;
 
         /// <summary>Initializes a userscript bridge gateway.</summary>
@@ -80,10 +82,36 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
         public event EventHandler<UserScriptDiagnostic> Diagnostic;
 
         /// <inheritdoc />
-        public async Task<string> DispatchAsync(string requestJson, CancellationToken cancellationToken)
+        public Task<string> DispatchAsync(string requestJson, CancellationToken cancellationToken)
         {
-            if (_disposed)
-                return ProtocolJson.Error(string.Empty, BridgeErrorCodes.SessionExpired, "The bridge is disposed.");
+            if (!TryEnterDispatch())
+            {
+                return Task.FromResult(ProtocolJson.Error(
+                    string.Empty,
+                    BridgeErrorCodes.SessionExpired,
+                    "The bridge is disposed."));
+            }
+            return DispatchEnteredAsync(requestJson, cancellationToken);
+        }
+
+        private async Task<string> DispatchEnteredAsync(
+            string requestJson,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                return await DispatchCoreAsync(requestJson, cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                ExitDispatch();
+            }
+        }
+
+        private async Task<string> DispatchCoreAsync(
+            string requestJson,
+            CancellationToken cancellationToken)
+        {
             if (requestJson == null)
                 return ProtocolJson.Error(string.Empty, BridgeErrorCodes.MalformedMessage, "The message is required.");
             if (Encoding.UTF8.GetByteCount(requestJson) > _options.MaxRequestBytes)
@@ -149,25 +177,59 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
         /// <inheritdoc />
         public void Dispose()
         {
-            if (_disposed)
-                return;
-            _store.ValueChanged -= StoreValueChanged;
-            _engine.ExecutionEnded -= EngineExecutionEnded;
+            var disposeProviderResources = false;
             lock (_stateLock)
             {
                 if (_disposed)
                     return;
+                _disposed = true;
                 foreach (var pending in _pending.Values)
                     pending.Cancellation.Cancel();
-                foreach (var pending in _pending.Values)
-                    pending.Cancellation.Dispose();
-                _pending.Clear();
                 _seenRequests.Clear();
                 _seenRequestOrder.Clear();
                 _listeners.Clear();
                 _mutationOrigins.Clear();
-                _disposed = true;
+                if (_activeDispatches == 0 && !_providerResourcesDisposed)
+                {
+                    _providerResourcesDisposed = true;
+                    disposeProviderResources = true;
+                }
             }
+            _store.ValueChanged -= StoreValueChanged;
+            _engine.ExecutionEnded -= EngineExecutionEnded;
+            if (disposeProviderResources)
+                DisposeProviderResources();
+        }
+
+        private bool TryEnterDispatch()
+        {
+            lock (_stateLock)
+            {
+                if (_disposed)
+                    return false;
+                _activeDispatches++;
+                return true;
+            }
+        }
+
+        private void ExitDispatch()
+        {
+            var disposeProviderResources = false;
+            lock (_stateLock)
+            {
+                _activeDispatches--;
+                if (_disposed && _activeDispatches == 0 && !_providerResourcesDisposed)
+                {
+                    _providerResourcesDisposed = true;
+                    disposeProviderResources = true;
+                }
+            }
+            if (disposeProviderResources)
+                DisposeProviderResources();
+        }
+
+        private void DisposeProviderResources()
+        {
             foreach (var source in _providerInstances.OfType<IUserScriptNotificationSource>())
                 source.Notification -= ProviderNotification;
             foreach (var disposable in _providerInstances.OfType<IDisposable>())
@@ -553,6 +615,11 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             lock (_stateLock)
             {
                 pending = null;
+                if (_disposed)
+                {
+                    errorCode = BridgeErrorCodes.SessionExpired;
+                    return false;
+                }
                 if (_pending.ContainsKey(key) || _seenRequests.Contains(key))
                 {
                     errorCode = BridgeErrorCodes.MalformedMessage;

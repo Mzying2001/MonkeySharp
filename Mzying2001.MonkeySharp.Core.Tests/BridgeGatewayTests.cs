@@ -305,6 +305,30 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Fact]
+        public async Task DisposeCancelsActiveDispatchBeforeReleasingProviders()
+        {
+            var provider = new DisposeAwareBlockingProvider();
+            using (var fixture = await BridgeFixture.CreateAsync(
+                null,
+                new[] { provider },
+                new BridgeOptions(requestTimeout: TimeSpan.FromSeconds(5)),
+                "GM.download"))
+            {
+                var request = fixture.RequestAsync("GM.download", new { });
+                await provider.Entered.Task;
+
+                fixture.Gateway.Dispose();
+
+                AssertError(await request, BridgeErrorCodes.Canceled);
+                Assert.True(provider.Exited.Task.IsCompleted);
+                Assert.True(provider.Disposed);
+                AssertError(
+                    await fixture.RequestAsync("GM.download", new { }),
+                    BridgeErrorCodes.SessionExpired);
+            }
+        }
+
+        [Fact]
         public async Task ValueListenersOnlyReceiveSameScriptActiveSessions()
         {
             using (var fixture = await BridgeFixture.CreateAsync(
@@ -505,6 +529,39 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 Entered.TrySetResult(null);
                 await Task.Delay(Timeout.Infinite, cancellationToken);
                 return ApiResult.Undefined;
+            }
+        }
+
+        private sealed class DisposeAwareBlockingProvider : IUserScriptApiProvider, IDisposable
+        {
+            public TaskCompletionSource<object> Entered { get; } =
+                new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
+            public TaskCompletionSource<object> Exited { get; } =
+                new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
+            public IReadOnlyCollection<string> Methods { get; } =
+                new ReadOnlyCollection<string>(new[] { "GM.download" });
+            public bool Disposed { get; private set; }
+
+            public async Task<ApiResult> InvokeAsync(
+                ApiInvocationContext context,
+                CancellationToken cancellationToken)
+            {
+                Entered.TrySetResult(null);
+                try
+                {
+                    await Task.Delay(Timeout.Infinite, cancellationToken);
+                    return ApiResult.Undefined;
+                }
+                finally
+                {
+                    Exited.TrySetResult(null);
+                }
+            }
+
+            public void Dispose()
+            {
+                Assert.True(Exited.Task.IsCompleted);
+                Disposed = true;
             }
         }
 
