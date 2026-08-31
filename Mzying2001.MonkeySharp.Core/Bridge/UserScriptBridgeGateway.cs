@@ -36,6 +36,8 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
         private readonly Dictionary<string, PendingRequest> _pending =
             new Dictionary<string, PendingRequest>(StringComparer.Ordinal);
         private readonly HashSet<string> _seenRequests = new HashSet<string>(StringComparer.Ordinal);
+        private readonly Dictionary<string, Queue<string>> _seenRequestOrder =
+            new Dictionary<string, Queue<string>>(StringComparer.Ordinal);
         private readonly Dictionary<string, Dictionary<int, ValueListener>> _listeners =
             new Dictionary<string, Dictionary<int, ValueListener>>(StringComparer.Ordinal);
         private readonly Dictionary<string, Queue<MutationOrigin>> _mutationOrigins =
@@ -161,6 +163,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                     pending.Cancellation.Dispose();
                 _pending.Clear();
                 _seenRequests.Clear();
+                _seenRequestOrder.Clear();
                 _listeners.Clear();
                 _mutationOrigins.Clear();
                 _disposed = true;
@@ -550,7 +553,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             lock (_stateLock)
             {
                 pending = null;
-                if (_seenRequests.Contains(key))
+                if (_pending.ContainsKey(key) || _seenRequests.Contains(key))
                 {
                     errorCode = BridgeErrorCodes.MalformedMessage;
                     return false;
@@ -564,7 +567,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                 }
                 pending = new PendingRequest(execution);
                 _pending.Add(key, pending);
-                _seenRequests.Add(key);
+                RememberRequest(execution.Invocation.ExecutionId, key);
                 errorCode = null;
                 return true;
             }
@@ -581,6 +584,19 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                     pending.Cancellation.Dispose();
                 }
             }
+        }
+
+        private void RememberRequest(string executionId, string key)
+        {
+            if (!_seenRequestOrder.TryGetValue(executionId, out var order))
+            {
+                order = new Queue<string>();
+                _seenRequestOrder.Add(executionId, order);
+            }
+            _seenRequests.Add(key);
+            order.Enqueue(key);
+            while (order.Count > _options.MaxReplayEntriesPerExecution)
+                _seenRequests.Remove(order.Dequeue());
         }
 
         private ApiResult AddValueListener(UserScriptEngine.ExecutionRecord execution, JsonElement parameters)
@@ -775,11 +791,15 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
 
         private void EngineExecutionEnded(UserScriptEngine.ExecutionRecord execution)
         {
-            var prefix = execution.Invocation.ExecutionId + ":";
             lock (_stateLock)
             {
                 _listeners.Remove(execution.Invocation.ExecutionId);
-                _seenRequests.RemoveWhere(item => item.StartsWith(prefix, StringComparison.Ordinal));
+                if (_seenRequestOrder.TryGetValue(execution.Invocation.ExecutionId, out var order))
+                {
+                    foreach (var key in order)
+                        _seenRequests.Remove(key);
+                    _seenRequestOrder.Remove(execution.Invocation.ExecutionId);
+                }
             }
             foreach (var observer in _providerInstances.OfType<IUserScriptExecutionObserver>())
             {

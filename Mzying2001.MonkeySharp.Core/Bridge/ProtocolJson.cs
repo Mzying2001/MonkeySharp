@@ -69,7 +69,8 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                     ["responseBytes"] = options.MaxResponseBytes,
                     ["resourceBytes"] = options.MaxResourceBytes,
                     ["timeoutMilliseconds"] = (long)options.RequestTimeout.TotalMilliseconds,
-                    ["pendingRequests"] = options.MaxPendingRequestsPerDocument
+                    ["pendingRequests"] = options.MaxPendingRequestsPerDocument,
+                    ["replayRequestsPerExecution"] = options.MaxReplayEntriesPerExecution
                 },
                 ["apis"] = apis.OrderBy(item => item, StringComparer.Ordinal).ToArray()
             };

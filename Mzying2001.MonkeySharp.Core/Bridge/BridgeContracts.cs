@@ -55,6 +55,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
         /// <param name="maxPendingRequestsPerDocument">The maximum concurrent requests for one document.</param>
         /// <param name="maxCompatibilityBootstrapBytes">The maximum compatibility bootstrap size.</param>
         /// <param name="compatibilityBootstrapTimeout">The compatibility bootstrap timeout.</param>
+        /// <param name="maxReplayEntriesPerExecution">The number of recent request IDs retained to reject replays for one execution.</param>
         public BridgeOptions(
             int maxRequestBytes = 1024 * 1024,
             int maxResponseBytes = 1024 * 1024,
@@ -62,13 +63,15 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             TimeSpan? requestTimeout = null,
             int maxPendingRequestsPerDocument = 64,
             int maxCompatibilityBootstrapBytes = 1024 * 1024,
-            TimeSpan? compatibilityBootstrapTimeout = null)
+            TimeSpan? compatibilityBootstrapTimeout = null,
+            int maxReplayEntriesPerExecution = 4096)
         {
             if (maxRequestBytes <= 0) throw new ArgumentOutOfRangeException(nameof(maxRequestBytes));
             if (maxResponseBytes <= 0) throw new ArgumentOutOfRangeException(nameof(maxResponseBytes));
             if (maxResourceBytes <= 0) throw new ArgumentOutOfRangeException(nameof(maxResourceBytes));
             if (maxPendingRequestsPerDocument <= 0) throw new ArgumentOutOfRangeException(nameof(maxPendingRequestsPerDocument));
             if (maxCompatibilityBootstrapBytes <= 0) throw new ArgumentOutOfRangeException(nameof(maxCompatibilityBootstrapBytes));
+            if (maxReplayEntriesPerExecution <= 0) throw new ArgumentOutOfRangeException(nameof(maxReplayEntriesPerExecution));
             MaxRequestBytes = maxRequestBytes;
             MaxResponseBytes = maxResponseBytes;
             MaxResourceBytes = maxResourceBytes;
@@ -78,6 +81,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             MaxCompatibilityBootstrapBytes = maxCompatibilityBootstrapBytes;
             CompatibilityBootstrapTimeout = compatibilityBootstrapTimeout ?? TimeSpan.FromSeconds(5);
             if (CompatibilityBootstrapTimeout <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(compatibilityBootstrapTimeout));
+            MaxReplayEntriesPerExecution = maxReplayEntriesPerExecution;
         }
 
         /// <summary>Gets the maximum UTF-8 request size.</summary>
@@ -100,6 +104,9 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
 
         /// <summary>Gets the compatibility bootstrap timeout.</summary>
         public TimeSpan CompatibilityBootstrapTimeout { get; }
+
+        /// <summary>Gets the number of recent request IDs retained to reject replays for one execution.</summary>
+        public int MaxReplayEntriesPerExecution { get; }
     }
 
     /// <summary>

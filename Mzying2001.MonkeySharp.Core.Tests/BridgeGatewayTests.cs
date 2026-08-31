@@ -137,6 +137,35 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Fact]
+        public async Task ReplayTrackingEvictsOldRequestIdsAtTheConfiguredBound()
+        {
+            using (var fixture = await BridgeFixture.CreateAsync(
+                new AllowDeclaredPermissionsPolicy(),
+                null,
+                new BridgeOptions(maxReplayEntriesPerExecution: 2),
+                "GM.getValue"))
+            {
+                var firstId = Guid.NewGuid().ToString("D");
+                var recentId = Guid.NewGuid().ToString("D");
+                Assert.True((await fixture.RequestAsync(
+                    "GM.getValue", new { key = "x" }, requestId: firstId)).GetProperty("ok").GetBoolean());
+                AssertError(
+                    await fixture.RequestAsync("GM.getValue", new { key = "x" }, requestId: firstId),
+                    BridgeErrorCodes.MalformedMessage);
+                Assert.True((await fixture.RequestAsync(
+                    "GM.getValue", new { key = "x" }, requestId: recentId)).GetProperty("ok").GetBoolean());
+                Assert.True((await fixture.RequestAsync(
+                    "GM.getValue", new { key = "x" })).GetProperty("ok").GetBoolean());
+
+                AssertError(
+                    await fixture.RequestAsync("GM.getValue", new { key = "x" }, requestId: recentId),
+                    BridgeErrorCodes.MalformedMessage);
+                Assert.True((await fixture.RequestAsync(
+                    "GM.getValue", new { key = "x" }, requestId: firstId)).GetProperty("ok").GetBoolean());
+            }
+        }
+
+        [Fact]
         public async Task MalformedVersionAndInvalidParamsUseStableErrors()
         {
             using (var fixture = await BridgeFixture.CreateAsync("GM.getValue"))
