@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-MonkeySharp 2 is a userscript runtime for applications that embed CefSharp. It provides userscript metadata parsing, URL matching, storage, permissions, asynchronous GM APIs, and browser lifecycle integration.
+MonkeySharp 3 is a userscript runtime for applications that embed CefSharp. It separates browser-independent metadata parsing, URL matching, repository and storage management, permissions, asynchronous GM APIs, and bridge dispatch from the CefSharp browser-lifecycle adapter. The current release is `3.0.0`; the default compatibility profile is `LegacyCompatible` and the bridge protocol remains version 1.
 
 ## Project Structure
 
@@ -10,9 +10,12 @@ MonkeySharp 2 is a userscript runtime for applications that embed CefSharp. It p
 - `Mzying2001.MonkeySharp.CefSharp/`: CefSharp adapter for frame lifecycle handling, JavaScript binding, and script execution.
 - `Mzying2001.MonkeySharp.Core.Tests/`: Core unit tests and JavaScript protocol tests.
 - `Mzying2001.MonkeySharp.CefSharp.IntegrationTests/`: CefSharp adapter integration tests.
+- `Mzying2001.MonkeySharp.CefSharp.SmokeHost/`: WinForms real-Chromium smoke host and `Run-E2E.ps1` lifecycle/API gate.
 - `MonkeySharp.slnx`: Main solution for building and testing the repository.
 - `README.md`: Setup, supported APIs, security model, migration, and build documentation.
 - `local-notes/`: Local design and implementation notes that are not committed to Git.
+
+The Core project targets `net462`, `netstandard2.0`, and `net8.0`. The CefSharp adapter and smoke host target `net462` and must be built for an explicit `x64` or `x86` process platform. The adapter defaults to CefSharp `121.3.70`; set `CefSharpVersion` when compiling against another tested CefSharp release.
 
 ## Git Commit Conventions
 

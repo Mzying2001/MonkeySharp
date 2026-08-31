@@ -157,7 +157,7 @@ var host = new CefSharpUserScriptHostBuilder(repository)
     .Build();
 ```
 
-Every affected document emits `MSR200_UNVERIFIED_BRIDGE`. The adapter cannot be configured to claim `Verified` integrity.
+Each privileged script execution in an affected document emits `MSR200_UNVERIFIED_BRIDGE`. The adapter cannot be configured to claim `Verified` integrity.
 
 ## Metadata
 
@@ -300,7 +300,7 @@ Important service requirements:
 
 - `IUserScriptValueStore` operations for one `ScriptKey` must be linearizable. Cancellation before commit makes no change; cancellation after commit still completes successfully and emits one notification.
 - `IUserScriptDependencyProvider` is responsible for trusted download, caching, HTTPS policy, and optional hash/signature validation of `@require`. `ResourceScriptSourceResolver` preserves declaration order and enforces the configured byte limit.
-- `@require` is resolved before the main source is planned and does not use a GM grant. A resolution failure skips that invocation and emits `MSR400_DEPENDENCY_RESOLUTION_FAILED`.
+- `@require` is resolved before the main source is planned when an `IUserScriptDependencyProvider` is configured, and it does not use a GM grant. In `LegacyCompatible`, declaring `@require` without a dependency provider skips that invocation with `MSR401_DEPENDENCY_PROVIDER_UNAVAILABLE`; a configured provider failure emits `MSR400_DEPENDENCY_RESOLUTION_FAILED`. In `ModernStrict`, configure a provider to load declared dependencies; without one, the installed main source is used as-is.
 - `IResourceProvider` must return previously authorized content for the named declaration. Resources are capped by `BridgeOptions.MaxResourceBytes`; HTTP request and response bodies are not subject to that resource limit.
 - `IHttpRequestService` receives a repeatable `IUserScriptHttpBody` and an observer before execution starts. It must respect `UserScriptHttpRequest.MaxResponseBytes` when non-null, report response metadata before body data, and call `RedirectAllowed` before following every redirect. It must report followed redirects in `UserScriptHttpResponse.RedirectUrls`; Core rechecks that chain and the final URL against `@connect`.
 - `IUserScriptPermissionPolicy` receives the installation, frame, method, target summary, and current host capabilities for every host-backed request.
