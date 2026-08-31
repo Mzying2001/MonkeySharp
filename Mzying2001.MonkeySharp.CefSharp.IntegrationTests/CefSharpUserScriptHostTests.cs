@@ -1,6 +1,7 @@
 using CefSharp;
 using Moq;
 using Mzying2001.MonkeySharp.Core.Apis;
+using Mzying2001.MonkeySharp.Core.Bridge;
 using Mzying2001.MonkeySharp.Core.Domain;
 using Mzying2001.MonkeySharp.Core.Repository;
 using Mzying2001.MonkeySharp.Core.Runtime;
@@ -226,6 +227,43 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
 
                 Assert.Contains(diagnostics, item =>
                     item.Code == "MSC300_JAVASCRIPT_EXCEPTION" && item.Message == "fixture failure");
+            }
+        }
+
+        [Theory]
+        [InlineData("[]")]
+        [InlineData("null")]
+        public async Task PageBindingDispatchRejectsNonObjectMessagesWithoutFault(string requestJson)
+        {
+            using (var host = await CreateHostAsync(Script("none", "document-start")))
+            {
+                var browser = new BrowserFixture();
+                host.Attach(browser.Browser.Object);
+
+                var responseJson = await browser.DispatchFromPageAsync(requestJson);
+
+                using (var response = JsonDocument.Parse(responseJson))
+                {
+                    Assert.False(response.RootElement.GetProperty("ok").GetBoolean());
+                    Assert.Equal(BridgeErrorCodes.MalformedMessage,
+                        response.RootElement.GetProperty("error").GetProperty("code").GetString());
+                }
+            }
+        }
+
+        [Theory]
+        [InlineData("[]")]
+        [InlineData("null")]
+        [InlineData("{\"protocol\":\"1\",\"documentId\":\"document\",\"frameId\":\"frame\",\"token\":\"token\",\"stage\":\"load\"}")]
+        [InlineData("{\"protocol\":2147483648,\"documentId\":\"document\",\"frameId\":\"frame\",\"token\":\"token\",\"stage\":\"load\"}")]
+        public async Task PageBindingLifecycleRejectsMalformedMessagesWithoutFault(string requestJson)
+        {
+            using (var host = await CreateHostAsync(Script("none", "document-start")))
+            {
+                var browser = new BrowserFixture();
+                host.Attach(browser.Browser.Object);
+
+                Assert.False(await browser.LifecycleFromPageAsync(requestJson));
             }
         }
 
@@ -549,7 +587,11 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
                 Repository.Setup(item => item.IsBound(It.IsAny<string>())).Returns(() => _bound);
                 Repository.Setup(item => item.Register(
                         It.IsAny<string>(), It.IsAny<object>(), It.IsAny<bool>(), It.IsAny<BindingOptions>()))
-                    .Callback(() => _bound = true);
+                    .Callback<string, object, bool, BindingOptions>((_, value, __, ___) =>
+                    {
+                        _bound = true;
+                        BoundBridge = value;
+                    });
                 Repository.Setup(item => item.UnRegister(It.IsAny<string>()))
                     .Returns(() =>
                     {
@@ -587,6 +629,17 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
             public Mock<IBrowser> CefBrowser { get; }
             public Mock<IFrame> Frame { get; }
             public ConcurrentQueue<string> Scripts { get; } = new ConcurrentQueue<string>();
+            private object BoundBridge { get; set; }
+
+            public Task<string> DispatchFromPageAsync(string requestJson)
+            {
+                return InvokeBoundAsync<string>("Dispatch", requestJson);
+            }
+
+            public Task<bool> LifecycleFromPageAsync(string requestJson)
+            {
+                return InvokeBoundAsync<bool>("Lifecycle", requestJson);
+            }
 
             public void CreateContext()
             {
@@ -637,6 +690,14 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
                 while (Scripts.Count < count && DateTime.UtcNow < timeout)
                     await Task.Delay(10);
                 Assert.True(Scripts.Count >= count, "Timed out waiting for CefSharp frame execution.");
+            }
+
+            private Task<T> InvokeBoundAsync<T>(string methodName, string requestJson)
+            {
+                Assert.NotNull(BoundBridge);
+                var method = BoundBridge.GetType().GetMethod(methodName, BindingFlags.Instance | BindingFlags.Public);
+                Assert.NotNull(method);
+                return (Task<T>)method.Invoke(BoundBridge, new object[] { requestJson });
             }
         }
 

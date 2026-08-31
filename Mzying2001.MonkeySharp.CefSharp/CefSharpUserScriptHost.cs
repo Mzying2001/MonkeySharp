@@ -613,7 +613,9 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 {
                     var root = document.RootElement;
                     if (root.ValueKind != JsonValueKind.Object ||
-                        !root.TryGetProperty("protocol", out var protocol) || protocol.GetInt32() != 1 ||
+                        !root.TryGetProperty("protocol", out var protocol) ||
+                        protocol.ValueKind != JsonValueKind.Number ||
+                        !protocol.TryGetInt32(out var protocolVersion) || protocolVersion != 1 ||
                         !root.TryGetProperty("documentId", out var documentIdValue) || documentIdValue.ValueKind != JsonValueKind.String ||
                         !root.TryGetProperty("frameId", out var frameIdValue) || frameIdValue.ValueKind != JsonValueKind.String ||
                         !root.TryGetProperty("token", out var tokenValue) || tokenValue.ValueKind != JsonValueKind.String ||
@@ -842,10 +844,14 @@ namespace Mzying2001.MonkeySharp.CefSharp
 
         private static string TryReadDocumentId(string requestJson)
         {
+            if (requestJson == null)
+                return null;
             try
             {
                 using (var document = JsonDocument.Parse(requestJson))
-                    return document.RootElement.TryGetProperty("documentId", out var value) && value.ValueKind == JsonValueKind.String
+                    return document.RootElement.ValueKind == JsonValueKind.Object &&
+                        document.RootElement.TryGetProperty("documentId", out var value) &&
+                        value.ValueKind == JsonValueKind.String
                         ? value.GetString()
                         : null;
             }
