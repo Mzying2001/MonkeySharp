@@ -575,8 +575,8 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         private sealed class FakeNotificationHandle : INotificationHandle
         {
             public Task Completion { get; } = Task.CompletedTask;
-            public event EventHandler Clicked;
-            public event EventHandler Closed;
+            public event EventHandler Clicked { add { } remove { } }
+            public event EventHandler Closed { add { } remove { } }
             public void Dispose() { }
         }
 
@@ -599,9 +599,9 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             public FakeDownloadOperation(string id) { DownloadId = id; }
             public string DownloadId { get; }
             public Task Completion { get; } = Task.CompletedTask;
-            public event EventHandler<UserScriptDownloadProgress> Progress;
-            public event EventHandler Completed;
-            public event EventHandler<UserScriptDownloadFailure> Failed;
+            public event EventHandler<UserScriptDownloadProgress> Progress { add { } remove { } }
+            public event EventHandler Completed { add { } remove { } }
+            public event EventHandler<UserScriptDownloadFailure> Failed { add { } remove { } }
             public event EventHandler Aborted;
             public void Abort() { Aborted?.Invoke(this, EventArgs.Empty); }
             public void Dispose() { }

@@ -319,7 +319,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
             {
                 if (_documents.TryGetValue(frame.DocumentId, out var existing))
                     return existing;
-                var document = new DocumentState(frame);
+                var document = new DocumentState();
                 _documents.Add(frame.DocumentId, document);
                 return document;
             }
@@ -448,12 +448,6 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
 
         private sealed class DocumentState
         {
-            public DocumentState(DocumentFrame frame)
-            {
-                Frame = frame;
-            }
-
-            public DocumentFrame Frame { get; }
             public HashSet<string> Executed { get; } = new HashSet<string>(StringComparer.Ordinal);
             public List<string> ExecutionIds { get; } = new List<string>();
         }

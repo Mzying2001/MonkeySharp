@@ -507,7 +507,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             await session.OperationGate.WaitAsync(session.Cancellation.Token).ConfigureAwait(false);
             try
             {
-                var contextPlan = await ProcessLifecycleAsync(
+                await ProcessLifecycleAsync(
                     DocumentLifecycleKind.ContextCreated,
                     session,
                     session.Cancellation.Token).ConfigureAwait(false);
