@@ -26,18 +26,18 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 {
                     operation = "addRule", rule = new
                     {
-                        id = "low", phase = "OnBeforeSendHeaders", priority = 1,
+                        id = "high", phase = "OnBeforeSendHeaders", priority = 10,
                         filter = new { urlPatterns = new[] { "https://example.com/*" } },
-                        action = new { kind = "ModifyRequestHeaders", headers = new { X_Test = "low", X_Other = "1" } }
+                        action = new { kind = "ModifyRequestHeaders", headers = new { X_Test = "high" } }
                     }
                 }), CancellationToken.None);
                 await provider.InvokeAsync(Context(installation, new
                 {
                     operation = "addRule", rule = new
                     {
-                        id = "high", phase = "OnBeforeSendHeaders", priority = 10,
+                        id = "low", phase = "OnBeforeSendHeaders", priority = 1,
                         filter = new { urlPatterns = new[] { "https://example.com/*" } },
-                        action = new { kind = "ModifyRequestHeaders", headers = new { X_Test = "high" } }
+                        action = new { kind = "ModifyRequestHeaders", headers = new { X_Test = "low", X_Other = "1" } }
                     }
                 }), CancellationToken.None);
                 var decision = service.Evaluate(new WebRequestEvent(WebRequestPhase.OnBeforeSendHeaders, 7,

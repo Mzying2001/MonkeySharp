@@ -127,7 +127,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         public WebRequestFilter Filter { get; }
         /// <summary>Gets the evaluated lifecycle phase.</summary>
         public WebRequestPhase Phase { get; }
-        /// <summary>Gets rule priority; higher values win terminal decisions.</summary>
+        /// <summary>Gets rule priority; higher values win terminal and conflicting header decisions.</summary>
         public int Priority { get; }
         /// <summary>Gets the rule action.</summary>
         public WebRequestAction Action { get; }
@@ -185,7 +185,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         public WebRequestActionKind Kind { get; }
         /// <summary>Gets the redirect URL.</summary>
         public string RedirectUrl { get; }
-        /// <summary>Gets merged header changes in registration order.</summary>
+        /// <summary>Gets merged header changes, with higher-priority and later rules winning conflicts.</summary>
         public IReadOnlyDictionary<string, string> Headers { get; }
         /// <summary>Gets the authentication username.</summary>
         public string Username { get; }
@@ -475,8 +475,8 @@ namespace Mzying2001.MonkeySharp.Core.Apis
 
     /// <summary>
     /// Provides a thread-safe in-memory rule engine. Listener callbacks run synchronously and
-    /// cannot change the decision; terminal actions use descending priority while header edits
-    /// are merged in registration order.
+    /// cannot change the decision. Higher-priority rules win terminal and conflicting header
+    /// decisions; rules with equal priority use registration order, with later header edits winning.
     /// </summary>
     public sealed class InMemoryWebRequestService : IWebRequestService, IDisposable
     {
@@ -582,7 +582,9 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                     break;
                 }
             }
-            foreach (var item in rules.OrderBy(x => x.Item2))
+            foreach (var item in rules
+                .OrderBy(x => x.Item1.Priority)
+                .ThenBy(x => x.Item2))
             {
                 // Header mutations are phase-specific. Keeping this filtering in
                 // the service prevents a request rule from accidentally changing
