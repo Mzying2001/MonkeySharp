@@ -81,6 +81,33 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             }
         }
 
+        [Fact]
+        public async Task PendingListenerRegistrationIsUniqueAndReleasedWhenExecutionEnds()
+        {
+            var installation = await InstallAsync("// @grant GM.cookie");
+            var service = new BlockingCookieService();
+            using (var provider = new CookieApiProvider(service))
+            {
+                var add = new
+                {
+                    operation = "addListener",
+                    listenerId = 3,
+                    details = new { url = "https://example.com/" }
+                };
+                var pending = Task.Run(() => provider.InvokeAsync(
+                    Context(installation, add), CancellationToken.None));
+                Assert.True(service.Entered.Wait(TimeSpan.FromSeconds(5)));
+
+                await Assert.ThrowsAsync<BridgeProtocolException>(() =>
+                    provider.InvokeAsync(Context(installation, add), CancellationToken.None));
+                provider.OnExecutionEnded("execution");
+                service.Release.Set();
+
+                await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pending);
+                Assert.True(service.Registration.Disposed);
+            }
+        }
+
         private static async Task<UserScriptInstallation> InstallAsync(string grants)
         {
             var repository = new InMemoryUserScriptRepository();
@@ -101,6 +128,53 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         private static JsonElement Json(string value)
         {
             using (var document = JsonDocument.Parse(value)) return document.RootElement.Clone();
+        }
+
+        private sealed class BlockingCookieService : ICookieService
+        {
+            public ManualResetEventSlim Entered { get; } = new ManualResetEventSlim();
+            public ManualResetEventSlim Release { get; } = new ManualResetEventSlim();
+            public TestCookieRegistration Registration { get; } = new TestCookieRegistration();
+
+            public ICookieListenerRegistration AddListener(
+                UserScriptCookieQuery query,
+                EventHandler<UserScriptCookieChangedEventArgs> changed)
+            {
+                Entered.Set();
+                Release.Wait();
+                return Registration;
+            }
+
+            public Task<IReadOnlyList<UserScriptCookie>> ListAsync(
+                UserScriptCookieQuery query,
+                CancellationToken cancellationToken)
+            {
+                throw new NotSupportedException();
+            }
+
+            public Task<UserScriptCookie> SetAsync(
+                UserScriptCookieMutation mutation,
+                CancellationToken cancellationToken)
+            {
+                throw new NotSupportedException();
+            }
+
+            public Task<bool> DeleteAsync(
+                UserScriptCookieMutation mutation,
+                CancellationToken cancellationToken)
+            {
+                throw new NotSupportedException();
+            }
+        }
+
+        private sealed class TestCookieRegistration : ICookieListenerRegistration
+        {
+            public bool Disposed { get; private set; }
+
+            public void Dispose()
+            {
+                Disposed = true;
+            }
         }
     }
 }

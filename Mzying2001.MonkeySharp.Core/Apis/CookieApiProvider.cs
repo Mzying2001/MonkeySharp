@@ -160,8 +160,11 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         IUserScriptExecutionObserver, IDisposable
     {
         private readonly ICookieService _cookies;
+        private readonly object _sync = new object();
         private readonly Dictionary<string, ICookieListenerRegistration> _listeners =
             new Dictionary<string, ICookieListenerRegistration>(StringComparer.Ordinal);
+        private readonly HashSet<string> _pendingListeners = new HashSet<string>(StringComparer.Ordinal);
+        private readonly HashSet<string> _endedPendingListeners = new HashSet<string>(StringComparer.Ordinal);
         private bool _disposed;
 
         public CookieApiProvider(ICookieService cookies)
@@ -177,7 +180,8 @@ namespace Mzying2001.MonkeySharp.Core.Apis
 
         public async Task<ApiResult> InvokeAsync(ApiInvocationContext context, CancellationToken cancellationToken)
         {
-            if (_disposed) throw new ObjectDisposedException(nameof(CookieApiProvider));
+            cancellationToken.ThrowIfCancellationRequested();
+            lock (_sync) ThrowIfDisposed();
             switch (context.Method)
             {
                 case "GM.cookie":
@@ -188,19 +192,34 @@ namespace Mzying2001.MonkeySharp.Core.Apis
 
         public void OnExecutionEnded(string executionId)
         {
-            foreach (var key in _listeners.Keys.Where(item => item.StartsWith(executionId + ":", StringComparison.Ordinal)).ToArray())
+            ICookieListenerRegistration[] registrations;
+            var prefix = executionId + ":";
+            lock (_sync)
             {
-                if (_listeners.TryGetValue(key, out var registration)) registration.Dispose();
-                _listeners.Remove(key);
+                var keys = _listeners.Keys
+                    .Where(item => item.StartsWith(prefix, StringComparison.Ordinal))
+                    .ToArray();
+                registrations = keys.Select(item => _listeners[item]).ToArray();
+                foreach (var key in keys) _listeners.Remove(key);
+                foreach (var key in _pendingListeners.Where(item =>
+                    item.StartsWith(prefix, StringComparison.Ordinal)))
+                    _endedPendingListeners.Add(key);
             }
+            foreach (var registration in registrations) registration.Dispose();
         }
 
         public void Dispose()
         {
-            if (_disposed) return;
-            _disposed = true;
-            foreach (var registration in _listeners.Values.ToArray()) registration.Dispose();
-            _listeners.Clear();
+            ICookieListenerRegistration[] registrations;
+            lock (_sync)
+            {
+                if (_disposed) return;
+                _disposed = true;
+                registrations = _listeners.Values.ToArray();
+                _listeners.Clear();
+                _endedPendingListeners.Clear();
+            }
+            foreach (var registration in registrations) registration.Dispose();
         }
 
         private async Task<ApiResult> InvokeCookieAsync(ApiInvocationContext context, CancellationToken cancellationToken)
@@ -231,8 +250,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 var query = ReadQuery(details);
                 var listenerId = ProviderParameters.RequiredInt32(context.Parameters, "listenerId");
                 var key = context.ExecutionId + ":" + listenerId;
-                if (_listeners.ContainsKey(key)) throw ProviderParameters.Invalid("listenerId is already registered.");
-                var registration = _cookies.AddListener(query, (_, change) => Notification?.Invoke(this,
+                RegisterListener(key, () => _cookies.AddListener(query, (_, change) => Notification?.Invoke(this,
                     new ApiNotificationEventArgs(context.Installation.ScriptKey, context.ExecutionId, "cookie-change",
                         JsonSerializer.Serialize(new
                         {
@@ -242,21 +260,74 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                             removed = change.Removed,
                             originExecutionId = change.OriginExecutionId,
                             sequence = change.Sequence
-                        }))));
-                if (registration == null) throw new InvalidOperationException("The cookie service returned no listener registration.");
-                _listeners.Add(key, registration);
+                        })))));
                 return ApiResult.FromValue(listenerId);
             }
             if (operation == "removeListener")
             {
                 var listenerId = ProviderParameters.RequiredInt32(context.Parameters, "listenerId");
                 var key = context.ExecutionId + ":" + listenerId;
-                if (!_listeners.TryGetValue(key, out var registration)) return ApiResult.FromValue(false);
-                _listeners.Remove(key);
+                ICookieListenerRegistration registration;
+                lock (_sync)
+                {
+                    ThrowIfDisposed();
+                    if (!_listeners.TryGetValue(key, out registration)) return ApiResult.FromValue(false);
+                    _listeners.Remove(key);
+                }
                 registration.Dispose();
                 return ApiResult.FromValue(true);
             }
             throw ProviderParameters.Invalid("Unknown cookie operation.");
+        }
+
+        private void RegisterListener(string key, Func<ICookieListenerRegistration> factory)
+        {
+            lock (_sync)
+            {
+                ThrowIfDisposed();
+                if (_listeners.ContainsKey(key) || !_pendingListeners.Add(key))
+                    throw ProviderParameters.Invalid("listenerId is already registered.");
+            }
+            ICookieListenerRegistration registration = null;
+            try
+            {
+                registration = factory();
+                if (registration == null)
+                    throw new InvalidOperationException("The cookie service returned no listener registration.");
+                bool disposed;
+                bool executionEnded;
+                lock (_sync)
+                {
+                    _pendingListeners.Remove(key);
+                    disposed = _disposed;
+                    executionEnded = _endedPendingListeners.Remove(key);
+                    if (!disposed && !executionEnded)
+                        _listeners.Add(key, registration);
+                }
+                if (disposed || executionEnded)
+                {
+                    registration.Dispose();
+                    registration = null;
+                    if (disposed) throw new ObjectDisposedException(nameof(CookieApiProvider));
+                    throw new OperationCanceledException(
+                        "The script execution ended while registering a cookie listener.");
+                }
+            }
+            catch
+            {
+                lock (_sync)
+                {
+                    _pendingListeners.Remove(key);
+                    _endedPendingListeners.Remove(key);
+                }
+                registration?.Dispose();
+                throw;
+            }
+        }
+
+        private void ThrowIfDisposed()
+        {
+            if (_disposed) throw new ObjectDisposedException(nameof(CookieApiProvider));
         }
 
         private static UserScriptCookieQuery ReadQuery(JsonElement details)

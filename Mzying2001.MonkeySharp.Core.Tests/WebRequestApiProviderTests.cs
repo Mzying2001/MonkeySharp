@@ -168,6 +168,33 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Fact]
+        public async Task PendingListenerRegistrationIsUniqueAndReleasedWhenExecutionEnds()
+        {
+            var installation = await InstallAsync("// @grant GM.webRequest");
+            var service = new BlockingWebRequestService();
+            using (var provider = new WebRequestApiProvider(service))
+            {
+                var add = new
+                {
+                    operation = "addListener",
+                    listenerId = 9,
+                    filter = new { }
+                };
+                var pending = Task.Run(() => provider.InvokeAsync(
+                    Context(installation, add), CancellationToken.None));
+                Assert.True(service.Entered.Wait(TimeSpan.FromSeconds(5)));
+
+                await Assert.ThrowsAsync<BridgeProtocolException>(() =>
+                    provider.InvokeAsync(Context(installation, add), CancellationToken.None));
+                provider.OnExecutionEnded("execution");
+                service.Release.Set();
+
+                await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pending);
+                Assert.True(service.Registration.Disposed);
+            }
+        }
+
+        [Fact]
         public void RequestAndResponseHeaderRulesAreScopedToTheirPhases()
         {
             using (var service = new InMemoryWebRequestService())
@@ -210,6 +237,53 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                     TimingGuarantee.BestEffortDocumentStart, BridgeIntegrityGuarantee.Verified), executionId,
                 Guid.NewGuid().ToString("D"), "GM.webRequest",
                 JsonSerializer.Deserialize<JsonElement>(JsonSerializer.Serialize(value)));
+        }
+
+        private sealed class BlockingWebRequestService : IWebRequestService
+        {
+            public ManualResetEventSlim Entered { get; } = new ManualResetEventSlim();
+            public ManualResetEventSlim Release { get; } = new ManualResetEventSlim();
+            public TestRegistration Registration { get; } = new TestRegistration();
+
+            public IWebRequestRegistration AddListener(
+                WebRequestFilter filter,
+                EventHandler<WebRequestEvent> listener)
+            {
+                Entered.Set();
+                Release.Wait();
+                return Registration;
+            }
+
+            public IWebRequestRegistration AddRule(WebRequestRule rule)
+            {
+                throw new NotSupportedException();
+            }
+
+            public bool RemoveRule(string id)
+            {
+                return false;
+            }
+
+            public IReadOnlyList<WebRequestRule> ListRules()
+            {
+                return new WebRequestRule[0];
+            }
+
+            public WebRequestDecision Evaluate(WebRequestEvent request)
+            {
+                return new WebRequestDecision();
+            }
+        }
+
+        private sealed class TestRegistration : IWebRequestRegistration
+        {
+            public string Id { get; } = Guid.NewGuid().ToString("D");
+            public bool Disposed { get; private set; }
+
+            public void Dispose()
+            {
+                Disposed = true;
+            }
         }
     }
 }

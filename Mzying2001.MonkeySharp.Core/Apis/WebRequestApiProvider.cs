@@ -116,93 +116,172 @@ namespace Mzying2001.MonkeySharp.Core.Apis
     public sealed class WebRequestApiProvider : IUserScriptApiProvider, IUserScriptNotificationSource, IUserScriptExecutionObserver, IDisposable
     {
         private readonly IWebRequestService _service;
+        private readonly object _sync = new object();
         private readonly Dictionary<string, IWebRequestRegistration> _registrations = new Dictionary<string, IWebRequestRegistration>(StringComparer.Ordinal);
+        private readonly HashSet<string> _pendingRegistrations = new HashSet<string>(StringComparer.Ordinal);
+        private readonly HashSet<string> _endedPendingRegistrations = new HashSet<string>(StringComparer.Ordinal);
         private bool _disposed;
         public WebRequestApiProvider(IWebRequestService service) { _service = service ?? throw new ArgumentNullException(nameof(service)); }
         public event EventHandler<ApiNotificationEventArgs> Notification;
         public IReadOnlyCollection<string> Methods { get; } = new ReadOnlyCollection<string>(new[] { "GM.webRequest" });
-        public async Task<ApiResult> InvokeAsync(ApiInvocationContext context, CancellationToken cancellationToken)
+        public Task<ApiResult> InvokeAsync(ApiInvocationContext context, CancellationToken cancellationToken)
         {
-            await Task.Yield();
-            if (_disposed) throw new ObjectDisposedException(nameof(WebRequestApiProvider));
+            cancellationToken.ThrowIfCancellationRequested();
+            lock (_sync) ThrowIfDisposed();
             ProviderParameters.RequireObject(context.Parameters);
             var operation = ProviderParameters.OptionalString(context.Parameters, "operation") ?? "listRules";
             if (operation == "addRule")
             {
                 var rule = ReadRule(context.Parameters.GetProperty("rule"));
                 var registrationKey = RuleKey(context.ExecutionId, rule.Id);
-                if (_registrations.ContainsKey(registrationKey))
-                    throw ProviderParameters.Invalid("The rule ID is already registered by this execution.");
                 var serviceRule = new WebRequestRule(
                     Guid.NewGuid().ToString("D"),
                     rule.Filter,
                     rule.Phase,
                     rule.Priority,
                     rule.Action);
-                var registration = _service.AddRule(serviceRule);
-                Track(registrationKey, registration);
-                return ApiResult.FromValue(rule.Id);
+                Register(registrationKey, () => _service.AddRule(serviceRule),
+                    "The rule ID is already registered by this execution.");
+                return Task.FromResult(ApiResult.FromValue(rule.Id));
             }
             if (operation == "removeRule")
             {
                 var id = ProviderParameters.RequiredString(context.Parameters, "id");
                 var key = RuleKey(context.ExecutionId, id);
-                if (!_registrations.TryGetValue(key, out var registration))
-                    return ApiResult.FromValue(false);
-                _registrations.Remove(key);
-                registration.Dispose();
-                return ApiResult.FromValue(true);
+                var registration = RemoveRegistration(key);
+                registration?.Dispose();
+                return Task.FromResult(ApiResult.FromValue(registration != null));
             }
             if (operation == "listRules")
             {
                 var prefix = RulePrefix(context.ExecutionId);
-                return ApiResult.FromValue(_registrations.Keys
-                    .Where(item => item.StartsWith(prefix, StringComparison.Ordinal))
-                    .Select(item => item.Substring(prefix.Length))
-                    .OrderBy(item => item, StringComparer.Ordinal)
-                    .ToArray());
+                string[] rules;
+                lock (_sync)
+                {
+                    ThrowIfDisposed();
+                    rules = _registrations.Keys
+                        .Where(item => item.StartsWith(prefix, StringComparison.Ordinal))
+                        .Select(item => item.Substring(prefix.Length))
+                        .OrderBy(item => item, StringComparer.Ordinal)
+                        .ToArray();
+                }
+                return Task.FromResult(ApiResult.FromValue(rules));
             }
             if (operation == "addListener")
             {
                 var listenerId = ProviderParameters.RequiredInt32(context.Parameters, "listenerId");
                 var registrationKey = ListenerKey(context.ExecutionId, listenerId);
-                if (_registrations.ContainsKey(registrationKey))
-                    throw ProviderParameters.Invalid("listenerId is already registered.");
                 var filter = ReadFilter(context.Parameters.GetProperty("filter"));
-                var registration = _service.AddListener(filter, (_, item) => Notification?.Invoke(this, new ApiNotificationEventArgs(
-                    context.Installation.ScriptKey, context.ExecutionId, "webrequest-event", JsonSerializer.Serialize(new
-                    {
-                        listenerId, phase = item.Phase.ToString(), requestId = item.RequestId, url = item.Url,
-                        method = item.Method, resourceType = item.ResourceType, headers = item.Headers,
-                        statusCode = item.StatusCode, error = item.Error
-                    }))));
-                Track(registrationKey, registration);
-                return ApiResult.FromValue(listenerId);
+                Register(registrationKey, () => _service.AddListener(filter, (_, item) =>
+                    Notification?.Invoke(this, new ApiNotificationEventArgs(
+                        context.Installation.ScriptKey, context.ExecutionId, "webrequest-event", JsonSerializer.Serialize(new
+                        {
+                            listenerId, phase = item.Phase.ToString(), requestId = item.RequestId, url = item.Url,
+                            method = item.Method, resourceType = item.ResourceType, headers = item.Headers,
+                            statusCode = item.StatusCode, error = item.Error
+                        })))), "listenerId is already registered.");
+                return Task.FromResult(ApiResult.FromValue(listenerId));
             }
             if (operation == "removeListener")
             {
                 var id = ProviderParameters.RequiredInt32(context.Parameters, "listenerId");
                 var key = ListenerKey(context.ExecutionId, id);
-                if (!_registrations.TryGetValue(key, out var registration)) return ApiResult.FromValue(false);
-                _registrations.Remove(key); registration.Dispose(); return ApiResult.FromValue(true);
+                var registration = RemoveRegistration(key);
+                registration?.Dispose();
+                return Task.FromResult(ApiResult.FromValue(registration != null));
             }
             throw ProviderParameters.Invalid("Unknown webRequest operation.");
         }
         public void OnExecutionEnded(string executionId)
         {
-            foreach (var key in _registrations.Keys.Where(item => item.StartsWith(executionId + ":", StringComparison.Ordinal)).ToArray())
-            { _registrations[key].Dispose(); _registrations.Remove(key); }
+            IWebRequestRegistration[] registrations;
+            var prefix = executionId + ":";
+            lock (_sync)
+            {
+                var keys = _registrations.Keys
+                    .Where(item => item.StartsWith(prefix, StringComparison.Ordinal))
+                    .ToArray();
+                registrations = keys.Select(item => _registrations[item]).ToArray();
+                foreach (var key in keys) _registrations.Remove(key);
+                foreach (var key in _pendingRegistrations.Where(item =>
+                    item.StartsWith(prefix, StringComparison.Ordinal)))
+                    _endedPendingRegistrations.Add(key);
+            }
+            foreach (var registration in registrations) registration.Dispose();
         }
         public void Dispose()
         {
-            if (_disposed) return; _disposed = true;
-            foreach (var registration in _registrations.Values.ToArray()) registration.Dispose(); _registrations.Clear();
+            IWebRequestRegistration[] registrations;
+            lock (_sync)
+            {
+                if (_disposed) return;
+                _disposed = true;
+                registrations = _registrations.Values.ToArray();
+                _registrations.Clear();
+                _endedPendingRegistrations.Clear();
+            }
+            foreach (var registration in registrations) registration.Dispose();
         }
-        private void Track(string key, IWebRequestRegistration registration)
+        private void Register(
+            string key,
+            Func<IWebRequestRegistration> factory,
+            string duplicateMessage)
         {
-            if (registration == null || string.IsNullOrEmpty(registration.Id))
-                throw new InvalidOperationException("The webRequest service returned no registration.");
-            _registrations.Add(key, registration);
+            lock (_sync)
+            {
+                ThrowIfDisposed();
+                if (_registrations.ContainsKey(key) || !_pendingRegistrations.Add(key))
+                    throw ProviderParameters.Invalid(duplicateMessage);
+            }
+            IWebRequestRegistration registration = null;
+            try
+            {
+                registration = factory();
+                if (registration == null || string.IsNullOrEmpty(registration.Id))
+                    throw new InvalidOperationException("The webRequest service returned no registration.");
+                bool disposed;
+                bool executionEnded;
+                lock (_sync)
+                {
+                    _pendingRegistrations.Remove(key);
+                    disposed = _disposed;
+                    executionEnded = _endedPendingRegistrations.Remove(key);
+                    if (!disposed && !executionEnded)
+                        _registrations.Add(key, registration);
+                }
+                if (disposed || executionEnded)
+                {
+                    registration.Dispose();
+                    registration = null;
+                    if (disposed) throw new ObjectDisposedException(nameof(WebRequestApiProvider));
+                    throw new OperationCanceledException(
+                        "The script execution ended while registering a webRequest operation.");
+                }
+            }
+            catch
+            {
+                lock (_sync)
+                {
+                    _pendingRegistrations.Remove(key);
+                    _endedPendingRegistrations.Remove(key);
+                }
+                registration?.Dispose();
+                throw;
+            }
+        }
+        private IWebRequestRegistration RemoveRegistration(string key)
+        {
+            lock (_sync)
+            {
+                ThrowIfDisposed();
+                if (!_registrations.TryGetValue(key, out var registration)) return null;
+                _registrations.Remove(key);
+                return registration;
+            }
+        }
+        private void ThrowIfDisposed()
+        {
+            if (_disposed) throw new ObjectDisposedException(nameof(WebRequestApiProvider));
         }
         private static string ListenerKey(string executionId, int listenerId)
         {
