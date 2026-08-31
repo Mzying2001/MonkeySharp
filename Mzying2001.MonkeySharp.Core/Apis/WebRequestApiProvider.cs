@@ -130,17 +130,38 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             if (operation == "addRule")
             {
                 var rule = ReadRule(context.Parameters.GetProperty("rule"));
-                var registration = _service.AddRule(rule);
-                Track(context, registration);
+                var registrationKey = RuleKey(context.ExecutionId, rule.Id);
+                if (_registrations.ContainsKey(registrationKey))
+                    throw ProviderParameters.Invalid("The rule ID is already registered by this execution.");
+                var serviceRule = new WebRequestRule(
+                    Guid.NewGuid().ToString("D"),
+                    rule.Filter,
+                    rule.Phase,
+                    rule.Priority,
+                    rule.Action);
+                var registration = _service.AddRule(serviceRule);
+                Track(registrationKey, registration);
                 return ApiResult.FromValue(rule.Id);
             }
             if (operation == "removeRule")
             {
                 var id = ProviderParameters.RequiredString(context.Parameters, "id");
-                return ApiResult.FromValue(_service.RemoveRule(id));
+                var key = RuleKey(context.ExecutionId, id);
+                if (!_registrations.TryGetValue(key, out var registration))
+                    return ApiResult.FromValue(false);
+                _registrations.Remove(key);
+                registration.Dispose();
+                return ApiResult.FromValue(true);
             }
             if (operation == "listRules")
-                return ApiResult.FromValue(_service.ListRules().Select(item => item.Id).ToArray());
+            {
+                var prefix = RulePrefix(context.ExecutionId);
+                return ApiResult.FromValue(_registrations.Keys
+                    .Where(item => item.StartsWith(prefix, StringComparison.Ordinal))
+                    .Select(item => item.Substring(prefix.Length))
+                    .OrderBy(item => item, StringComparer.Ordinal)
+                    .ToArray());
+            }
             if (operation == "addListener")
             {
                 var listenerId = ProviderParameters.RequiredInt32(context.Parameters, "listenerId");
@@ -177,12 +198,6 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             if (_disposed) return; _disposed = true;
             foreach (var registration in _registrations.Values.ToArray()) registration.Dispose(); _registrations.Clear();
         }
-        private void Track(ApiInvocationContext context, IWebRequestRegistration registration)
-        {
-            if (registration == null || string.IsNullOrEmpty(registration.Id)) throw new InvalidOperationException("The webRequest service returned no registration.");
-            var key = context.ExecutionId + ":" + registration.Id;
-            _registrations[key] = registration;
-        }
         private void Track(string key, IWebRequestRegistration registration)
         {
             if (registration == null || string.IsNullOrEmpty(registration.Id))
@@ -192,6 +207,14 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         private static string ListenerKey(string executionId, int listenerId)
         {
             return executionId + ":listener:" + listenerId;
+        }
+        private static string RuleKey(string executionId, string ruleId)
+        {
+            return RulePrefix(executionId) + ruleId;
+        }
+        private static string RulePrefix(string executionId)
+        {
+            return executionId + ":rule:";
         }
         private static WebRequestRule ReadRule(JsonElement value)
         {

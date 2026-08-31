@@ -118,6 +118,56 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Fact]
+        public async Task RulesAreListedAndRemovedOnlyByTheirOwningExecution()
+        {
+            var installation = await InstallAsync("// @grant GM.webRequest");
+            using (var service = new InMemoryWebRequestService())
+            using (var provider = new WebRequestApiProvider(service))
+            {
+                var rule = new
+                {
+                    operation = "addRule",
+                    rule = new
+                    {
+                        id = "shared-name",
+                        phase = "OnBeforeRequest",
+                        filter = new { urlPatterns = new[] { "https://example.com/*" } },
+                        action = new { kind = "Block" }
+                    }
+                };
+                await provider.InvokeAsync(Context(installation, rule, "execution-a"), CancellationToken.None);
+                await provider.InvokeAsync(Context(installation, rule, "execution-b"), CancellationToken.None);
+
+                var firstRules = await provider.InvokeAsync(Context(installation, new
+                {
+                    operation = "listRules"
+                }, "execution-a"), CancellationToken.None);
+                Assert.Equal(new[] { "shared-name" },
+                    JsonSerializer.Deserialize<string[]>(firstRules.Json));
+
+                var removed = await provider.InvokeAsync(Context(installation, new
+                {
+                    operation = "removeRule",
+                    id = "shared-name"
+                }, "execution-a"), CancellationToken.None);
+                Assert.True(JsonSerializer.Deserialize<bool>(removed.Json));
+                Assert.Single(service.ListRules());
+
+                var firstRulesAfterRemoval = await provider.InvokeAsync(Context(installation, new
+                {
+                    operation = "listRules"
+                }, "execution-a"), CancellationToken.None);
+                var secondRules = await provider.InvokeAsync(Context(installation, new
+                {
+                    operation = "listRules"
+                }, "execution-b"), CancellationToken.None);
+                Assert.Empty(JsonSerializer.Deserialize<string[]>(firstRulesAfterRemoval.Json));
+                Assert.Equal(new[] { "shared-name" },
+                    JsonSerializer.Deserialize<string[]>(secondRules.Json));
+            }
+        }
+
+        [Fact]
         public void RequestAndResponseHeaderRulesAreScopedToTheirPhases()
         {
             using (var service = new InMemoryWebRequestService())
@@ -150,11 +200,14 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 "window.request = true;"), "test", true, CancellationToken.None);
         }
 
-        private static ApiInvocationContext Context(UserScriptInstallation installation, object value)
+        private static ApiInvocationContext Context(
+            UserScriptInstallation installation,
+            object value,
+            string executionId = "execution")
         {
             return new ApiInvocationContext(installation,
                 new DocumentFrame("browser", "document", "frame", new Uri("https://example.com/page"), true,
-                    TimingGuarantee.BestEffortDocumentStart, BridgeIntegrityGuarantee.Verified), "execution",
+                    TimingGuarantee.BestEffortDocumentStart, BridgeIntegrityGuarantee.Verified), executionId,
                 Guid.NewGuid().ToString("D"), "GM.webRequest",
                 JsonSerializer.Deserialize<JsonElement>(JsonSerializer.Serialize(value)));
         }
