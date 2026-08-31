@@ -6,8 +6,6 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography.X509Certificates;
 
-#pragma warning disable CS1591
-
 namespace Mzying2001.MonkeySharp.CefSharp
 {
     /// <summary>Bridges synchronous Chromium request callbacks to an <see cref="IWebRequestService"/>.</summary>
@@ -15,16 +13,24 @@ namespace Mzying2001.MonkeySharp.CefSharp
     {
         private readonly IWebRequestService _service;
 
+        /// <summary>Initializes a handler over an application-owned web request service.</summary>
         public CefSharpWebRequestHandler(IWebRequestService service)
-        { _service = service ?? throw new ArgumentNullException(nameof(service)); }
+        {
+            _service = service ?? throw new ArgumentNullException(nameof(service));
+        }
 
+        /// <inheritdoc />
         public bool OnBeforeBrowse(IWebBrowser chromiumWebBrowser, IBrowser browser, IFrame frame, IRequest request, bool userGesture, bool isRedirect)
         { return false; }
+        /// <inheritdoc />
         public void OnDocumentAvailableInMainFrame(IWebBrowser chromiumWebBrowser, IBrowser browser) { }
+        /// <inheritdoc />
         public bool OnOpenUrlFromTab(IWebBrowser chromiumWebBrowser, IBrowser browser, IFrame frame, string targetUrl, WindowOpenDisposition targetDisposition, bool userGesture)
         { return false; }
+        /// <inheritdoc />
         public IResourceRequestHandler GetResourceRequestHandler(IWebBrowser chromiumWebBrowser, IBrowser browser, IFrame frame, IRequest request, bool isNavigation, bool isDownload, string requestInitiator, ref bool disableDefaultHandling)
         { return new ResourceHandler(_service); }
+        /// <inheritdoc />
         public bool GetAuthCredentials(IWebBrowser chromiumWebBrowser, IBrowser browser, string originUrl, bool isProxy, string host, int port, string realm, string scheme, IAuthCallback callback)
         {
             var eventData = new WebRequestEvent(WebRequestPhase.OnAuthRequired, 0, originUrl ?? string.Empty, "GET");
@@ -33,14 +39,21 @@ namespace Mzying2001.MonkeySharp.CefSharp
             callback.Continue(decision.Username, decision.Password);
             return true;
         }
+        /// <inheritdoc />
         public bool OnCertificateError(IWebBrowser chromiumWebBrowser, IBrowser browser, CefErrorCode errorCode, string requestUrl, ISslInfo sslInfo, IRequestCallback callback) { return false; }
+        /// <inheritdoc />
         public bool OnQuotaRequest(IWebBrowser chromiumWebBrowser, IBrowser browser, string originUrl, long newSize, IRequestCallback callback) { return false; }
+        /// <inheritdoc />
         public void OnPluginCrashed(IWebBrowser chromiumWebBrowser, IBrowser browser, string pluginPath) { }
+        /// <inheritdoc />
         public bool OnSelectClientCertificate(IWebBrowser chromiumWebBrowser, IBrowser browser, bool isProxy, string host, int port, X509Certificate2Collection certificates, ISelectClientCertificateCallback callback) { return false; }
+        /// <inheritdoc />
         public void OnRenderViewReady(IWebBrowser chromiumWebBrowser, IBrowser browser) { }
 #if CEF_SHARP_EXTENDED_RENDER_TERMINATED
+        /// <inheritdoc />
         public void OnRenderProcessTerminated(IWebBrowser chromiumWebBrowser, IBrowser browser, CefTerminationStatus status, int errorCode, string errorMessage) { }
 #else
+        /// <inheritdoc />
         public void OnRenderProcessTerminated(IWebBrowser chromiumWebBrowser, IBrowser browser, CefTerminationStatus status) { }
 #endif
 
@@ -48,7 +61,10 @@ namespace Mzying2001.MonkeySharp.CefSharp
         {
             private readonly IWebRequestService _service;
             private bool _responseBlocked;
-            public ResourceHandler(IWebRequestService service) { _service = service; }
+            public ResourceHandler(IWebRequestService service)
+            {
+                _service = service;
+            }
             public ICookieAccessFilter GetCookieAccessFilter(IWebBrowser chromiumWebBrowser, IBrowser browser, IFrame frame, IRequest request) { return null; }
             public CefReturnValue OnBeforeResourceLoad(IWebBrowser chromiumWebBrowser, IBrowser browser, IFrame frame, IRequest request, IRequestCallback callback)
             {
@@ -91,7 +107,9 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 _service.Evaluate(CreateEvent(phase, request, response, status.ToString()));
             }
             public bool OnProtocolExecution(IWebBrowser chromiumWebBrowser, IBrowser browser, IFrame frame, IRequest request) { return false; }
-            public void Dispose() { }
+            public void Dispose()
+            {
+            }
 
             private static WebRequestEvent CreateEvent(WebRequestPhase phase, IRequest request, IResponse response = null, string error = null, string url = null)
             {
@@ -137,15 +155,28 @@ namespace Mzying2001.MonkeySharp.CefSharp
     {
         private readonly object _sync = new object();
         private readonly List<IRequestHandler> _handlers = new List<IRequestHandler>();
+        /// <summary>Adds a handler once; callbacks fan out to a snapshot of current handlers.</summary>
         public void Add(IRequestHandler handler)
         {
             if (handler == null) throw new ArgumentNullException(nameof(handler));
             lock (_sync) if (!_handlers.Contains(handler)) _handlers.Add(handler);
         }
-        public void Remove(IRequestHandler handler) { if (handler != null) lock (_sync) _handlers.Remove(handler); }
+        /// <summary>Removes a previously added handler.</summary>
+        public void Remove(IRequestHandler handler)
+        {
+            if (handler != null)
+            {
+                lock (_sync)
+                    _handlers.Remove(handler);
+            }
+        }
+        /// <inheritdoc />
         public bool OnBeforeBrowse(IWebBrowser a, IBrowser b, IFrame c, IRequest d, bool e, bool f) => Snapshot().Any(x => x.OnBeforeBrowse(a, b, c, d, e, f));
+        /// <inheritdoc />
         public void OnDocumentAvailableInMainFrame(IWebBrowser a, IBrowser b) { foreach (var x in Snapshot()) x.OnDocumentAvailableInMainFrame(a, b); }
+        /// <inheritdoc />
         public bool OnOpenUrlFromTab(IWebBrowser a, IBrowser b, IFrame c, string d, WindowOpenDisposition e, bool f) => Snapshot().Any(x => x.OnOpenUrlFromTab(a, b, c, d, e, f));
+        /// <inheritdoc />
         public IResourceRequestHandler GetResourceRequestHandler(IWebBrowser a, IBrowser b, IFrame c, IRequest d, bool e, bool f, string g, ref bool h)
         {
             var handlers = new List<IResourceRequestHandler>();
@@ -158,19 +189,27 @@ namespace Mzying2001.MonkeySharp.CefSharp
             if (handlers.Count == 1) return handlers[0];
             return new ResourceRequestHandlerMultiplexer(handlers);
         }
+        /// <inheritdoc />
         public bool GetAuthCredentials(IWebBrowser a, IBrowser b, string c, bool d, string e, int f, string g, string h, IAuthCallback i) => Snapshot().Any(x => x.GetAuthCredentials(a, b, c, d, e, f, g, h, i));
+        /// <inheritdoc />
         public bool OnCertificateError(IWebBrowser a, IBrowser b, CefErrorCode c, string d, ISslInfo e, IRequestCallback f) => Snapshot().Any(x => x.OnCertificateError(a, b, c, d, e, f));
+        /// <inheritdoc />
         public bool OnQuotaRequest(IWebBrowser a, IBrowser b, string c, long d, IRequestCallback e) =>
             Snapshot().Any(x => InvokeQuotaRequest(x, a, b, c, d, e));
+        /// <inheritdoc />
         public void OnPluginCrashed(IWebBrowser a, IBrowser b, string c)
         {
             foreach (var x in Snapshot()) InvokePluginCrashed(x, a, b, c);
         }
+        /// <inheritdoc />
         public bool OnSelectClientCertificate(IWebBrowser a, IBrowser b, bool c, string d, int e, X509Certificate2Collection f, ISelectClientCertificateCallback g) => Snapshot().Any(x => x.OnSelectClientCertificate(a, b, c, d, e, f, g));
+        /// <inheritdoc />
         public void OnRenderViewReady(IWebBrowser a, IBrowser b) { foreach (var x in Snapshot()) x.OnRenderViewReady(a, b); }
 #if CEF_SHARP_EXTENDED_RENDER_TERMINATED
+        /// <inheritdoc />
         public void OnRenderProcessTerminated(IWebBrowser a, IBrowser b, CefTerminationStatus c, int d, string e) { foreach (var x in Snapshot()) x.OnRenderProcessTerminated(a, b, c, d, e); }
 #else
+        /// <inheritdoc />
         public void OnRenderProcessTerminated(IWebBrowser a, IBrowser b, CefTerminationStatus c) { foreach (var x in Snapshot()) x.OnRenderProcessTerminated(a, b, c); }
 #endif
 

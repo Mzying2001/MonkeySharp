@@ -10,24 +10,65 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
-#pragma warning disable CS1591
-
 namespace Mzying2001.MonkeySharp.Core.Apis
 {
-    public enum WebRequestPhase { OnBeforeRequest, OnBeforeSendHeaders, OnHeadersReceived, OnAuthRequired, OnResponseStarted, OnCompleted, OnErrorOccurred }
-    public enum WebRequestActionKind { Allow, Block, Redirect, ModifyRequestHeaders, ModifyResponseHeaders, AuthResponse }
+    /// <summary>Identifies the Chromium request lifecycle phase being evaluated.</summary>
+    public enum WebRequestPhase
+    {
+        /// <summary>Before URL dispatch.</summary>
+        OnBeforeRequest,
+        /// <summary>Before request headers are sent.</summary>
+        OnBeforeSendHeaders,
+        /// <summary>After response headers arrive.</summary>
+        OnHeadersReceived,
+        /// <summary>When credentials are requested.</summary>
+        OnAuthRequired,
+        /// <summary>When the response begins.</summary>
+        OnResponseStarted,
+        /// <summary>After a request completes successfully.</summary>
+        OnCompleted,
+        /// <summary>After a request fails.</summary>
+        OnErrorOccurred
+    }
 
+    /// <summary>Identifies the action produced by a web request rule.</summary>
+    public enum WebRequestActionKind
+    {
+        /// <summary>Allows the request without a terminal change.</summary>
+        Allow,
+        /// <summary>Blocks the request.</summary>
+        Block,
+        /// <summary>Redirects the request.</summary>
+        Redirect,
+        /// <summary>Changes request headers.</summary>
+        ModifyRequestHeaders,
+        /// <summary>Changes response headers.</summary>
+        ModifyResponseHeaders,
+        /// <summary>Supplies authentication credentials.</summary>
+        AuthResponse
+    }
+
+    /// <summary>Matches requests by URL glob, resource type, and HTTP method.</summary>
     public sealed class WebRequestFilter
     {
+        /// <summary>Initializes a request filter. Empty collections match every value.</summary>
         public WebRequestFilter(IEnumerable<string> urlPatterns = null, IEnumerable<string> resourceTypes = null, IEnumerable<string> methods = null)
         {
-            UrlPatterns = new ReadOnlyCollection<string>((urlPatterns ?? Enumerable.Empty<string>()).Where(item => !string.IsNullOrWhiteSpace(item)).ToArray());
-            ResourceTypes = new ReadOnlyCollection<string>((resourceTypes ?? Enumerable.Empty<string>()).Where(item => !string.IsNullOrWhiteSpace(item)).ToArray());
-            Methods = new ReadOnlyCollection<string>((methods ?? Enumerable.Empty<string>()).Where(item => !string.IsNullOrWhiteSpace(item)).Select(item => item.ToUpperInvariant()).ToArray());
+            UrlPatterns = new ReadOnlyCollection<string>((urlPatterns ?? Enumerable.Empty<string>())
+                .Where(item => !string.IsNullOrWhiteSpace(item)).ToArray());
+            ResourceTypes = new ReadOnlyCollection<string>((resourceTypes ?? Enumerable.Empty<string>())
+                .Where(item => !string.IsNullOrWhiteSpace(item)).ToArray());
+            Methods = new ReadOnlyCollection<string>((methods ?? Enumerable.Empty<string>())
+                .Where(item => !string.IsNullOrWhiteSpace(item))
+                .Select(item => item.ToUpperInvariant()).ToArray());
         }
+        /// <summary>Gets case-insensitive URL globs.</summary>
         public IReadOnlyList<string> UrlPatterns { get; }
+        /// <summary>Gets matched Chromium resource type names.</summary>
         public IReadOnlyList<string> ResourceTypes { get; }
+        /// <summary>Gets matched uppercase HTTP methods.</summary>
         public IReadOnlyList<string> Methods { get; }
+        /// <summary>Returns whether all configured constraints match a request.</summary>
         public bool Matches(WebRequestEvent request)
         {
             if (UrlPatterns.Count > 0 && !UrlPatterns.Any(pattern => GlobMatch(pattern, request.Url))) return false;
@@ -42,77 +83,139 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         }
     }
 
+    /// <summary>Describes the effect of a web request rule.</summary>
     public sealed class WebRequestAction
     {
+        /// <summary>Initializes a rule action and copies its header mutations.</summary>
         public WebRequestAction(WebRequestActionKind kind, string redirectUrl = null, IDictionary<string, string> headers = null, string username = null, string password = null)
         {
-            Kind = kind; RedirectUrl = redirectUrl; Username = username; Password = password;
-            Headers = new ReadOnlyDictionary<string, string>(new Dictionary<string, string>(headers ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase));
+            Kind = kind;
+            RedirectUrl = redirectUrl;
+            Username = username;
+            Password = password;
+            Headers = new ReadOnlyDictionary<string, string>(new Dictionary<string, string>(
+                headers ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase));
         }
+        /// <summary>Gets the action kind.</summary>
         public WebRequestActionKind Kind { get; }
+        /// <summary>Gets the redirect target for <see cref="WebRequestActionKind.Redirect"/>.</summary>
         public string RedirectUrl { get; }
+        /// <summary>Gets request or response header replacements.</summary>
         public IReadOnlyDictionary<string, string> Headers { get; }
+        /// <summary>Gets the authentication username.</summary>
         public string Username { get; }
+        /// <summary>Gets the authentication password.</summary>
         public string Password { get; }
     }
 
+    /// <summary>Defines a prioritized action for one request lifecycle phase.</summary>
     public sealed class WebRequestRule
     {
+        /// <summary>Initializes a web request rule.</summary>
         public WebRequestRule(string id, WebRequestFilter filter, WebRequestPhase phase, int priority, WebRequestAction action)
         {
             if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("Rule id is required.", nameof(id));
-            Id = id; Filter = filter ?? throw new ArgumentNullException(nameof(filter)); Action = action ?? throw new ArgumentNullException(nameof(action));
-            Phase = phase; Priority = priority;
+            Id = id;
+            Filter = filter ?? throw new ArgumentNullException(nameof(filter));
+            Action = action ?? throw new ArgumentNullException(nameof(action));
+            Phase = phase;
+            Priority = priority;
         }
+        /// <summary>Gets the service-local rule identifier.</summary>
         public string Id { get; }
+        /// <summary>Gets the request filter.</summary>
         public WebRequestFilter Filter { get; }
+        /// <summary>Gets the evaluated lifecycle phase.</summary>
         public WebRequestPhase Phase { get; }
+        /// <summary>Gets rule priority; higher values win terminal decisions.</summary>
         public int Priority { get; }
+        /// <summary>Gets the rule action.</summary>
         public WebRequestAction Action { get; }
     }
 
+    /// <summary>Contains an immutable request snapshot delivered to rules and listeners.</summary>
     public sealed class WebRequestEvent : EventArgs
     {
+        /// <summary>Initializes a request lifecycle event.</summary>
         public WebRequestEvent(WebRequestPhase phase, ulong requestId, string url, string method = "GET", string resourceType = null,
             IDictionary<string, string> headers = null, int? statusCode = null, string error = null)
         {
-            Phase = phase; RequestId = requestId; Url = url ?? throw new ArgumentNullException(nameof(url)); Method = method ?? "GET";
-            ResourceType = resourceType; Headers = new ReadOnlyDictionary<string, string>(new Dictionary<string, string>(headers ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase));
-            StatusCode = statusCode; Error = error;
+            Phase = phase;
+            RequestId = requestId;
+            Url = url ?? throw new ArgumentNullException(nameof(url));
+            Method = method ?? "GET";
+            ResourceType = resourceType;
+            Headers = new ReadOnlyDictionary<string, string>(new Dictionary<string, string>(
+                headers ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase));
+            StatusCode = statusCode;
+            Error = error;
         }
+        /// <summary>Gets the lifecycle phase.</summary>
         public WebRequestPhase Phase { get; }
+        /// <summary>Gets the adapter-provided request identifier.</summary>
         public ulong RequestId { get; }
+        /// <summary>Gets the absolute request URL.</summary>
         public string Url { get; }
+        /// <summary>Gets the HTTP method.</summary>
         public string Method { get; }
+        /// <summary>Gets the Chromium resource type name.</summary>
         public string ResourceType { get; }
+        /// <summary>Gets request or response headers for the current phase.</summary>
         public IReadOnlyDictionary<string, string> Headers { get; }
+        /// <summary>Gets the response status code when available.</summary>
         public int? StatusCode { get; }
+        /// <summary>Gets the failure description for error events.</summary>
         public string Error { get; }
     }
 
+    /// <summary>Contains the combined synchronous decision for a request event.</summary>
     public sealed class WebRequestDecision
     {
+        /// <summary>Initializes a combined request decision.</summary>
         public WebRequestDecision(WebRequestActionKind kind = WebRequestActionKind.Allow, string redirectUrl = null, IDictionary<string, string> headers = null, string username = null, string password = null)
         {
-            Kind = kind; RedirectUrl = redirectUrl; Headers = new ReadOnlyDictionary<string, string>(new Dictionary<string, string>(headers ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase)); Username = username; Password = password;
+            Kind = kind;
+            RedirectUrl = redirectUrl;
+            Headers = new ReadOnlyDictionary<string, string>(new Dictionary<string, string>(
+                headers ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase));
+            Username = username;
+            Password = password;
         }
+        /// <summary>Gets the terminal action kind.</summary>
         public WebRequestActionKind Kind { get; }
+        /// <summary>Gets the redirect URL.</summary>
         public string RedirectUrl { get; }
+        /// <summary>Gets merged header changes in registration order.</summary>
         public IReadOnlyDictionary<string, string> Headers { get; }
+        /// <summary>Gets the authentication username.</summary>
         public string Username { get; }
+        /// <summary>Gets the authentication password.</summary>
         public string Password { get; }
     }
 
-    public interface IWebRequestRegistration : IDisposable { string Id { get; } }
+    /// <summary>Owns a web request rule or listener registration.</summary>
+    public interface IWebRequestRegistration : IDisposable
+    {
+        /// <summary>Gets the service-local registration identifier.</summary>
+        string Id { get; }
+    }
+
+    /// <summary>Evaluates request events synchronously and manages rules and listeners.</summary>
     public interface IWebRequestService
     {
+        /// <summary>Adds a rule and returns its owned registration.</summary>
         IWebRequestRegistration AddRule(WebRequestRule rule);
+        /// <summary>Removes a rule by service-local identifier.</summary>
         bool RemoveRule(string id);
+        /// <summary>Lists rules in descending priority and then registration order.</summary>
         IReadOnlyList<WebRequestRule> ListRules();
+        /// <summary>Adds a synchronous observer that must not block Chromium callbacks.</summary>
         IWebRequestRegistration AddListener(WebRequestFilter filter, EventHandler<WebRequestEvent> listener);
+        /// <summary>Evaluates matching listeners and rules synchronously.</summary>
         WebRequestDecision Evaluate(WebRequestEvent request);
     }
 
+    /// <summary>Adapts an execution-isolated <see cref="IWebRequestService"/> to <c>GM.webRequest</c>.</summary>
     public sealed class WebRequestApiProvider : IUserScriptApiProvider, IUserScriptNotificationSource, IUserScriptExecutionObserver, IDisposable
     {
         private readonly IWebRequestService _service;
@@ -121,9 +224,16 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         private readonly HashSet<string> _pendingRegistrations = new HashSet<string>(StringComparer.Ordinal);
         private readonly HashSet<string> _endedPendingRegistrations = new HashSet<string>(StringComparer.Ordinal);
         private bool _disposed;
-        public WebRequestApiProvider(IWebRequestService service) { _service = service ?? throw new ArgumentNullException(nameof(service)); }
+        /// <summary>Initializes a provider over an application-owned request service.</summary>
+        public WebRequestApiProvider(IWebRequestService service)
+        {
+            _service = service ?? throw new ArgumentNullException(nameof(service));
+        }
+        /// <inheritdoc />
         public event EventHandler<ApiNotificationEventArgs> Notification;
+        /// <inheritdoc />
         public IReadOnlyCollection<string> Methods { get; } = new ReadOnlyCollection<string>(new[] { "GM.webRequest" });
+        /// <inheritdoc />
         public Task<ApiResult> InvokeAsync(ApiInvocationContext context, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -194,6 +304,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             }
             throw ProviderParameters.Invalid("Unknown webRequest operation.");
         }
+        /// <inheritdoc />
         public void OnExecutionEnded(string executionId)
         {
             IWebRequestRegistration[] registrations;
@@ -211,6 +322,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             }
             foreach (var registration in registrations) registration.Dispose();
         }
+        /// <inheritdoc />
         public void Dispose()
         {
             IWebRequestRegistration[] registrations;
@@ -361,6 +473,11 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         }
     }
 
+    /// <summary>
+    /// Provides a thread-safe in-memory rule engine. Listener callbacks run synchronously and
+    /// cannot change the decision; terminal actions use descending priority while header edits
+    /// are merged in registration order.
+    /// </summary>
     public sealed class InMemoryWebRequestService : IWebRequestService, IDisposable
     {
         private readonly object _sync = new object();
@@ -368,6 +485,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         private readonly List<Tuple<WebRequestFilter, EventHandler<WebRequestEvent>, IWebRequestRegistration>> _listeners = new List<Tuple<WebRequestFilter, EventHandler<WebRequestEvent>, IWebRequestRegistration>>();
         private long _sequence;
         private bool _disposed;
+        /// <inheritdoc />
         public IWebRequestRegistration AddRule(WebRequestRule rule)
         {
             if (rule == null) throw new ArgumentNullException(nameof(rule));
@@ -379,8 +497,32 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 return r;
             }
         }
-        public bool RemoveRule(string id) { lock (_sync) { var item = _rules.FirstOrDefault(x => x.Item1.Id == id); if (item == null) return false; _rules.Remove(item); item.Item3.Dispose(); return true; } }
-        public IReadOnlyList<WebRequestRule> ListRules() { lock (_sync) return new ReadOnlyCollection<WebRequestRule>(_rules.OrderByDescending(x => x.Item1.Priority).ThenBy(x => x.Item2).Select(x => x.Item1).ToList()); }
+        /// <inheritdoc />
+        public bool RemoveRule(string id)
+        {
+            lock (_sync)
+            {
+                var item = _rules.FirstOrDefault(x => x.Item1.Id == id);
+                if (item == null) return false;
+                _rules.Remove(item);
+                item.Item3.Dispose();
+                return true;
+            }
+        }
+
+        /// <inheritdoc />
+        public IReadOnlyList<WebRequestRule> ListRules()
+        {
+            lock (_sync)
+            {
+                return new ReadOnlyCollection<WebRequestRule>(_rules
+                    .OrderByDescending(x => x.Item1.Priority)
+                    .ThenBy(x => x.Item2)
+                    .Select(x => x.Item1)
+                    .ToList());
+            }
+        }
+        /// <inheritdoc />
         public IWebRequestRegistration AddListener(WebRequestFilter filter, EventHandler<WebRequestEvent> listener)
         {
             if (listener == null) throw new ArgumentNullException(nameof(listener));
@@ -396,10 +538,21 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 return registration;
             }
         }
+        /// <inheritdoc />
         public WebRequestDecision Evaluate(WebRequestEvent request)
         {
-            Tuple<WebRequestRule, long, IWebRequestRegistration>[] rules; Tuple<WebRequestFilter, EventHandler<WebRequestEvent>, IWebRequestRegistration>[] listeners;
-            lock (_sync) { ThrowIfDisposed(); rules = _rules.Where(x => x.Item1.Phase == request.Phase && x.Item1.Filter.Matches(request)).OrderByDescending(x => x.Item1.Priority).ThenBy(x => x.Item2).ToArray(); listeners = _listeners.Where(x => x.Item1.Matches(request)).ToArray(); }
+            Tuple<WebRequestRule, long, IWebRequestRegistration>[] rules;
+            Tuple<WebRequestFilter, EventHandler<WebRequestEvent>, IWebRequestRegistration>[] listeners;
+            lock (_sync)
+            {
+                ThrowIfDisposed();
+                rules = _rules
+                    .Where(x => x.Item1.Phase == request.Phase && x.Item1.Filter.Matches(request))
+                    .OrderByDescending(x => x.Item1.Priority)
+                    .ThenBy(x => x.Item2)
+                    .ToArray();
+                listeners = _listeners.Where(x => x.Item1.Matches(request)).ToArray();
+            }
             foreach (var listener in listeners)
             {
                 // Observers must never be able to delay or change the host's
@@ -407,14 +560,27 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 try { listener.Item2(this, request); }
                 catch { }
             }
-            var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase); WebRequestActionKind kind = WebRequestActionKind.Allow; string redirect = null, user = null, password = null;
+            var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            var kind = WebRequestActionKind.Allow;
+            string redirect = null;
+            string user = null;
+            string password = null;
             foreach (var item in rules)
             {
                 var action = item.Item1.Action;
                 if (action.Kind == WebRequestActionKind.Block || action.Kind == WebRequestActionKind.Redirect)
-                { kind = action.Kind; redirect = action.RedirectUrl; break; }
+                {
+                    kind = action.Kind;
+                    redirect = action.RedirectUrl;
+                    break;
+                }
                 if (action.Kind == WebRequestActionKind.AuthResponse)
-                { kind = action.Kind; user = action.Username; password = action.Password; break; }
+                {
+                    kind = action.Kind;
+                    user = action.Username;
+                    password = action.Password;
+                    break;
+                }
             }
             foreach (var item in rules.OrderBy(x => x.Item2))
             {
@@ -430,6 +596,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             }
             return new WebRequestDecision(kind, redirect, headers, user, password);
         }
+        /// <inheritdoc />
         public void Dispose()
         {
             IWebRequestRegistration[] rules;
@@ -450,6 +617,24 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         {
             if (_disposed) throw new ObjectDisposedException(nameof(InMemoryWebRequestService));
         }
-        private sealed class Registration : IWebRequestRegistration { private readonly Action _dispose; private int _disposed; public Registration(string id, Action dispose) { Id = id; _dispose = dispose; } public string Id { get; } public void Dispose() { if (Interlocked.Exchange(ref _disposed, 1) == 0) _dispose(); } }
+        private sealed class Registration : IWebRequestRegistration
+        {
+            private readonly Action _dispose;
+            private int _disposed;
+
+            public Registration(string id, Action dispose)
+            {
+                Id = id;
+                _dispose = dispose;
+            }
+
+            public string Id { get; }
+
+            public void Dispose()
+            {
+                if (Interlocked.Exchange(ref _disposed, 1) == 0)
+                    _dispose();
+            }
+        }
     }
 }

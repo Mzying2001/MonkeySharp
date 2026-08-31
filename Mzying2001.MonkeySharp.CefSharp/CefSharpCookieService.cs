@@ -7,8 +7,6 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
-#pragma warning disable CS1591
-
 namespace Mzying2001.MonkeySharp.CefSharp
 {
     /// <summary>Maps MonkeySharp cookie operations to a CefSharp request context cookie manager.</summary>
@@ -37,6 +35,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             _contextAccessor = contextAccessor ?? throw new ArgumentNullException(nameof(contextAccessor));
         }
 
+        /// <summary>Lists cookies through the currently attached request context.</summary>
         public Task<IReadOnlyList<UserScriptCookie>> ListAsync(UserScriptCookieQuery query, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -68,6 +67,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             return source.Completion;
         }
 
+        /// <summary>Sets a cookie and publishes the resulting change to listeners.</summary>
         public async Task<UserScriptCookie> SetAsync(UserScriptCookieMutation mutation, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -107,6 +107,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             return result;
         }
 
+        /// <summary>Deletes a cookie and returns whether the browser removed one.</summary>
         public async Task<bool> DeleteAsync(UserScriptCookieMutation mutation, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -137,6 +138,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             }
         }
 
+        /// <summary>Registers a listener owned by the service until disposed.</summary>
         public ICookieListenerRegistration AddListener(UserScriptCookieQuery query,
             EventHandler<UserScriptCookieChangedEventArgs> changed)
         {
@@ -199,6 +201,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             return context.GetCookieManager(null);
         }
 
+        /// <summary>Cancels pending browser operations and releases listener state.</summary>
         public void Dispose()
         {
             IPendingOperation[] pending;

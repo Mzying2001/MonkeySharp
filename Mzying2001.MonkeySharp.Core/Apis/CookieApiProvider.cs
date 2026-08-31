@@ -9,13 +9,12 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
-#pragma warning disable CS1591
-
 namespace Mzying2001.MonkeySharp.Core.Apis
 {
     /// <summary>Describes the scope used to query userscript cookies.</summary>
     public sealed class UserScriptCookieQuery
     {
+        /// <summary>Initializes a cookie query for an absolute HTTP or HTTPS URL.</summary>
         public UserScriptCookieQuery(Uri url, string name = null, string domain = null, string path = null)
         {
             Url = ValidateUrl(url);
@@ -24,11 +23,16 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             Path = path;
         }
 
+        /// <summary>Gets the URL whose cookie scope is queried.</summary>
         public Uri Url { get; }
+        /// <summary>Gets the optional exact cookie name.</summary>
         public string Name { get; }
+        /// <summary>Gets the optional case-insensitive cookie domain.</summary>
         public string Domain { get; }
+        /// <summary>Gets the optional exact cookie path.</summary>
         public string Path { get; }
 
+        /// <summary>Returns whether a cookie belongs to the query URL and optional constraints.</summary>
         public bool Matches(UserScriptCookie cookie)
         {
             if (Name != null && !string.Equals(Name, cookie.Name, StringComparison.Ordinal)) return false;
@@ -64,6 +68,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
     /// <summary>Represents a cookie exposed through the userscript cookie API.</summary>
     public sealed class UserScriptCookie
     {
+        /// <summary>Initializes an immutable userscript cookie value.</summary>
         public UserScriptCookie(
             string name, string value, string domain, string path,
             DateTime? expiration = null, bool secure = false, bool httpOnly = false, string sameSite = null)
@@ -79,19 +84,28 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             SameSite = sameSite;
         }
 
+        /// <summary>Gets the cookie name.</summary>
         public string Name { get; }
+        /// <summary>Gets the cookie value.</summary>
         public string Value { get; }
+        /// <summary>Gets the normalized cookie domain.</summary>
         public string Domain { get; }
+        /// <summary>Gets the cookie path.</summary>
         public string Path { get; }
+        /// <summary>Gets the UTC expiration time, or <see langword="null"/> for a session cookie.</summary>
         public DateTime? Expiration { get; }
+        /// <summary>Gets whether the cookie requires a secure transport.</summary>
         public bool Secure { get; }
+        /// <summary>Gets whether scripts are prohibited from reading the cookie.</summary>
         public bool HttpOnly { get; }
+        /// <summary>Gets the SameSite mode reported by the browser service.</summary>
         public string SameSite { get; }
     }
 
     /// <summary>Describes a cookie mutation requested by a userscript.</summary>
     public sealed class UserScriptCookieMutation
     {
+        /// <summary>Initializes a set or delete request and derives omitted domain/path defaults.</summary>
         public UserScriptCookieMutation(
             Uri url, string name, string value = null, string domain = null, string path = "/",
             DateTime? expiration = null, bool secure = false, string sameSite = null, string originExecutionId = null)
@@ -108,20 +122,30 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             OriginExecutionId = originExecutionId;
         }
 
+        /// <summary>Gets the target URL.</summary>
         public Uri Url { get; }
+        /// <summary>Gets the cookie name.</summary>
         public string Name { get; }
+        /// <summary>Gets the value used by set operations.</summary>
         public string Value { get; }
+        /// <summary>Gets the normalized cookie domain.</summary>
         public string Domain { get; }
+        /// <summary>Gets the cookie path.</summary>
         public string Path { get; }
+        /// <summary>Gets the expiration time.</summary>
         public DateTime? Expiration { get; }
+        /// <summary>Gets whether the cookie requires a secure transport.</summary>
         public bool Secure { get; }
+        /// <summary>Gets the requested SameSite mode.</summary>
         public string SameSite { get; }
+        /// <summary>Gets the execution that initiated the change, when known.</summary>
         public string OriginExecutionId { get; }
     }
 
     /// <summary>Describes a cookie change delivered to registered listeners.</summary>
     public sealed class UserScriptCookieChangedEventArgs : EventArgs
     {
+        /// <summary>Initializes cookie change event data.</summary>
         public UserScriptCookieChangedEventArgs(UserScriptCookie cookie, string cause, bool removed,
             string originExecutionId, long sequence)
         {
@@ -132,10 +156,15 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             Sequence = sequence;
         }
 
+        /// <summary>Gets the cookie that changed.</summary>
         public UserScriptCookie Cookie { get; }
+        /// <summary>Gets the service-defined change cause.</summary>
         public string Cause { get; }
+        /// <summary>Gets whether the cookie was removed.</summary>
         public bool Removed { get; }
+        /// <summary>Gets the originating execution, when known.</summary>
         public string OriginExecutionId { get; }
+        /// <summary>Gets the monotonically increasing service change sequence.</summary>
         public long Sequence { get; }
     }
 
@@ -147,9 +176,16 @@ namespace Mzying2001.MonkeySharp.Core.Apis
     /// <summary>Provides cookie CRUD and change-listener operations for one browser session.</summary>
     public interface ICookieService
     {
+        /// <summary>Lists cookies visible to a query.</summary>
         Task<IReadOnlyList<UserScriptCookie>> ListAsync(UserScriptCookieQuery query, CancellationToken cancellationToken);
+        /// <summary>Creates or overwrites a cookie.</summary>
         Task<UserScriptCookie> SetAsync(UserScriptCookieMutation mutation, CancellationToken cancellationToken);
+        /// <summary>Deletes a cookie and returns whether one was removed.</summary>
         Task<bool> DeleteAsync(UserScriptCookieMutation mutation, CancellationToken cancellationToken);
+        /// <summary>
+        /// Registers a change listener. Browser adapters may only report mutations performed
+        /// through this service when their underlying cookie API has no global observer.
+        /// </summary>
         ICookieListenerRegistration AddListener(
             UserScriptCookieQuery query,
             EventHandler<UserScriptCookieChangedEventArgs> changed);
@@ -167,17 +203,21 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         private readonly HashSet<string> _endedPendingListeners = new HashSet<string>(StringComparer.Ordinal);
         private bool _disposed;
 
+        /// <summary>Initializes a provider over an application-owned cookie service.</summary>
         public CookieApiProvider(ICookieService cookies)
         {
             _cookies = cookies ?? throw new ArgumentNullException(nameof(cookies));
         }
 
+        /// <inheritdoc />
         public event EventHandler<ApiNotificationEventArgs> Notification;
+        /// <inheritdoc />
         public IReadOnlyCollection<string> Methods { get; } = new ReadOnlyCollection<string>(new[]
         {
             "GM.cookie"
         });
 
+        /// <inheritdoc />
         public async Task<ApiResult> InvokeAsync(ApiInvocationContext context, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -190,6 +230,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             }
         }
 
+        /// <inheritdoc />
         public void OnExecutionEnded(string executionId)
         {
             ICookieListenerRegistration[] registrations;
@@ -208,6 +249,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             foreach (var registration in registrations) registration.Dispose();
         }
 
+        /// <inheritdoc />
         public void Dispose()
         {
             ICookieListenerRegistration[] registrations;
@@ -391,6 +433,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         private long _sequence;
         private bool _disposed;
 
+        /// <inheritdoc />
         public Task<IReadOnlyList<UserScriptCookie>> ListAsync(UserScriptCookieQuery query, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -402,6 +445,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             }
         }
 
+        /// <inheritdoc />
         public Task<UserScriptCookie> SetAsync(UserScriptCookieMutation mutation, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -421,6 +465,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             return Task.FromResult(cookie);
         }
 
+        /// <inheritdoc />
         public Task<bool> DeleteAsync(UserScriptCookieMutation mutation, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -436,6 +481,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             return Task.FromResult(old != null);
         }
 
+        /// <inheritdoc />
         public ICookieListenerRegistration AddListener(UserScriptCookieQuery query, EventHandler<UserScriptCookieChangedEventArgs> changed)
         {
             if (changed == null) throw new ArgumentNullException(nameof(changed));
@@ -458,6 +504,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         private void Remove(Guid id) { lock (_sync) _listeners.Remove(id); }
         private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(nameof(InMemoryCookieService)); }
 
+        /// <inheritdoc />
         public void Dispose()
         {
             lock (_sync) { _listeners.Clear(); _cookies.Clear(); _disposed = true; }
