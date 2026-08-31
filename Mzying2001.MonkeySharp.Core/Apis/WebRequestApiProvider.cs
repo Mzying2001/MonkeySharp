@@ -132,7 +132,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             var operation = ProviderParameters.OptionalString(context.Parameters, "operation") ?? "listRules";
             if (operation == "addRule")
             {
-                var rule = ReadRule(context.Parameters.GetProperty("rule"));
+                var rule = ReadRule(ProviderParameters.RequiredObject(context.Parameters, "rule"));
                 var registrationKey = RuleKey(context.ExecutionId, rule.Id);
                 var serviceRule = new WebRequestRule(
                     Guid.NewGuid().ToString("D"),
@@ -171,7 +171,9 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             {
                 var listenerId = ProviderParameters.RequiredInt32(context.Parameters, "listenerId");
                 var registrationKey = ListenerKey(context.ExecutionId, listenerId);
-                var filter = ReadFilter(context.Parameters.GetProperty("filter"));
+                var filter = ReadFilter(
+                    ProviderParameters.RequiredObject(context.Parameters, "filter"),
+                    "filter");
                 Register(registrationKey, () => _service.AddListener(filter, (_, item) =>
                     Notification?.Invoke(this, new ApiNotificationEventArgs(
                         context.Installation.ScriptKey, context.ExecutionId, "webrequest-event", JsonSerializer.Serialize(new
@@ -298,29 +300,64 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         private static WebRequestRule ReadRule(JsonElement value)
         {
             ProviderParameters.RequireObject(value);
-            var id = ProviderParameters.RequiredString(value, "id");
-            var phaseText = ProviderParameters.RequiredString(value, "phase");
-            if (!Enum.TryParse(phaseText, true, out WebRequestPhase phase)) throw ProviderParameters.Invalid("phase is invalid.");
-            var filter = ReadFilter(value.GetProperty("filter"));
-            var actionValue = value.GetProperty("action"); ProviderParameters.RequireObject(actionValue);
-            var actionText = ProviderParameters.RequiredString(actionValue, "kind");
-            if (!Enum.TryParse(actionText, true, out WebRequestActionKind kind)) throw ProviderParameters.Invalid("action.kind is invalid.");
+            var id = ProviderParameters.RequiredString(value, "id", "rule.id");
+            var phaseText = ProviderParameters.RequiredString(value, "phase", "rule.phase");
+            if (!Enum.TryParse(phaseText, true, out WebRequestPhase phase))
+                throw ProviderParameters.Invalid("rule.phase is invalid.");
+            var filter = ReadFilter(
+                ProviderParameters.RequiredObject(value, "filter", "rule.filter"),
+                "rule.filter");
+            var actionValue = ProviderParameters.RequiredObject(value, "action", "rule.action");
+            var actionText = ProviderParameters.RequiredString(actionValue, "kind", "rule.action.kind");
+            if (!Enum.TryParse(actionText, true, out WebRequestActionKind kind))
+                throw ProviderParameters.Invalid("rule.action.kind is invalid.");
             var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            if (actionValue.TryGetProperty("headers", out var h)) foreach (var item in h.EnumerateObject()) headers[item.Name] = item.Value.GetString();
-            return new WebRequestRule(id, filter, phase, value.TryGetProperty("priority", out var p) && p.TryGetInt32(out var priority) ? priority : 0,
-                new WebRequestAction(kind, ProviderParameters.OptionalString(actionValue, "redirectUrl"), headers,
-                    ProviderParameters.OptionalString(actionValue, "username"), ProviderParameters.OptionalString(actionValue, "password")));
+            if (actionValue.TryGetProperty("headers", out var headerValues))
+            {
+                if (headerValues.ValueKind != JsonValueKind.Object)
+                    throw ProviderParameters.Invalid("rule.action.headers must be an object.");
+                foreach (var header in headerValues.EnumerateObject())
+                {
+                    if (header.Value.ValueKind != JsonValueKind.String)
+                        throw ProviderParameters.Invalid(
+                            "rule.action.headers." + header.Name + " must be a string.");
+                    headers[header.Name] = header.Value.GetString();
+                }
+            }
+            var priority = 0;
+            if (value.TryGetProperty("priority", out var priorityValue) &&
+                (priorityValue.ValueKind != JsonValueKind.Number || !priorityValue.TryGetInt32(out priority)))
+                throw ProviderParameters.Invalid("rule.priority must be an integer.");
+            return new WebRequestRule(id, filter, phase, priority,
+                new WebRequestAction(kind,
+                    ProviderParameters.OptionalString(actionValue, "redirectUrl", "rule.action.redirectUrl"),
+                    headers,
+                    ProviderParameters.OptionalString(actionValue, "username", "rule.action.username"),
+                    ProviderParameters.OptionalString(actionValue, "password", "rule.action.password")));
         }
-        private static WebRequestFilter ReadFilter(JsonElement value)
+        private static WebRequestFilter ReadFilter(JsonElement value, string path)
         {
             ProviderParameters.RequireObject(value);
-            return new WebRequestFilter(ReadStrings(value, "urlPatterns"), ReadStrings(value, "resourceTypes"), ReadStrings(value, "methods"));
+            return new WebRequestFilter(
+                ReadStrings(value, "urlPatterns", path + ".urlPatterns"),
+                ReadStrings(value, "resourceTypes", path + ".resourceTypes"),
+                ReadStrings(value, "methods", path + ".methods"));
         }
-        private static IEnumerable<string> ReadStrings(JsonElement value, string name)
+        private static IEnumerable<string> ReadStrings(JsonElement value, string name, string path)
         {
             if (!value.TryGetProperty(name, out var items)) return Enumerable.Empty<string>();
-            if (items.ValueKind != JsonValueKind.Array) throw ProviderParameters.Invalid(name + " must be an array.");
-            return items.EnumerateArray().Select(item => item.GetString()).ToArray();
+            if (items.ValueKind != JsonValueKind.Array)
+                throw ProviderParameters.Invalid(path + " must be an array.");
+            var result = new List<string>();
+            var index = 0;
+            foreach (var item in items.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.String)
+                    throw ProviderParameters.Invalid(path + "[" + index + "] must be a string.");
+                result.Add(item.GetString());
+                index++;
+            }
+            return result;
         }
     }
 

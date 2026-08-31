@@ -766,24 +766,41 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 throw Invalid("params must be an object.");
         }
 
-        public static string RequiredString(JsonElement parameters, string name)
+        public static string RequiredString(
+            JsonElement parameters,
+            string name,
+            string displayName = null)
         {
             RequireObject(parameters);
             if (!parameters.TryGetProperty(name, out var value) || value.ValueKind != JsonValueKind.String)
-                throw Invalid(name + " must be a string.");
+                throw Invalid((displayName ?? name) + " must be a string.");
             var result = value.GetString();
             if (string.IsNullOrEmpty(result))
-                throw Invalid(name + " cannot be empty.");
+                throw Invalid((displayName ?? name) + " cannot be empty.");
             return result;
         }
 
-        public static string OptionalString(JsonElement parameters, string name)
+        public static JsonElement RequiredObject(
+            JsonElement parameters,
+            string name,
+            string displayName = null)
+        {
+            RequireObject(parameters);
+            if (!parameters.TryGetProperty(name, out var value) || value.ValueKind != JsonValueKind.Object)
+                throw Invalid((displayName ?? name) + " must be an object.");
+            return value;
+        }
+
+        public static string OptionalString(
+            JsonElement parameters,
+            string name,
+            string displayName = null)
         {
             RequireObject(parameters);
             if (!parameters.TryGetProperty(name, out var value) || value.ValueKind == JsonValueKind.Null)
                 return null;
             if (value.ValueKind != JsonValueKind.String)
-                throw Invalid(name + " must be a string.");
+                throw Invalid((displayName ?? name) + " must be a string.");
             return value.GetString();
         }
 

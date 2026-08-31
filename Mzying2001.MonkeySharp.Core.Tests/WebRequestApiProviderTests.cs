@@ -194,6 +194,31 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             }
         }
 
+        [Theory]
+        [InlineData("{\"operation\":\"addRule\"}", "rule must be an object.")]
+        [InlineData("{\"operation\":\"addRule\",\"rule\":[]}", "rule must be an object.")]
+        [InlineData("{\"operation\":\"addRule\",\"rule\":{\"id\":\"r\",\"phase\":\"OnBeforeRequest\",\"action\":{\"kind\":\"Block\"}}}", "rule.filter must be an object.")]
+        [InlineData("{\"operation\":\"addRule\",\"rule\":{\"id\":\"r\",\"phase\":\"OnBeforeRequest\",\"filter\":{},\"action\":[]}}", "rule.action must be an object.")]
+        [InlineData("{\"operation\":\"addRule\",\"rule\":{\"id\":\"r\",\"phase\":\"OnBeforeRequest\",\"priority\":\"high\",\"filter\":{},\"action\":{\"kind\":\"Block\"}}}", "rule.priority must be an integer.")]
+        [InlineData("{\"operation\":\"addRule\",\"rule\":{\"id\":\"r\",\"phase\":\"OnBeforeRequest\",\"filter\":{\"methods\":[\"GET\",1]},\"action\":{\"kind\":\"Block\"}}}", "rule.filter.methods[1] must be a string.")]
+        [InlineData("{\"operation\":\"addRule\",\"rule\":{\"id\":\"r\",\"phase\":\"OnBeforeSendHeaders\",\"filter\":{},\"action\":{\"kind\":\"ModifyRequestHeaders\",\"headers\":[]}}}", "rule.action.headers must be an object.")]
+        [InlineData("{\"operation\":\"addRule\",\"rule\":{\"id\":\"r\",\"phase\":\"OnBeforeSendHeaders\",\"filter\":{},\"action\":{\"kind\":\"ModifyRequestHeaders\",\"headers\":{\"X-Test\":1}}}}", "rule.action.headers.X-Test must be a string.")]
+        [InlineData("{\"operation\":\"addListener\",\"listenerId\":1}", "filter must be an object.")]
+        [InlineData("{\"operation\":\"addListener\",\"listenerId\":1,\"filter\":{\"urlPatterns\":\"*\"}}", "filter.urlPatterns must be an array.")]
+        public async Task InvalidNestedParametersReturnProtocolErrors(string json, string message)
+        {
+            var installation = await InstallAsync("// @grant GM.webRequest");
+            using (var service = new InMemoryWebRequestService())
+            using (var provider = new WebRequestApiProvider(service))
+            {
+                var exception = await Assert.ThrowsAsync<BridgeProtocolException>(() =>
+                    provider.InvokeAsync(ContextJson(installation, json), CancellationToken.None));
+
+                Assert.Equal(BridgeErrorCodes.InvalidParams, exception.Code);
+                Assert.Equal(message, exception.Message);
+            }
+        }
+
         [Fact]
         public void RequestAndResponseHeaderRulesAreScopedToTheirPhases()
         {
@@ -237,6 +262,17 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                     TimingGuarantee.BestEffortDocumentStart, BridgeIntegrityGuarantee.Verified), executionId,
                 Guid.NewGuid().ToString("D"), "GM.webRequest",
                 JsonSerializer.Deserialize<JsonElement>(JsonSerializer.Serialize(value)));
+        }
+
+        private static ApiInvocationContext ContextJson(
+            UserScriptInstallation installation,
+            string json)
+        {
+            return new ApiInvocationContext(installation,
+                new DocumentFrame("browser", "document", "frame", new Uri("https://example.com/page"), true,
+                    TimingGuarantee.BestEffortDocumentStart, BridgeIntegrityGuarantee.Verified), "execution",
+                Guid.NewGuid().ToString("D"), "GM.webRequest",
+                JsonSerializer.Deserialize<JsonElement>(json));
         }
 
         private sealed class BlockingWebRequestService : IWebRequestService
