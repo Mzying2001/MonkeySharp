@@ -1,3 +1,4 @@
+using CefSharp;
 using Mzying2001.MonkeySharp.Core.Apis;
 using Mzying2001.MonkeySharp.Core.Bridge;
 using Mzying2001.MonkeySharp.Core.Compatibility;
@@ -29,6 +30,8 @@ namespace Mzying2001.MonkeySharp.CefSharp
         private ITabService _tabs;
         private IDownloadService _downloads;
         private ITabStateService _tabState;
+        private ICookieService _cookies;
+        private IWebRequestService _webRequests;
         private IUserScriptDependencyProvider _dependencies;
         private bool _built;
 
@@ -147,6 +150,22 @@ namespace Mzying2001.MonkeySharp.CefSharp
             return this;
         }
 
+        /// <summary>Enables <c>GM.cookie</c> with a host cookie service.</summary>
+        /// <param name="cookies">The cookie service to use.</param>
+        /// <returns>This builder.</returns>
+        public CefSharpUserScriptHostBuilder UseCookieService(ICookieService cookies)
+        {
+            _cookies = cookies ?? throw new ArgumentNullException(nameof(cookies));
+            return this;
+        }
+
+        /// <summary>Enables <c>GM.webRequest</c> with a host web request service.</summary>
+        public CefSharpUserScriptHostBuilder UseWebRequestService(IWebRequestService webRequests)
+        {
+            _webRequests = webRequests ?? throw new ArgumentNullException(nameof(webRequests));
+            return this;
+        }
+
         /// <summary>Routes <c>GM.log</c> values to a host callback.</summary>
         /// <param name="log">The callback that receives log entries.</param>
         /// <returns>This builder.</returns>
@@ -190,14 +209,39 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     : new ResourceScriptSourceResolver(
                         _dependencies,
                         _options.Bridge?.MaxResourceBytes ?? 10 * 1024 * 1024));
+            var ownedServices = new List<IDisposable>();
             try
             {
+                var contextAccessor = new CefSharpRequestContextAccessor();
+                var effectiveWebRequests = _webRequests;
+                if (effectiveWebRequests == null && _options.EnableDefaultNetworkServices)
+                {
+                    effectiveWebRequests = new InMemoryWebRequestService();
+                    ownedServices.Add((IDisposable)effectiveWebRequests);
+                }
+
+                var effectiveHttp = _http;
+                if (effectiveHttp == null && _options.EnableDefaultNetworkServices)
+                {
+                    effectiveHttp = new CefSharpHttpRequestService(
+                        () => contextAccessor.Current,
+                        effectiveWebRequests);
+                    ownedServices.Add((IDisposable)effectiveHttp);
+                }
+
+                var effectiveCookies = _cookies;
+                if (effectiveCookies == null && _options.EnableDefaultNetworkServices)
+                {
+                    effectiveCookies = new CefSharpCookieService(() => contextAccessor.Current);
+                    ownedServices.Add((IDisposable)effectiveCookies);
+                }
+
                 var providers = new List<IUserScriptApiProvider>(_providers);
-                if (_resources != null || _http != null)
+                if (_resources != null || effectiveHttp != null)
                 {
                     providers.Add(new ResourceAndNetworkApiProvider(
                         _resources,
-                        _http,
+                        effectiveHttp,
                         _options.Bridge));
                 }
                 if (_menu != null || _notifications != null || _clipboard != null || _tabs != null ||
@@ -211,6 +255,10 @@ namespace Mzying2001.MonkeySharp.CefSharp
                         _downloads,
                         _tabState));
                 }
+                if (effectiveCookies != null)
+                    providers.Add(new CookieApiProvider(effectiveCookies));
+                if (effectiveWebRequests != null)
+                    providers.Add(new WebRequestApiProvider(effectiveWebRequests));
                 var gateway = new UserScriptBridgeGateway(
                     engine,
                     store,
@@ -222,13 +270,18 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     engine,
                     gateway,
                     _options,
-                    ownsStore ? store as IDisposable : null);
+                    ownsStore ? store as IDisposable : null,
+                    effectiveWebRequests == null ? null : (IRequestHandler)new CefSharpWebRequestHandler(effectiveWebRequests),
+                    contextAccessor,
+                    ownedServices);
             }
             catch
             {
                 engine.Dispose();
                 if (ownsStore && store is IDisposable disposable)
                     disposable.Dispose();
+                for (var index = ownedServices.Count - 1; index >= 0; index--)
+                    ownedServices[index].Dispose();
                 throw;
             }
         }

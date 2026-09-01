@@ -3,12 +3,45 @@ using Mzying2001.MonkeySharp.Core.Runtime;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace Mzying2001.MonkeySharp.Core.Apis
 {
+    /// <summary>Controls how a userscript HTTP request handles redirects.</summary>
+    public enum UserScriptHttpRedirectMode
+    {
+        /// <summary>Follows redirects after authorization.</summary>
+        Follow,
+
+        /// <summary>Fails when a redirect response is received.</summary>
+        Error,
+
+        /// <summary>Returns the redirect response without following it.</summary>
+        Manual
+    }
+
+    /// <summary>Identifies the JavaScript representation requested for an HTTP response body.</summary>
+    public enum UserScriptHttpResponseType
+    {
+        /// <summary>Decodes the response as text.</summary>
+        Text,
+
+        /// <summary>Decodes and parses the response as JSON.</summary>
+        Json,
+
+        /// <summary>Returns an ArrayBuffer.</summary>
+        ArrayBuffer,
+
+        /// <summary>Returns a Blob.</summary>
+        Blob,
+
+        /// <summary>Returns a ReadableStream backed by host response chunks.</summary>
+        Stream
+    }
+
     /// <summary>
     /// Contains the binary and optional decoded text returned for a declared userscript resource.
     /// </summary>
@@ -69,38 +102,76 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             CancellationToken cancellationToken);
     }
 
-    /// <summary>
-    /// Describes a validated HTTP request initiated by a userscript.
-    /// </summary>
+    /// <summary>Provides repeatable access to a userscript HTTP request body.</summary>
+    public interface IUserScriptHttpBody
+    {
+        /// <summary>Gets the body length in bytes.</summary>
+        long Length { get; }
+
+        /// <summary>Opens the body for reading from its beginning.</summary>
+        Stream OpenRead();
+    }
+
+    /// <summary>Contains optional Tampermonkey-compatible HTTP request controls.</summary>
+    public sealed class UserScriptHttpRequestOptions
+    {
+        /// <summary>Gets or sets cookies appended to the outgoing Cookie header.</summary>
+        public string Cookie { get; set; }
+
+        /// <summary>Gets or sets the user name supplied to an HTTP authentication challenge.</summary>
+        public string Username { get; set; }
+
+        /// <summary>Gets or sets the password supplied to an HTTP authentication challenge.</summary>
+        public string Password { get; set; }
+
+        /// <summary>Gets or sets whether stored cookies and credentials are disabled.</summary>
+        public bool Anonymous { get; set; }
+
+        /// <summary>Gets or sets the MIME type used to interpret the response.</summary>
+        public string OverrideMimeType { get; set; }
+
+        /// <summary>Gets or sets redirect handling.</summary>
+        public UserScriptHttpRedirectMode Redirect { get; set; }
+
+        /// <summary>Gets or sets whether the request bypasses cached content.</summary>
+        public bool NoCache { get; set; }
+
+        /// <summary>Gets or sets whether cached content must be revalidated.</summary>
+        public bool Revalidate { get; set; }
+
+        /// <summary>Gets or sets whether Tampermonkey fetch restrictions apply.</summary>
+        public bool Fetch { get; set; }
+
+        /// <summary>Gets or sets the requested response representation.</summary>
+        public UserScriptHttpResponseType ResponseType { get; set; }
+    }
+
+    /// <summary>Describes a validated HTTP request initiated by a userscript.</summary>
     public sealed class UserScriptHttpRequest
     {
         /// <summary>Initializes a userscript HTTP request.</summary>
-        /// <param name="method">The HTTP method.</param>
-        /// <param name="url">The absolute HTTP or HTTPS URL.</param>
-        /// <param name="headers">The request headers.</param>
-        /// <param name="body">The optional request body.</param>
-        /// <param name="timeout">The optional host request timeout.</param>
-        /// <param name="maxResponseBytes">The maximum accepted response body size.</param>
-        /// <param name="redirectAllowed">A callback that authorizes each redirect target.</param>
         public UserScriptHttpRequest(
             string method,
             Uri url,
             IDictionary<string, string> headers,
-            string body,
+            IUserScriptHttpBody body,
             TimeSpan? timeout,
-            int maxResponseBytes,
-            Func<Uri, bool> redirectAllowed)
+            long? maxResponseBytes,
+            Func<Uri, CancellationToken, Task<bool>> redirectAllowed,
+            UserScriptHttpRequestOptions options = null)
         {
             if (string.IsNullOrWhiteSpace(method)) throw new ArgumentException("The HTTP method is required.", nameof(method));
+            if (maxResponseBytes.HasValue && maxResponseBytes.Value <= 0)
+                throw new ArgumentOutOfRangeException(nameof(maxResponseBytes));
             Method = method;
             Url = url ?? throw new ArgumentNullException(nameof(url));
             Headers = new ReadOnlyDictionary<string, string>(
                 new Dictionary<string, string>(headers ?? throw new ArgumentNullException(nameof(headers)), StringComparer.OrdinalIgnoreCase));
             Body = body;
             Timeout = timeout;
-            if (maxResponseBytes <= 0) throw new ArgumentOutOfRangeException(nameof(maxResponseBytes));
             MaxResponseBytes = maxResponseBytes;
             RedirectAllowed = redirectAllowed ?? throw new ArgumentNullException(nameof(redirectAllowed));
+            Options = options ?? new UserScriptHttpRequestOptions();
         }
 
         /// <summary>Gets the HTTP method.</summary>
@@ -112,39 +183,34 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         /// <summary>Gets the case-insensitive request headers.</summary>
         public IReadOnlyDictionary<string, string> Headers { get; }
 
-        /// <summary>Gets the optional request body.</summary>
-        public string Body { get; }
+        /// <summary>Gets the optional binary request body.</summary>
+        public IUserScriptHttpBody Body { get; }
 
         /// <summary>Gets the optional host request timeout.</summary>
         public TimeSpan? Timeout { get; }
 
-        /// <summary>Gets the maximum accepted response body size in bytes.</summary>
-        public int MaxResponseBytes { get; }
+        /// <summary>Gets the optional response body limit. A null value means unlimited.</summary>
+        public long? MaxResponseBytes { get; }
 
         /// <summary>Gets the callback that must authorize every redirect target before it is followed.</summary>
-        public Func<Uri, bool> RedirectAllowed { get; }
+        public Func<Uri, CancellationToken, Task<bool>> RedirectAllowed { get; }
+
+        /// <summary>Gets optional request controls.</summary>
+        public UserScriptHttpRequestOptions Options { get; }
     }
 
-    /// <summary>
-    /// Contains an HTTP response returned by a userscript host service.
-    /// </summary>
+    /// <summary>Contains HTTP response metadata returned by a userscript host service.</summary>
     public sealed class UserScriptHttpResponse
     {
-        /// <summary>Initializes a userscript HTTP response.</summary>
-        /// <param name="status">The numeric HTTP status code.</param>
-        /// <param name="statusText">The HTTP reason phrase.</param>
-        /// <param name="finalUrl">The final response URL after redirects.</param>
-        /// <param name="headers">The response headers.</param>
-        /// <param name="body">The response body bytes.</param>
-        /// <param name="responseText">An optional host-decoded text representation.</param>
-        /// <param name="redirectUrls">The redirect targets followed in order.</param>
+        /// <summary>Initializes userscript HTTP response metadata.</summary>
         public UserScriptHttpResponse(
             int status,
             string statusText,
             Uri finalUrl,
             IDictionary<string, string> headers,
-            byte[] body,
-            string responseText,
+            string rawHeaders,
+            string mimeType,
+            string charset,
             IEnumerable<Uri> redirectUrls = null)
         {
             Status = status;
@@ -152,8 +218,9 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             FinalUrl = finalUrl ?? throw new ArgumentNullException(nameof(finalUrl));
             Headers = new ReadOnlyDictionary<string, string>(
                 new Dictionary<string, string>(headers ?? throw new ArgumentNullException(nameof(headers)), StringComparer.OrdinalIgnoreCase));
-            Body = body != null ? (byte[])body.Clone() : new byte[0];
-            ResponseText = responseText;
+            RawHeaders = rawHeaders ?? string.Empty;
+            MimeType = mimeType;
+            Charset = charset;
             RedirectUrls = new ReadOnlyCollection<Uri>((redirectUrls ?? Enumerable.Empty<Uri>()).ToList());
         }
 
@@ -169,51 +236,53 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         /// <summary>Gets the case-insensitive response headers.</summary>
         public IReadOnlyDictionary<string, string> Headers { get; }
 
-        /// <summary>Gets a copy of the response body bytes supplied at construction.</summary>
-        public byte[] Body { get; }
+        /// <summary>Gets the raw CRLF-separated response headers.</summary>
+        public string RawHeaders { get; }
 
-        /// <summary>Gets the optional host-decoded response text.</summary>
-        public string ResponseText { get; }
+        /// <summary>Gets the response MIME type, if reported.</summary>
+        public string MimeType { get; }
+
+        /// <summary>Gets the response character set, if reported.</summary>
+        public string Charset { get; }
 
         /// <summary>Gets the redirect targets followed in order.</summary>
         public IReadOnlyList<Uri> RedirectUrls { get; }
     }
 
-    /// <summary>
-    /// Reports HTTP response download progress in bytes.
-    /// </summary>
-    public sealed class UserScriptHttpProgress
+    /// <summary>Receives HTTP lifecycle events before request execution starts.</summary>
+    public interface IUserScriptHttpObserver
     {
-        /// <summary>Initializes an HTTP progress update.</summary>
-        /// <param name="loaded">The number of response bytes received.</param>
-        /// <param name="total">The expected total response size, if known.</param>
-        public UserScriptHttpProgress(long loaded, long? total)
-        {
-            Loaded = loaded;
-            Total = total;
-        }
+        /// <summary>Reports response metadata before response body data.</summary>
+        void OnResponseStarted(UserScriptHttpResponse response);
 
-        /// <summary>Gets the number of response bytes received.</summary>
-        public long Loaded { get; }
+        /// <summary>Reports request body upload progress.</summary>
+        void OnUploadProgress(long loaded, long? total);
 
-        /// <summary>Gets the expected total response size in bytes, if known.</summary>
-        public long? Total { get; }
+        /// <summary>Reports response body download progress.</summary>
+        void OnDownloadProgress(long loaded, long? total);
+
+        /// <summary>Reports one response body data segment.</summary>
+        void OnResponseData(byte[] buffer, int offset, int count);
     }
 
-    /// <summary>
-    /// Sends validated HTTP requests on behalf of userscripts.
-    /// </summary>
+    /// <summary>Sends validated HTTP requests on behalf of userscripts.</summary>
     public interface IHttpRequestService
     {
-        /// <summary>Sends an HTTP request while enforcing its redirect and response-size constraints.</summary>
-        /// <param name="request">The validated HTTP request.</param>
-        /// <param name="progress">The receiver for response download progress.</param>
-        /// <param name="cancellationToken">A token that cancels the request.</param>
-        /// <returns>The completed HTTP response.</returns>
-        Task<UserScriptHttpResponse> SendAsync(
+        /// <summary>Starts an HTTP request with its observer attached before any events can occur.</summary>
+        IHttpRequestOperation SendAsync(
             UserScriptHttpRequest request,
-            IProgress<UserScriptHttpProgress> progress,
+            IUserScriptHttpObserver observer,
             CancellationToken cancellationToken);
+    }
+
+    /// <summary>Represents a running userscript HTTP request.</summary>
+    public interface IHttpRequestOperation
+    {
+        /// <summary>Gets the task completed with final response metadata.</summary>
+        Task<UserScriptHttpResponse> Completion { get; }
+
+        /// <summary>Aborts the request.</summary>
+        void Abort();
     }
 
     /// <summary>
@@ -303,11 +372,24 @@ namespace Mzying2001.MonkeySharp.Core.Apis
     /// </summary>
     public interface INotificationService
     {
-        /// <summary>Displays a notification.</summary>
+        /// <summary>Displays a notification and returns its lifecycle handle.</summary>
         /// <param name="request">The notification to display.</param>
         /// <param name="cancellationToken">A token that cancels the operation.</param>
-        /// <returns>A task that completes after the host accepts the notification.</returns>
-        Task ShowAsync(UserScriptNotificationRequest request, CancellationToken cancellationToken);
+        /// <returns>A handle that reports click, close, and completion state.</returns>
+        INotificationHandle ShowAsync(UserScriptNotificationRequest request, CancellationToken cancellationToken);
+    }
+
+    /// <summary>Represents a host notification and its lifecycle.</summary>
+    public interface INotificationHandle : IDisposable
+    {
+        /// <summary>Completes when the notification is closed or otherwise finished.</summary>
+        Task Completion { get; }
+
+        /// <summary>Occurs when the notification is clicked.</summary>
+        event EventHandler Clicked;
+
+        /// <summary>Occurs when the notification is closed.</summary>
+        event EventHandler Closed;
     }
 
     /// <summary>
@@ -375,11 +457,27 @@ namespace Mzying2001.MonkeySharp.Core.Apis
     /// </summary>
     public interface ITabService
     {
-        /// <summary>Opens a browser tab.</summary>
+        /// <summary>Opens a browser tab and returns a lifecycle handle.</summary>
         /// <param name="request">The tab request.</param>
         /// <param name="cancellationToken">A token that cancels the operation.</param>
-        /// <returns>The opened tab identifier, if supplied by the host.</returns>
-        Task<OpenTabResult> OpenAsync(OpenTabRequest request, CancellationToken cancellationToken);
+        /// <returns>The opened tab handle.</returns>
+        Task<ITabHandle> OpenAsync(OpenTabRequest request, CancellationToken cancellationToken);
+    }
+
+    /// <summary>Represents a browser tab opened for a userscript.</summary>
+    public interface ITabHandle : IDisposable
+    {
+        /// <summary>Gets the host-defined tab identifier.</summary>
+        string TabId { get; }
+
+        /// <summary>Gets whether the tab has closed.</summary>
+        bool Closed { get; }
+
+        /// <summary>Occurs when the tab closes.</summary>
+        event EventHandler OnClose;
+
+        /// <summary>Closes the tab.</summary>
+        Task CloseAsync(CancellationToken cancellationToken);
     }
 
     /// <summary>
@@ -434,11 +532,61 @@ namespace Mzying2001.MonkeySharp.Core.Apis
     /// </summary>
     public interface IDownloadService
     {
-        /// <summary>Starts a file download.</summary>
+        /// <summary>Starts a file download and returns its lifecycle operation.</summary>
         /// <param name="request">The download request.</param>
         /// <param name="cancellationToken">A token that cancels the operation.</param>
-        /// <returns>The download identifier, if supplied by the host.</returns>
-        Task<DownloadResult> DownloadAsync(DownloadRequest request, CancellationToken cancellationToken);
+        /// <returns>The running download operation.</returns>
+        Task<IDownloadOperation> DownloadAsync(DownloadRequest request, CancellationToken cancellationToken);
+    }
+
+    /// <summary>Represents a running userscript download.</summary>
+    public interface IDownloadOperation : IDisposable
+    {
+        /// <summary>Gets the host-defined download identifier.</summary>
+        string DownloadId { get; }
+
+        /// <summary>Gets a task completed when the download reaches a terminal state.</summary>
+        Task Completion { get; }
+
+        /// <summary>Occurs as bytes are downloaded.</summary>
+        event EventHandler<UserScriptDownloadProgress> Progress;
+
+        /// <summary>Occurs when the download completes successfully.</summary>
+        event EventHandler Completed;
+
+        /// <summary>Occurs when the download fails.</summary>
+        event EventHandler<UserScriptDownloadFailure> Failed;
+
+        /// <summary>Occurs when the download is aborted.</summary>
+        event EventHandler Aborted;
+
+        /// <summary>Aborts the download.</summary>
+        void Abort();
+    }
+
+    /// <summary>Reports userscript download progress.</summary>
+    public sealed class UserScriptDownloadProgress : EventArgs
+    {
+        /// <summary>Initializes a download progress update.</summary>
+        public UserScriptDownloadProgress(long loaded, long? total)
+        {
+            Loaded = loaded;
+            Total = total;
+        }
+
+        /// <summary>Gets the number of downloaded bytes.</summary>
+        public long Loaded { get; }
+        /// <summary>Gets the expected total bytes, if known.</summary>
+        public long? Total { get; }
+    }
+
+    /// <summary>Describes a userscript download failure.</summary>
+    public sealed class UserScriptDownloadFailure : EventArgs
+    {
+        /// <summary>Initializes a download failure.</summary>
+        public UserScriptDownloadFailure(Exception error) { Error = error; }
+        /// <summary>Gets the underlying failure.</summary>
+        public Exception Error { get; }
     }
 
     /// <summary>

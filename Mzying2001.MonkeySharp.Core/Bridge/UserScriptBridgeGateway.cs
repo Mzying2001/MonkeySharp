@@ -36,10 +36,14 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
         private readonly Dictionary<string, PendingRequest> _pending =
             new Dictionary<string, PendingRequest>(StringComparer.Ordinal);
         private readonly HashSet<string> _seenRequests = new HashSet<string>(StringComparer.Ordinal);
+        private readonly Dictionary<string, Queue<string>> _seenRequestOrder =
+            new Dictionary<string, Queue<string>>(StringComparer.Ordinal);
         private readonly Dictionary<string, Dictionary<int, ValueListener>> _listeners =
             new Dictionary<string, Dictionary<int, ValueListener>>(StringComparer.Ordinal);
         private readonly Dictionary<string, Queue<MutationOrigin>> _mutationOrigins =
             new Dictionary<string, Queue<MutationOrigin>>(StringComparer.Ordinal);
+        private int _activeDispatches;
+        private bool _providerResourcesDisposed;
         private bool _disposed;
 
         /// <summary>Initializes a userscript bridge gateway.</summary>
@@ -78,10 +82,36 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
         public event EventHandler<UserScriptDiagnostic> Diagnostic;
 
         /// <inheritdoc />
-        public async Task<string> DispatchAsync(string requestJson, CancellationToken cancellationToken)
+        public Task<string> DispatchAsync(string requestJson, CancellationToken cancellationToken)
         {
-            if (_disposed)
-                return ProtocolJson.Error(string.Empty, BridgeErrorCodes.SessionExpired, "The bridge is disposed.");
+            if (!TryEnterDispatch())
+            {
+                return Task.FromResult(ProtocolJson.Error(
+                    string.Empty,
+                    BridgeErrorCodes.SessionExpired,
+                    "The bridge is disposed."));
+            }
+            return DispatchEnteredAsync(requestJson, cancellationToken);
+        }
+
+        private async Task<string> DispatchEnteredAsync(
+            string requestJson,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                return await DispatchCoreAsync(requestJson, cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                ExitDispatch();
+            }
+        }
+
+        private async Task<string> DispatchCoreAsync(
+            string requestJson,
+            CancellationToken cancellationToken)
+        {
             if (requestJson == null)
                 return ProtocolJson.Error(string.Empty, BridgeErrorCodes.MalformedMessage, "The message is required.");
             if (Encoding.UTF8.GetByteCount(requestJson) > _options.MaxRequestBytes)
@@ -147,26 +177,63 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
         /// <inheritdoc />
         public void Dispose()
         {
-            if (_disposed)
-                return;
-            _store.ValueChanged -= StoreValueChanged;
-            _engine.ExecutionEnded -= EngineExecutionEnded;
+            var disposeProviderResources = false;
             lock (_stateLock)
             {
                 if (_disposed)
                     return;
+                _disposed = true;
                 foreach (var pending in _pending.Values)
                     pending.Cancellation.Cancel();
-                foreach (var pending in _pending.Values)
-                    pending.Cancellation.Dispose();
-                _pending.Clear();
                 _seenRequests.Clear();
+                _seenRequestOrder.Clear();
                 _listeners.Clear();
                 _mutationOrigins.Clear();
-                _disposed = true;
+                if (_activeDispatches == 0 && !_providerResourcesDisposed)
+                {
+                    _providerResourcesDisposed = true;
+                    disposeProviderResources = true;
+                }
             }
+            _store.ValueChanged -= StoreValueChanged;
+            _engine.ExecutionEnded -= EngineExecutionEnded;
+            if (disposeProviderResources)
+                DisposeProviderResources();
+        }
+
+        private bool TryEnterDispatch()
+        {
+            lock (_stateLock)
+            {
+                if (_disposed)
+                    return false;
+                _activeDispatches++;
+                return true;
+            }
+        }
+
+        private void ExitDispatch()
+        {
+            var disposeProviderResources = false;
+            lock (_stateLock)
+            {
+                _activeDispatches--;
+                if (_disposed && _activeDispatches == 0 && !_providerResourcesDisposed)
+                {
+                    _providerResourcesDisposed = true;
+                    disposeProviderResources = true;
+                }
+            }
+            if (disposeProviderResources)
+                DisposeProviderResources();
+        }
+
+        private void DisposeProviderResources()
+        {
             foreach (var source in _providerInstances.OfType<IUserScriptNotificationSource>())
                 source.Notification -= ProviderNotification;
+            foreach (var source in _providerInstances.OfType<IUserScriptDiagnosticSource>())
+                source.Diagnostic -= ProviderDiagnostic;
             foreach (var disposable in _providerInstances.OfType<IDisposable>())
                 disposable.Dispose();
         }
@@ -372,12 +439,10 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             if (!TryBeginRequest(execution, requestId, out var pending, out var beginError))
                 return Limit(ProtocolJson.Error(requestId, beginError, "The request cannot be started."));
 
-            using (var timeout = new CancellationTokenSource(_options.RequestTimeout))
+            var longRunningHttp = IsLongRunningHttpExecute(method, parameters);
+            using (var timeout = longRunningHttp ? null : new CancellationTokenSource(_options.RequestTimeout))
             using (var linked = CancellationTokenSource.CreateLinkedTokenSource(
-                cancellationToken,
-                execution.Cancellation.Token,
-                pending.Cancellation.Token,
-                timeout.Token))
+                RequestTokens(method, execution, pending, cancellationToken, timeout)))
             {
                 try
                 {
@@ -385,6 +450,13 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                     {
                         HandleRuntimeError(execution, requestId, parameters);
                         return Limit(ProtocolJson.Success(requestId, ApiResult.Undefined.Json));
+                    }
+
+                    if (method == "runtime.getStorageSnapshot")
+                    {
+                        var snapshot = await BuildStorageBootstrapAsync(execution, linked.Token)
+                            .ConfigureAwait(false);
+                        return Limit(ProtocolJson.Success(requestId, JsonSerializer.Serialize(snapshot)));
                     }
 
                     if (!execution.Installation.Definition.Metadata.Grants.Contains(method))
@@ -419,7 +491,9 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                                 execution.Invocation.ExecutionId,
                                 requestId,
                                 method,
-                                parameters), linked.Token).ConfigureAwait(false);
+                                parameters,
+                                (target, token) => ReauthorizeTargetAsync(
+                                    execution, method, parameters, target, token)), linked.Token).ConfigureAwait(false);
                         }
                         finally
                         {
@@ -445,7 +519,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                 {
                     if (execution.Cancellation.IsCancellationRequested)
                         return Limit(ProtocolJson.Error(requestId, BridgeErrorCodes.SessionExpired, "The document session expired."));
-                    if (timeout.IsCancellationRequested)
+                    if (timeout != null && timeout.IsCancellationRequested)
                         return Limit(ProtocolJson.Error(requestId, BridgeErrorCodes.Timeout, "The request timed out."));
                     return Limit(ProtocolJson.Error(requestId, BridgeErrorCodes.Canceled, "The request was canceled."));
                 }
@@ -463,6 +537,50 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                     EndRequest(execution.Invocation.ExecutionId, requestId);
                 }
             }
+        }
+
+        private static CancellationToken[] RequestTokens(
+            string method,
+            UserScriptEngine.ExecutionRecord execution,
+            PendingRequest pending,
+            CancellationToken cancellationToken,
+            CancellationTokenSource timeout)
+        {
+            var tokens = new List<CancellationToken> { cancellationToken, pending.Cancellation.Token };
+            if (!IsValueMutation(method)) tokens.Add(execution.Cancellation.Token);
+            if (timeout != null) tokens.Add(timeout.Token);
+            return tokens.ToArray();
+        }
+
+        private async Task<bool> ReauthorizeTargetAsync(
+            UserScriptEngine.ExecutionRecord execution,
+            string method,
+            JsonElement parameters,
+            string target,
+            CancellationToken cancellationToken)
+        {
+            if (execution.Cancellation.IsCancellationRequested ||
+                !execution.Installation.Definition.Metadata.Grants.Contains(method))
+                return false;
+            var authorization = new ApiAuthorizationRequest(
+                execution.Installation,
+                execution.Frame,
+                method,
+                target,
+                Summarize(parameters),
+                SupportedApis());
+            return await _permissionPolicy.AuthorizeAsync(authorization, cancellationToken)
+                .ConfigureAwait(false) == PermissionDecision.Allow;
+        }
+
+        private static bool IsLongRunningHttpExecute(string method, JsonElement parameters)
+        {
+            if (!string.Equals(method, "GM.xmlHttpRequest", StringComparison.Ordinal) ||
+                parameters.ValueKind != JsonValueKind.Object ||
+                !parameters.TryGetProperty("operation", out var operation) ||
+                operation.ValueKind != JsonValueKind.String)
+                return false;
+            return string.Equals(operation.GetString(), "execute", StringComparison.Ordinal);
         }
 
         private string HandleCancel(JsonElement root)
@@ -499,7 +617,12 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             lock (_stateLock)
             {
                 pending = null;
-                if (_seenRequests.Contains(key))
+                if (_disposed)
+                {
+                    errorCode = BridgeErrorCodes.SessionExpired;
+                    return false;
+                }
+                if (_pending.ContainsKey(key) || _seenRequests.Contains(key))
                 {
                     errorCode = BridgeErrorCodes.MalformedMessage;
                     return false;
@@ -513,7 +636,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                 }
                 pending = new PendingRequest(execution);
                 _pending.Add(key, pending);
-                _seenRequests.Add(key);
+                RememberRequest(execution.Invocation.ExecutionId, key);
                 errorCode = null;
                 return true;
             }
@@ -530,6 +653,19 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                     pending.Cancellation.Dispose();
                 }
             }
+        }
+
+        private void RememberRequest(string executionId, string key)
+        {
+            if (!_seenRequestOrder.TryGetValue(executionId, out var order))
+            {
+                order = new Queue<string>();
+                _seenRequestOrder.Add(executionId, order);
+            }
+            _seenRequests.Add(key);
+            order.Enqueue(key);
+            while (order.Count > _options.MaxReplayEntriesPerExecution)
+                _seenRequests.Remove(order.Dequeue());
         }
 
         private ApiResult AddValueListener(UserScriptEngine.ExecutionRecord execution, JsonElement parameters)
@@ -572,9 +708,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             var mutation = TakeMutation(args.ScriptKey, args.Key);
             var originExecutionId = args.OriginExecutionId ?? mutation?.OriginExecutionId;
             var mutationId = args.MutationId ?? mutation?.MutationId;
-            var executions = _engine.GetExecutionsForScript(scriptKey)
-                .Where(item => item.Invocation.ExecutionId != originExecutionId)
-                .ToList();
+            var executions = _engine.GetExecutionsForScript(scriptKey).ToList();
             var deliveries = new List<Tuple<UserScriptEngine.ExecutionRecord, ValueListener>>();
             lock (_stateLock)
             {
@@ -595,7 +729,17 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                 args.OldValue.Exists ? args.OldValue.JsonValue : null,
                 args.NewValue.Exists ? args.NewValue.JsonValue : null,
                 mutationId,
-                originExecutionId);
+                originExecutionId,
+                args.Sequence);
+            foreach (var execution in executions)
+            {
+                Notification?.Invoke(this, new BridgeNotificationEventArgs(
+                    execution.Frame,
+                    execution.Invocation.ExecutionId,
+                    execution.Invocation.DeliveryToken,
+                    "storage-sync",
+                    data));
+            }
             foreach (var delivery in deliveries)
             {
                 var listenerData = ReplaceListenerId(data, delivery.Item2.Id);
@@ -677,6 +821,8 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                     values["mutationId"] = mutationId.GetString();
                 if (root.TryGetProperty("originExecutionId", out var origin))
                     values["originExecutionId"] = origin.GetString();
+                if (root.TryGetProperty("sequence", out var sequence))
+                    values["sequence"] = sequence.GetInt64();
                 return JsonSerializer.Serialize(values);
             }
         }
@@ -693,6 +839,13 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             }
             if (_providerInstances.Add(provider) && provider is IUserScriptNotificationSource source)
                 source.Notification += ProviderNotification;
+            if (provider is IUserScriptDiagnosticSource diagnosticSource)
+                diagnosticSource.Diagnostic += ProviderDiagnostic;
+        }
+
+        private void ProviderDiagnostic(object sender, UserScriptDiagnostic diagnostic)
+        {
+            Diagnostic?.Invoke(this, diagnostic);
         }
 
         private void ProviderNotification(object sender, ApiNotificationEventArgs notification)
@@ -714,11 +867,15 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
 
         private void EngineExecutionEnded(UserScriptEngine.ExecutionRecord execution)
         {
-            var prefix = execution.Invocation.ExecutionId + ":";
             lock (_stateLock)
             {
                 _listeners.Remove(execution.Invocation.ExecutionId);
-                _seenRequests.RemoveWhere(item => item.StartsWith(prefix, StringComparison.Ordinal));
+                if (_seenRequestOrder.TryGetValue(execution.Invocation.ExecutionId, out var order))
+                {
+                    foreach (var key in order)
+                        _seenRequests.Remove(key);
+                    _seenRequestOrder.Remove(execution.Invocation.ExecutionId);
+                }
             }
             foreach (var observer in _providerInstances.OfType<IUserScriptExecutionObserver>())
             {
@@ -772,7 +929,10 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
         {
             EnsureObject(parameters);
             var message = ReadOptionalString(parameters, "message") ?? "The userscript failed.";
-            EmitDiagnostic("MSR300_SCRIPT_EXCEPTION", message, null, execution, requestId);
+            var code = ReadOptionalString(parameters, "code");
+            if (!string.Equals(code, "MSC413_COMPATIBILITY_MUTATION_FAILED", StringComparison.Ordinal))
+                code = "MSR300_SCRIPT_EXCEPTION";
+            EmitDiagnostic(code, message, null, execution, requestId);
         }
 
         private void EmitDiagnostic(

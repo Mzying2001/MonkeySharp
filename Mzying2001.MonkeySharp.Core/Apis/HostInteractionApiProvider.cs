@@ -32,6 +32,12 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             new Dictionary<string, IMenuRegistration>(StringComparer.Ordinal);
         private readonly HashSet<string> _pendingMenus = new HashSet<string>(StringComparer.Ordinal);
         private readonly HashSet<string> _endedPendingMenus = new HashSet<string>(StringComparer.Ordinal);
+        private readonly Dictionary<string, INotificationHandle> _notificationHandles =
+            new Dictionary<string, INotificationHandle>(StringComparer.Ordinal);
+        private readonly Dictionary<string, ITabHandle> _tabHandles =
+            new Dictionary<string, ITabHandle>(StringComparer.Ordinal);
+        private readonly Dictionary<string, IDownloadOperation> _downloadOperations =
+            new Dictionary<string, IDownloadOperation>(StringComparer.Ordinal);
         private bool _disposed;
 
         /// <summary>Initializes a provider from the host interaction services that are available.</summary>
@@ -95,14 +101,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 case "GM.unregisterMenuCommand":
                     return UnregisterMenu(context);
                 case "GM.notification":
-                    await _notifications.ShowAsync(new UserScriptNotificationRequest(
-                        context.Installation.ScriptKey,
-                        ProviderParameters.OptionalString(context.Parameters, "title") ??
-                            context.Installation.Definition.Metadata.Name,
-                        ProviderParameters.RequiredString(context.Parameters, "text"),
-                        ProviderParameters.OptionalString(context.Parameters, "imageUrl")), cancellationToken)
-                        .ConfigureAwait(false);
-                    return ApiResult.Undefined;
+                    return ShowNotification(context, cancellationToken);
                 case "GM.setClipboard":
                     await _clipboard.SetTextAsync(
                         ProviderParameters.RequiredString(context.Parameters, "text"),
@@ -110,6 +109,11 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                         cancellationToken).ConfigureAwait(false);
                     return ApiResult.Undefined;
                 case "GM.openInTab":
+                    if (ProviderParameters.OptionalBoolean(context.Parameters, "close"))
+                    {
+                        var tabId = ProviderParameters.RequiredString(context.Parameters, "tabId");
+                        return await CloseTabAsync(context, tabId, cancellationToken).ConfigureAwait(false);
+                    }
                     var tabUrl = ReadHttpUrl(context.Parameters, "url");
                     var tab = await _tabs.OpenAsync(new OpenTabRequest(
                         tabUrl,
@@ -117,7 +121,10 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                         ProviderParameters.OptionalBoolean(context.Parameters, "insert"),
                         ProviderParameters.OptionalBoolean(context.Parameters, "setParent")), cancellationToken)
                         .ConfigureAwait(false);
-                    return ApiResult.FromValue(new { id = tab?.TabId });
+                    if (tab == null || string.IsNullOrEmpty(tab.TabId))
+                        throw new InvalidOperationException("The tab service returned no tab handle.");
+                    TrackTab(context, tab);
+                    return ApiResult.FromValue(new { id = tab.TabId });
                 case "GM.download":
                     var download = await _downloads.DownloadAsync(new DownloadRequest(
                         context.Installation.ScriptKey,
@@ -125,7 +132,10 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                         ProviderParameters.OptionalString(context.Parameters, "name"),
                         ProviderParameters.OptionalBoolean(context.Parameters, "saveAs")), cancellationToken)
                         .ConfigureAwait(false);
-                    return ApiResult.FromValue(new { id = download?.DownloadId });
+                    if (download == null || string.IsNullOrEmpty(download.DownloadId))
+                        throw new InvalidOperationException("The download service returned no operation.");
+                    TrackDownload(context, download);
+                    return ApiResult.FromValue(new { id = download.DownloadId });
                 case "GM.getTab":
                     return ApiResult.FromJson(ValidateJson(await _tabState.GetAsync(
                         context.Installation.ScriptKey, context.Frame, cancellationToken).ConfigureAwait(false)));
@@ -133,6 +143,8 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                     ProviderParameters.RequireObject(context.Parameters);
                     if (!context.Parameters.TryGetProperty("value", out var value))
                         throw ProviderParameters.Invalid("value is required.");
+                    if (value.ValueKind != JsonValueKind.Object)
+                        throw ProviderParameters.Invalid("value must be a JSON object.");
                     await _tabState.SaveAsync(
                         context.Installation.ScriptKey,
                         context.Frame,
@@ -153,18 +165,33 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             if (_disposed)
                 return;
             IMenuRegistration[] registrations;
+            INotificationHandle[] notifications;
+            ITabHandle[] tabs;
+            IDownloadOperation[] downloads;
             lock (_sync)
             {
                 if (_disposed)
                     return;
                 registrations = _menuRegistrations.Values.ToArray();
+                notifications = _notificationHandles.Values.ToArray();
+                tabs = _tabHandles.Values.ToArray();
+                downloads = _downloadOperations.Values.ToArray();
                 _menuRegistrations.Clear();
+                _notificationHandles.Clear();
+                _tabHandles.Clear();
+                _downloadOperations.Clear();
                 _pendingMenus.Clear();
                 _endedPendingMenus.Clear();
                 _disposed = true;
             }
             foreach (var registration in registrations)
                 registration.Dispose();
+            foreach (var handle in notifications)
+                handle.Dispose();
+            foreach (var handle in tabs)
+                handle.Dispose();
+            foreach (var operation in downloads)
+                operation.Dispose();
         }
 
         /// <inheritdoc />
@@ -174,6 +201,9 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 throw new ArgumentException("The execution ID is required.", nameof(executionId));
             var prefix = executionId + ":";
             IMenuRegistration[] registrations;
+            INotificationHandle[] notifications;
+            ITabHandle[] tabs;
+            IDownloadOperation[] downloads;
             lock (_sync)
             {
                 if (_disposed)
@@ -186,9 +216,100 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                     _menuRegistrations.Remove(key);
                 foreach (var pending in _pendingMenus.Where(item => item.StartsWith(prefix, StringComparison.Ordinal)))
                     _endedPendingMenus.Add(pending);
+                notifications = _notificationHandles
+                    .Where(item => item.Key.StartsWith(prefix, StringComparison.Ordinal))
+                    .Select(item => item.Value).ToArray();
+                tabs = _tabHandles
+                    .Where(item => item.Key.StartsWith(prefix, StringComparison.Ordinal))
+                    .Select(item => item.Value).ToArray();
+                downloads = _downloadOperations
+                    .Where(item => item.Key.StartsWith(prefix, StringComparison.Ordinal))
+                    .Select(item => item.Value).ToArray();
+                foreach (var key in _notificationHandles.Keys.Where(item => item.StartsWith(prefix, StringComparison.Ordinal)).ToArray())
+                    _notificationHandles.Remove(key);
+                foreach (var key in _tabHandles.Keys.Where(item => item.StartsWith(prefix, StringComparison.Ordinal)).ToArray())
+                    _tabHandles.Remove(key);
+                foreach (var key in _downloadOperations.Keys.Where(item => item.StartsWith(prefix, StringComparison.Ordinal)).ToArray())
+                    _downloadOperations.Remove(key);
             }
             foreach (var registration in registrations)
                 registration.Dispose();
+            foreach (var handle in notifications)
+                handle.Dispose();
+            foreach (var handle in tabs)
+                handle.Dispose();
+            foreach (var operation in downloads)
+                operation.Dispose();
+        }
+
+        private ApiResult ShowNotification(ApiInvocationContext context, CancellationToken cancellationToken)
+        {
+            var handle = _notifications.ShowAsync(new UserScriptNotificationRequest(
+                context.Installation.ScriptKey,
+                ProviderParameters.OptionalString(context.Parameters, "title") ??
+                    context.Installation.Definition.Metadata.Name,
+                ProviderParameters.RequiredString(context.Parameters, "text"),
+                ProviderParameters.OptionalString(context.Parameters, "imageUrl")), cancellationToken);
+            if (handle == null)
+                throw new InvalidOperationException("The notification service returned no handle.");
+            var notificationId = Guid.NewGuid().ToString("D");
+            var key = context.ExecutionId + ":" + notificationId;
+            handle.Clicked += (_, __) => Notification?.Invoke(this, new ApiNotificationEventArgs(
+                context.Installation.ScriptKey, context.ExecutionId, "notification-click",
+                JsonSerializer.Serialize(new { notificationId })));
+            handle.Closed += (_, __) => Notification?.Invoke(this, new ApiNotificationEventArgs(
+                context.Installation.ScriptKey, context.ExecutionId, "notification-done",
+                JsonSerializer.Serialize(new { notificationId })));
+            lock (_sync)
+            {
+                if (_disposed)
+                {
+                    handle.Dispose();
+                    throw new ObjectDisposedException(nameof(HostInteractionApiProvider));
+                }
+                _notificationHandles[key] = handle;
+            }
+            return ApiResult.FromValue(new { id = notificationId });
+        }
+
+        private async Task<ApiResult> CloseTabAsync(
+            ApiInvocationContext context, string tabId, CancellationToken cancellationToken)
+        {
+            ITabHandle handle;
+            lock (_sync)
+                _tabHandles.TryGetValue(context.ExecutionId + ":" + tabId, out handle);
+            if (handle == null)
+                return ApiResult.FromValue(false);
+            await handle.CloseAsync(cancellationToken).ConfigureAwait(false);
+            return ApiResult.FromValue(true);
+        }
+
+        private void TrackTab(ApiInvocationContext context, ITabHandle tab)
+        {
+            tab.OnClose += (_, __) => Notification?.Invoke(this, new ApiNotificationEventArgs(
+                context.Installation.ScriptKey, context.ExecutionId, "tab-closed",
+                JsonSerializer.Serialize(new { tabId = tab.TabId })));
+            lock (_sync)
+                _tabHandles[context.ExecutionId + ":" + tab.TabId] = tab;
+        }
+
+        private void TrackDownload(ApiInvocationContext context, IDownloadOperation operation)
+        {
+            var key = context.ExecutionId + ":" + operation.DownloadId;
+            operation.Progress += (_, progress) => Notification?.Invoke(this, new ApiNotificationEventArgs(
+                context.Installation.ScriptKey, context.ExecutionId, "download-progress",
+                JsonSerializer.Serialize(new { downloadId = operation.DownloadId, loaded = progress.Loaded, total = progress.Total })));
+            operation.Completed += (_, __) => Notification?.Invoke(this, new ApiNotificationEventArgs(
+                context.Installation.ScriptKey, context.ExecutionId, "download-complete",
+                JsonSerializer.Serialize(new { downloadId = operation.DownloadId })));
+            operation.Failed += (_, failure) => Notification?.Invoke(this, new ApiNotificationEventArgs(
+                context.Installation.ScriptKey, context.ExecutionId, "download-error",
+                JsonSerializer.Serialize(new { downloadId = operation.DownloadId, message = failure.Error?.Message })));
+            operation.Aborted += (_, __) => Notification?.Invoke(this, new ApiNotificationEventArgs(
+                context.Installation.ScriptKey, context.ExecutionId, "download-aborted",
+                JsonSerializer.Serialize(new { downloadId = operation.DownloadId })));
+            lock (_sync)
+                _downloadOperations[key] = operation;
         }
 
         private async Task<ApiResult> RegisterMenuAsync(
@@ -279,8 +400,12 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         private static string ValidateJson(string json)
         {
             if (json == null)
-                return "null";
-            using (JsonDocument.Parse(json)) { }
+                throw ProviderParameters.Invalid("tab state must be a JSON object.");
+            using (var document = JsonDocument.Parse(json))
+            {
+                if (document.RootElement.ValueKind != JsonValueKind.Object)
+                    throw ProviderParameters.Invalid("tab state must be a JSON object.");
+            }
             return json;
         }
 
@@ -294,7 +419,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                     foreach (var tab in tabs.OrderBy(item => item.Key, StringComparer.Ordinal))
                     {
                         writer.WritePropertyName(tab.Key);
-                        using (var value = JsonDocument.Parse(tab.Value))
+                        using (var value = JsonDocument.Parse(ValidateJson(tab.Value)))
                             value.RootElement.WriteTo(writer);
                     }
                     writer.WriteEndObject();

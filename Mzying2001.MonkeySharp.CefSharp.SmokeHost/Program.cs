@@ -25,7 +25,11 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
         {
             CefSharpSettings.WcfEnabled = false;
             CefSharpSettings.ConcurrentTaskExecution = true;
-            if (!Cef.Initialize(new CefSettings()))
+            var settings = new CefSettings
+            {
+                RootCachePath = Path.Combine(Path.GetTempPath(), "MonkeySharpSmoke", Guid.NewGuid().ToString("N"))
+            };
+            if (!Cef.Initialize(settings))
                 throw new InvalidOperationException("CefSharp initialization failed.");
 
             try
@@ -50,30 +54,40 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                     true,
                     CancellationToken.None);
 
-                var host = new CefSharpUserScriptHostBuilder(repository)
-                    .UseHttpRequestService(new FixtureHttpRequestService())
-                    .Configure(new CefSharpHostOptions
-                    {
-                        TrustedPageWorld = true
-                    })
-                    .LogTo(entry => Console.WriteLine("GM.log: " + entry.JsonValue))
-                    .Build();
-                host.Diagnostic += (_, diagnostic) =>
+                {
+                    var host = new CefSharpUserScriptHostBuilder(repository)
+                        .UseNotificationService(new SmokeNotificationService())
+                        .UseTabService(new SmokeTabService())
+                        .UseDownloadService(new SmokeDownloadService())
+                        .Configure(new CefSharpHostOptions
+                        {
+                            TrustedPageWorld = true
+                        })
+                        .LogTo(entry => Console.WriteLine("GM.log: " + entry.JsonValue))
+                        .Build();
+                    host.Diagnostic += (_, diagnostic) =>
+                        Console.WriteLine(JsonSerializer.Serialize(new
+                        {
+                            type = "diagnostic",
+                            code = diagnostic.Code,
+                            severity = diagnostic.Severity.ToString(),
+                            message = diagnostic.Message,
+                            documentId = diagnostic.DocumentId,
+                            frameId = diagnostic.FrameId,
+                            requestId = diagnostic.RequestId
+                        }));
+
+                    using (var form = new SmokeForm(host, startUri))
+                        Application.Run(form);
+                    host.Dispose();
                     Console.WriteLine(JsonSerializer.Serialize(new
                     {
-                        type = "diagnostic",
-                        code = diagnostic.Code,
-                        severity = diagnostic.Severity.ToString(),
-                        message = diagnostic.Message,
-                        documentId = diagnostic.DocumentId,
-                        frameId = diagnostic.FrameId,
-                        requestId = diagnostic.RequestId
+                        type = "final-disposal",
+                        disposed = true,
+                        platform = Environment.Is64BitProcess ? "x64" : "x86",
+                        cefSharpVersion = typeof(Cef).Assembly.GetName().Version.ToString()
                     }));
-
-                using (var form = new SmokeForm(host, startUri))
-                    Application.Run(form);
-                host.Dispose();
-                Console.WriteLine("{\"type\":\"host-disposed\"}");
+                }
             }
         }
 
@@ -85,14 +99,60 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             "// @grant GM_getValue\n" +
             "// @grant GM_setValue\n" +
             "// @grant GM_xmlhttpRequest\n" +
-            "// @connect api.example.com\n" +
+            "// @grant GM.notification\n" +
+            "// @grant GM.openInTab\n" +
+            "// @grant GM.download\n" +
+            "// @grant GM.cookie\n" +
+            "// @grant GM.webRequest\n" +
+            "// @connect 127.0.0.1\n" +
             "// @run-at document-end\n" +
             "// ==/UserScript==\n" +
             "var mainFrame = window.top === window;\n" +
             "var count = GM_getValue('smoke-count', 0);\n" +
             "if (mainFrame) GM_setValue('smoke-count', count + 1);\n" +
             "var smoke = { mainFrame: mainFrame, storageBefore: count, storageAfter: GM_getValue('smoke-count', 0), xhr: [] };\n" +
-            "if (mainFrame) GM_xmlhttpRequest({ url: 'https://api.example.com/smoke', onprogress: function (progress) { smoke.xhr.push('progress'); }, onload: function (response) { smoke.xhr.push('load'); smoke.responseText = response.responseText; window.__monkeySharpSmokeResult = smoke; document.documentElement.dataset.monkeySharpSmoke = JSON.stringify(smoke); } });\n" +
+            "if (mainFrame && location.pathname.indexOf('/initial') >= 0) {\n" +
+            "  (async function () {\n" +
+            "    smoke.apis = {};\n" +
+            "    smoke.cookie = await GM.cookie.set({ url: location.href, name: 'smoke-cookie', value: 'ready' });\n" +
+            "    smoke.cookieList = (await GM.cookie.list({ url: location.href })).length;\n" +
+            "    GM.cookie.addListener({ url: location.href }, function (cookie) { smoke.cookieChanged = cookie && cookie.value === 'changed'; });\n" +
+            "    await new Promise(function (resolve) { setTimeout(resolve, 80); });\n" +
+            "    await GM.cookie.set({ url: location.href, name: 'smoke-cookie', value: 'changed' });\n" +
+            "    smoke.webRule = await GM.webRequest.addRule({ id: 'smoke-header', phase: 'OnBeforeRequest', priority: 10, filter: { urlPatterns: [location.origin + '/*'] }, action: { kind: 'ModifyRequestHeaders', headers: { 'X-MonkeySharp-Smoke': '1' } } });\n" +
+            "    GM.webRequest.addListener({ urlPatterns: [location.origin + '/*'] }, function (event) { smoke.webRequestEvents = (smoke.webRequestEvents || 0) + 1; });\n" +
+            "    var beacon = document.createElement('img'); beacon.src = location.origin + '/webrequest-beacon'; document.body.appendChild(beacon);\n" +
+            "    await GM.notification({ title: 'MonkeySharp smoke', text: 'notification', onclick: function () { smoke.notificationClicked = true; }, ondone: function () { smoke.notificationDone = true; } });\n" +
+            "    smoke.tab = await GM.openInTab(location.href, { active: false });\n" +
+            "    var legacyTab = GM_openInTab(location.href, { active: false }); setTimeout(function () { legacyTab.close(); }, 25);\n" +
+            "    GM_download({ url: location.href, name: 'smoke.txt', onprogress: function () { smoke.downloadProgress = true; }, onload: function () { smoke.downloadCompleted = true; } });\n" +
+            "    GM_xmlhttpRequest({ url: location.origin + '/xhr', onprogress: function (progress) { smoke.xhr.push('progress'); }, onload: function (response) { smoke.xhr.push('load'); smoke.responseText = response.responseText; } });\n" +
+            "    smoke.extended = {};\n" +
+            "    var echo = await GM.xmlHttpRequest({ url: location.origin + '/echo', method: 'PROPFIND', data: new Uint8Array([65, 0, 66]), responseType: 'arraybuffer', headers: { 'X-Smoke': 'echo' } });\n" +
+            "    var echoBytes = new Uint8Array(echo.response); smoke.extended.echo = echo.status === 200 && echoBytes.length === 3 && echoBytes[0] === 65 && echoBytes[1] === 0 && echoBytes[2] === 66 && echo.responseHeaders.indexOf('X-Echo-Method: PROPFIND') >= 0;\n" +
+            "    var cookieXhr = await GM.xmlHttpRequest({ url: location.origin + '/cookie' });\n" +
+            "    var anonymousXhr = await GM.xmlHttpRequest({ url: location.origin + '/cookie', anonymous: true });\n" +
+            "    smoke.extended.cookies = cookieXhr.responseText.indexOf('smoke-cookie=changed') >= 0 && anonymousXhr.responseText.indexOf('smoke-cookie') < 0;\n" +
+            "    var auth = await GM.xmlHttpRequest({ url: location.origin + '/auth', user: 'alice', password: 'secret' }); smoke.extended.auth = auth.status === 200 && auth.responseText === 'auth ok';\n" +
+            "    var redirect = await GM.xmlHttpRequest({ url: location.origin + '/redirect' }); smoke.extended.redirect = redirect.status === 200 && /redirect-target$/.test(redirect.finalUrl) && redirect.responseText === 'redirect ok';\n" +
+            "    var binary = await GM.xmlHttpRequest({ url: location.origin + '/binary', responseType: 'arraybuffer' }); var binaryBytes = new Uint8Array(binary.response); smoke.extended.binary = binaryBytes.length === 4 && binaryBytes[3] === 255;\n" +
+            "    var large = await GM.xmlHttpRequest({ url: location.origin + '/large' }); smoke.extended.large = large.responseText.length === 1200000;\n" +
+            "    var duplicate = await GM.xmlHttpRequest({ url: location.origin + '/headers' }); smoke.extended.headers = duplicate.responseHeaders.indexOf('X-Duplicate: one') >= 0 && duplicate.responseHeaders.indexOf('X-Duplicate: two') >= 0;\n" +
+            "    var streamed = await GM.xmlHttpRequest({ url: location.origin + '/stream', responseType: 'stream' }); var reader = streamed.response.getReader(); var streamText = ''; while (true) { var part = await reader.read(); if (part.done) break; streamText += new TextDecoder().decode(part.value); } smoke.extended.stream = streamText === 'stream body';\n" +
+            "    try { await GM.xmlHttpRequest({ url: location.origin + '/slow', timeout: 50, ontimeout: function () { smoke.extended.timeout = true; } }); } catch (ignore) {}\n" +
+            "    await new Promise(function (resolve) { var pending = GM.xmlHttpRequest({ url: location.origin + '/slow', onabort: function () { smoke.extended.abort = true; resolve(); }, onerror: resolve }); pending.catch(function () {}); setTimeout(function () { pending.abort(); }, 20); });\n" +
+            "    smoke.apis.xmlhttpExtended = Object.keys(smoke.extended).length === 10 && Object.keys(smoke.extended).every(function (key) { return smoke.extended[key] === true; });\n" +
+            "    await new Promise(function (resolve) { setTimeout(resolve, 350); });\n" +
+            "    smoke.apis.notification = smoke.notificationDone === true;\n" +
+            "    smoke.apis.tab = Boolean(smoke.tab && smoke.tab.id);\n" +
+            "    smoke.apis.download = smoke.downloadProgress === true && smoke.downloadCompleted === true;\n" +
+            "    smoke.apis.cookie = smoke.cookieList === 1 && smoke.cookieChanged === true;\n" +
+            "    smoke.apis.webRequest = Boolean(smoke.webRule) && (smoke.webRequestEvents || 0) > 0;\n" +
+            "    window.__monkeySharpSmokeResult = smoke; document.documentElement.dataset.monkeySharpSmoke = JSON.stringify(smoke);\n" +
+            "  })().catch(function (error) { smoke.error = String(error && error.message || error); window.__monkeySharpSmokeResult = smoke; });\n" +
+            "} else if (mainFrame) {\n" +
+            "  GM_xmlhttpRequest({ url: location.origin + '/xhr', onprogress: function (progress) { smoke.xhr.push('progress'); }, onload: function (response) { smoke.xhr.push('load'); smoke.responseText = response.responseText; window.__monkeySharpSmokeResult = smoke; } });\n" +
+            "}\n" +
             "window.__monkeySharpSmokeResult = smoke;\n" +
             "if (window.top === window) { var child = document.createElement('iframe'); child.src = location.href + '#child'; document.body.appendChild(child); }";
     }
@@ -109,6 +169,15 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
         private bool _navigationRequested;
         private bool _closing;
         private bool _initialFixturePassed;
+        private string _initialFixtureJson;
+        private bool _storageMirrorVerified;
+        private bool _xhrVerified;
+        private bool _xhrExtendedVerified;
+        private bool _notificationVerified;
+        private bool _tabVerified;
+        private bool _downloadVerified;
+        private bool _cookieVerified;
+        private bool _webRequestVerified;
         private readonly System.Windows.Forms.Timer _timeoutTimer;
 
         public SmokeForm(CefSharpUserScriptHost host, Uri startUri)
@@ -169,8 +238,8 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
 
         private async Task VerifyFixtureAsync(string phase)
         {
-            // The legacy XHR callback and child-frame creation are asynchronous.
-            await Task.Delay(500).ConfigureAwait(true);
+            // The legacy callbacks and host lifecycle notifications are asynchronous.
+            await Task.Delay(1500).ConfigureAwait(true);
             var browser = _browser.GetBrowser();
             var frame = browser?.MainFrame;
             if (frame == null || frame.IsDisposed)
@@ -192,6 +261,8 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             }
 
             var passed = ValidateFixtureResult(response, phase);
+            if (phase == "initial" && response.Success && response.Result is string initialJson)
+                _initialFixtureJson = initialJson;
             Console.WriteLine(JsonSerializer.Serialize(new
             {
                 type = "fixture-result",
@@ -232,14 +303,33 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                     var root = document.RootElement;
                     var expectedBefore = phase == "initial" ? 0 : 1;
                     var expectedAfter = phase == "initial" ? 1 : 2;
-                    if (!root.GetProperty("mainFrame").GetBoolean() ||
-                        root.GetProperty("storageBefore").GetInt32() != expectedBefore ||
-                        root.GetProperty("storageAfter").GetInt32() != expectedAfter)
+                    _storageMirrorVerified = root.GetProperty("mainFrame").GetBoolean() &&
+                        root.GetProperty("storageBefore").GetInt32() == expectedBefore &&
+                        root.GetProperty("storageAfter").GetInt32() == expectedAfter;
+                    if (!_storageMirrorVerified)
                         return false;
                     var callbacks = root.GetProperty("xhr").EnumerateArray()
                         .Select(item => item.GetString()).ToList();
-                    return callbacks.SequenceEqual(new[] { "progress", "load" }) &&
+                    _xhrVerified = callbacks.Count >= 2 && callbacks.Last() == "load" &&
+                        callbacks.Take(callbacks.Count - 1).All(item => item == "progress") &&
                         root.GetProperty("responseText").GetString() == "legacy xhr ok";
+                    if (!_xhrVerified)
+                        return false;
+                    if (phase == "initial")
+                    {
+                        if (root.TryGetProperty("error", out _))
+                            return false;
+                        var apis = root.GetProperty("apis");
+                        _notificationVerified = apis.GetProperty("notification").GetBoolean();
+                        _tabVerified = apis.GetProperty("tab").GetBoolean();
+                        _downloadVerified = apis.GetProperty("download").GetBoolean();
+                        _cookieVerified = apis.GetProperty("cookie").GetBoolean();
+                        _webRequestVerified = apis.GetProperty("webRequest").GetBoolean();
+                        _xhrExtendedVerified = apis.GetProperty("xmlhttpExtended").GetBoolean();
+                        return _notificationVerified && _tabVerified && _downloadVerified &&
+                            _cookieVerified && _webRequestVerified && _xhrExtendedVerified;
+                    }
+                    return true;
                 }
             }
             catch (Exception exception)
@@ -274,16 +364,33 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             _closing = true;
             _timeoutTimer.Stop();
             await _host.DetachAsync(CancellationToken.None).ConfigureAwait(true);
+            object fixture = null;
+            if (!string.IsNullOrEmpty(_initialFixtureJson))
+            {
+                using (var document = JsonDocument.Parse(_initialFixtureJson))
+                    fixture = document.RootElement.Clone();
+            }
             Console.WriteLine(JsonSerializer.Serialize(new
             {
                 type = "smoke-summary",
+                success = _initialFixturePassed && _mainFrameLoads >= 2 && _childFrameLoads >= 1 && _contextReleased >= 1,
+                fixtureResult = fixture,
+                storageMirror = _storageMirrorVerified,
+                xhr = _xhrVerified,
+                xhrExtended = _xhrExtendedVerified,
+                notification = _notificationVerified,
+                tab = _tabVerified,
+                download = _downloadVerified,
+                cookie = _cookieVerified,
+                webRequest = _webRequestVerified,
                 mainFrameLoads = _mainFrameLoads,
                 childFrameLoads = _childFrameLoads,
+                navigation = _navigationRequested,
                 contextCreated = _contextCreated,
                 contextReleased = _contextReleased,
                 hostAttachedAfterDetach = _host.IsAttached
             }));
-            if (!_initialFixturePassed || _mainFrameLoads < 2 || _childFrameLoads < 1 || _contextReleased < 1)
+            if (_initialFixtureJson == null || !_initialFixturePassed || _mainFrameLoads < 2 || _childFrameLoads < 1 || _contextReleased < 1)
                 Environment.ExitCode = 1;
             BeginInvoke((Action)Close);
         }
@@ -370,18 +477,79 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             using (client)
             using (var stream = client.GetStream())
             {
-                var requestBuffer = new byte[4096];
                 try
                 {
-                    await stream.ReadAsync(requestBuffer, 0, requestBuffer.Length).ConfigureAwait(false);
-                    var body = Encoding.UTF8.GetBytes(
-                        "<!doctype html><html><head><title>MonkeySharp smoke</title></head>" +
-                        "<body><main id='smoke-fixture'>loopback fixture</main></body></html>");
-                    var header = Encoding.ASCII.GetBytes(
-                        "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n" +
-                        "Content-Length: " + body.Length + "\r\nConnection: close\r\n\r\n");
-                    await stream.WriteAsync(header, 0, header.Length).ConfigureAwait(false);
-                    await stream.WriteAsync(body, 0, body.Length).ConfigureAwait(false);
+                    var request = await ReadRequestAsync(stream).ConfigureAwait(false);
+                    if (request == null) return;
+                    if (request.Path == "/stream")
+                    {
+                        await WriteChunkedAsync(stream).ConfigureAwait(false);
+                        return;
+                    }
+                    if (request.Path == "/slow") await Task.Delay(500).ConfigureAwait(false);
+
+                    var status = 200;
+                    var statusText = "OK";
+                    var contentType = "text/plain; charset=utf-8";
+                    var headers = new List<KeyValuePair<string, string>>();
+                    byte[] body;
+                    switch (request.Path)
+                    {
+                        case "/xhr":
+                            body = Encoding.UTF8.GetBytes("legacy xhr ok");
+                            break;
+                        case "/echo":
+                            body = request.Body;
+                            headers.Add(new KeyValuePair<string, string>("X-Echo-Method", request.Method));
+                            break;
+                        case "/cookie":
+                            request.Headers.TryGetValue("Cookie", out var cookie);
+                            body = Encoding.UTF8.GetBytes(cookie ?? string.Empty);
+                            break;
+                        case "/auth":
+                            request.Headers.TryGetValue("Authorization", out var authorization);
+                            if (authorization != "Basic " + Convert.ToBase64String(Encoding.UTF8.GetBytes("alice:secret")))
+                            {
+                                status = 401;
+                                statusText = "Unauthorized";
+                                headers.Add(new KeyValuePair<string, string>("WWW-Authenticate", "Basic realm=\"MonkeySharp\""));
+                                body = Encoding.UTF8.GetBytes("auth required");
+                            }
+                            else body = Encoding.UTF8.GetBytes("auth ok");
+                            break;
+                        case "/redirect":
+                            status = 302;
+                            statusText = "Found";
+                            headers.Add(new KeyValuePair<string, string>("Location", "/redirect-target"));
+                            body = new byte[0];
+                            break;
+                        case "/redirect-target":
+                            body = Encoding.UTF8.GetBytes("redirect ok");
+                            break;
+                        case "/binary":
+                            contentType = "application/octet-stream";
+                            body = new byte[] { 0, 1, 2, 255 };
+                            break;
+                        case "/large":
+                            body = Enumerable.Repeat((byte)'x', 1200000).ToArray();
+                            break;
+                        case "/headers":
+                            headers.Add(new KeyValuePair<string, string>("X-Duplicate", "one"));
+                            headers.Add(new KeyValuePair<string, string>("X-Duplicate", "two"));
+                            body = Encoding.UTF8.GetBytes("headers");
+                            break;
+                        case "/slow":
+                            body = Encoding.UTF8.GetBytes("too slow");
+                            break;
+                        default:
+                            contentType = "text/html; charset=utf-8";
+                            body = Encoding.UTF8.GetBytes(
+                                "<!doctype html><html><head><title>MonkeySharp smoke</title></head>" +
+                                "<body><main id='smoke-fixture'>loopback fixture</main></body></html>");
+                            break;
+                    }
+                    await WriteResponseAsync(stream, status, statusText, contentType, headers, body)
+                        .ConfigureAwait(false);
                 }
                 catch (IOException)
                 {
@@ -391,25 +559,257 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                 }
             }
         }
-    }
 
-    internal sealed class FixtureHttpRequestService : IHttpRequestService
-    {
-        public async Task<UserScriptHttpResponse> SendAsync(
-            UserScriptHttpRequest request,
-            IProgress<UserScriptHttpProgress> progress,
-            CancellationToken cancellationToken)
+        private static async Task<HttpRequestData> ReadRequestAsync(NetworkStream stream)
         {
-            await Task.Delay(50, cancellationToken).ConfigureAwait(false);
-            progress?.Report(new UserScriptHttpProgress(1, 1));
-            var body = Encoding.UTF8.GetBytes("legacy xhr ok");
-            return new UserScriptHttpResponse(
-                200,
-                "OK",
-                request.Url,
-                new Dictionary<string, string> { ["Content-Type"] = "text/plain" },
-                body,
-                "legacy xhr ok");
+            var buffer = new byte[4096];
+            using (var received = new MemoryStream())
+            {
+                var headerEnd = -1;
+                while (headerEnd < 0)
+                {
+                    var count = await stream.ReadAsync(buffer, 0, buffer.Length).ConfigureAwait(false);
+                    if (count == 0) return null;
+                    received.Write(buffer, 0, count);
+                    if (received.Length > 64 * 1024) throw new IOException("HTTP request headers are too large.");
+                    headerEnd = FindHeaderEnd(received.GetBuffer(), (int)received.Length);
+                }
+                var all = received.ToArray();
+                var headerText = Encoding.ASCII.GetString(all, 0, headerEnd);
+                var lines = headerText.Split(new[] { "\r\n" }, StringSplitOptions.None);
+                var requestLine = lines[0].Split(' ');
+                var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var line in lines.Skip(1))
+                {
+                    var separator = line.IndexOf(':');
+                    if (separator > 0)
+                        headers[line.Substring(0, separator).Trim()] = line.Substring(separator + 1).Trim();
+                }
+                var contentLength = 0;
+                if (headers.TryGetValue("Content-Length", out var lengthText)) int.TryParse(lengthText, out contentLength);
+                var body = new byte[contentLength];
+                var available = Math.Min(contentLength, all.Length - headerEnd - 4);
+                if (available > 0) Buffer.BlockCopy(all, headerEnd + 4, body, 0, available);
+                var offset = available;
+                while (offset < contentLength)
+                {
+                    var count = await stream.ReadAsync(body, offset, contentLength - offset).ConfigureAwait(false);
+                    if (count == 0) break;
+                    offset += count;
+                }
+                return new HttpRequestData(requestLine[0], requestLine[1].Split('?')[0], headers, body);
+            }
+        }
+
+        private static int FindHeaderEnd(byte[] buffer, int length)
+        {
+            for (var index = 0; index <= length - 4; index++)
+            {
+                if (buffer[index] == 13 && buffer[index + 1] == 10 &&
+                    buffer[index + 2] == 13 && buffer[index + 3] == 10)
+                    return index;
+            }
+            return -1;
+        }
+
+        private static async Task WriteResponseAsync(
+            NetworkStream stream,
+            int status,
+            string statusText,
+            string contentType,
+            IEnumerable<KeyValuePair<string, string>> headers,
+            byte[] body)
+        {
+            var builder = new StringBuilder()
+                .Append("HTTP/1.1 ").Append(status).Append(' ').Append(statusText).Append("\r\n")
+                .Append("Content-Type: ").Append(contentType).Append("\r\n")
+                .Append("Content-Length: ").Append(body.Length).Append("\r\n");
+            foreach (var header in headers)
+                builder.Append(header.Key).Append(": ").Append(header.Value).Append("\r\n");
+            builder.Append("Connection: close\r\n\r\n");
+            var headerBytes = Encoding.ASCII.GetBytes(builder.ToString());
+            await stream.WriteAsync(headerBytes, 0, headerBytes.Length).ConfigureAwait(false);
+            await stream.WriteAsync(body, 0, body.Length).ConfigureAwait(false);
+        }
+
+        private static async Task WriteChunkedAsync(NetworkStream stream)
+        {
+            var header = Encoding.ASCII.GetBytes(
+                "HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\n" +
+                "Transfer-Encoding: chunked\r\nConnection: close\r\n\r\n");
+            await stream.WriteAsync(header, 0, header.Length).ConfigureAwait(false);
+            foreach (var text in new[] { "stream ", "body" })
+            {
+                var body = Encoding.UTF8.GetBytes(text);
+                var prefix = Encoding.ASCII.GetBytes(body.Length.ToString("X") + "\r\n");
+                await stream.WriteAsync(prefix, 0, prefix.Length).ConfigureAwait(false);
+                await stream.WriteAsync(body, 0, body.Length).ConfigureAwait(false);
+                await stream.WriteAsync(new byte[] { 13, 10 }, 0, 2).ConfigureAwait(false);
+                await Task.Delay(40).ConfigureAwait(false);
+            }
+            var end = Encoding.ASCII.GetBytes("0\r\n\r\n");
+            await stream.WriteAsync(end, 0, end.Length).ConfigureAwait(false);
+        }
+
+        private sealed class HttpRequestData
+        {
+            public HttpRequestData(string method, string path, IDictionary<string, string> headers, byte[] body)
+            {
+                Method = method;
+                Path = path;
+                Headers = headers;
+                Body = body;
+            }
+
+            public string Method { get; }
+            public string Path { get; }
+            public IDictionary<string, string> Headers { get; }
+            public byte[] Body { get; }
         }
     }
+
+    internal sealed class SmokeNotificationService : INotificationService
+    {
+        public INotificationHandle ShowAsync(UserScriptNotificationRequest request, CancellationToken cancellationToken)
+        {
+            return new SmokeNotificationHandle();
+        }
+    }
+
+    internal sealed class SmokeNotificationHandle : INotificationHandle
+    {
+        private readonly TaskCompletionSource<bool> _completion = new TaskCompletionSource<bool>();
+        private int _disposed;
+
+        public SmokeNotificationHandle()
+        {
+            _ = CompleteAsync();
+        }
+
+        public Task Completion => _completion.Task;
+        public event EventHandler Clicked;
+        public event EventHandler Closed;
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) == 0)
+                _completion.TrySetResult(true);
+        }
+
+        private async Task CompleteAsync()
+        {
+            await Task.Delay(80).ConfigureAwait(false);
+            if (Volatile.Read(ref _disposed) != 0) return;
+            Clicked?.Invoke(this, EventArgs.Empty);
+            await Task.Delay(80).ConfigureAwait(false);
+            if (Interlocked.Exchange(ref _disposed, 1) == 0)
+            {
+                Closed?.Invoke(this, EventArgs.Empty);
+                _completion.TrySetResult(true);
+            }
+        }
+    }
+
+    internal sealed class SmokeTabService : ITabService
+    {
+        private int _nextId;
+
+        public Task<ITabHandle> OpenAsync(OpenTabRequest request, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var handle = new SmokeTabHandle("smoke-tab-" + Interlocked.Increment(ref _nextId));
+            return Task.FromResult<ITabHandle>(handle);
+        }
+    }
+
+    internal sealed class SmokeTabHandle : ITabHandle
+    {
+        private readonly TaskCompletionSource<bool> _closed = new TaskCompletionSource<bool>();
+        private int _isClosed;
+
+        public SmokeTabHandle(string tabId)
+        {
+            TabId = tabId;
+            _ = AutoCloseAsync();
+        }
+
+        public string TabId { get; }
+        public bool Closed => Volatile.Read(ref _isClosed) != 0;
+        public event EventHandler OnClose;
+        public Task CloseAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            CloseCore();
+            return _closed.Task;
+        }
+
+        public void Dispose() { CloseCore(); }
+
+        private async Task AutoCloseAsync()
+        {
+            await Task.Delay(220).ConfigureAwait(false);
+            CloseCore();
+        }
+
+        private void CloseCore()
+        {
+            if (Interlocked.Exchange(ref _isClosed, 1) != 0) return;
+            OnClose?.Invoke(this, EventArgs.Empty);
+            _closed.TrySetResult(true);
+        }
+    }
+
+    internal sealed class SmokeDownloadService : IDownloadService
+    {
+        private int _nextId;
+
+        public Task<IDownloadOperation> DownloadAsync(DownloadRequest request, CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult<IDownloadOperation>(
+                new SmokeDownloadOperation("smoke-download-" + Interlocked.Increment(ref _nextId)));
+        }
+    }
+
+#pragma warning disable CS0067
+    internal sealed class SmokeDownloadOperation : IDownloadOperation
+    {
+        private readonly TaskCompletionSource<bool> _completion = new TaskCompletionSource<bool>();
+        private int _state;
+
+        public SmokeDownloadOperation(string downloadId)
+        {
+            DownloadId = downloadId;
+            _ = CompleteAsync();
+        }
+
+        public string DownloadId { get; }
+        public Task Completion => _completion.Task;
+        public event EventHandler<UserScriptDownloadProgress> Progress;
+        public event EventHandler Completed;
+        public event EventHandler<UserScriptDownloadFailure> Failed;
+        public event EventHandler Aborted;
+
+        public void Abort()
+        {
+            if (Interlocked.CompareExchange(ref _state, 2, 0) == 0)
+            {
+                Aborted?.Invoke(this, EventArgs.Empty);
+                _completion.TrySetResult(true);
+            }
+        }
+
+        public void Dispose() { Abort(); }
+
+        private async Task CompleteAsync()
+        {
+            await Task.Delay(90).ConfigureAwait(false);
+            if (Interlocked.CompareExchange(ref _state, 1, 0) != 0) return;
+            Progress?.Invoke(this, new UserScriptDownloadProgress(1, 1));
+            Completed?.Invoke(this, EventArgs.Empty);
+            _completion.TrySetResult(true);
+        }
+    }
+#pragma warning restore CS0067
+
 }

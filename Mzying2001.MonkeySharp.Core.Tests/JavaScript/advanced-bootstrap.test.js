@@ -23,6 +23,7 @@ function waitFor(predicate) {
 }
 
 test("advanced APIs use promises, progress notifications, and capability discovery", async () => {
+    let xhrId;
     const payload = {
         protocol: 1,
         documentId: "advanced-document",
@@ -68,15 +69,22 @@ test("advanced APIs use promises, progress notifications, and capability discove
             let result = { $monkeySharpType: "undefined" };
             if (request.method === "GM.getResourceText") result = "resource text";
             if (request.method === "GM.xmlHttpRequest") {
-                globalThis.__MonkeySharpRuntime.receive({
-                    type: "notification",
-                    protocol: 1,
-                    executionId: "advanced-execution",
-                    deliveryToken: "advanced-delivery",
-                    event: "xhr-progress",
-                    data: { xhrId: request.params.xhrId, loaded: 5, total: 10 }
-                });
-                result = { status: 200, responseText: "done" };
+                if (request.params.operation === "create") {
+                    xhrId = request.params.xhrId;
+                    result = { sessionId: "advanced-xhr" };
+                } else if (request.params.operation === "execute") {
+                    globalThis.__MonkeySharpRuntime.receive({
+                        type: "notification",
+                        protocol: 1,
+                        executionId: "advanced-execution",
+                        deliveryToken: "advanced-delivery",
+                        event: "xhr-progress",
+                        data: { xhrId, loaded: 5, total: 10 }
+                    });
+                    result = { status: 200, bodyLength: 4 };
+                } else if (request.params.operation === "readBody") {
+                    result = { chunk: Buffer.from("done").toString("base64"), done: true };
+                } else result = true;
             }
             if (request.method === "GM.registerMenuCommand") result = request.params.commandId;
             return JSON.stringify({
@@ -102,8 +110,11 @@ test("advanced APIs use promises, progress notifications, and capability discove
     await globalThis.__advancedPromise;
 
     assert.equal(globalThis.__resource, "resource text");
-    assert.deepEqual(globalThis.__progress, { loaded: 5, total: 10 });
-    assert.deepEqual(globalThis.__loaded, { status: 200, responseText: "done" });
+    assert.equal(globalThis.__progress.loaded, 5);
+    assert.equal(globalThis.__progress.total, 10);
+    assert.equal(globalThis.__progress.lengthComputable, true);
+    assert.equal(globalThis.__loaded.status, 200);
+    assert.equal(globalThis.__loaded.responseText, "done");
     assert.equal(globalThis.__xhr.status, 200);
     assert.equal(globalThis.__signalAdds, 1);
     assert.equal(globalThis.__signalRemoves, 1);

@@ -69,7 +69,8 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                     ["responseBytes"] = options.MaxResponseBytes,
                     ["resourceBytes"] = options.MaxResourceBytes,
                     ["timeoutMilliseconds"] = (long)options.RequestTimeout.TotalMilliseconds,
-                    ["pendingRequests"] = options.MaxPendingRequestsPerDocument
+                    ["pendingRequests"] = options.MaxPendingRequestsPerDocument,
+                    ["replayRequestsPerExecution"] = options.MaxReplayEntriesPerExecution
                 },
                 ["apis"] = apis.OrderBy(item => item, StringComparer.Ordinal).ToArray()
             };
@@ -84,7 +85,8 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             string oldJson,
             string newJson,
             string mutationId = null,
-            string originExecutionId = null)
+            string originExecutionId = null,
+            long? sequence = null)
         {
             using (var stream = new MemoryStream())
             {
@@ -102,6 +104,8 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                         writer.WriteString("mutationId", mutationId);
                     if (originExecutionId != null)
                         writer.WriteString("originExecutionId", originExecutionId);
+                    if (sequence.HasValue)
+                        writer.WriteNumber("sequence", sequence.Value);
                     writer.WriteEndObject();
                 }
                 return Encoding.UTF8.GetString(stream.ToArray());

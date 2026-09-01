@@ -190,7 +190,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                     continue;
 
                 var onceKey = installation.ScriptKey + ":" + runAt;
-                if (!document.Executed.Add(onceKey))
+                if (document.Executed.Contains(onceKey))
                     continue;
 
                 if (runAt == UserScriptRunAt.DocumentStart)
@@ -307,6 +307,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                     _executions.Add(invocation.ExecutionId, execution);
                 document.ExecutionIds.Add(invocation.ExecutionId);
                 invocations.Add(invocation);
+                document.Executed.Add(onceKey);
             }
 
             return new InjectionPlan(frame, runAt, invocations);
@@ -318,7 +319,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
             {
                 if (_documents.TryGetValue(frame.DocumentId, out var existing))
                     return existing;
-                var document = new DocumentState(frame);
+                var document = new DocumentState();
                 _documents.Add(frame.DocumentId, document);
                 return document;
             }
@@ -447,12 +448,6 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
 
         private sealed class DocumentState
         {
-            public DocumentState(DocumentFrame frame)
-            {
-                Frame = frame;
-            }
-
-            public DocumentFrame Frame { get; }
             public HashSet<string> Executed { get; } = new HashSet<string>(StringComparer.Ordinal);
             public List<string> ExecutionIds { get; } = new List<string>();
         }

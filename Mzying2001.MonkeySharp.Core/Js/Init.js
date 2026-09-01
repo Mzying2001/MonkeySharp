@@ -73,6 +73,11 @@
             };
 
             const call = async function (record, method, parameters, signal) {
+                if (signal && signal.aborted) {
+                    const error = new Error("The request was canceled.");
+                    error.name = "AbortError";
+                    throw error;
+                }
                 const requestId = uuid();
                 const envelope = Object.assign({
                     type: "request",
@@ -112,12 +117,57 @@
                 return decodeResult(response.result);
             };
 
-            const enqueueMutation = function (record, method, parameters) {
-                const operation = record.mutationTail.then(() => call(record, method, parameters));
-                record.mutationTail = operation.catch(error => {
-                    if (root.console && typeof root.console.error === "function") {
-                        root.console.error("[MonkeySharp] compatibility storage write failed", error);
+            const reportMutationFailure = async function (record, method, error) {
+                try {
+                    const snapshot = await call(record, "runtime.getStorageSnapshot", {});
+                    if (snapshot && snapshot.complete && snapshot.values) {
+                        record.storageMirror = Object.assign({}, snapshot.values);
+                        record.pendingStorageMutations.forEach(mutation => {
+                            applyStorageMutation(record, mutation);
+                        });
                     }
+                } catch (snapshotError) {
+                    if (root.console && typeof root.console.warn === "function") {
+                        root.console.warn("[MonkeySharp] compatibility storage reconcile failed", snapshotError);
+                    }
+                }
+                try {
+                    await call(record, "runtime.reportError", {
+                        code: "MSC413_COMPATIBILITY_MUTATION_FAILED",
+                        operation: method,
+                        message: String(error && error.message || error)
+                    });
+                } catch (diagnosticError) {
+                    if (root.console && typeof root.console.warn === "function") {
+                        root.console.warn("[MonkeySharp] compatibility storage diagnostic failed", diagnosticError);
+                    }
+                }
+            };
+
+            const enqueueMutation = function (record, method, parameters, storageMutation) {
+                const operation = record.mutationTail
+                    .then(() => call(record, method, parameters))
+                    .then(result => {
+                        if (storageMutation) {
+                            removePendingStorageMutation(record, storageMutation);
+                            if (storageMutation.operation === "set" || storageMutation.existed) {
+                                notifyLocalValueChange(
+                                    record,
+                                    storageMutation.key,
+                                    cloneOptionalValue(storageMutation.oldValue),
+                                    cloneOptionalValue(storageMutation.newValue));
+                            }
+                        }
+                        return result;
+                    }, error => {
+                        if (storageMutation) {
+                            removePendingStorageMutation(record, storageMutation);
+                            rollbackStorageMutation(record, storageMutation);
+                        }
+                        throw error;
+                    });
+                record.mutationTail = operation.catch(error => {
+                    return reportMutationFailure(record, method, error);
                 });
                 return operation;
             };
@@ -137,10 +187,140 @@
                 });
             };
 
-            const detailsWithSignal = function (details, signal, xhrId) {
-                const copy = Object.assign({}, details, { __monkeySharpXhrId: xhrId, __monkeySharpLegacy: true });
-                if (signal) copy.signal = signal;
-                return copy;
+            const cloneOptionalValue = function (value) {
+                return typeof value === "undefined" ? undefined : cloneValue(value);
+            };
+
+            const applyStorageMutation = function (record, mutation) {
+                const existed = Object.prototype.hasOwnProperty.call(record.storageMirror, mutation.key);
+                mutation.oldValue = existed ? cloneValue(record.storageMirror[mutation.key]) : undefined;
+                if (mutation.operation === "set") {
+                    record.storageMirror[mutation.key] = cloneValue(mutation.value);
+                    mutation.newValue = cloneValue(mutation.value);
+                } else {
+                    if (existed) delete record.storageMirror[mutation.key];
+                    mutation.newValue = undefined;
+                }
+                mutation.existed = existed;
+            };
+
+            const beginStorageMutation = function (record, operation, key, value) {
+                const mutation = { operation: operation, key: key, value: value };
+                applyStorageMutation(record, mutation);
+                record.pendingStorageMutations.push(mutation);
+                return mutation;
+            };
+
+            const removePendingStorageMutation = function (record, mutation) {
+                const index = record.pendingStorageMutations.indexOf(mutation);
+                if (index >= 0) record.pendingStorageMutations.splice(index, 1);
+            };
+
+            const rollbackStorageMutation = function (record, mutation) {
+                if (typeof mutation.oldValue === "undefined") delete record.storageMirror[mutation.key];
+                else record.storageMirror[mutation.key] = cloneValue(mutation.oldValue);
+                record.pendingStorageMutations.forEach(pending => {
+                    if (pending.key === mutation.key) applyStorageMutation(record, pending);
+                });
+            };
+
+            const notSupported = function (message) {
+                const error = new Error(message);
+                error.code = "MSP006_NOT_SUPPORTED";
+                return error;
+            };
+
+            const objectTag = value => Object.prototype.toString.call(value);
+
+            const normalizeHttpUrl = function (value) {
+                const tag = objectTag(value);
+                if (tag === "[object Blob]" || tag === "[object File]") {
+                    throw notSupported("Blob and File request URLs are not supported.");
+                }
+                if (typeof value === "string") return value;
+                if (tag === "[object URL]") return value.href;
+                throw new TypeError("details.url must be a string or URL.");
+            };
+
+            const setDefaultHeader = function (headers, name, value) {
+                if (!value) return;
+                const exists = Object.keys(headers).some(header => header.toLowerCase() === name.toLowerCase());
+                if (!exists) headers[name] = value;
+            };
+
+            const serializeHttpBody = async function (value) {
+                if (typeof value === "undefined" || value === null) return { bytes: null, contentType: null };
+                if (typeof value === "string") return { bytes: new TextEncoder().encode(value), contentType: null };
+                const tag = objectTag(value);
+                if (tag === "[object ArrayBuffer]") {
+                    return { bytes: new Uint8Array(value.slice(0)), contentType: null };
+                }
+                if (ArrayBuffer.isView(value)) {
+                    return {
+                        bytes: new Uint8Array(value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength)),
+                        contentType: null
+                    };
+                }
+                if (tag === "[object Blob]" || tag === "[object File]") {
+                    return { bytes: new Uint8Array(await value.arrayBuffer()), contentType: value.type || null };
+                }
+                if (tag === "[object FormData]") {
+                    if (typeof root.Response !== "function") throw notSupported("This browser cannot serialize FormData.");
+                    const encoded = new root.Response(value);
+                    return {
+                        bytes: new Uint8Array(await encoded.arrayBuffer()),
+                        contentType: encoded.headers.get("content-type")
+                    };
+                }
+                if (tag === "[object URLSearchParams]") {
+                    return {
+                        bytes: new TextEncoder().encode(value.toString()),
+                        contentType: "application/x-www-form-urlencoded;charset=UTF-8"
+                    };
+                }
+                const prototype = Object.getPrototypeOf(value);
+                if (Array.isArray(value) || prototype === Object.prototype || prototype === null) {
+                    return {
+                        bytes: new TextEncoder().encode(JSON.stringify(value)),
+                        contentType: "application/json;charset=UTF-8"
+                    };
+                }
+                throw new TypeError("details.data has an unsupported type.");
+            };
+
+            const decodeHttpChunk = function (encoded) {
+                const binary = atob(encoded || "");
+                const bytes = new Uint8Array(binary.length);
+                for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+                return bytes;
+            };
+
+            const invokeHttpCallback = function (handler, name, value) {
+                const callback = handler.callbacks[name];
+                if (typeof callback !== "function") return;
+                try {
+                    callback.call(handler.state, typeof value === "undefined" ? handler.state : value);
+                } catch (error) {
+                    if (root.console && typeof root.console.error === "function") {
+                        root.console.error("[MonkeySharp] XHR callback failed", error);
+                    }
+                }
+            };
+
+            const httpProgress = function (handler, data) {
+                return Object.assign({}, handler.state, {
+                    lengthComputable: data.total !== null && typeof data.total !== "undefined",
+                    loaded: data.loaded,
+                    total: data.total === null || typeof data.total === "undefined" ? 0 : data.total
+                });
+            };
+
+            const updateHttpState = function (handler, data) {
+                handler.state.readyState = data.readyState;
+                handler.state.status = data.status;
+                handler.state.statusText = data.statusText;
+                if (data.finalUrl) handler.state.finalUrl = data.finalUrl;
+                handler.state.responseHeaders = data.responseHeaders || "";
             };
 
             const createApi = function (record, invocation, availableApis) {
@@ -173,11 +353,8 @@
                         if (typeof key !== "string" || key.length === 0) throw new TypeError("key must be a non-empty string.");
                         const cloned = cloneValue(value);
                         if (record.storageMirror) {
-                            const oldValue = Object.prototype.hasOwnProperty.call(record.storageMirror, key)
-                                ? cloneValue(record.storageMirror[key]) : undefined;
-                            record.storageMirror[key] = cloned;
-                            notifyLocalValueChange(record, key, oldValue, cloneValue(cloned));
-                            await enqueueMutation(record, "GM.setValue", { key: key, value: cloned });
+                            const mutation = beginStorageMutation(record, "set", key, cloned);
+                            await enqueueMutation(record, "GM.setValue", { key: key, value: cloned }, mutation);
                             return;
                         }
                         await call(record, "GM.setValue", { key: key, value: cloned });
@@ -187,12 +364,9 @@
                     api.deleteValue = async function (key) {
                         if (typeof key !== "string" || key.length === 0) throw new TypeError("key must be a non-empty string.");
                         if (record.storageMirror) {
-                            const existed = Object.prototype.hasOwnProperty.call(record.storageMirror, key);
-                            const oldValue = existed ? cloneValue(record.storageMirror[key]) : undefined;
-                            if (existed) delete record.storageMirror[key];
-                            if (existed) notifyLocalValueChange(record, key, oldValue, undefined);
-                            await enqueueMutation(record, "GM.deleteValue", { key: key });
-                            return existed;
+                            const mutation = beginStorageMutation(record, "delete", key);
+                            await enqueueMutation(record, "GM.deleteValue", { key: key }, mutation);
+                            return mutation.existed;
                         }
                         return call(record, "GM.deleteValue", { key: key });
                     };
@@ -274,49 +448,228 @@
                     };
                 }
                 if (enabled("GM.xmlHttpRequest")) {
-                    api.xmlHttpRequest = async function (details) {
-                        if (!details || typeof details !== "object" || typeof details.url !== "string") {
-                            throw new TypeError("details.url must be a string.");
+                    api.xmlHttpRequest = function (details) {
+                        if (!details || typeof details !== "object") throw new TypeError("details must be an object.");
+                        const requestUrl = normalizeHttpUrl(details.url);
+                        if (typeof details.proxy !== "undefined") throw notSupported("proxy is not supported by CefSharp.");
+                        if (typeof details.cookiePartition !== "undefined") {
+                            throw notSupported("cookiePartition is not supported by CefSharp.");
                         }
                         const xhrId = Number.isInteger(details.__monkeySharpXhrId)
                             ? details.__monkeySharpXhrId : nextListenerId++;
                         const callbacks = {
+                            onloadstart: details.onloadstart,
+                            onreadystatechange: details.onreadystatechange,
                             onload: details.onload,
                             onerror: details.onerror,
                             ontimeout: details.ontimeout,
-                            onprogress: details.onprogress
+                            onabort: details.onabort,
+                            onloadend: details.onloadend,
+                            onprogress: details.onprogress,
+                            onuploadprogress: details.onuploadprogress
                         };
+                        if (typeof details.upload !== "undefined") {
+                            if (!details.upload || typeof details.upload !== "object") {
+                                throw new TypeError("upload must be an object.");
+                            }
+                            if (typeof details.upload.onprogress !== "undefined") {
+                                callbacks.onuploadprogress = details.upload.onprogress;
+                            }
+                        }
                         Object.keys(callbacks).forEach(name => {
                             if (typeof callbacks[name] !== "undefined" && typeof callbacks[name] !== "function") {
                                 throw new TypeError(name + " must be a function.");
                             }
                         });
-                        const parameters = { xhrId: xhrId, url: details.url };
-                        ["method", "data"].forEach(name => {
-                            if (typeof details[name] !== "undefined") {
-                                if (typeof details[name] !== "string") throw new TypeError(name + " must be a string.");
-                                parameters[name] = details[name];
-                            }
-                        });
-                        if (typeof details.headers !== "undefined") parameters.headers = serializableValue(details.headers);
+                        const parameters = { operation: "create", xhrId: xhrId, url: requestUrl };
+                        if (typeof details.method !== "undefined") {
+                            if (typeof details.method !== "string") throw new TypeError("method must be a string.");
+                            parameters.method = details.method;
+                        }
+                        const headers = typeof details.headers === "undefined" ? {} : serializableValue(details.headers);
+                        if (!headers || typeof headers !== "object" || Array.isArray(headers)) {
+                            throw new TypeError("headers must be an object.");
+                        }
+                        parameters.headers = headers;
                         if (typeof details.timeout !== "undefined") {
-                            if (!Number.isInteger(details.timeout) || details.timeout <= 0) throw new TypeError("timeout must be positive.");
-                            parameters.timeout = details.timeout;
+                            if (!Number.isInteger(details.timeout) || details.timeout < 0) throw new TypeError("timeout must not be negative.");
                         }
-                        record.xhrHandlers.set(xhrId, callbacks);
-                        try {
-                            const response = await call(record, "GM.xmlHttpRequest", parameters, details.signal);
-                            if (!details.__monkeySharpLegacy && callbacks.onload) callbacks.onload(response);
-                            return response;
-                        } catch (error) {
-                            if (!details.__monkeySharpLegacy) {
-                                if (error.code === "MSP009_TIMEOUT" && callbacks.ontimeout) callbacks.ontimeout(error);
-                                else if (callbacks.onerror) callbacks.onerror(error);
+                        ["cookie", "user", "password", "overrideMimeType"].forEach(name => {
+                            if (typeof details[name] === "undefined") return;
+                            if (typeof details[name] !== "string") throw new TypeError(name + " must be a string.");
+                            parameters[name] = details[name];
+                        });
+                        if (typeof details.anonymous !== "undefined") {
+                            if (typeof details.anonymous !== "boolean") throw new TypeError("anonymous must be a boolean.");
+                            parameters.anonymous = details.anonymous;
+                        }
+                        ["nocache", "revalidate", "fetch"].forEach(name => {
+                            if (typeof details[name] === "undefined") return;
+                            if (typeof details[name] !== "boolean") throw new TypeError(name + " must be a boolean.");
+                            parameters[name] = details[name];
+                        });
+                        if (!details.fetch && details.timeout > 0) parameters.timeout = details.timeout;
+                        if (typeof details.redirect !== "undefined") {
+                            if (!["follow", "error", "manual"].includes(details.redirect)) {
+                                throw new TypeError("redirect must be 'follow', 'error', or 'manual'.");
                             }
-                            throw error;
-                        } finally {
-                            record.xhrHandlers.delete(xhrId);
+                            parameters.redirect = details.redirect;
                         }
+                        const responseType = typeof details.responseType === "undefined" || details.responseType === ""
+                            ? "text" : details.responseType;
+                        if (!["text", "json", "arraybuffer", "blob", "stream"].includes(responseType)) {
+                            throw new TypeError("responseType is not supported.");
+                        }
+                        parameters.responseType = responseType;
+                        if (details.signal && (typeof details.signal.addEventListener !== "function" ||
+                            typeof details.signal.removeEventListener !== "function")) {
+                            throw new TypeError("signal must be an AbortSignal.");
+                        }
+                        const controller = typeof AbortController === "function" ? new AbortController() : null;
+                        let sessionId = null;
+                        let externalAbort;
+                        if (details.signal && controller) {
+                            externalAbort = () => controller.abort();
+                            if (details.signal.aborted) externalAbort();
+                            else details.signal.addEventListener("abort", externalAbort, { once: true });
+                        }
+                        const signal = controller ? controller.signal : details.signal;
+                        const state = {
+                            context: details.context,
+                            finalUrl: requestUrl,
+                            readyState: 0,
+                            response: null,
+                            responseHeaders: "",
+                            responseText: "",
+                            status: 0,
+                            statusText: ""
+                        };
+                        const handler = {
+                            callbacks: callbacks,
+                            state: state,
+                            responseType: responseType,
+                            deferState4: responseType !== "stream",
+                            pendingState4: false,
+                            streamController: null,
+                            streamChunks: [],
+                            streamClosed: false,
+                            terminal: false,
+                            cleanup: null
+                        };
+                        let released = false;
+                        const release = function () {
+                            if (released) return;
+                            released = true;
+                            if (details.signal && externalAbort) details.signal.removeEventListener("abort", externalAbort);
+                            if (sessionId) call(record, "GM.xmlHttpRequest", {
+                                operation: "release", sessionId: sessionId
+                            }).catch(error => console.warn("[MonkeySharp] XHR release failed", error));
+                            record.xhrHandlers.delete(xhrId);
+                        };
+                        handler.cleanup = release;
+                        record.xhrHandlers.set(xhrId, handler);
+                        const abortRequest = function () {
+                            if (sessionId) call(record, "GM.xmlHttpRequest", {
+                                operation: "abort", sessionId: sessionId
+                            }).catch(error => {
+                                if (!error || error.code !== "MSP003_SESSION_EXPIRED") {
+                                    console.warn("[MonkeySharp] XHR abort failed", error);
+                                }
+                            });
+                            if (controller) controller.abort();
+                        };
+                        let responseStream = null;
+                        if (responseType === "stream") {
+                            if (typeof ReadableStream !== "function") throw notSupported("ReadableStream is unavailable.");
+                            responseStream = new ReadableStream({
+                                start: function (streamController) {
+                                    handler.streamController = streamController;
+                                    handler.streamChunks.splice(0).forEach(chunk => streamController.enqueue(chunk));
+                                    if (handler.streamClosed) streamController.close();
+                                },
+                                cancel: function () { abortRequest(); }
+                            });
+                            state.response = responseStream;
+                            state.responseText = undefined;
+                        }
+                        const operation = (async function () {
+                            try {
+                                const body = await serializeHttpBody(details.data);
+                                setDefaultHeader(parameters.headers, "Content-Type", body.contentType);
+                                const created = await call(record, "GM.xmlHttpRequest", parameters, signal);
+                                sessionId = created.sessionId;
+                                if (body.bytes && body.bytes.length !== 0) {
+                                    const bytes = body.bytes;
+                                    for (let offset = 0; offset < bytes.length; offset += 65536) {
+                                        const segment = bytes.subarray(offset, Math.min(offset + 65536, bytes.length));
+                                        let binary = "";
+                                        for (let index = 0; index < segment.length; index += 1) binary += String.fromCharCode(segment[index]);
+                                        await call(record, "GM.xmlHttpRequest", {
+                                            operation: "appendBody", sessionId: sessionId, chunk: btoa(binary)
+                                        }, signal);
+                                    }
+                                }
+                                const response = await call(record, "GM.xmlHttpRequest", {
+                                    operation: "execute", sessionId: sessionId
+                                }, signal);
+                                state.status = response.status;
+                                state.statusText = response.statusText;
+                                state.finalUrl = response.finalUrl || state.finalUrl;
+                                state.responseHeaders = response.responseHeaders || "";
+                                if (responseType === "stream") return state;
+                                const chunks = [];
+                                let length = 0;
+                                while (length < response.bodyLength) {
+                                    const result = await call(record, "GM.xmlHttpRequest", {
+                                        operation: "readBody", sessionId: sessionId, offset: length
+                                    }, signal);
+                                    const chunk = decodeHttpChunk(result.chunk);
+                                    chunks.push(chunk);
+                                    length += chunk.length;
+                                    if (result.done) break;
+                                }
+                                const responseBytes = new Uint8Array(length);
+                                let bodyOffset = 0;
+                                chunks.forEach(chunk => { responseBytes.set(chunk, bodyOffset); bodyOffset += chunk.length; });
+                                let responseText;
+                                try { responseText = new TextDecoder(response.charset || "utf-8").decode(responseBytes); }
+                                catch (_) { responseText = new TextDecoder().decode(responseBytes); }
+                                if (responseType === "json") {
+                                    state.responseText = responseText;
+                                    try { state.response = responseText.length === 0 ? null : JSON.parse(responseText); }
+                                    catch (_) { state.response = null; }
+                                } else if (responseType === "arraybuffer") {
+                                    state.responseText = undefined;
+                                    state.response = responseBytes.buffer;
+                                } else if (responseType === "blob") {
+                                    state.responseText = undefined;
+                                    state.response = new Blob([responseBytes], {
+                                        type: response.mimeType || "application/octet-stream"
+                                    });
+                                } else {
+                                    state.responseText = responseText;
+                                    state.response = responseText;
+                                }
+                                if (handler.pendingState4) invokeHttpCallback(handler, "onreadystatechange");
+                                invokeHttpCallback(handler, "onload");
+                                invokeHttpCallback(handler, "onloadend");
+                                handler.terminal = true;
+                                return state;
+                            } catch (error) {
+                                if (error && (error.name === "AbortError" || error.code === "MSP010_CANCELED")) {
+                                    invokeHttpCallback(handler, "onabort", error);
+                                } else if (error && error.code === "MSP009_TIMEOUT") {
+                                    invokeHttpCallback(handler, "ontimeout", error);
+                                } else invokeHttpCallback(handler, "onerror", error);
+                                invokeHttpCallback(handler, "onloadend", error);
+                                handler.terminal = true;
+                                throw error;
+                            } finally {
+                                if (responseType !== "stream" || handler.terminal) release();
+                            }
+                        })();
+                        operation.abort = abortRequest;
+                        return operation;
                     };
                 }
                 if (enabled("GM.registerMenuCommand")) {
@@ -351,11 +704,18 @@
                     api.notification = async function (details) {
                         if (typeof details === "string") details = { text: details };
                         if (!details || typeof details !== "object") throw new TypeError("details must be an object.");
-                        return call(record, "GM.notification", {
+                        const result = await call(record, "GM.notification", {
                             title: details.title || null,
                             text: details.text,
                             imageUrl: details.imageUrl || details.image || null
                         });
+                        if (result && result.id) {
+                            record.notificationHandlers.set(result.id, {
+                                onclick: typeof details.onclick === "function" ? details.onclick : null,
+                                ondone: typeof details.ondone === "function" ? details.ondone : null
+                            });
+                        }
+                        return result;
                     };
                 }
                 if (enabled("GM.setClipboard")) {
@@ -393,6 +753,58 @@
                     api.saveTab = async value => call(record, "GM.saveTab", { value: serializableValue(value) });
                 }
                 if (enabled("GM.getTabs")) api.getTabs = async () => call(record, "GM.getTabs", {});
+                if (enabled("GM.cookie")) {
+                    api.cookie = Object.freeze({
+                        list: details => call(record, "GM.cookie", { operation: "list", details: serializableValue(details || {}) }),
+                        set: details => call(record, "GM.cookie", { operation: "set", details: serializableValue(details || {}) }),
+                        delete: details => call(record, "GM.cookie", { operation: "delete", details: serializableValue(details || {}) }),
+                        addListener: function (details, callback) {
+                            if (typeof details === "function") { callback = details; details = {}; }
+                            if (typeof callback !== "function") throw new TypeError("callback must be a function.");
+                            const listenerId = nextListenerId++;
+                            record.cookieHandlers.set(listenerId, callback);
+                            call(record, "GM.cookie", {
+                                operation: "addListener", listenerId: listenerId,
+                                details: serializableValue(details || {})
+                            }).catch(error => {
+                                record.cookieHandlers.delete(listenerId);
+                                console.error("[MonkeySharp] cookie listener registration failed", error);
+                            });
+                            return listenerId;
+                        },
+                        removeListener: async function (listenerId) {
+                            const removed = await call(record, "GM.cookie", { operation: "removeListener", listenerId: listenerId });
+                            if (removed) record.cookieHandlers.delete(listenerId);
+                            return removed;
+                        }
+                    });
+                }
+                if (enabled("GM.webRequest")) {
+                    api.webRequest = Object.freeze({
+                        addRule: rule => call(record, "GM.webRequest", { operation: "addRule", rule: serializableValue(rule || {}) }),
+                        removeRule: id => call(record, "GM.webRequest", { operation: "removeRule", id: id }),
+                        listRules: () => call(record, "GM.webRequest", { operation: "listRules" }),
+                        addListener: function (filter, callback) {
+                            if (typeof filter === "function") { callback = filter; filter = {}; }
+                            if (typeof callback !== "function") throw new TypeError("callback must be a function.");
+                            const listenerId = nextListenerId++;
+                            record.webRequestHandlers.set(listenerId, callback);
+                            call(record, "GM.webRequest", {
+                                operation: "addListener", listenerId: listenerId,
+                                filter: serializableValue(filter || {})
+                            }).catch(error => {
+                                record.webRequestHandlers.delete(listenerId);
+                                console.error("[MonkeySharp] webRequest listener registration failed", error);
+                            });
+                            return listenerId;
+                        },
+                        removeListener: async function (listenerId) {
+                            const removed = await call(record, "GM.webRequest", { operation: "removeListener", listenerId: listenerId });
+                            if (removed) record.webRequestHandlers.delete(listenerId);
+                            return removed;
+                        }
+                    });
+                }
                 return Object.freeze(api);
             };
 
@@ -402,6 +814,7 @@
                 "GM_getResourceText", "GM_getResourceURL", "GM_xmlhttpRequest", "GM_registerMenuCommand",
                 "GM_unregisterMenuCommand", "GM_notification", "GM_setClipboard", "GM_openInTab",
                 "GM_download", "GM_getTab", "GM_saveTab", "GM_getTabs"
+                , "GM_cookie", "GM_webRequest"
             ];
 
             const createLegacyFacade = function (record, invocation, api) {
@@ -442,19 +855,13 @@
                     if (api.setValue) facade.GM_setValue = function (key, value) {
                         key = requireKey(key);
                         const cloned = cloneValue(value);
-                        const oldValue = Object.prototype.hasOwnProperty.call(record.storageMirror, key)
-                            ? cloneValue(record.storageMirror[key]) : undefined;
-                        record.storageMirror[key] = cloned;
-                        notifyLocalValueChange(record, key, oldValue, cloneValue(cloned));
-                        enqueueMutation(record, "GM.setValue", { key: key, value: cloned });
+                        const mutation = beginStorageMutation(record, "set", key, cloned);
+                        enqueueMutation(record, "GM.setValue", { key: key, value: cloned }, mutation);
                     };
                     if (api.deleteValue) facade.GM_deleteValue = function (key) {
                         key = requireKey(key);
-                        const existed = Object.prototype.hasOwnProperty.call(record.storageMirror, key);
-                        const oldValue = existed ? cloneValue(record.storageMirror[key]) : undefined;
-                        if (existed) delete record.storageMirror[key];
-                        if (existed) notifyLocalValueChange(record, key, oldValue, undefined);
-                        enqueueMutation(record, "GM.deleteValue", { key: key });
+                        const mutation = beginStorageMutation(record, "delete", key);
+                        enqueueMutation(record, "GM.deleteValue", { key: key }, mutation);
                     };
                     if (api.listValues) facade.GM_listValues = function () {
                         return Object.keys(record.storageMirror).sort();
@@ -509,9 +916,7 @@
                     return element;
                 };
                 if (api.xmlHttpRequest) facade.GM_xmlhttpRequest = function (details) {
-                    if (!details || typeof details !== "object" || typeof details.url !== "string") {
-                        throw new TypeError("details.url must be a string.");
-                    }
+                    if (!details || typeof details !== "object") throw new TypeError("details must be an object.");
                     const xhrId = nextListenerId++;
                     const callbacks = {
                         onload: details.onload,
@@ -524,29 +929,18 @@
                             throw new TypeError(name + " must be a function.");
                         }
                     });
-                    const parameters = { xhrId: xhrId, url: details.url };
-                    ["method", "data"].forEach(name => {
-                        if (typeof details[name] !== "undefined") {
-                            if (typeof details[name] !== "string") throw new TypeError(name + " must be a string.");
-                            parameters[name] = details[name];
-                        }
-                    });
-                    if (typeof details.headers !== "undefined") parameters.headers = serializableValue(details.headers);
-                    if (typeof details.timeout !== "undefined") {
-                        if (!Number.isInteger(details.timeout) || details.timeout <= 0) throw new TypeError("timeout must be positive.");
-                        parameters.timeout = details.timeout;
-                    }
-                    const controller = typeof AbortController === "function" ? new AbortController() : null;
-                    const handle = { abort: function () { if (controller) controller.abort(); } };
-                    record.xhrHandlers.set(xhrId, callbacks);
-                    api.xmlHttpRequest(detailsWithSignal(details, controller && controller.signal, xhrId))
-                        .then(response => { if (callbacks.onload) callbacks.onload(response); })
+                    const request = api.xmlHttpRequest(Object.assign({}, details, {
+                        __monkeySharpXhrId: xhrId,
+                        __monkeySharpLegacy: true
+                    }));
+                    const handle = { abort: function () { request.abort(); } };
+                    request
                         .catch(error => {
                             if (error && error.name === "AbortError") return;
-                            if (error && error.code === "MSP009_TIMEOUT" && callbacks.ontimeout) callbacks.ontimeout(error);
-                            else if (callbacks.onerror) callbacks.onerror(error);
-                        })
-                        .finally(() => record.xhrHandlers.delete(xhrId));
+                            if (!callbacks.onerror && !callbacks.ontimeout) {
+                                console.error("[MonkeySharp] legacy XHR failed", error);
+                            }
+                        });
                     return handle;
                 };
                 if (api.registerMenuCommand) facade.GM_registerMenuCommand = function (name, callback, accessKey) {
@@ -571,6 +965,9 @@
                     api.unregisterMenuCommand(commandId).catch(error => console.error("[MonkeySharp] legacy menu removal failed", error));
                     return removed;
                 };
+                if (api.saveTab) facade.GM_saveTab = function (value) {
+                    api.saveTab(value).catch(error => console.error("[MonkeySharp] legacy saveTab failed", error));
+                };
                 if (api.getTab) facade.GM_getTab = function (callback) {
                     if (typeof callback !== "function") throw new TypeError("callback must be a function.");
                     api.getTab().then(callback).catch(error => console.error("[MonkeySharp] legacy getTab failed", error));
@@ -583,28 +980,82 @@
                     api.setClipboard(text, type).catch(error => console.error("[MonkeySharp] legacy clipboard failed", error));
                 };
                 if (api.notification) facade.GM_notification = function (details, ondone) {
-                    api.notification(details).then(() => {
-                        if (typeof ondone === "function") ondone();
-                    }).catch(error => console.error("[MonkeySharp] legacy notification failed", error));
+                    if (typeof details === "string") details = { text: details };
+                    details = Object.assign({}, details || {}, { ondone: ondone });
+                    api.notification(details).catch(error => console.error("[MonkeySharp] legacy notification failed", error));
                 };
                 if (api.openInTab) facade.GM_openInTab = function (url, options) {
-                    const state = { closed: false, id: null };
+                    const state = { closed: false, id: null, closeRequested: false };
                     const handle = {
-                        close: function () { state.closed = true; },
+                        close: function () {
+                            state.closeRequested = true;
+                            if (!state.id) return;
+                            call(record, "GM.openInTab", { close: true, tabId: state.id })
+                                .then(() => { state.closed = true; })
+                                .catch(error => console.error("[MonkeySharp] legacy tab close failed", error));
+                        },
                         get closed() { return state.closed; }
                     };
-                    api.openInTab(url, options).then(result => { state.id = result && result.id; })
+                    api.openInTab(url, options).then(result => {
+                        state.id = result && result.id;
+                        if (state.closeRequested && state.id) handle.close();
+                    })
                         .catch(error => console.error("[MonkeySharp] legacy tab open failed", error));
+                    record.tabHandlers.push(state);
                     return handle;
                 };
                 if (api.download) facade.GM_download = function (details, onload, onerror) {
                     if (typeof details === "string") details = { url: details };
+                    if (!details || typeof details !== "object") throw new TypeError("details must be an object.");
+                    ["onload", "onerror", "onprogress"].forEach(name => {
+                        if (typeof details[name] !== "undefined" && typeof details[name] !== "function") {
+                            throw new TypeError(name + " must be a function.");
+                        }
+                    });
+                    const state = { id: null, callbacks: { onload: onload || details.onload, onerror: onerror || details.onerror, onprogress: details.onprogress }, aborted: false };
+                    const handle = { abort: function () { state.aborted = true; if (state.id) record.downloadHandlers.get(state.id)?.abort(); } };
                     api.download(details).then(result => {
-                        if (typeof onload === "function") onload(result);
+                        state.id = result && result.id;
+                        if (state.id) record.downloadHandlers.set(state.id, state);
                     }).catch(error => {
-                        if (typeof onerror === "function") onerror(error);
+                        if (typeof state.callbacks.onerror === "function") state.callbacks.onerror(error);
                         else console.error("[MonkeySharp] legacy download failed", error);
                     });
+                    return handle;
+                };
+                if (api.cookie) facade.GM_cookie = {
+                    list: function (details, callback) {
+                        if (typeof details === "function") { callback = details; details = {}; }
+                        api.cookie.list(details).then(value => { if (typeof callback === "function") callback(value); })
+                            .catch(error => console.error("[MonkeySharp] legacy cookie list failed", error));
+                    },
+                    set: function (details, callback) {
+                        api.cookie.set(details).then(value => { if (typeof callback === "function") callback(value); })
+                            .catch(error => console.error("[MonkeySharp] legacy cookie set failed", error));
+                    },
+                    delete: function (details, callback) {
+                        api.cookie.delete(details).then(value => { if (typeof callback === "function") callback(value); })
+                            .catch(error => console.error("[MonkeySharp] legacy cookie delete failed", error));
+                    },
+                    addListener: function (details, callback) { return api.cookie.addListener(details, callback); },
+                    removeListener: function (listenerId) {
+                        api.cookie.removeListener(listenerId).catch(error => console.error("[MonkeySharp] legacy cookie listener removal failed", error));
+                    }
+                };
+                if (api.webRequest) facade.GM_webRequest = function (rules, listener) {
+                    if (!Array.isArray(rules)) rules = [rules];
+                    const listenerId = typeof listener === "function" ? api.webRequest.addListener({}, listener) : null;
+                    const ids = [];
+                    rules.forEach(rule => api.webRequest.addRule(rule).then(id => ids.push(id))
+                        .catch(error => console.error("[MonkeySharp] legacy webRequest rule failed", error)));
+                    return {
+                        remove: function () {
+                            ids.splice(0).forEach(id => api.webRequest.removeRule(id)
+                                .catch(error => console.error("[MonkeySharp] legacy webRequest removal failed", error)));
+                            if (listenerId) api.webRequest.removeListener(listenerId)
+                                .catch(error => console.error("[MonkeySharp] legacy webRequest listener removal failed", error));
+                        }
+                    };
                 };
                 return facade;
             };
@@ -619,9 +1070,16 @@
                     handlers: new Map(),
                     menuHandlers: new Map(),
                     xhrHandlers: new Map(),
+                    downloadHandlers: new Map(),
+                    notificationHandlers: new Map(),
+                    tabHandlers: [],
+                    cookieHandlers: new Map(),
+                    webRequestHandlers: new Map(),
                     valueListenerKeys: new Map(),
                     mutationTail: Promise.resolve(),
                     storageMirror: null,
+                    pendingStorageMutations: [],
+                    lastStorageSequence: 0,
                     resourceMirror: null
                 };
                 executions.set(invocation.executionId, record);
@@ -682,11 +1140,24 @@
                 if (!record || record.deliveryToken !== notification.deliveryToken) return false;
                 const data = notification.data || {};
                 try {
+                    if (notification.event === "storage-sync") {
+                        if (record.storageMirror && data.key) {
+                            if (data.sequence && data.sequence <= record.lastStorageSequence) return true;
+                            const incoming = decodeResult(data.newValue);
+                            if (typeof incoming === "undefined") delete record.storageMirror[data.key];
+                            else record.storageMirror[data.key] = cloneValue(incoming);
+                            if (data.sequence) record.lastStorageSequence = data.sequence;
+                        }
+                        return true;
+                    }
                     if (notification.event === "value-change") {
                         if (record.storageMirror && data.key) {
                             const incoming = decodeResult(data.newValue);
                             if (typeof incoming === "undefined") delete record.storageMirror[data.key];
                             else record.storageMirror[data.key] = cloneValue(incoming);
+                            if (data.sequence && data.sequence > record.lastStorageSequence) {
+                                record.lastStorageSequence = data.sequence;
+                            }
                         }
                         if (data.originExecutionId === record.executionId) return true;
                         const handler = record.handlers.get(data.listenerId);
@@ -700,10 +1171,91 @@
                         handler();
                         return true;
                     }
-                    if (notification.event === "xhr-progress") {
-                        const handlers = record.xhrHandlers.get(data.xhrId);
-                        if (!handlers || !handlers.onprogress) return false;
-                        handlers.onprogress({ loaded: data.loaded, total: data.total });
+                    if (notification.event === "notification-click" || notification.event === "notification-done") {
+                        const handler = record.notificationHandlers.get(data.notificationId);
+                        if (!handler) return false;
+                        const callback = notification.event === "notification-click" ? handler.onclick : handler.ondone;
+                        if (callback) callback();
+                        if (notification.event === "notification-done") record.notificationHandlers.delete(data.notificationId);
+                        return true;
+                    }
+                    if (notification.event === "tab-closed") {
+                        record.tabHandlers.forEach(state => {
+                            if (state.id === data.tabId) state.closed = true;
+                        });
+                        return true;
+                    }
+                    if (notification.event === "download-progress" || notification.event === "download-complete" ||
+                        notification.event === "download-error" || notification.event === "download-aborted") {
+                        const state = record.downloadHandlers.get(data.downloadId);
+                        if (!state) return false;
+                        if (notification.event === "download-progress") {
+                            if (state.callbacks.onprogress) state.callbacks.onprogress({ loaded: data.loaded, total: data.total });
+                        } else if (notification.event === "download-complete") {
+                            if (state.callbacks.onload) state.callbacks.onload({ id: data.downloadId });
+                            record.downloadHandlers.delete(data.downloadId);
+                        } else {
+                            if (state.callbacks.onerror) state.callbacks.onerror(new Error(data.message || "The download failed."));
+                            record.downloadHandlers.delete(data.downloadId);
+                        }
+                        return true;
+                    }
+                    if (notification.event === "cookie-change") {
+                        const callback = record.cookieHandlers.get(data.listenerId);
+                        if (!callback) return false;
+                        callback(data.cookie, data.cause, Boolean(data.removed));
+                        return true;
+                    }
+                    if (notification.event === "webrequest-event") {
+                        const callback = record.webRequestHandlers.get(data.listenerId);
+                        if (!callback) return false;
+                        callback(data);
+                        return true;
+                    }
+                    if (notification.event.indexOf("xhr-") === 0) {
+                        const handler = record.xhrHandlers.get(data.xhrId);
+                        if (!handler) return false;
+                        if (notification.event === "xhr-state") {
+                            updateHttpState(handler, data);
+                            if (data.readyState === 4 && handler.deferState4) handler.pendingState4 = true;
+                            else invokeHttpCallback(handler, "onreadystatechange");
+                            if (data.readyState === 1) invokeHttpCallback(handler, "onloadstart");
+                        } else if (notification.event === "xhr-progress") {
+                            invokeHttpCallback(handler, "onprogress", httpProgress(handler, data));
+                        } else if (notification.event === "xhr-upload-progress") {
+                            invokeHttpCallback(handler, "onuploadprogress", httpProgress(handler, data));
+                        } else if (notification.event === "xhr-chunk") {
+                            const chunk = decodeHttpChunk(data.chunk);
+                            if (handler.streamController) {
+                                try { handler.streamController.enqueue(chunk); } catch (_) { }
+                            }
+                            else handler.streamChunks.push(chunk);
+                        } else if (notification.event === "xhr-complete") {
+                            if (handler.terminal) return true;
+                            handler.streamClosed = true;
+                            if (handler.streamController) {
+                                try { handler.streamController.close(); } catch (_) { }
+                            }
+                            if (handler.pendingState4) invokeHttpCallback(handler, "onreadystatechange");
+                            invokeHttpCallback(handler, "onload");
+                            invokeHttpCallback(handler, "onloadend");
+                            handler.terminal = true;
+                            handler.cleanup();
+                        } else if (notification.event === "xhr-error") {
+                            if (handler.terminal) return true;
+                            const error = new Error(data.message || "The HTTP request failed.");
+                            error.code = data.code;
+                            if (data.code === "MSP010_CANCELED") error.name = "AbortError";
+                            if (handler.streamController) {
+                                try { handler.streamController.error(error); } catch (_) { }
+                            }
+                            if (error.name === "AbortError") invokeHttpCallback(handler, "onabort", error);
+                            else if (error.code === "MSP009_TIMEOUT") invokeHttpCallback(handler, "ontimeout", error);
+                            else invokeHttpCallback(handler, "onerror", error);
+                            invokeHttpCallback(handler, "onloadend", error);
+                            handler.terminal = true;
+                            handler.cleanup();
+                        }
                         return true;
                     }
                     return false;

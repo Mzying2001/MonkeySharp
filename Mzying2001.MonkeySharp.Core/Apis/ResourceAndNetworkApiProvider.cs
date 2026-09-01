@@ -19,15 +19,18 @@ namespace Mzying2001.MonkeySharp.Core.Apis
     public sealed class ResourceAndNetworkApiProvider :
         IUserScriptApiProvider,
         IUserScriptNotificationSource,
-        IUserScriptCompatibilityBootstrapProvider
+        IUserScriptDiagnosticSource,
+        IUserScriptCompatibilityBootstrapProvider,
+        IUserScriptExecutionObserver,
+        IDisposable
     {
-        private static readonly HashSet<string> AllowedMethods = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        private static readonly HashSet<string> BlockedMethods = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"
+            "CONNECT", "TRACE", "TRACK"
         };
         private static readonly HashSet<string> BlockedHeaders = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "Host", "Content-Length", "Cookie", "Origin", "Referer", "Connection", "Proxy-Connection",
+            "Host", "Content-Length", "Connection", "Proxy-Connection",
             "Transfer-Encoding", "Upgrade", "Keep-Alive", "TE", "Trailer"
         };
 
@@ -35,6 +38,9 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         private readonly IHttpRequestService _http;
         private readonly BridgeOptions _options;
         private readonly IReadOnlyCollection<string> _methods;
+        private readonly object _sessionLock = new object();
+        private readonly Dictionary<string, HttpSession> _sessions = new Dictionary<string, HttpSession>(StringComparer.Ordinal);
+        private bool _disposed;
 
         /// <summary>Initializes a resource and network API provider.</summary>
         /// <param name="resources">The optional declared-resource provider.</param>
@@ -49,6 +55,8 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 throw new ArgumentException("At least one resource or HTTP service is required.");
             _resources = resources;
             _http = http;
+            if (_http is IUserScriptDiagnosticSource diagnosticSource)
+                diagnosticSource.Diagnostic += HttpDiagnostic;
             _options = options ?? new BridgeOptions();
             var methods = new List<string>();
             if (resources != null)
@@ -63,6 +71,9 @@ namespace Mzying2001.MonkeySharp.Core.Apis
 
         /// <inheritdoc />
         public event EventHandler<ApiNotificationEventArgs> Notification;
+
+        /// <inheritdoc />
+        public event EventHandler<UserScriptDiagnostic> Diagnostic;
 
         /// <inheritdoc />
         public IReadOnlyCollection<string> Methods => _methods;
@@ -123,7 +134,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             var content = await _resources.GetAsync(
                 context.Installation,
                 declaration,
-                cancellationToken).ConfigureAwait(false);
+                cancellationToken);
             if (content == null)
                 throw new BridgeProtocolException(BridgeErrorCodes.Internal, "The resource provider returned no content.");
             if (content.Bytes.Length > _options.MaxResourceBytes ||
@@ -143,6 +154,33 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             CancellationToken cancellationToken)
         {
             ProviderParameters.RequireObject(context.Parameters);
+            var operation = ProviderParameters.RequiredString(context.Parameters, "operation");
+            switch (operation)
+            {
+                case "create":
+                    return CreateHttpSession(context);
+                case "appendBody":
+                    return AppendHttpBody(context);
+                case "execute":
+                    return await ExecuteHttpSessionAsync(context, cancellationToken).ConfigureAwait(false);
+                case "readBody":
+                    return ReadHttpBody(context);
+                case "abort":
+                    return AbortHttpSession(context);
+                case "release":
+                    return ReleaseHttpSession(context);
+                default:
+                    throw ProviderParameters.Invalid("Unknown HTTP request operation.");
+            }
+        }
+
+        private ApiResult CreateHttpSession(ApiInvocationContext context)
+        {
+            if (context.Parameters.TryGetProperty("proxy", out _) ||
+                context.Parameters.TryGetProperty("cookiePartition", out _))
+                throw new BridgeProtocolException(
+                    BridgeErrorCodes.NotSupported,
+                    "proxy and cookiePartition are not supported by this host.");
             var urlText = ProviderParameters.RequiredString(context.Parameters, "url");
             if (!Uri.TryCreate(urlText, UriKind.Absolute, out var url) ||
                 (url.Scheme != Uri.UriSchemeHttp && url.Scheme != Uri.UriSchemeHttps))
@@ -152,10 +190,9 @@ namespace Mzying2001.MonkeySharp.Core.Apis
 
             var method = ProviderParameters.OptionalString(context.Parameters, "method") ?? "GET";
             method = method.ToUpperInvariant();
-            if (!AllowedMethods.Contains(method))
+            if (!IsHeaderName(method) || BlockedMethods.Contains(method))
                 throw ProviderParameters.Invalid("The HTTP method is not allowed.");
             var headers = ReadHeaders(context.Parameters);
-            var body = ProviderParameters.OptionalString(context.Parameters, "data");
             TimeSpan? timeout = null;
             if (context.Parameters.TryGetProperty("timeout", out var timeoutValue))
             {
@@ -167,32 +204,107 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             var xhrId = ProviderParameters.RequiredInt32(context.Parameters, "xhrId");
             if (xhrId <= 0)
                 throw ProviderParameters.Invalid("xhrId must be positive.");
+            var fetch = OptionalBoolean(context.Parameters, "fetch");
+            if (fetch) timeout = null;
 
-            var progress = new CallbackProgress<UserScriptHttpProgress>(value =>
-            {
-                var data = JsonSerializer.Serialize(new
-                {
-                    xhrId,
-                    loaded = value.Loaded,
-                    total = value.Total
-                });
-                Notification?.Invoke(this, new ApiNotificationEventArgs(
-                    context.Installation.ScriptKey,
-                    context.ExecutionId,
-                    "xhr-progress",
-                    data));
-            });
-            var response = await _http.SendAsync(
+            var sessionId = Guid.NewGuid().ToString("D");
+            var session = new HttpSession(
+                sessionId,
+                context.Installation.ScriptKey,
+                context.ExecutionId,
+                context.Frame,
+                context.RequestId,
+                xhrId,
                 new UserScriptHttpRequest(
                     method,
                     url,
                     headers,
-                    body,
+                    null,
                     timeout,
-                    _options.MaxResourceBytes,
-                    redirect => ConnectAllows(context.Installation.Definition.Metadata.Connects, context.Frame.Url, redirect)),
-                progress,
-                cancellationToken).ConfigureAwait(false);
+                    null,
+                    async (redirect, token) =>
+                    {
+                        if (!ConnectAllows(context.Installation.Definition.Metadata.Connects, context.Frame.Url, redirect))
+                            return false;
+                        return context.AuthorizeTargetAsync == null ||
+                            await context.AuthorizeTargetAsync(redirect.AbsoluteUri, token).ConfigureAwait(false);
+                    },
+                    new UserScriptHttpRequestOptions
+                    {
+                        Cookie = OptionalSafeString(context.Parameters, "cookie"),
+                        Username = OptionalSafeString(context.Parameters, "user"),
+                        Password = OptionalSafeString(context.Parameters, "password"),
+                        Anonymous = OptionalBoolean(context.Parameters, "anonymous"),
+                        OverrideMimeType = OptionalSafeString(context.Parameters, "overrideMimeType"),
+                        Redirect = ReadRedirectMode(context.Parameters),
+                        NoCache = OptionalBoolean(context.Parameters, "nocache"),
+                        Revalidate = OptionalBoolean(context.Parameters, "revalidate"),
+                        Fetch = fetch,
+                        ResponseType = ReadResponseType(context.Parameters)
+                    }),
+                RaiseHttpNotification,
+                ReportHttpNotificationFailure);
+            lock (_sessionLock)
+            {
+                ThrowIfDisposed();
+                _sessions.Add(SessionKey(context.ExecutionId, sessionId), session);
+            }
+            session.ReportReadyState(1);
+            return ApiResult.FromValue(new { sessionId });
+        }
+
+        private ApiResult AppendHttpBody(ApiInvocationContext context)
+        {
+            var session = GetSession(context);
+            var encoded = ProviderParameters.RequiredString(context.Parameters, "chunk");
+            byte[] chunk;
+            try { chunk = Convert.FromBase64String(encoded); }
+            catch (FormatException) { throw ProviderParameters.Invalid("chunk must be valid Base64."); }
+            if (chunk.Length > HttpSpoolingBuffer.BridgeChunkSize)
+                throw ProviderParameters.Invalid("The HTTP body chunk exceeds 64 KiB.");
+            session.AppendRequestBody(chunk);
+            return ApiResult.FromValue(new { length = session.RequestBodyLength });
+        }
+
+        private async Task<ApiResult> ExecuteHttpSessionAsync(
+            ApiInvocationContext context,
+            CancellationToken cancellationToken)
+        {
+            var session = GetSession(context);
+            session.PrepareRequestBody();
+            var operation = _http.SendAsync(session.Request, session, cancellationToken);
+            if (operation == null)
+                throw new BridgeProtocolException(BridgeErrorCodes.Internal, "The HTTP service returned no operation.");
+            session.Start(operation);
+            var completion = CompleteHttpSessionAsync(context, session, operation);
+            if (session.Request.Options.ResponseType == UserScriptHttpResponseType.Stream)
+            {
+                var winner = await Task.WhenAny(session.ResponseStarted, completion).ConfigureAwait(false);
+                if (winner == completion)
+                    await completion.ConfigureAwait(false);
+                var started = await session.ResponseStarted.ConfigureAwait(false);
+                ObserveStreamCompletion(session, completion);
+                return ResponseResult(session, started, true);
+            }
+            var response = await completion.ConfigureAwait(false);
+            return ResponseResult(session, response, false);
+        }
+
+        private async Task<UserScriptHttpResponse> CompleteHttpSessionAsync(
+            ApiInvocationContext context,
+            HttpSession session,
+            IHttpRequestOperation operation)
+        {
+            UserScriptHttpResponse response;
+            try
+            {
+                response = await operation.Completion.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                operation.Abort();
+                throw;
+            }
             if (response == null)
                 throw new BridgeProtocolException(BridgeErrorCodes.Internal, "The HTTP service returned no response.");
             if (response.RedirectUrls.Any(redirect =>
@@ -200,19 +312,393 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 throw new BridgeProtocolException(BridgeErrorCodes.PermissionDenied, "A redirect escaped the @connect allowlist.");
             if (!ConnectAllows(context.Installation.Definition.Metadata.Connects, context.Frame.Url, response.FinalUrl))
                 throw new BridgeProtocolException(BridgeErrorCodes.PermissionDenied, "A redirect escaped the @connect allowlist.");
-            if (response.Body.Length > _options.MaxResourceBytes ||
-                (response.ResponseText != null && Encoding.UTF8.GetByteCount(response.ResponseText) > _options.MaxResourceBytes))
-                throw new BridgeProtocolException(BridgeErrorCodes.PayloadTooLarge, "The HTTP response exceeds the configured limit.");
+            session.Complete(response);
+            return response;
+        }
 
+        private static ApiResult ResponseResult(
+            HttpSession session,
+            UserScriptHttpResponse response,
+            bool streaming)
+        {
             return ApiResult.FromValue(new
             {
                 status = response.Status,
                 statusText = response.StatusText,
                 finalUrl = response.FinalUrl.AbsoluteUri,
-                responseHeaders = response.Headers,
-                responseText = response.ResponseText,
-                responseBase64 = response.ResponseText == null ? Convert.ToBase64String(response.Body) : null
+                responseHeaders = response.RawHeaders,
+                mimeType = response.MimeType,
+                charset = response.Charset,
+                bodyLength = streaming ? (long?)null : session.ResponseBodyLength,
+                streaming
             });
+        }
+
+        private static async void ObserveStreamCompletion(HttpSession session, Task<UserScriptHttpResponse> completion)
+        {
+            try { await completion.ConfigureAwait(false); }
+            catch (Exception exception) { session.Fail(exception); }
+        }
+
+        private ApiResult ReadHttpBody(ApiInvocationContext context)
+        {
+            var session = GetSession(context);
+            if (!context.Parameters.TryGetProperty("offset", out var value) ||
+                value.ValueKind != JsonValueKind.Number || !value.TryGetInt64(out var offset) || offset < 0)
+                throw ProviderParameters.Invalid("offset must be a non-negative integer.");
+            var chunk = session.ReadResponseBody(offset);
+            return ApiResult.FromValue(new
+            {
+                chunk = Convert.ToBase64String(chunk),
+                offset,
+                done = offset + chunk.Length >= session.ResponseBodyLength
+            });
+        }
+
+        private ApiResult AbortHttpSession(ApiInvocationContext context)
+        {
+            GetSession(context).Abort();
+            return ApiResult.FromValue(true);
+        }
+
+        private ApiResult ReleaseHttpSession(ApiInvocationContext context)
+        {
+            var sessionId = ProviderParameters.RequiredString(context.Parameters, "sessionId");
+            HttpSession session;
+            lock (_sessionLock)
+            {
+                if (!_sessions.TryGetValue(SessionKey(context.ExecutionId, sessionId), out session))
+                    return ApiResult.FromValue(false);
+                _sessions.Remove(SessionKey(context.ExecutionId, sessionId));
+            }
+            session.Dispose();
+            return ApiResult.FromValue(true);
+        }
+
+        /// <inheritdoc />
+        public void OnExecutionEnded(string executionId)
+        {
+            HttpSession[] sessions;
+            lock (_sessionLock)
+            {
+                var prefix = executionId + ":";
+                var keys = _sessions.Keys.Where(key => key.StartsWith(prefix, StringComparison.Ordinal)).ToArray();
+                sessions = keys.Select(key => _sessions[key]).ToArray();
+                foreach (var key in keys) _sessions.Remove(key);
+            }
+            foreach (var session in sessions) session.Dispose();
+        }
+
+        /// <inheritdoc />
+        public void Dispose()
+        {
+            HttpSession[] sessions;
+            lock (_sessionLock)
+            {
+                if (_disposed) return;
+                _disposed = true;
+                sessions = _sessions.Values.ToArray();
+                _sessions.Clear();
+            }
+            if (_http is IUserScriptDiagnosticSource diagnosticSource)
+                diagnosticSource.Diagnostic -= HttpDiagnostic;
+            foreach (var session in sessions) session.Dispose();
+        }
+
+        private HttpSession GetSession(ApiInvocationContext context)
+        {
+            var sessionId = ProviderParameters.RequiredString(context.Parameters, "sessionId");
+            lock (_sessionLock)
+            {
+                ThrowIfDisposed();
+                if (_sessions.TryGetValue(SessionKey(context.ExecutionId, sessionId), out var session))
+                    return session;
+            }
+            throw new BridgeProtocolException(BridgeErrorCodes.SessionExpired, "The HTTP request session is not active.");
+        }
+
+        private void RaiseHttpNotification(HttpSession session, string eventName, object value)
+        {
+            Notification?.Invoke(this, new ApiNotificationEventArgs(
+                session.ScriptKey,
+                session.ExecutionId,
+                eventName,
+                JsonSerializer.Serialize(value)));
+        }
+
+        private void ReportHttpNotificationFailure(
+            HttpSession session,
+            string eventName,
+            Exception exception)
+        {
+            RaiseDiagnostic(new UserScriptDiagnostic(
+                "MSA300_NOTIFICATION_CALLBACK_FAILED",
+                DiagnosticSeverity.Error,
+                "An HTTP notification callback failed for '" + eventName + "'.",
+                exception,
+                session.ScriptKey,
+                session.Frame.DocumentId,
+                session.Frame.FrameId,
+                session.RequestId));
+        }
+
+        private void HttpDiagnostic(object sender, UserScriptDiagnostic diagnostic)
+        {
+            RaiseDiagnostic(diagnostic);
+        }
+
+        private void RaiseDiagnostic(UserScriptDiagnostic diagnostic)
+        {
+            var handlers = Diagnostic;
+            if (handlers == null)
+            {
+                System.Diagnostics.Trace.TraceError(
+                    "MonkeySharp diagnostic {0}: {1}", diagnostic.Code, diagnostic.Message);
+                return;
+            }
+            foreach (EventHandler<UserScriptDiagnostic> handler in handlers.GetInvocationList())
+            {
+                try
+                {
+                    handler(this, diagnostic);
+                }
+                catch (Exception exception)
+                {
+                    System.Diagnostics.Trace.TraceError(
+                        "MonkeySharp diagnostic observer failed: {0}", exception);
+                }
+            }
+        }
+
+        private void ThrowIfDisposed()
+        {
+            if (_disposed) throw new ObjectDisposedException(nameof(ResourceAndNetworkApiProvider));
+        }
+
+        private static string SessionKey(string executionId, string sessionId)
+        {
+            return executionId + ":" + sessionId;
+        }
+
+        private sealed class HttpSession : IUserScriptHttpObserver, IDisposable
+        {
+            private readonly object _sync = new object();
+            private readonly HttpSpoolingBuffer _requestBody = new HttpSpoolingBuffer();
+            private readonly HttpSpoolingBuffer _responseBody = new HttpSpoolingBuffer();
+            private readonly Action<HttpSession, string, object> _notify;
+            private readonly Action<HttpSession, string, Exception> _reportNotificationFailure;
+            private readonly TaskCompletionSource<UserScriptHttpResponse> _responseStartedTask =
+                new TaskCompletionSource<UserScriptHttpResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
+            private IHttpRequestOperation _operation;
+            private bool _started;
+            private bool _responseStarted;
+            private bool _loadingReported;
+            private bool _disposed;
+            private UserScriptHttpResponse _response;
+
+            public HttpSession(
+                string sessionId,
+                ScriptKey scriptKey,
+                string executionId,
+                DocumentFrame frame,
+                string requestId,
+                int xhrId,
+                UserScriptHttpRequest request,
+                Action<HttpSession, string, object> notify,
+                Action<HttpSession, string, Exception> reportNotificationFailure)
+            {
+                SessionId = sessionId;
+                ScriptKey = scriptKey;
+                ExecutionId = executionId;
+                Frame = frame;
+                RequestId = requestId;
+                XhrId = xhrId;
+                Request = request;
+                _notify = notify;
+                _reportNotificationFailure = reportNotificationFailure;
+            }
+
+            public string SessionId { get; }
+            public ScriptKey ScriptKey { get; }
+            public string ExecutionId { get; }
+            public DocumentFrame Frame { get; }
+            public string RequestId { get; }
+            public int XhrId { get; }
+            public UserScriptHttpRequest Request { get; private set; }
+            public long RequestBodyLength => _requestBody.Length;
+            public long ResponseBodyLength => _responseBody.Length;
+            public Task<UserScriptHttpResponse> ResponseStarted => _responseStartedTask.Task;
+
+            public void AppendRequestBody(byte[] chunk)
+            {
+                lock (_sync)
+                {
+                    ThrowIfDisposed();
+                    if (_started) throw ProviderParameters.Invalid("The HTTP request has already started.");
+                    _requestBody.Append(chunk, 0, chunk.Length);
+                }
+            }
+
+            public void PrepareRequestBody()
+            {
+                lock (_sync)
+                {
+                    ThrowIfDisposed();
+                    if (_started) throw ProviderParameters.Invalid("The HTTP request has already started.");
+                    _started = true;
+                    if (_requestBody.Length != 0)
+                    {
+                        Request = new UserScriptHttpRequest(
+                            Request.Method,
+                            Request.Url,
+                            Request.Headers.ToDictionary(item => item.Key, item => item.Value, StringComparer.OrdinalIgnoreCase),
+                            _requestBody,
+                            Request.Timeout,
+                            Request.MaxResponseBytes,
+                            Request.RedirectAllowed,
+                            Request.Options);
+                    }
+                }
+            }
+
+            public void Start(IHttpRequestOperation operation)
+            {
+                if (operation == null) throw new ArgumentNullException(nameof(operation));
+                lock (_sync)
+                {
+                    ThrowIfDisposed();
+                    _operation = operation;
+                }
+            }
+
+            public void OnResponseStarted(UserScriptHttpResponse response)
+            {
+                lock (_sync)
+                {
+                    if (_disposed || _responseStarted) return;
+                    _responseStarted = true;
+                    _response = response;
+                }
+                ReportReadyState(2, response);
+                _responseStartedTask.TrySetResult(response);
+            }
+
+            public void OnUploadProgress(long loaded, long? total)
+            {
+                if (Request.Options.Fetch) return;
+                Notify("xhr-upload-progress", new { xhrId = XhrId, loaded, total });
+            }
+
+            public void OnDownloadProgress(long loaded, long? total)
+            {
+                if (Request.Options.Fetch) return;
+                Notify("xhr-progress", new { xhrId = XhrId, loaded, total });
+            }
+
+            public void OnResponseData(byte[] buffer, int offset, int count)
+            {
+                if (count <= 0) return;
+                lock (_sync)
+                {
+                    ThrowIfDisposed();
+                    if (Request.Options.ResponseType == UserScriptHttpResponseType.Stream)
+                    {
+                        var chunk = new byte[count];
+                        Buffer.BlockCopy(buffer, offset, chunk, 0, count);
+                        Notify("xhr-chunk", new { xhrId = XhrId, chunk = Convert.ToBase64String(chunk) });
+                    }
+                    else
+                    {
+                        _responseBody.Append(buffer, offset, count);
+                    }
+                    if (_loadingReported) return;
+                    _loadingReported = true;
+                }
+                ReportReadyState(3, _response);
+            }
+
+            public byte[] ReadResponseBody(long offset)
+            {
+                lock (_sync)
+                {
+                    ThrowIfDisposed();
+                    return _responseBody.Read(offset, HttpSpoolingBuffer.BridgeChunkSize);
+                }
+            }
+
+            public void Complete(UserScriptHttpResponse response)
+            {
+                OnResponseStarted(response);
+                ReportReadyState(4, response);
+                if (Request.Options.ResponseType == UserScriptHttpResponseType.Stream)
+                    Notify("xhr-complete", new { xhrId = XhrId });
+            }
+
+            public void Fail(Exception exception)
+            {
+                var error = exception as BridgeProtocolException;
+                var code = error?.Code ?? (exception is OperationCanceledException
+                    ? BridgeErrorCodes.Canceled : BridgeErrorCodes.Internal);
+                _responseStartedTask.TrySetException(exception);
+                Notify("xhr-error", new
+                {
+                    xhrId = XhrId,
+                    code,
+                    message = exception?.Message ?? "The HTTP request failed."
+                });
+            }
+
+            public void Abort()
+            {
+                IHttpRequestOperation operation;
+                lock (_sync)
+                {
+                    if (_disposed) return;
+                    operation = _operation;
+                }
+                operation?.Abort();
+            }
+
+            public void ReportReadyState(int readyState, UserScriptHttpResponse response = null)
+            {
+                if (Request.Options.Fetch && readyState != 4) return;
+                Notify("xhr-state", new
+                {
+                    xhrId = XhrId,
+                    readyState,
+                    status = response?.Status ?? 0,
+                    statusText = response?.StatusText ?? string.Empty,
+                    finalUrl = response?.FinalUrl?.AbsoluteUri,
+                    responseHeaders = response?.RawHeaders ?? string.Empty
+                });
+            }
+
+            public void Dispose()
+            {
+                IHttpRequestOperation operation;
+                lock (_sync)
+                {
+                    if (_disposed) return;
+                    _disposed = true;
+                    operation = _operation;
+                    _operation = null;
+                }
+                operation?.Abort();
+                _responseStartedTask.TrySetCanceled();
+                _requestBody.Dispose();
+                _responseBody.Dispose();
+            }
+
+            private void Notify(string eventName, object value)
+            {
+                try { _notify(this, eventName, value); }
+                catch (Exception exception) { _reportNotificationFailure(this, eventName, exception); }
+            }
+
+            private void ThrowIfDisposed()
+            {
+                if (_disposed) throw new ObjectDisposedException(nameof(HttpSession));
+            }
         }
 
         private static IDictionary<string, string> ReadHeaders(JsonElement parameters)
@@ -235,6 +721,50 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 result.Add(header.Name, header.Value.GetString());
             }
             return result;
+        }
+
+        private static string OptionalSafeString(JsonElement parameters, string name)
+        {
+            var value = ProviderParameters.OptionalString(parameters, name);
+            if (value != null && value.IndexOfAny(new[] { '\r', '\n' }) >= 0)
+                throw ProviderParameters.Invalid(name + " cannot contain line breaks.");
+            return value;
+        }
+
+        private static bool OptionalBoolean(JsonElement parameters, string name)
+        {
+            if (!parameters.TryGetProperty(name, out var value) || value.ValueKind == JsonValueKind.Null)
+                return false;
+            if (value.ValueKind != JsonValueKind.True && value.ValueKind != JsonValueKind.False)
+                throw ProviderParameters.Invalid(name + " must be a boolean.");
+            return value.GetBoolean();
+        }
+
+        private static UserScriptHttpRedirectMode ReadRedirectMode(JsonElement parameters)
+        {
+            var value = ProviderParameters.OptionalString(parameters, "redirect") ?? "follow";
+            switch (value)
+            {
+                case "follow": return UserScriptHttpRedirectMode.Follow;
+                case "error": return UserScriptHttpRedirectMode.Error;
+                case "manual": return UserScriptHttpRedirectMode.Manual;
+                default: throw ProviderParameters.Invalid("redirect must be 'follow', 'error', or 'manual'.");
+            }
+        }
+
+        private static UserScriptHttpResponseType ReadResponseType(JsonElement parameters)
+        {
+            var value = ProviderParameters.OptionalString(parameters, "responseType") ?? "text";
+            switch (value)
+            {
+                case "":
+                case "text": return UserScriptHttpResponseType.Text;
+                case "json": return UserScriptHttpResponseType.Json;
+                case "arraybuffer": return UserScriptHttpResponseType.ArrayBuffer;
+                case "blob": return UserScriptHttpResponseType.Blob;
+                case "stream": return UserScriptHttpResponseType.Stream;
+                default: throw ProviderParameters.Invalid("responseType is not supported.");
+            }
         }
 
         private static bool IsHeaderName(string name)
@@ -290,20 +820,6 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             return false;
         }
 
-        private sealed class CallbackProgress<T> : IProgress<T>
-        {
-            private readonly Action<T> _callback;
-
-            public CallbackProgress(Action<T> callback)
-            {
-                _callback = callback;
-            }
-
-            public void Report(T value)
-            {
-                _callback(value);
-            }
-        }
     }
 
     internal static class ProviderParameters
@@ -314,24 +830,41 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 throw Invalid("params must be an object.");
         }
 
-        public static string RequiredString(JsonElement parameters, string name)
+        public static string RequiredString(
+            JsonElement parameters,
+            string name,
+            string displayName = null)
         {
             RequireObject(parameters);
             if (!parameters.TryGetProperty(name, out var value) || value.ValueKind != JsonValueKind.String)
-                throw Invalid(name + " must be a string.");
+                throw Invalid((displayName ?? name) + " must be a string.");
             var result = value.GetString();
             if (string.IsNullOrEmpty(result))
-                throw Invalid(name + " cannot be empty.");
+                throw Invalid((displayName ?? name) + " cannot be empty.");
             return result;
         }
 
-        public static string OptionalString(JsonElement parameters, string name)
+        public static JsonElement RequiredObject(
+            JsonElement parameters,
+            string name,
+            string displayName = null)
+        {
+            RequireObject(parameters);
+            if (!parameters.TryGetProperty(name, out var value) || value.ValueKind != JsonValueKind.Object)
+                throw Invalid((displayName ?? name) + " must be an object.");
+            return value;
+        }
+
+        public static string OptionalString(
+            JsonElement parameters,
+            string name,
+            string displayName = null)
         {
             RequireObject(parameters);
             if (!parameters.TryGetProperty(name, out var value) || value.ValueKind == JsonValueKind.Null)
                 return null;
             if (value.ValueKind != JsonValueKind.String)
-                throw Invalid(name + " must be a string.");
+                throw Invalid((displayName ?? name) + " must be a string.");
             return value.GetString();
         }
 
