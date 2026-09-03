@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-MonkeySharp 3 is a userscript runtime for applications that embed CefSharp. It separates browser-independent metadata parsing, URL matching, repository and storage management, permissions, asynchronous GM APIs, and bridge dispatch from the CefSharp browser-lifecycle adapter. The current release is `3.0.0`; the default compatibility profile is `LegacyCompatible` and the bridge protocol remains version 1.
+MonkeySharp 3 is a userscript runtime for applications that embed CefSharp. It separates browser-independent metadata parsing, URL matching, repository and storage management, permissions, asynchronous GM APIs, and bridge dispatch from the CefSharp browser-lifecycle adapter.
 
 ## Project Structure
 
