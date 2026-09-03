@@ -182,18 +182,18 @@ Both canonical `GM.*` methods and the legacy facade are available when the corre
 | API | Availability | Notes |
 | --- | --- | --- |
 | `GM.info` / `GM_info` | Core | Frozen installation information; requires its exact grant. `GM_info` preserves declared grant spelling. |
-| `GM.log` | Core | Delivered to the builder's `LogTo` callback. |
-| `GM.getValue`, `setValue`, `deleteValue`, `listValues` and `GM_getValue`/`GM_setValue`/`GM_deleteValue`/`GM_listValues` | Core | Canonical JSON storage isolated by stable `ScriptKey`; modern methods are asynchronous, legacy mirror reads are synchronous and writes are queued in order. |
-| `GM.addValueChangeListener`, `removeValueChangeListener` | Core | Notifications go only to active executions of the same installation. |
-| `GM.addStyle`, `addElement` | Bootstrap | Page-local implementation; still requires the exact grant. |
-| `GM.getResourceText`, `getResourceURL` and `GM_getResourceText`/`GM_getResourceURL` | Conditional | Requires `IResourceProvider` and a declared `@resource`; legacy reads use the bounded bootstrap snapshot. |
+| `GM.log` / `GM_log` | Core | Delivered to the builder's `LogTo` callback. |
+| `GM.getValue`, `GM.setValue`, `GM.deleteValue`, `GM.listValues` / `GM_getValue`, `GM_setValue`, `GM_deleteValue`, `GM_listValues` | Core | Canonical JSON storage isolated by stable `ScriptKey`; modern methods are asynchronous, legacy mirror reads are synchronous and writes are queued in order. |
+| `GM.addValueChangeListener`, `GM.removeValueChangeListener` / `GM_addValueChangeListener`, `GM_removeValueChangeListener` | Core | Notifications go only to active executions of the same installation. |
+| `GM.addStyle`, `GM.addElement` / `GM_addStyle`, `GM_addElement` | Bootstrap | Page-local implementation; still requires the exact grant. |
+| `GM.getResourceText`, `GM.getResourceURL` / `GM_getResourceText`, `GM_getResourceURL` | Conditional | Requires `IResourceProvider` and a declared `@resource`; legacy reads use the bounded bootstrap snapshot. |
 | `GM.xmlHttpRequest` / `GM_xmlhttpRequest` | Conditional | CefSharp hosts create a default `CefSharpHttpRequestService`; applications can override it with `UseHttpRequestService`. Supports binary and multipart request bodies, redirects, credentials, progress, abort, and text/JSON/binary/blob/stream responses. Initial and redirected URLs must satisfy `@connect`. |
-| `GM.registerMenuCommand`, `GM_registerMenuCommand`, `unregisterMenuCommand` | Conditional | Requires `IMenuService`; the legacy form allocates its ID synchronously and registers asynchronously. |
+| `GM.registerMenuCommand`, `GM.unregisterMenuCommand` / `GM_registerMenuCommand`, `GM_unregisterMenuCommand` | Conditional | Requires `IMenuService`; the legacy form allocates its ID synchronously and registers asynchronously. |
 | `GM.notification` / `GM_notification` | Conditional | Requires `INotificationService`; legacy callbacks receive click/done lifecycle notifications. |
-| `GM.setClipboard` | Conditional | Requires `IClipboardService`. |
+| `GM.setClipboard` / `GM_setClipboard` | Conditional | Requires `IClipboardService`. |
 | `GM.openInTab` / `GM_openInTab` | Conditional | Requires `ITabService`; legacy `close()` calls the host and exposes `closed`. |
 | `GM.download` / `GM_download` | Conditional | Requires `IDownloadService`; legacy callbacks receive progress, success, failure, and abort events. |
-| `GM.getTab`, `GM_getTab`, `saveTab`, `getTabs`, `GM_getTabs` | Conditional | Requires `ITabStateService`; legacy tab methods use callbacks. |
+| `GM.getTab`, `GM.saveTab`, `GM.getTabs` / `GM_getTab`, `GM_saveTab`, `GM_getTabs` | Conditional | Requires `ITabStateService`; legacy tab methods use callbacks. |
 | `unsafeWindow` | Trusted page world only | Bound only for the exact `@grant unsafeWindow`. |
 | `GM.cookie` / `GM_cookie` | Conditional | CefSharp hosts create a context-backed `CefSharpCookieService`; applications can override it with `UseCookieService`. List/set/delete and service-originated change listeners use the browser request context. |
 | `GM.webRequest` / `GM_webRequest` | Conditional | CefSharp hosts create an `InMemoryWebRequestService` and attach `CefSharpWebRequestHandler`; applications can override it with `UseWebRequestService`. Rules cover request/response/auth phases, while callbacks observe events. |
