@@ -1,5 +1,7 @@
 # MonkeySharp 3.0
 
+**English** | [中文](README.zh-CN.md)
+
 MonkeySharp 3 is a userscript runtime for applications that embed CefSharp. It separates browser-independent script parsing, matching, storage, permissions, and API dispatch from the CefSharp lifecycle adapter.
 
 Version 3 is a breaking release of the host service contracts. Its default `LegacyCompatible` profile provides the common v1 userscript surface over the version 1 asynchronous bridge. The v1 `Injector`, `JScript`, `IDataStore`, and WCF bridge remain removed; no synchronous WCF transport is restored.
