@@ -271,7 +271,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     gateway,
                     _options,
                     ownsStore ? store as IDisposable : null,
-                    effectiveWebRequests == null ? null : (IRequestHandler)new CefSharpWebRequestHandler(effectiveWebRequests),
+                    effectiveWebRequests,
                     contextAccessor,
                     ownedServices);
             }
