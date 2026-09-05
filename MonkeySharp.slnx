@@ -17,4 +17,8 @@
     <Platform Solution="*|x64" Project="x64" />
     <Build Solution="*|x86" Project="false" />
   </Project>
+  <Project Path="Mzying2001.MonkeySharp.Demo.Tests/Mzying2001.MonkeySharp.Demo.Tests.csproj">
+    <Platform Solution="*|x64" Project="x64" />
+    <Build Solution="*|x86" Project="false" />
+  </Project>
 </Solution>
