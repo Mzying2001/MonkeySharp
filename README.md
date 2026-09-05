@@ -41,6 +41,28 @@ The adapter's `CefSharp.Common` reference is private to its NuGet package so it 
 
 ## Minimal Setup
 
+### WPF Browser Demo
+
+`Mzying2001.MonkeySharp.Demo` is a runnable `net462`/`x64` WPF browser using `CefSharp.Wpf`, `CommunityToolkit.Mvvm`, and SQLite. It provides persistent userscripts, real background tabs, a native script editor/manager, installation permission review, script menus, notifications, clipboard writes, tab handles, downloads, resources, and the adapter's default XHR/Cookie/webRequest services. Each retained browser control has its own MonkeySharp host; tabs share the repository, GM value store, and Chromium request context.
+
+```powershell
+dotnet build Mzying2001.MonkeySharp.Demo/Mzying2001.MonkeySharp.Demo.csproj -c Release -p:Platform=x64
+& .\Mzying2001.MonkeySharp.Demo\bin\x64\Release\net462\Mzying2001.MonkeySharp.Demo.exe
+```
+
+The executable directory must be writable. Data stays under its `Data/` directory, not the shell's working directory: `BrowserCache/`, `UserScripts/`, `Dependencies/`, `Downloads/`, `Logs/`, and `monkeysharp.db`. A profile lock prevents two instances from writing the same data. The x86 solution configuration continues to build the libraries/tests and excludes the x64-only Demo projects.
+
+**The Demo explicitly enables `TrustedPageWorld`. It is a trusted-environment integration example, not a secure general-purpose browser or a complete Tampermonkey replacement.** The warning is also displayed in the browser and script manager. Read `Mzying2001.MonkeySharp.Demo/README.md` for usage, recovery, the implemented host-service boundaries, and manual verification scenarios.
+
+```powershell
+dotnet test Mzying2001.MonkeySharp.Demo.Tests/Mzying2001.MonkeySharp.Demo.Tests.csproj -c Release -p:Platform=x64
+powershell -NoProfile -ExecutionPolicy Bypass -File Mzying2001.MonkeySharp.Demo/Run-E2E.ps1
+```
+
+The WPF E2E gate uses an isolated profile and a loopback HTTP server. It verifies real background tabs, shared storage/cookies, resources, XHR, webRequest, menus, notification clicks, downloads, frames, navigation, script toggles, and disposal. It does not replace the existing WinForms SmokeHost gate.
+
+### Minimal Host Integration
+
 Install a script into a repository, build the host, attach it before the browser is initialized, and then create the browser.
 
 ```csharp
