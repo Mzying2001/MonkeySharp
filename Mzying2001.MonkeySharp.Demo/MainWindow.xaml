@@ -1,0 +1,109 @@
+<Window x:Class="Mzying2001.MonkeySharp.Demo.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="MonkeySharp · Userscript Browser" Width="1320" Height="860" MinWidth="900" MinHeight="600"
+        Background="#F4F6F9" FontFamily="Segoe UI, Microsoft YaHei UI">
+    <Window.Resources><BooleanToVisibilityConverter x:Key="BooleanVisibility" /></Window.Resources>
+    <Window.InputBindings>
+        <KeyBinding Key="T" Modifiers="Control" Command="{Binding NewTabCommand}" />
+        <KeyBinding Key="W" Modifiers="Control" Command="{Binding CloseTabCommand}" />
+        <KeyBinding Key="F5" Command="{Binding ReloadCommand}" />
+        <KeyBinding Key="F12" Command="{Binding DevToolsCommand}" />
+    </Window.InputBindings>
+    <DockPanel>
+        <Border DockPanel.Dock="Top" Background="#172B40" Padding="16,8">
+            <DockPanel>
+                <TextBlock Text="MONKEYSHARP" Foreground="White" FontSize="16" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,20,0" />
+                <Button DockPanel.Dock="Right" Content="＋" ToolTip="新标签 Ctrl+T" Command="{Binding NewTabCommand}" />
+                <ListBox x:Name="BrowserTabs" ItemsSource="{Binding Tabs}" SelectedItem="{Binding SelectedTab, Mode=TwoWay}" Background="Transparent" BorderThickness="0"
+                         ScrollViewer.HorizontalScrollBarVisibility="Auto" ScrollViewer.VerticalScrollBarVisibility="Disabled">
+                    <ListBox.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate></ListBox.ItemsPanel>
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="Foreground" Value="#E2E8F0" /><Setter Property="Background" Value="#243B53" />
+                            <Setter Property="BorderBrush" Value="Transparent" /><Setter Property="BorderThickness" Value="1" />
+                            <Setter Property="Padding" Value="8,2" />
+                            <Setter Property="Margin" Value="2,0" />
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                            <Setter Property="VerticalContentAlignment" Value="Center" />
+                            <Setter Property="Template"><Setter.Value>
+                                <ControlTemplate TargetType="ListBoxItem">
+                                    <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                            BorderThickness="{TemplateBinding BorderThickness}" Padding="{TemplateBinding Padding}" CornerRadius="5">
+                                        <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                          VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                                    </Border>
+                                </ControlTemplate>
+                            </Setter.Value></Setter>
+                            <Style.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#334E68" /></Trigger>
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter Property="Foreground" Value="#172B40" /><Setter Property="Background" Value="#E5F1FC" />
+                                    <Setter Property="BorderBrush" Value="#91BCE3" />
+                                </Trigger>
+                                <Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter Property="BorderBrush" Value="#60A5FA" /></Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate><DataTemplate>
+                        <DockPanel Width="174">
+                            <Button DockPanel.Dock="Right" Content="×" Padding="5,0" ToolTip="关闭标签"
+                                    Command="{Binding DataContext.CloseTabCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" />
+                            <TextBlock Text="{Binding Title}" ToolTip="{Binding Address}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
+                                       Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" />
+                        </DockPanel>
+                    </DataTemplate></ListBox.ItemTemplate>
+                </ListBox>
+            </DockPanel>
+        </Border>
+        <Border DockPanel.Dock="Top" Padding="10,7" Background="White" BorderBrush="#D5DDE5" BorderThickness="0,0,0,1">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
+                    <Button Content="←" ToolTip="后退" Command="{Binding BackCommand}" />
+                    <Button Content="→" ToolTip="前进" Command="{Binding ForwardCommand}" />
+                    <Button Content="刷新" Command="{Binding ReloadCommand}" />
+                    <Button Content="停止" Command="{Binding StopCommand}" />
+                </StackPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <Button Content="脚本管理器" Command="{Binding ScriptManagerCommand}" />
+                    <Menu Background="Transparent" VerticalAlignment="Center">
+                        <MenuItem Header="脚本菜单" ItemsSource="{Binding SelectedTab.MenuCommands}">
+                            <MenuItem.ItemContainerStyle><Style TargetType="MenuItem">
+                                <Setter Property="Header" Value="{Binding Label}" /><Setter Property="Command" Value="{Binding InvokeCommand}" />
+                                <Setter Property="InputGestureText" Value="{Binding AccessKey}" />
+                            </Style></MenuItem.ItemContainerStyle>
+                        </MenuItem>
+                        <MenuItem Header="工具">
+                            <MenuItem Header="诊断与下载" Command="{Binding DiagnosticsCommand}" />
+                            <MenuItem Header="开发者工具 F12" Command="{Binding DevToolsCommand}" />
+                            <MenuItem Header="打开数据目录" Click="OpenDataDirectory" />
+                            <MenuItem Header="打开下载目录" Click="OpenDownloadsDirectory" />
+                        </MenuItem>
+                    </Menu>
+                </StackPanel>
+                <TextBox x:Name="AddressBar" Text="{Binding Address, UpdateSourceTrigger=PropertyChanged}" KeyDown="AddressKeyDown"
+                         Margin="10,2" Padding="8,5" BorderBrush="#CBD5E1" VerticalContentAlignment="Center" />
+            </DockPanel>
+        </Border>
+        <Border DockPanel.Dock="Top" Background="#FFF4DB" Padding="12,6">
+            <TextBlock x:Name="TrustWarning" Foreground="#704C0A" TextWrapping="Wrap" FontSize="12" />
+        </Border>
+        <StackPanel DockPanel.Dock="Top">
+            <ProgressBar Height="3" IsIndeterminate="True" Visibility="{Binding SelectedTab.IsLoading, Converter={StaticResource BooleanVisibility}}" />
+            <TextBlock Text="{Binding SelectedTab.Error}" Foreground="#B42318" TextWrapping="Wrap" />
+        </StackPanel>
+        <Border DockPanel.Dock="Bottom" Background="#E5EBF0" Padding="10,4">
+            <TextBlock Text="每标签独立 MonkeySharp Host  ·  共享浏览器 Cookie / 缓存  ·  Ctrl+L 地址栏  ·  F12 开发者工具" FontSize="11" Foreground="#475569" />
+        </Border>
+        <TabControl DockPanel.Dock="Bottom" Height="190" Visibility="{Binding ShowDiagnostics, Converter={StaticResource BooleanVisibility}}">
+            <TabItem Header="诊断"><ListBox ItemsSource="{Binding Diagnostics.Entries}" FontFamily="Consolas" FontSize="12" /></TabItem>
+            <TabItem Header="GM 下载">
+                <ListBox ItemsSource="{Binding Downloads}"><ListBox.ItemTemplate><DataTemplate>
+                    <StackPanel Orientation="Horizontal"><TextBlock Text="{Binding Name}" Width="280" /><TextBlock Text="{Binding Loaded}" Width="100" />
+                        <TextBlock Text="{Binding Status}" Width="100" /><Button Content="取消" Command="{Binding CancelCommand}" /></StackPanel>
+                </DataTemplate></ListBox.ItemTemplate></ListBox>
+            </TabItem>
+        </TabControl>
+        <Grid x:Name="BrowserPanels" Background="White" />
+    </DockPanel>
+</Window>

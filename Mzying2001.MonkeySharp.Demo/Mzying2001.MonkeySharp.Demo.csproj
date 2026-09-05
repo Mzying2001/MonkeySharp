@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net462</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <RootNamespace>Mzying2001.MonkeySharp.Demo</RootNamespace>
+    <AssemblyName>Mzying2001.MonkeySharp.Demo</AssemblyName>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <CefSharpVersion Condition="'$(CefSharpVersion)' == ''">121.3.70</CefSharpVersion>
+    <DefineConstants Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(CefSharpVersion)', '125.0.0'))">$(DefineConstants);CEF_SHARP_BOOLEAN_DOWNLOAD</DefineConstants>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="CefSharp.Common" Version="$(CefSharpVersion)" />
+    <PackageReference Include="CefSharp.Wpf" Version="$(CefSharpVersion)" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.8" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Mzying2001.MonkeySharp.Core\Mzying2001.MonkeySharp.Core.csproj" />
+    <ProjectReference Include="..\Mzying2001.MonkeySharp.CefSharp\Mzying2001.MonkeySharp.CefSharp.csproj" />
+  </ItemGroup>
+</Project>
