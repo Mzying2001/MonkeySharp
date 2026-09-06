@@ -3,7 +3,9 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="MonkeySharp · Userscript Browser" Width="1320" Height="860" MinWidth="900" MinHeight="600"
         Background="#F4F6F9" FontFamily="Segoe UI, Microsoft YaHei UI">
-    <Window.Resources><BooleanToVisibilityConverter x:Key="BooleanVisibility" /></Window.Resources>
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanVisibility" />
+    </Window.Resources>
     <Window.InputBindings>
         <KeyBinding Key="T" Modifiers="Control" Command="{Binding NewTabCommand}" />
         <KeyBinding Key="W" Modifiers="Control" Command="{Binding CloseTabCommand}" />
@@ -56,41 +58,57 @@
                 </ListBox>
             </DockPanel>
         </Border>
-        <Border DockPanel.Dock="Top" Padding="10,7" Background="White" BorderBrush="#D5DDE5" BorderThickness="0,0,0,1">
-            <DockPanel>
-                <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
-                    <Button Content="←" ToolTip="后退" Command="{Binding BackCommand}" />
-                    <Button Content="→" ToolTip="前进" Command="{Binding ForwardCommand}" />
-                    <Button Content="刷新" Command="{Binding ReloadCommand}" />
-                    <Button Content="停止" Command="{Binding StopCommand}" />
-                </StackPanel>
-                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                    <Button Content="脚本管理器" Command="{Binding ScriptManagerCommand}" />
-                    <Menu Background="Transparent" VerticalAlignment="Center">
-                        <MenuItem Header="脚本菜单" ItemsSource="{Binding SelectedTab.MenuCommands}">
-                            <MenuItem.ItemContainerStyle><Style TargetType="MenuItem">
-                                <Setter Property="Header" Value="{Binding Label}" /><Setter Property="Command" Value="{Binding InvokeCommand}" />
-                                <Setter Property="InputGestureText" Value="{Binding AccessKey}" />
-                            </Style></MenuItem.ItemContainerStyle>
-                        </MenuItem>
-                        <MenuItem Header="工具">
-                            <MenuItem Header="诊断与下载" Command="{Binding DiagnosticsCommand}" />
-                            <MenuItem Header="开发者工具 F12" Command="{Binding DevToolsCommand}" />
-                            <MenuItem Header="打开数据目录" Click="OpenDataDirectory" />
-                            <MenuItem Header="打开下载目录" Click="OpenDownloadsDirectory" />
-                        </MenuItem>
-                    </Menu>
-                </StackPanel>
-                <TextBox x:Name="AddressBar" Text="{Binding Address, UpdateSourceTrigger=PropertyChanged}" KeyDown="AddressKeyDown"
-                         Margin="10,2" Padding="8,5" BorderBrush="#CBD5E1" VerticalContentAlignment="Center" />
-            </DockPanel>
+        <Border DockPanel.Dock="Top" Background="White" BorderBrush="#D5DDE5" BorderThickness="0,0,0,1">
+            <Grid>
+                <DockPanel Margin="10,7">
+                    <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
+                        <Button Content="&lt;" ToolTip="后退" Command="{Binding BackCommand}" />
+                        <Button Content="&gt;" ToolTip="前进" Command="{Binding ForwardCommand}" />
+                        <Button Content="刷新" Command="{Binding ReloadCommand}" />
+                        <Button Content="停止" Command="{Binding StopCommand}" />
+                    </StackPanel>
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                        <Button Content="脚本管理器" Margin="0,0,10,0" Command="{Binding ScriptManagerCommand}" />
+                        <Menu Background="Transparent" VerticalAlignment="Center">
+                            <MenuItem Header="脚本菜单" ItemsSource="{Binding SelectedTab.MenuCommands}">
+                                <MenuItem.ItemContainerStyle>
+                                    <Style TargetType="MenuItem">
+                                        <Setter Property="Header" Value="{Binding Label}" />
+                                        <Setter Property="Command" Value="{Binding InvokeCommand}" />
+                                        <Setter Property="InputGestureText" Value="{Binding AccessKey}" />
+                                    </Style>
+                                </MenuItem.ItemContainerStyle>
+                            </MenuItem>
+                            <MenuItem Header="工具">
+                                <MenuItem Header="诊断与下载" Command="{Binding DiagnosticsCommand}" />
+                                <MenuItem Header="开发者工具 F12" Command="{Binding DevToolsCommand}" />
+                                <MenuItem Header="打开数据目录" Click="OpenDataDirectory" />
+                                <MenuItem Header="打开下载目录" Click="OpenDownloadsDirectory" />
+                            </MenuItem>
+                        </Menu>
+                    </StackPanel>
+                    <TextBox x:Name="AddressBar" Text="{Binding Address, UpdateSourceTrigger=PropertyChanged}" KeyDown="AddressKeyDown"
+                             Margin="10,2" Padding="8,5" BorderBrush="#CBD5E1" VerticalContentAlignment="Center" />
+                </DockPanel>
+                <ProgressBar Height="3" IsIndeterminate="True" VerticalAlignment="Bottom"
+                             Visibility="{Binding SelectedTab.IsLoading, Converter={StaticResource BooleanVisibility}}" />
+            </Grid>
         </Border>
         <Border DockPanel.Dock="Top" Background="#FFF4DB" Padding="12,6">
             <TextBlock x:Name="TrustWarning" Foreground="#704C0A" TextWrapping="Wrap" FontSize="12" />
         </Border>
         <StackPanel DockPanel.Dock="Top">
-            <ProgressBar Height="3" IsIndeterminate="True" Visibility="{Binding SelectedTab.IsLoading, Converter={StaticResource BooleanVisibility}}" />
-            <TextBlock Text="{Binding SelectedTab.Error}" Foreground="#B42318" TextWrapping="Wrap" />
+            <TextBlock Text="{Binding SelectedTab.Error}" Foreground="#B42318" TextWrapping="Wrap">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                        <Style.Triggers>
+                            <Trigger Property="Text" Value="">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
         </StackPanel>
         <Border DockPanel.Dock="Bottom" Background="#E5EBF0" Padding="10,4">
             <TextBlock Text="每标签独立 MonkeySharp Host  ·  共享浏览器 Cookie / 缓存  ·  Ctrl+L 地址栏  ·  F12 开发者工具" FontSize="11" Foreground="#475569" />
