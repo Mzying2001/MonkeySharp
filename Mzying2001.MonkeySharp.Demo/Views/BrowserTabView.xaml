@@ -1,0 +1,8 @@
+<UserControl x:Class="Mzying2001.MonkeySharp.Demo.Views.BrowserTabView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:Mzying2001.MonkeySharp.Demo.Views">
+    <Grid Background="White">
+        <Grid x:Name="BrowserContainer" />
+    </Grid>
+</UserControl>

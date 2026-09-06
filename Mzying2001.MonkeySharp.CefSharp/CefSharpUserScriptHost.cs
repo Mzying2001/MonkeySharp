@@ -1,4 +1,5 @@
 using CefSharp;
+using Mzying2001.MonkeySharp.Core.Apis;
 using Mzying2001.MonkeySharp.Core.Bridge;
 using Mzying2001.MonkeySharp.Core.Domain;
 using Mzying2001.MonkeySharp.Core.Runtime;
@@ -29,6 +30,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
         private readonly IDisposable _ownedStore;
         private readonly CefSharpRequestContextAccessor _requestContextAccessor;
         private readonly IReadOnlyList<IDisposable> _ownedServices;
+        private readonly IWebRequestService _webRequestService;
         private readonly RenderObserver _renderObserver;
         private readonly Dictionary<string, FrameSession> _sessions =
             new Dictionary<string, FrameSession>(StringComparer.Ordinal);
@@ -37,7 +39,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
         private IWebBrowser _browser;
         private RenderProcessMessageHandlerMultiplexer _multiplexer;
         private CefSharpWebRequestHandlerMultiplexer _requestMultiplexer;
-        private IRequestHandler _webRequestHandler;
+        private CefSharpWebRequestHandler _webRequestHandler;
         private bool _ownsRequestMultiplexer;
         private bool _ownsMultiplexer;
         private CancellationTokenSource _attachmentCancellation;
@@ -50,7 +52,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             UserScriptBridgeGateway gateway,
             CefSharpHostOptions options,
             IDisposable ownedStore,
-            IRequestHandler webRequestHandler = null,
+            IWebRequestService webRequestService = null,
             CefSharpRequestContextAccessor requestContextAccessor = null,
             IReadOnlyList<IDisposable> ownedServices = null)
         {
@@ -60,7 +62,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             _ownedStore = ownedStore;
             _requestContextAccessor = requestContextAccessor ?? new CefSharpRequestContextAccessor();
             _ownedServices = ownedServices ?? new List<IDisposable>();
-            _webRequestHandler = webRequestHandler;
+            _webRequestService = webRequestService;
             _bridge = gateway;
             _renderObserver = new RenderObserver(this);
             _engine.Diagnostic += ForwardDiagnostic;
@@ -123,7 +125,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     "The browser already has a render process message handler. " +
                     "Assign a RenderProcessMessageHandlerMultiplexer before attaching MonkeySharp.");
             }
-            if (_webRequestHandler != null && browser.RequestHandler != null &&
+            if (_webRequestService != null && browser.RequestHandler != null &&
                 !(browser.RequestHandler is CefSharpWebRequestHandlerMultiplexer))
             {
                 throw new InvalidOperationException(
@@ -141,9 +143,11 @@ namespace Mzying2001.MonkeySharp.CefSharp
             }
 
             CefSharpWebRequestHandlerMultiplexer requestMultiplexer = null;
+            CefSharpWebRequestHandler webRequestHandler = null;
             var ownsRequestMultiplexer = false;
-            if (_webRequestHandler != null)
+            if (_webRequestService != null)
             {
+                webRequestHandler = new CefSharpWebRequestHandler(_webRequestService);
                 requestMultiplexer = browser.RequestHandler as CefSharpWebRequestHandlerMultiplexer;
                 if (requestMultiplexer == null)
                 {
@@ -151,7 +155,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     browser.RequestHandler = requestMultiplexer;
                     ownsRequestMultiplexer = true;
                 }
-                requestMultiplexer.Add(_webRequestHandler);
+                requestMultiplexer.Add(webRequestHandler);
             }
 
             var boundBridge = new BoundBridge(this);
@@ -172,6 +176,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     _multiplexer = multiplexer;
                     _ownsMultiplexer = ownsMultiplexer;
                     _requestMultiplexer = requestMultiplexer;
+                    _webRequestHandler = webRequestHandler;
                     _ownsRequestMultiplexer = ownsRequestMultiplexer;
                     _attachmentCancellation = new CancellationTokenSource();
                     _browserSessionId = Guid.NewGuid().ToString("D");
@@ -182,6 +187,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             }
             catch (Exception exception)
             {
+                webRequestHandler?.Dispose();
                 EmitDiagnostic(
                     "MSC200_BRIDGE_REGISTRATION_FAILED",
                     DiagnosticSeverity.Error,
@@ -195,7 +201,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     browser.RenderProcessMessageHandler = null;
                 if (requestMultiplexer != null)
                 {
-                    requestMultiplexer.Remove(_webRequestHandler);
+                    requestMultiplexer.Remove(webRequestHandler);
                     if (ownsRequestMultiplexer && ReferenceEquals(browser.RequestHandler, requestMultiplexer))
                         browser.RequestHandler = null;
                 }
@@ -212,6 +218,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             IWebBrowser browser;
             RenderProcessMessageHandlerMultiplexer multiplexer;
             CefSharpWebRequestHandlerMultiplexer requestMultiplexer;
+            CefSharpWebRequestHandler webRequestHandler;
             bool ownsRequestMultiplexer;
             bool ownsMultiplexer;
             CancellationTokenSource attachmentCancellation;
@@ -224,6 +231,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 browser = _browser;
                 multiplexer = _multiplexer;
                 requestMultiplexer = _requestMultiplexer;
+                webRequestHandler = _webRequestHandler;
                 ownsRequestMultiplexer = _ownsRequestMultiplexer;
                 ownsMultiplexer = _ownsMultiplexer;
                 attachmentCancellation = _attachmentCancellation;
@@ -233,12 +241,14 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 _browser = null;
                 _multiplexer = null;
                 _requestMultiplexer = null;
+                _webRequestHandler = null;
                 _ownsRequestMultiplexer = false;
                 _ownsMultiplexer = false;
                 _attachmentCancellation = null;
                 _browserSessionId = null;
             }
 
+            webRequestHandler?.Dispose();
             attachmentCancellation.Cancel();
             foreach (var session in sessions)
                 session.Cancellation.Cancel();
@@ -250,7 +260,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 browser.RenderProcessMessageHandler = null;
             if (requestMultiplexer != null)
             {
-                requestMultiplexer.Remove(_webRequestHandler);
+                requestMultiplexer.Remove(webRequestHandler);
                 if (ownsRequestMultiplexer && ReferenceEquals(browser.RequestHandler, requestMultiplexer))
                     browser.RequestHandler = null;
             }

@@ -375,6 +375,111 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
         }
 
         [Fact]
+        public async Task LateWebRequestCallbacksDoNotUseServicesAfterHostDisposal()
+        {
+            var browser = new BrowserFixture();
+            var request = CreateWebRequest();
+            var response = new Mock<IResponse>();
+            response.SetupGet(item => item.Headers).Returns(new NameValueCollection());
+            using (var host = await CreateHostAsync(Script("none", "document-start")))
+            {
+                host.Attach(browser.Browser.Object);
+                var disableDefaultHandling = false;
+                using (var resource = browser.Browser.Object.RequestHandler.GetResourceRequestHandler(
+                    browser.Browser.Object, null, null, request.Object, false, false, string.Empty, ref disableDefaultHandling))
+                {
+                    await host.DetachAsync(CancellationToken.None);
+                    host.Dispose();
+                    Assert.Equal(CefReturnValue.Continue, resource.OnBeforeResourceLoad(null, null, null, request.Object, null));
+                    var redirect = "https://example.test/redirect";
+                    resource.OnResourceRedirect(null, null, null, request.Object, response.Object, ref redirect);
+                    Assert.Equal("https://example.test/redirect", redirect);
+                    Assert.False(resource.OnResourceResponse(null, null, null, request.Object, response.Object));
+                    resource.OnResourceLoadComplete(null, null, null, request.Object, response.Object, UrlRequestStatus.Success, 1);
+                    resource.OnResourceLoadComplete(null, null, null, request.Object, response.Object, UrlRequestStatus.Canceled, 0);
+                }
+            }
+        }
+
+        [Fact]
+        public async Task WebRequestHandlerDisposalWaitsForActiveEvaluationAndStopsLateAuthentication()
+        {
+            using (var entered = new ManualResetEventSlim())
+            using (var release = new ManualResetEventSlim())
+            using (var disposalStarted = new ManualResetEventSlim())
+            {
+                var service = new Mock<IWebRequestService>();
+                service.Setup(item => item.Evaluate(It.IsAny<WebRequestEvent>())).Returns(() =>
+                {
+                    entered.Set();
+                    if (!release.Wait(TimeSpan.FromSeconds(10))) throw new TimeoutException("The evaluation was not released.");
+                    return new WebRequestDecision();
+                });
+                using (var handler = new CefSharpWebRequestHandler(service.Object))
+                {
+                    var evaluation = Task.Run(() => handler.GetAuthCredentials(null, null, "https://example.test/",
+                        false, "example.test", 443, "realm", "basic", null));
+                    Task disposal = null;
+                    try
+                    {
+                        Assert.True(entered.Wait(TimeSpan.FromSeconds(5)));
+                        disposal = Task.Run(() => { disposalStarted.Set(); handler.Dispose(); });
+                        Assert.True(disposalStarted.Wait(TimeSpan.FromSeconds(5)));
+                        Assert.NotSame(disposal, await Task.WhenAny(disposal, Task.Delay(100)));
+                    }
+                    finally
+                    {
+                        release.Set();
+                        await evaluation;
+                        if (disposal != null) await disposal;
+                    }
+                    Assert.False(handler.GetAuthCredentials(null, null, "https://example.test/", false,
+                        "example.test", 443, "realm", "basic", null));
+                    service.Verify(item => item.Evaluate(It.IsAny<WebRequestEvent>()), Times.Once);
+                }
+            }
+        }
+
+        [Fact]
+        public async Task ReattachingDoesNotReactivateOldWebRequestCallbacks()
+        {
+            var service = new Mock<IWebRequestService>();
+            service.Setup(item => item.Evaluate(It.IsAny<WebRequestEvent>())).Returns(new WebRequestDecision());
+            using (var host = new CefSharpUserScriptHostBuilder(new InMemoryUserScriptRepository())
+                .UseWebRequestService(service.Object).Build())
+            {
+                var first = new BrowserFixture();
+                var second = new BrowserFixture();
+                var request = CreateWebRequest();
+                var disableDefaultHandling = false;
+                host.Attach(first.Browser.Object);
+                using (var oldResource = first.Browser.Object.RequestHandler.GetResourceRequestHandler(
+                    first.Browser.Object, null, null, request.Object, false, false, string.Empty, ref disableDefaultHandling))
+                {
+                    await host.DetachAsync(CancellationToken.None);
+                    host.Attach(second.Browser.Object);
+                    oldResource.OnResourceLoadComplete(null, null, null, request.Object, null, UrlRequestStatus.Canceled, 0);
+                    service.Verify(item => item.Evaluate(It.IsAny<WebRequestEvent>()), Times.Never);
+                    using (var newResource = second.Browser.Object.RequestHandler.GetResourceRequestHandler(
+                        second.Browser.Object, null, null, request.Object, false, false, string.Empty, ref disableDefaultHandling))
+                    {
+                        Assert.Equal(CefReturnValue.Continue, newResource.OnBeforeResourceLoad(null, null, null, request.Object, null));
+                        service.Verify(item => item.Evaluate(It.IsAny<WebRequestEvent>()), Times.Exactly(2));
+                    }
+                }
+            }
+        }
+
+        private static Mock<IRequest> CreateWebRequest()
+        {
+            var request = new Mock<IRequest>();
+            request.SetupGet(item => item.Url).Returns("https://example.test/data");
+            request.SetupGet(item => item.Method).Returns("GET");
+            request.SetupGet(item => item.Headers).Returns(new NameValueCollection());
+            return request;
+        }
+
+        [Fact]
         public void WebRequestHandlerPublishesResponseHeadersForResponseLifecycleEvents()
         {
             var events = new ConcurrentQueue<WebRequestEvent>();

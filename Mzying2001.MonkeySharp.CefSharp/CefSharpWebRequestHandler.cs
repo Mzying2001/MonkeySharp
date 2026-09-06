@@ -9,14 +9,27 @@ using System.Security.Cryptography.X509Certificates;
 namespace Mzying2001.MonkeySharp.CefSharp
 {
     /// <summary>Bridges synchronous Chromium request callbacks to an <see cref="IWebRequestService"/>.</summary>
-    public sealed class CefSharpWebRequestHandler : IRequestHandler
+    public sealed class CefSharpWebRequestHandler : IRequestHandler, IDisposable
     {
-        private readonly IWebRequestService _service;
+        private static readonly WebRequestDecision DetachedDecision = new WebRequestDecision();
+        private readonly object _sync = new object();
+        private IWebRequestService _service;
 
         /// <summary>Initializes a handler over an application-owned web request service.</summary>
         public CefSharpWebRequestHandler(IWebRequestService service)
         {
             _service = service ?? throw new ArgumentNullException(nameof(service));
+        }
+
+        /// <summary>Stops forwarding callbacks and waits for active service evaluations without disposing the application-owned service.</summary>
+        public void Dispose()
+        {
+            lock (_sync) _service = null;
+        }
+
+        private WebRequestDecision Evaluate(WebRequestEvent request)
+        {
+            lock (_sync) return _service == null ? DetachedDecision : _service.Evaluate(request);
         }
 
         /// <inheritdoc />
@@ -29,12 +42,12 @@ namespace Mzying2001.MonkeySharp.CefSharp
         { return false; }
         /// <inheritdoc />
         public IResourceRequestHandler GetResourceRequestHandler(IWebBrowser chromiumWebBrowser, IBrowser browser, IFrame frame, IRequest request, bool isNavigation, bool isDownload, string requestInitiator, ref bool disableDefaultHandling)
-        { return new ResourceHandler(_service); }
+        { return new ResourceHandler(this); }
         /// <inheritdoc />
         public bool GetAuthCredentials(IWebBrowser chromiumWebBrowser, IBrowser browser, string originUrl, bool isProxy, string host, int port, string realm, string scheme, IAuthCallback callback)
         {
             var eventData = new WebRequestEvent(WebRequestPhase.OnAuthRequired, 0, originUrl ?? string.Empty, "GET");
-            var decision = _service.Evaluate(eventData);
+            var decision = Evaluate(eventData);
             if (decision.Kind != WebRequestActionKind.AuthResponse) return false;
             callback.Continue(decision.Username, decision.Password);
             return true;
@@ -59,23 +72,23 @@ namespace Mzying2001.MonkeySharp.CefSharp
 
         private sealed class ResourceHandler : IResourceRequestHandler
         {
-            private readonly IWebRequestService _service;
+            private readonly CefSharpWebRequestHandler _owner;
             private bool _responseBlocked;
-            public ResourceHandler(IWebRequestService service)
+            public ResourceHandler(CefSharpWebRequestHandler owner)
             {
-                _service = service;
+                _owner = owner;
             }
             public ICookieAccessFilter GetCookieAccessFilter(IWebBrowser chromiumWebBrowser, IBrowser browser, IFrame frame, IRequest request) { return null; }
             public CefReturnValue OnBeforeResourceLoad(IWebBrowser chromiumWebBrowser, IBrowser browser, IFrame frame, IRequest request, IRequestCallback callback)
             {
-                var decision = _service.Evaluate(CreateEvent(WebRequestPhase.OnBeforeRequest, request));
+                var decision = _owner.Evaluate(CreateEvent(WebRequestPhase.OnBeforeRequest, request));
                 if (decision.Kind == WebRequestActionKind.Block) return CefReturnValue.Cancel;
                 if (decision.Kind == WebRequestActionKind.Redirect && !string.IsNullOrEmpty(decision.RedirectUrl)) request.Url = decision.RedirectUrl;
                 ApplyRequestHeaders(request, decision.Headers);
                 // CefSharp exposes request interception as one callback. Evaluate
                 // both request phases explicitly so phase-specific rules remain
                 // isolated while still allowing header edits before dispatch.
-                var headerDecision = _service.Evaluate(CreateEvent(WebRequestPhase.OnBeforeSendHeaders, request));
+                var headerDecision = _owner.Evaluate(CreateEvent(WebRequestPhase.OnBeforeSendHeaders, request));
                 if (headerDecision.Kind == WebRequestActionKind.Block) return CefReturnValue.Cancel;
                 if (headerDecision.Kind == WebRequestActionKind.Redirect && !string.IsNullOrEmpty(headerDecision.RedirectUrl))
                     request.Url = headerDecision.RedirectUrl;
@@ -85,18 +98,18 @@ namespace Mzying2001.MonkeySharp.CefSharp
             public IResourceHandler GetResourceHandler(IWebBrowser chromiumWebBrowser, IBrowser browser, IFrame frame, IRequest request) { return null; }
             public void OnResourceRedirect(IWebBrowser chromiumWebBrowser, IBrowser browser, IFrame frame, IRequest request, IResponse response, ref string newUrl)
             {
-                var decision = _service.Evaluate(CreateEvent(WebRequestPhase.OnBeforeRequest, request, response, null, newUrl));
+                var decision = _owner.Evaluate(CreateEvent(WebRequestPhase.OnBeforeRequest, request, response, null, newUrl));
                 if (decision.Kind == WebRequestActionKind.Block) newUrl = "about:blank";
                 else if (decision.Kind == WebRequestActionKind.Redirect && !string.IsNullOrEmpty(decision.RedirectUrl)) newUrl = decision.RedirectUrl;
             }
             public bool OnResourceResponse(IWebBrowser chromiumWebBrowser, IBrowser browser, IFrame frame, IRequest request, IResponse response)
             {
-                var decision = _service.Evaluate(CreateEvent(WebRequestPhase.OnHeadersReceived, request, response));
+                var decision = _owner.Evaluate(CreateEvent(WebRequestPhase.OnHeadersReceived, request, response));
                 if (decision.Kind == WebRequestActionKind.Block)
                     _responseBlocked = true;
                 foreach (var header in decision.Headers)
                     if (response.Headers != null) response.Headers[header.Key] = header.Value;
-                _service.Evaluate(CreateEvent(WebRequestPhase.OnResponseStarted, request, response));
+                _owner.Evaluate(CreateEvent(WebRequestPhase.OnResponseStarted, request, response));
                 return false;
             }
             public IResponseFilter GetResourceResponseFilter(IWebBrowser chromiumWebBrowser, IBrowser browser, IFrame frame, IRequest request, IResponse response)
@@ -104,7 +117,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             public void OnResourceLoadComplete(IWebBrowser chromiumWebBrowser, IBrowser browser, IFrame frame, IRequest request, IResponse response, UrlRequestStatus status, long receivedContentLength)
             {
                 var phase = status == UrlRequestStatus.Success ? WebRequestPhase.OnCompleted : WebRequestPhase.OnErrorOccurred;
-                _service.Evaluate(CreateEvent(phase, request, response, status.ToString()));
+                _owner.Evaluate(CreateEvent(phase, request, response, status.ToString()));
             }
             public bool OnProtocolExecution(IWebBrowser chromiumWebBrowser, IBrowser browser, IFrame frame, IRequest request) { return false; }
             public void Dispose()

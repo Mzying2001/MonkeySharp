@@ -1,5 +1,7 @@
 # MonkeySharp 3.0
 
+**English** | [中文](README.zh-CN.md)
+
 MonkeySharp 3 is a userscript runtime for applications that embed CefSharp. It separates browser-independent script parsing, matching, storage, permissions, and API dispatch from the CefSharp lifecycle adapter.
 
 Version 3 is a breaking release of the host service contracts. Its default `LegacyCompatible` profile provides the common v1 userscript surface over the version 1 asynchronous bridge. The v1 `Injector`, `JScript`, `IDataStore`, and WCF bridge remain removed; no synchronous WCF transport is restored.
@@ -40,6 +42,28 @@ The source adapter has compatibility shims for the old and new frame lookup/iden
 The adapter's `CefSharp.Common` reference is private to its NuGet package so it cannot force a conflicting CefSharp version into the application. A package consumer must reference the matching `CefSharp.WinForms`, `CefSharp.Wpf`, or `CefSharp.Common` package itself, and for .NET Framework applications must allow the normal CefSharp binding redirects. Keep all CefSharp packages, native CEF binaries, and the MonkeySharp adapter on the same version.
 
 ## Minimal Setup
+
+### WPF Browser Demo
+
+`Mzying2001.MonkeySharp.Demo` is a runnable `net462`/`x64` WPF browser using `CefSharp.Wpf`, `CommunityToolkit.Mvvm`, and SQLite. It provides persistent userscripts, real background tabs, a native script editor/manager, installation permission review, script menus, notifications, clipboard writes, tab handles, downloads, resources, and the adapter's default XHR/Cookie/webRequest services. Each retained browser control has its own MonkeySharp host; tabs share the repository, GM value store, and Chromium request context.
+
+```powershell
+dotnet build Mzying2001.MonkeySharp.Demo/Mzying2001.MonkeySharp.Demo.csproj -c Release -p:Platform=x64
+& .\Mzying2001.MonkeySharp.Demo\bin\x64\Release\net462\Mzying2001.MonkeySharp.Demo.exe
+```
+
+The executable directory must be writable. Data stays under its `Data/` directory, not the shell's working directory: `BrowserCache/`, `UserScripts/`, `Dependencies/`, `Downloads/`, `Logs/`, and `monkeysharp.db`. A profile lock prevents two instances from writing the same data. The x86 solution configuration continues to build the libraries/tests and excludes the x64-only Demo projects.
+
+**The Demo explicitly enables `TrustedPageWorld`. It is a trusted-environment integration example, not a secure general-purpose browser or a complete Tampermonkey replacement.** The warning is also displayed in the browser and script manager. Read `Mzying2001.MonkeySharp.Demo/README.md` for usage, recovery, the implemented host-service boundaries, and manual verification scenarios.
+
+```powershell
+dotnet test Mzying2001.MonkeySharp.Demo.Tests/Mzying2001.MonkeySharp.Demo.Tests.csproj -c Release -p:Platform=x64
+powershell -NoProfile -ExecutionPolicy Bypass -File Mzying2001.MonkeySharp.Demo/Run-E2E.ps1
+```
+
+The WPF E2E gate uses an isolated profile and a loopback HTTP server. It verifies real background tabs, shared storage/cookies, resources, XHR, webRequest, menus, notification clicks, downloads, frames, navigation, script toggles, and disposal. It does not replace the existing WinForms SmokeHost gate.
+
+### Minimal Host Integration
 
 Install a script into a repository, build the host, attach it before the browser is initialized, and then create the browser.
 
@@ -182,18 +206,18 @@ Both canonical `GM.*` methods and the legacy facade are available when the corre
 | API | Availability | Notes |
 | --- | --- | --- |
 | `GM.info` / `GM_info` | Core | Frozen installation information; requires its exact grant. `GM_info` preserves declared grant spelling. |
-| `GM.log` | Core | Delivered to the builder's `LogTo` callback. |
-| `GM.getValue`, `setValue`, `deleteValue`, `listValues` and `GM_getValue`/`GM_setValue`/`GM_deleteValue`/`GM_listValues` | Core | Canonical JSON storage isolated by stable `ScriptKey`; modern methods are asynchronous, legacy mirror reads are synchronous and writes are queued in order. |
-| `GM.addValueChangeListener`, `removeValueChangeListener` | Core | Notifications go only to active executions of the same installation. |
-| `GM.addStyle`, `addElement` | Bootstrap | Page-local implementation; still requires the exact grant. |
-| `GM.getResourceText`, `getResourceURL` and `GM_getResourceText`/`GM_getResourceURL` | Conditional | Requires `IResourceProvider` and a declared `@resource`; legacy reads use the bounded bootstrap snapshot. |
+| `GM.log` / `GM_log` | Core | Delivered to the builder's `LogTo` callback. |
+| `GM.getValue`, `GM.setValue`, `GM.deleteValue`, `GM.listValues` / `GM_getValue`, `GM_setValue`, `GM_deleteValue`, `GM_listValues` | Core | Canonical JSON storage isolated by stable `ScriptKey`; modern methods are asynchronous, legacy mirror reads are synchronous and writes are queued in order. |
+| `GM.addValueChangeListener`, `GM.removeValueChangeListener` / `GM_addValueChangeListener`, `GM_removeValueChangeListener` | Core | Notifications go only to active executions of the same installation. |
+| `GM.addStyle`, `GM.addElement` / `GM_addStyle`, `GM_addElement` | Bootstrap | Page-local implementation; still requires the exact grant. |
+| `GM.getResourceText`, `GM.getResourceURL` / `GM_getResourceText`, `GM_getResourceURL` | Conditional | Requires `IResourceProvider` and a declared `@resource`; legacy reads use the bounded bootstrap snapshot. |
 | `GM.xmlHttpRequest` / `GM_xmlhttpRequest` | Conditional | CefSharp hosts create a default `CefSharpHttpRequestService`; applications can override it with `UseHttpRequestService`. Supports binary and multipart request bodies, redirects, credentials, progress, abort, and text/JSON/binary/blob/stream responses. Initial and redirected URLs must satisfy `@connect`. |
-| `GM.registerMenuCommand`, `GM_registerMenuCommand`, `unregisterMenuCommand` | Conditional | Requires `IMenuService`; the legacy form allocates its ID synchronously and registers asynchronously. |
+| `GM.registerMenuCommand`, `GM.unregisterMenuCommand` / `GM_registerMenuCommand`, `GM_unregisterMenuCommand` | Conditional | Requires `IMenuService`; the legacy form allocates its ID synchronously and registers asynchronously. |
 | `GM.notification` / `GM_notification` | Conditional | Requires `INotificationService`; legacy callbacks receive click/done lifecycle notifications. |
-| `GM.setClipboard` | Conditional | Requires `IClipboardService`. |
+| `GM.setClipboard` / `GM_setClipboard` | Conditional | Requires `IClipboardService`. |
 | `GM.openInTab` / `GM_openInTab` | Conditional | Requires `ITabService`; legacy `close()` calls the host and exposes `closed`. |
 | `GM.download` / `GM_download` | Conditional | Requires `IDownloadService`; legacy callbacks receive progress, success, failure, and abort events. |
-| `GM.getTab`, `GM_getTab`, `saveTab`, `getTabs`, `GM_getTabs` | Conditional | Requires `ITabStateService`; legacy tab methods use callbacks. |
+| `GM.getTab`, `GM.saveTab`, `GM.getTabs` / `GM_getTab`, `GM_saveTab`, `GM_getTabs` | Conditional | Requires `ITabStateService`; legacy tab methods use callbacks. |
 | `unsafeWindow` | Trusted page world only | Bound only for the exact `@grant unsafeWindow`. |
 | `GM.cookie` / `GM_cookie` | Conditional | CefSharp hosts create a context-backed `CefSharpCookieService`; applications can override it with `UseCookieService`. List/set/delete and service-originated change listeners use the browser request context. |
 | `GM.webRequest` / `GM_webRequest` | Conditional | CefSharp hosts create an `InMemoryWebRequestService` and attach `CefSharpWebRequestHandler`; applications can override it with `UseWebRequestService`. Rules cover request/response/auth phases, while callbacks observe events. |

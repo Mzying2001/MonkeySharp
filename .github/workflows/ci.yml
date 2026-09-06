@@ -70,6 +70,13 @@ jobs:
           Mzying2001.MonkeySharp.CefSharp.SmokeHost/Run-E2E.ps1
           -Platform ${{ matrix.platform }}
 
+      - name: Run WPF Demo Chromium smoke
+        if: matrix.platform == 'x64'
+        shell: pwsh
+        run: >-
+          pwsh -NoProfile -ExecutionPolicy Bypass -File
+          Mzying2001.MonkeySharp.Demo/Run-E2E.ps1
+
   cefsharp-version-compatibility:
     needs: build-test-pack
     runs-on: windows-2022
