@@ -15,65 +15,86 @@ using System.Windows.Data;
 
 namespace Mzying2001.MonkeySharp.Demo.ViewModels
 {
-    public sealed class ScriptManagerViewModel : ObservableObject, IDisposable
+    public sealed partial class ScriptManagerViewModel : ObservableObject, IDisposable
     {
         private readonly IUserScriptRepository _repository;
         private readonly HttpContentService _content;
         private readonly Func<string, bool> _confirm;
         private readonly DiagnosticsViewModel _diagnostics;
         private readonly CancellationTokenSource _cancellation = new CancellationTokenSource();
-        private ScriptItemViewModel _selected;
+
+        [ObservableProperty]
+        private ScriptItemViewModel _selectedScript;
+
         private string _origin = "application://editor/new.user.js";
+
+        [ObservableProperty]
         private string _url;
+
+        [ObservableProperty]
         private string _search;
+
+        [ObservableProperty]
         private string _status;
+
+        [ObservableProperty]
         private string _preview;
+
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(CanEdit))]
         private bool _busy;
+
         private bool _refreshing;
+
         public ScriptManagerViewModel(IUserScriptRepository repository, HttpContentService content,
             Func<string, bool> confirm, DiagnosticsViewModel diagnostics)
         {
             _repository = repository; _content = content; _confirm = confirm; _diagnostics = diagnostics;
             FilteredScripts = CollectionViewSource.GetDefaultView(Scripts);
             FilteredScripts.Filter = item => string.IsNullOrWhiteSpace(Search) || ((ScriptItemViewModel)item).DisplayName.IndexOf(Search, StringComparison.OrdinalIgnoreCase) >= 0;
-            NewCommand = new RelayCommand(New);
-            RefreshCommand = new AsyncRelayCommand(() => RunAsync(async () => { if (ConfirmDiscard()) await RefreshAsync(); }));
-            SaveCommand = new AsyncRelayCommand(() => RunAsync(SaveAsync));
-            ToggleCommand = new AsyncRelayCommand(() => RunAsync(ToggleAsync));
-            DeleteCommand = new AsyncRelayCommand(() => RunAsync(DeleteAsync));
-            InstallUrlCommand = new AsyncRelayCommand(() => RunAsync(LoadUrlAsync));
-            ValidateCommand = new RelayCommand(() => Preview = ScriptEditorViewModel.Describe(Editor.Parse()));
         }
+
         public ScriptEditorViewModel Editor { get; } = new ScriptEditorViewModel();
         public ObservableCollection<ScriptItemViewModel> Scripts { get; } = new ObservableCollection<ScriptItemViewModel>();
         public ICollectionView FilteredScripts { get; }
-        public string Url { get => _url; set => SetProperty(ref _url, value); }
-        public string Search { get => _search; set { if (SetProperty(ref _search, value)) FilteredScripts.Refresh(); } }
-        public string Status { get => _status; private set => SetProperty(ref _status, value); }
-        public string Preview { get => _preview; private set => SetProperty(ref _preview, value); }
-        public bool Busy { get => _busy; private set { SetProperty(ref _busy, value); OnPropertyChanged(nameof(CanEdit)); } }
         public bool CanEdit => !Busy;
-        public ScriptItemViewModel SelectedScript
+
+        [RelayCommand]
+        private void New() => NewScript();
+
+        [RelayCommand]
+        private void Validate() => Preview = ScriptEditorViewModel.Describe(Editor.Parse());
+
+        [RelayCommand]
+        private async Task Refresh() => await RunAsync(async () => { if (ConfirmDiscard()) await RefreshAsync(); });
+
+        [RelayCommand]
+        private Task Save() => RunAsync(SaveAsync);
+
+        [RelayCommand]
+        private Task Toggle() => RunAsync(ToggleAsync);
+
+        [RelayCommand]
+        private Task Delete() => RunAsync(DeleteAsync);
+
+        [RelayCommand]
+        private Task InstallUrl() => RunAsync(LoadUrlAsync);
+
+        partial void OnSearchChanged(string value) => FilteredScripts.Refresh();
+
+        partial void OnSelectedScriptChanged(ScriptItemViewModel oldValue, ScriptItemViewModel value)
         {
-            get => _selected;
-            set
+            if (!_refreshing && value != null && !ConfirmDiscard())
             {
-                if (_selected == value) return;
-                if (!_refreshing && !ConfirmDiscard()) { OnPropertyChanged(); return; }
-                SetProperty(ref _selected, value);
-                if (value == null) return;
-                _origin = value.Installation.SourceOrigin;
-                Editor.Load(value.Installation.Definition.Source);
-                Preview = ScriptEditorViewModel.Describe(value.Installation.Definition.ParseResult) + "\n来源：" + _origin;
+                _selectedScript = oldValue;
+                OnPropertyChanged(nameof(SelectedScript));
+                return;
             }
+            if (value == null) return;
+            _origin = value.Installation.SourceOrigin;
+            Editor.Load(value.Installation.Definition.Source);
+            Preview = ScriptEditorViewModel.Describe(value.Installation.Definition.ParseResult) + "\n来源：" + _origin;
         }
-        public IRelayCommand NewCommand { get; }
-        public IRelayCommand ValidateCommand { get; }
-        public IAsyncRelayCommand RefreshCommand { get; }
-        public IAsyncRelayCommand SaveCommand { get; }
-        public IAsyncRelayCommand ToggleCommand { get; }
-        public IAsyncRelayCommand DeleteCommand { get; }
-        public IAsyncRelayCommand InstallUrlCommand { get; }
 
         public bool ConfirmDiscard() => !Editor.IsDirty || _confirm("放弃尚未保存的源码修改？");
         public async Task RefreshAsync()
@@ -89,13 +110,15 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
             }
             finally { _refreshing = false; }
         }
-        private void New()
+
+        private void NewScript()
         {
             if (!ConfirmDiscard()) return;
             Editor.Load(ScriptEditorViewModel.Template); SelectedScript = null;
             _origin = "application://editor/new.user.js";
             Preview = "新脚本。保存前会显示权限确认。";
         }
+
         public Task ImportFileAsync(string path) => RunAsync(async () =>
         {
             if (!ConfirmDiscard()) return;
@@ -114,6 +137,7 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
             Preview = ScriptEditorViewModel.Describe(Editor.Parse());
             Status = "已下载草稿；尚未安装。请审核源码并点击安装 / 保存。";
         }
+
         private async Task SaveAsync()
         {
             if (Encoding.UTF8.GetByteCount(Editor.Source ?? string.Empty) > SqliteUserScriptRepositoryPersistence.MaximumSourceBytes)
@@ -129,6 +153,7 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
             SelectedScript = Scripts.First(item => item.Installation.ScriptKey == installation.ScriptKey);
             Status = "已保存并刷新浏览器标签。";
         }
+
         private async Task ToggleAsync()
         {
             if (SelectedScript == null || !ConfirmDiscard()) return;
@@ -137,12 +162,14 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
             await _repository.SetEnabledAsync(installation.ScriptKey, !installation.IsEnabled, _cancellation.Token);
             await RefreshAsync(); Status = "已更改脚本启用状态。";
         }
+
         private async Task DeleteAsync()
         {
             if (SelectedScript == null || !_confirm("删除该脚本、源码文件及其 GM 存储数据？")) return;
             await _repository.RemoveAsync(SelectedScript.Installation.ScriptKey, _cancellation.Token);
             Editor.Load(ScriptEditorViewModel.Template); await RefreshAsync(); Status = "已删除脚本。";
         }
+
         private async Task RunAsync(Func<Task> action)
         {
             if (Busy) return;
@@ -152,6 +179,7 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
             catch (Exception exception) { Status = exception.Message; _diagnostics.Report("脚本管理器：" + exception.Message); }
             finally { Busy = false; }
         }
+
         public void Dispose() { _cancellation.Cancel(); }
     }
 

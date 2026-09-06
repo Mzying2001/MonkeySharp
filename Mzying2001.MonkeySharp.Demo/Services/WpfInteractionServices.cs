@@ -1,3 +1,4 @@
+using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Mzying2001.MonkeySharp.Core.Apis;
 using Mzying2001.MonkeySharp.Demo.ViewModels;
@@ -14,20 +15,26 @@ using System.Windows.Threading;
 
 namespace Mzying2001.MonkeySharp.Demo.Services
 {
-    public sealed class ScriptMenuCommand : IMenuRegistration
+    public sealed partial class ScriptMenuCommand : ObservableObject, IMenuRegistration
     {
         private readonly Action<ScriptMenuCommand> _remove;
+        private readonly Action _invoked;
         private int _disposed;
+
+        public string Label { get; }
+        public string AccessKey { get; }
+
         public ScriptMenuCommand(string label, string accessKey, Action invoked, Action<ScriptMenuCommand> remove)
         {
             Label = label;
             AccessKey = accessKey;
             _remove = remove;
-            InvokeCommand = new RelayCommand(() => { if (_disposed == 0) invoked(); });
+            _invoked = invoked;
         }
-        public string Label { get; }
-        public string AccessKey { get; }
-        public IRelayCommand InvokeCommand { get; }
+
+        [RelayCommand]
+        private void Invoke() { if (_disposed == 0) _invoked(); }
+
         public void Dispose() { if (Interlocked.Exchange(ref _disposed, 1) == 0) _remove(this); }
     }
 
@@ -35,7 +42,13 @@ namespace Mzying2001.MonkeySharp.Demo.Services
     {
         private readonly BrowserTabViewModel _tab;
         private readonly Dispatcher _dispatcher;
-        public WpfMenuService(BrowserTabViewModel tab, Dispatcher dispatcher) { _tab = tab; _dispatcher = dispatcher; }
+
+        public WpfMenuService(BrowserTabViewModel tab, Dispatcher dispatcher)
+        {
+            _tab = tab;
+            _dispatcher = dispatcher;
+        }
+
         public async Task<IMenuRegistration> RegisterAsync(MenuCommandRequest request, Action invoked, CancellationToken cancellationToken)
         {
             return await _dispatcher.InvokeAsync(() =>
@@ -53,7 +66,9 @@ namespace Mzying2001.MonkeySharp.Demo.Services
     public sealed class WpfClipboardService : IClipboardService
     {
         private readonly Dispatcher _dispatcher;
+
         public WpfClipboardService(Dispatcher dispatcher) { _dispatcher = dispatcher; }
+
         public async Task SetTextAsync(string text, string mediaType, CancellationToken cancellationToken)
         {
             for (var attempt = 0; ; attempt++)
@@ -92,7 +107,13 @@ namespace Mzying2001.MonkeySharp.Demo.Services
     {
         private readonly Dispatcher _dispatcher;
         private readonly HttpContentService _content;
-        public WpfNotificationService(Dispatcher dispatcher, HttpContentService content) { _dispatcher = dispatcher; _content = content; }
+
+        public WpfNotificationService(Dispatcher dispatcher, HttpContentService content)
+        {
+            _dispatcher = dispatcher;
+            _content = content;
+        }
+
         public INotificationHandle ShowAsync(UserScriptNotificationRequest request, CancellationToken cancellationToken)
             => new NotificationHandle(_dispatcher, _content, request, cancellationToken);
 
@@ -104,6 +125,7 @@ namespace Mzying2001.MonkeySharp.Demo.Services
             private readonly CancellationTokenSource _images = new CancellationTokenSource();
             private Window _window;
             private int _closed;
+
             public NotificationHandle(Dispatcher dispatcher, HttpContentService content, UserScriptNotificationRequest request, CancellationToken token)
             {
                 _dispatcher = dispatcher;
@@ -119,14 +141,22 @@ namespace Mzying2001.MonkeySharp.Demo.Services
                     var close = new Button { Content = "关闭" };
                     close.Click += (sender, args) => Dispose();
                     panel.Children.Add(close);
-                    _window = new Window { Title = request.Title ?? "MonkeySharp", Content = panel,
-                        SizeToContent = SizeToContent.WidthAndHeight, ResizeMode = ResizeMode.NoResize,
-                        ShowInTaskbar = false, Owner = Application.Current.MainWindow, WindowStartupLocation = WindowStartupLocation.CenterOwner };
+                    _window = new Window
+                    {
+                        Title = request.Title ?? "MonkeySharp",
+                        Content = panel,
+                        SizeToContent = SizeToContent.WidthAndHeight,
+                        ResizeMode = ResizeMode.NoResize,
+                        ShowInTaskbar = false,
+                        Owner = Application.Current.MainWindow,
+                        WindowStartupLocation = WindowStartupLocation.CenterOwner
+                    };
                     _window.Closed += (sender, args) => Finish();
                     _window.Show();
                     if (!string.IsNullOrWhiteSpace(request.ImageUrl)) _ = LoadImageAsync(content, request.ImageUrl, panel);
                 }));
             }
+
             private async Task LoadImageAsync(HttpContentService content, string url, StackPanel panel)
             {
                 try
@@ -143,9 +173,11 @@ namespace Mzying2001.MonkeySharp.Demo.Services
                 }
                 catch (Exception exception) { System.Diagnostics.Trace.TraceWarning("Notification image unavailable: " + exception.Message); }
             }
+
             public Task Completion => _completion.Task;
             public event EventHandler Clicked;
             public event EventHandler Closed;
+
             private void Finish()
             {
                 if (Interlocked.Exchange(ref _closed, 1) != 0) return;
@@ -154,6 +186,7 @@ namespace Mzying2001.MonkeySharp.Demo.Services
                 Closed?.Invoke(this, EventArgs.Empty);
                 _completion.TrySetResult(null);
             }
+
             public void Dispose()
             {
                 if (!_dispatcher.HasShutdownStarted) _dispatcher.BeginInvoke(new Action(() =>
@@ -171,8 +204,14 @@ namespace Mzying2001.MonkeySharp.Demo.Services
         private readonly MainWindowViewModel _main;
         private readonly BrowserTabViewModel _origin;
         private readonly Dispatcher _dispatcher;
+
         public WpfTabService(MainWindowViewModel main, BrowserTabViewModel origin, Dispatcher dispatcher)
-        { _main = main; _origin = origin; _dispatcher = dispatcher; }
+        {
+            _main = main;
+            _origin = origin;
+            _dispatcher = dispatcher;
+        }
+
         public async Task<ITabHandle> OpenAsync(OpenTabRequest request, CancellationToken cancellationToken)
         {
             return await _dispatcher.InvokeAsync(() =>
@@ -189,17 +228,33 @@ namespace Mzying2001.MonkeySharp.Demo.Services
             private readonly MainWindowViewModel _main;
             private readonly BrowserTabViewModel _tab;
             private readonly Dispatcher _dispatcher;
-            public TabHandle(MainWindowViewModel main, BrowserTabViewModel tab, Dispatcher dispatcher)
-            { _main = main; _tab = tab; _dispatcher = dispatcher; _tab.Closed += TabClosed; }
             public string TabId => _tab.TabId;
             public bool Closed => _tab.IsClosed;
             public event EventHandler OnClose;
+
+            public TabHandle(MainWindowViewModel main, BrowserTabViewModel tab, Dispatcher dispatcher)
+            {
+                _main = main;
+                _tab = tab;
+                _dispatcher = dispatcher;
+                _tab.Closed += TabClosed;
+            }
+
             private void TabClosed(object sender, EventArgs args) => OnClose?.Invoke(this, EventArgs.Empty);
+
             public async Task CloseAsync(CancellationToken cancellationToken)
             {
-                await _dispatcher.InvokeAsync(() => { cancellationToken.ThrowIfCancellationRequested(); _main.CloseTab(_tab); });
+                await _dispatcher.InvokeAsync(() =>
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    _main.CloseTab(_tab);
+                });
             }
-            public void Dispose() { _tab.Closed -= TabClosed; }
+
+            public void Dispose()
+            {
+                _tab.Closed -= TabClosed;
+            }
         }
     }
 }

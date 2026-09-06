@@ -15,15 +15,22 @@ using System.Windows.Threading;
 
 namespace Mzying2001.MonkeySharp.Demo.Services
 {
-    public sealed class DownloadItemViewModel : ObservableObject
+    public sealed partial class DownloadItemViewModel : ObservableObject
     {
+        [ObservableProperty]
         private string _status = "等待下载";
+
+        [ObservableProperty]
         private long _loaded;
-        public DownloadItemViewModel(string name, Action cancel) { Name = name; CancelCommand = new RelayCommand(cancel); }
+
+        private readonly Action _cancel;
+
+        public DownloadItemViewModel(string name, Action cancel) { Name = name; _cancel = cancel; }
+
         public string Name { get; }
-        public string Status { get => _status; set => SetProperty(ref _status, value); }
-        public long Loaded { get => _loaded; set => SetProperty(ref _loaded, value); }
-        public IRelayCommand CancelCommand { get; }
+
+        [RelayCommand]
+        private void Cancel() => _cancel();
     }
 
     public sealed class DownloadService : IDownloadService, IDisposable
@@ -80,6 +87,7 @@ namespace Mzying2001.MonkeySharp.Demo.Services
             foreach (var operation in _operations.Values) operation.Abort();
             _client.Dispose();
         }
+
         public Task DrainAsync() => Task.WhenAll(_operations.Values.Select(operation => operation.Work.ContinueWith(completed => { var error = completed.Exception; })));
 
         public static string SafeFileName(string suggested)

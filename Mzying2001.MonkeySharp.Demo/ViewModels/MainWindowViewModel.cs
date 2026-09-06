@@ -7,57 +7,68 @@ using System.Linq;
 
 namespace Mzying2001.MonkeySharp.Demo.ViewModels
 {
-    public sealed class MainWindowViewModel : ObservableObject
+    public sealed partial class MainWindowViewModel : ObservableObject
     {
+        [ObservableProperty]
         private BrowserTabViewModel _selectedTab;
+
+        [ObservableProperty]
         private string _address = "about:blank";
+
+        [ObservableProperty]
         private bool _showDiagnostics;
+
         private bool _closing;
-        public MainWindowViewModel(DiagnosticsViewModel diagnostics)
-        {
-            Diagnostics = diagnostics;
-            NewTabCommand = new RelayCommand(() => NewTab());
-            CloseTabCommand = new RelayCommand<BrowserTabViewModel>(tab => CloseTab(tab ?? SelectedTab));
-            SelectTabCommand = new RelayCommand<BrowserTabViewModel>(tab => SelectedTab = tab);
-            NavigateCommand = new RelayCommand(Navigate);
-            BackCommand = new RelayCommand(() => SelectedTab?.Browser?.Back(), () => SelectedTab?.CanGoBack == true);
-            ForwardCommand = new RelayCommand(() => SelectedTab?.Browser?.Forward(), () => SelectedTab?.CanGoForward == true);
-            ReloadCommand = new RelayCommand(() => SelectedTab?.Browser?.Reload());
-            StopCommand = new RelayCommand(() => SelectedTab?.Browser?.Stop());
-            DevToolsCommand = new RelayCommand(() => SelectedTab?.Browser?.ShowDevTools());
-            ScriptManagerCommand = new RelayCommand(() => ScriptManagerRequested?.Invoke(this, EventArgs.Empty));
-            DiagnosticsCommand = new RelayCommand(() => ShowDiagnostics = !ShowDiagnostics);
-        }
 
         public ObservableCollection<BrowserTabViewModel> Tabs { get; } = new ObservableCollection<BrowserTabViewModel>();
         public ObservableCollection<Services.DownloadItemViewModel> Downloads { get; } = new ObservableCollection<Services.DownloadItemViewModel>();
         public DiagnosticsViewModel Diagnostics { get; }
-        public bool ShowDiagnostics { get => _showDiagnostics; set => SetProperty(ref _showDiagnostics, value); }
-        public string Address { get => _address; set => SetProperty(ref _address, value); }
-        public BrowserTabViewModel SelectedTab
-        {
-            get => _selectedTab;
-            set
-            {
-                if (!SetProperty(ref _selectedTab, value)) return;
-                Address = value?.Address ?? "about:blank";
-                UpdateNavigation();
-            }
-        }
 
-        public IRelayCommand NewTabCommand { get; }
-        public IRelayCommand<BrowserTabViewModel> CloseTabCommand { get; }
-        public IRelayCommand<BrowserTabViewModel> SelectTabCommand { get; }
-        public IRelayCommand NavigateCommand { get; }
-        public IRelayCommand BackCommand { get; }
-        public IRelayCommand ForwardCommand { get; }
-        public IRelayCommand ReloadCommand { get; }
-        public IRelayCommand StopCommand { get; }
-        public IRelayCommand DevToolsCommand { get; }
-        public IRelayCommand ScriptManagerCommand { get; }
-        public IRelayCommand DiagnosticsCommand { get; }
+        [RelayCommand(CanExecute = nameof(CanGoBack))]
+        private void Back() => SelectedTab?.Browser?.Back();
+
+        [RelayCommand(CanExecute = nameof(CanGoForward))]
+        private void Forward() => SelectedTab?.Browser?.Forward();
+
+        [RelayCommand]
+        private void Reload() => SelectedTab?.Browser?.Reload();
+
+        [RelayCommand]
+        private void Stop() => SelectedTab?.Browser?.Stop();
+
+        [RelayCommand]
+        private void DevTools() => SelectedTab?.Browser?.ShowDevTools();
+
+        [RelayCommand]
+        private void ScriptManager() => ScriptManagerRequested?.Invoke(this, EventArgs.Empty);
+
+        [RelayCommand]
+        private void ToggleDiagnostics() => ShowDiagnostics = !ShowDiagnostics;
+
+        public IRelayCommand NewTabCommand => CreateNewTabCommand;
+
+        public IRelayCommand DiagnosticsCommand => ToggleDiagnosticsCommand;
+
         public event EventHandler ScriptManagerRequested;
         public event EventHandler<BrowserTabViewModel> TabClosed;
+
+        public MainWindowViewModel(DiagnosticsViewModel diagnostics)
+        {
+            Diagnostics = diagnostics;
+        }
+
+        partial void OnSelectedTabChanged(BrowserTabViewModel value)
+        {
+            Address = value?.Address ?? "about:blank";
+            UpdateNavigation();
+        }
+
+        private bool CanGoBack() => SelectedTab?.CanGoBack == true;
+
+        private bool CanGoForward() => SelectedTab?.CanGoForward == true;
+
+        [RelayCommand]
+        private void CreateNewTab() => NewTab();
 
         public BrowserTabViewModel NewTab(string address = "about:blank", bool active = true,
             BrowserTabViewModel origin = null, bool insert = false, bool setParent = false)
@@ -71,6 +82,7 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
             return tab;
         }
 
+        [RelayCommand]
         public void CloseTab(BrowserTabViewModel tab)
         {
             if (tab == null || !Tabs.Contains(tab)) return;
@@ -91,6 +103,7 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
             foreach (var tab in Tabs.ToArray()) CloseTab(tab);
         }
 
+        [RelayCommand]
         private void Navigate()
         {
             try

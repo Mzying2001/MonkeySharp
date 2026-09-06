@@ -14,27 +14,38 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
         void ShowDevTools();
     }
 
-    public sealed class BrowserTabViewModel : ObservableObject
+    public sealed partial class BrowserTabViewModel : ObservableObject
     {
+        [ObservableProperty]
         private string _title = "新标签页";
+
+        [ObservableProperty]
         private string _address;
+
+        [ObservableProperty]
         private bool _isLoading;
+
+        [ObservableProperty]
         private bool _canGoBack;
+
+        [ObservableProperty]
         private bool _canGoForward;
+
+        [ObservableProperty]
         private string _error;
-        public BrowserTabViewModel(string address) { Address = address; }
+
         public string TabId { get; } = Guid.NewGuid().ToString("N");
         public string ParentTabId { get; set; }
-        public string Title { get => _title; set => SetProperty(ref _title, value); }
-        public string Address { get => _address; set => SetProperty(ref _address, value); }
-        public bool IsLoading { get => _isLoading; set => SetProperty(ref _isLoading, value); }
-        public bool CanGoBack { get => _canGoBack; set => SetProperty(ref _canGoBack, value); }
-        public bool CanGoForward { get => _canGoForward; set => SetProperty(ref _canGoForward, value); }
-        public string Error { get => _error; set => SetProperty(ref _error, value); }
         public IBrowserCommands Browser { get; set; }
         public ObservableCollection<Services.ScriptMenuCommand> MenuCommands { get; } = new ObservableCollection<Services.ScriptMenuCommand>();
         public bool IsClosed { get; private set; }
         public event EventHandler Closed;
+
+        public BrowserTabViewModel(string address)
+        {
+            Address = address;
+        }
+
         internal void Close()
         {
             if (IsClosed) return;

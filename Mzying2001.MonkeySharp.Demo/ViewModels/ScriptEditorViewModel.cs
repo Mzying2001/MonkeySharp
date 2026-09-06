@@ -5,19 +5,22 @@ using System.Linq;
 
 namespace Mzying2001.MonkeySharp.Demo.ViewModels
 {
-    public sealed class ScriptEditorViewModel : ObservableObject
+    public sealed partial class ScriptEditorViewModel : ObservableObject
     {
         public const string Template = "// ==UserScript==\n// @name My userscript\n// @namespace demo.local\n// @version 1.0\n// @description A MonkeySharp demo script\n// @match https://example.com/*\n// @grant none\n// @run-at document-end\n// ==/UserScript==\n\ndocument.documentElement.dataset.monkeySharp = 'ready';\n";
+
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(IsDirty))]
         private string _source = Template;
+
         private string _saved = Template;
-        public string Source
-        {
-            get => _source;
-            set { if (SetProperty(ref _source, value)) OnPropertyChanged(nameof(IsDirty)); }
-        }
-        public bool IsDirty => _source != _saved;
+
+        public bool IsDirty => Source != _saved;
+
         public void Load(string source) { _saved = source; Source = source; OnPropertyChanged(nameof(IsDirty)); }
+
         public MetadataParseResult Parse() => new UserScriptMetadataParser().Parse(Source ?? string.Empty);
+
         public static string Describe(MetadataParseResult parsed)
         {
             var metadata = parsed.Metadata;

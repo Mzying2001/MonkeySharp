@@ -11,12 +11,15 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
         private readonly Dispatcher _dispatcher;
         private readonly string _log;
         private readonly object _sync = new object();
+
+        public ObservableCollection<string> Entries { get; } = new ObservableCollection<string>();
+
         public DiagnosticsViewModel(Dispatcher dispatcher, string directory)
         {
             _dispatcher = dispatcher;
             _log = Path.Combine(directory, "demo.log");
         }
-        public ObservableCollection<string> Entries { get; } = new ObservableCollection<string>();
+
         public void Report(string message)
         {
             var line = DateTimeOffset.Now.ToString("HH:mm:ss") + "  " + message;

@@ -117,6 +117,7 @@ namespace Mzying2001.MonkeySharp.Demo.Services
             }
             throw new HttpRequestException("Too many redirects.");
         }
+
         public void Dispose() { _client.Dispose(); }
     }
 }
