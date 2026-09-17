@@ -18,7 +18,7 @@ jobs:
 
       - uses: actions/setup-dotnet@v4
         with:
-          global-json-file: global.json
+          dotnet-version: 9.0.315
 
       - uses: actions/setup-node@v4
         with:
@@ -61,7 +61,7 @@ jobs:
 
       - uses: actions/setup-dotnet@v4
         with:
-          global-json-file: global.json
+          dotnet-version: 9.0.315
 
       - name: Run CefSharp Chromium smoke
         shell: pwsh
@@ -91,7 +91,7 @@ jobs:
 
       - uses: actions/setup-dotnet@v4
         with:
-          global-json-file: global.json
+          dotnet-version: 9.0.315
 
       - uses: actions/setup-node@v4
         with:

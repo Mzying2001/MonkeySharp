@@ -2,7 +2,7 @@
 
 ## Build and run
 
-The Demo targets .NET Framework 4.6.2 and an **x64 process**. It references the Core and CefSharp projects, pins `CefSharp.Wpf` to the repository's default `121.3.70`, and uses `CommunityToolkit.Mvvm` 8.4.0 and `Microsoft.Data.Sqlite` 8.0.8. Build with the SDK selected by the root `global.json`. Windows needs a compatible .NET Framework installation and the x64 Visual C++ runtime required by CefSharp. Deploy the entire output directory, including native DLLs and the browser subprocess, rather than copying the EXE alone.
+The Demo targets .NET Framework 4.6.2 and an **x64 process**. It references the Core and CefSharp projects, pins `CefSharp.Wpf` to the repository's default `121.3.70`, and uses `CommunityToolkit.Mvvm` 8.4.0 and `Microsoft.Data.Sqlite` 8.0.8. Build with a compatible .NET SDK installed on the development machine. Windows needs a compatible .NET Framework installation and the x64 Visual C++ runtime required by CefSharp. Deploy the entire output directory, including native DLLs and the browser subprocess, rather than copying the EXE alone.
 
 ```powershell
 dotnet build Mzying2001.MonkeySharp.Demo/Mzying2001.MonkeySharp.Demo.csproj -c Release -p:Platform=x64
