@@ -4,7 +4,7 @@
         Title="MonkeySharp · 脚本管理器" Width="1150" Height="780" MinWidth="900" MinHeight="600" Background="#F4F6F9">
     <DockPanel Margin="16">
         <TextBlock DockPanel.Dock="Top" Text="用户脚本" FontSize="26" FontWeight="SemiBold" Foreground="#172B40" Margin="0,0,0,10" />
-        <Border DockPanel.Dock="Top" Background="#FFF4DB" Padding="10" Margin="0,0,0,10">
+        <Border DockPanel.Dock="Top" Background="#FFF4DB" Padding="12,6" Margin="0,0,0,10">
             <TextBlock x:Name="TrustWarning" TextWrapping="Wrap" Foreground="#704C0A" />
         </Border>
         <WrapPanel DockPanel.Dock="Top" IsEnabled="{Binding CanEdit}">
@@ -13,14 +13,14 @@
             <Button Content="验证元数据" Command="{Binding ValidateCommand}" /><Button Content="安装 / 保存" Command="{Binding SaveCommand}" />
         </WrapPanel>
         <DockPanel DockPanel.Dock="Top" Margin="0,8,0,12" IsEnabled="{Binding CanEdit}">
-            <Button DockPanel.Dock="Right" Content="从 URL 加载草稿" Command="{Binding InstallUrlCommand}" />
-            <TextBox Text="{Binding Url, UpdateSourceTrigger=PropertyChanged}" Padding="8" ToolTip="HTTP(S) .user.js 地址" />
+            <Button DockPanel.Dock="Right" Margin="8,0,0,0" Content="从 URL 加载草稿" Command="{Binding InstallUrlCommand}" />
+            <TextBox Text="{Binding Url, UpdateSourceTrigger=PropertyChanged}" Padding="4" VerticalAlignment="Center" ToolTip="HTTP(S) .user.js 地址" />
         </DockPanel>
-        <TextBlock DockPanel.Dock="Bottom" Text="{Binding Status}" Margin="0,10,0,0" TextWrapping="Wrap" Foreground="#334155" />
+        <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource HideWhenTextEmpty}" Text="{Binding Status}" Margin="0,10,0,0" TextWrapping="Wrap" Foreground="#334155" />
         <Grid IsEnabled="{Binding CanEdit}">
             <Grid.ColumnDefinitions><ColumnDefinition Width="275" /><ColumnDefinition Width="8" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
             <DockPanel Grid.Column="0">
-                <TextBox DockPanel.Dock="Top" Text="{Binding Search, UpdateSourceTrigger=PropertyChanged}" Padding="8" Margin="0,0,0,8" ToolTip="搜索脚本名称" />
+                <TextBox DockPanel.Dock="Top" Text="{Binding Search, UpdateSourceTrigger=PropertyChanged}" Padding="4" Margin="0,0,0,8" ToolTip="搜索脚本名称" />
                 <ListBox ItemsSource="{Binding FilteredScripts}" SelectedItem="{Binding SelectedScript}" DisplayMemberPath="DisplayName" />
             </DockPanel>
             <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Center" />

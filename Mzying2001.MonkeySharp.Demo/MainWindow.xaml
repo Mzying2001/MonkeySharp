@@ -98,17 +98,7 @@
             <TextBlock x:Name="TrustWarning" Foreground="#704C0A" TextWrapping="Wrap" FontSize="12" />
         </Border>
         <StackPanel DockPanel.Dock="Top">
-            <TextBlock Text="{Binding SelectedTab.Error}" Foreground="#B42318" TextWrapping="Wrap">
-                <TextBlock.Style>
-                    <Style TargetType="TextBlock">
-                        <Style.Triggers>
-                            <Trigger Property="Text" Value="">
-                                <Setter Property="Visibility" Value="Collapsed" />
-                            </Trigger>
-                        </Style.Triggers>
-                    </Style>
-                </TextBlock.Style>
-            </TextBlock>
+            <TextBlock Style="{StaticResource HideWhenTextEmpty}" Text="{Binding SelectedTab.Error}" Foreground="#B42318" TextWrapping="Wrap" />
         </StackPanel>
         <Border DockPanel.Dock="Bottom" Background="#E5EBF0" Padding="10,4">
             <TextBlock Text="每标签独立 MonkeySharp Host  ·  共享浏览器 Cookie / 缓存  ·  Ctrl+L 地址栏  ·  F12 开发者工具" FontSize="11" Foreground="#475569" />
