@@ -84,6 +84,7 @@ namespace Mzying2001.MonkeySharp.Core.Matching
     /// </summary>
     public sealed class MatchPattern
     {
+        private readonly bool _aboutBlank;
         private readonly bool _allUrls;
         private readonly string _scheme;
         private readonly string _host;
@@ -101,6 +102,7 @@ namespace Mzying2001.MonkeySharp.Core.Matching
             int? port,
             GlobPattern path)
         {
+            _aboutBlank = false;
             _allUrls = allUrls;
             _scheme = scheme;
             _host = host;
@@ -108,6 +110,23 @@ namespace Mzying2001.MonkeySharp.Core.Matching
             _subdomainsOnly = subdomainsOnly;
             _port = port;
             _path = path;
+        }
+
+        private MatchPattern(bool aboutBlank)
+        {
+            _aboutBlank = aboutBlank;
+            _allUrls = false;
+            _scheme = null;
+            _host = null;
+            _anyHost = false;
+            _subdomainsOnly = false;
+            _port = null;
+            _path = null;
+        }
+
+        internal static MatchPattern AboutBlank()
+        {
+            return new MatchPattern(true);
         }
 
         /// <summary>Determines whether an absolute URL matches the pattern.</summary>
@@ -118,6 +137,12 @@ namespace Mzying2001.MonkeySharp.Core.Matching
             if (uri == null || !uri.IsAbsoluteUri)
                 return false;
             var scheme = uri.Scheme.ToLowerInvariant();
+            if (_aboutBlank)
+            {
+                return scheme == "about" &&
+                       string.Equals(uri.AbsolutePath, "blank", StringComparison.Ordinal) &&
+                       string.IsNullOrEmpty(uri.Query);
+            }
             if (_allUrls)
                 return scheme == "http" || scheme == "https" || scheme == "file";
             if (_scheme == "*" && scheme != "http" && scheme != "https")
@@ -187,6 +212,11 @@ namespace Mzying2001.MonkeySharp.Core.Matching
             if (pattern == "<all_urls>")
             {
                 result = new MatchPattern(true, null, null, true, false, null, GlobPattern.CompileMatchPath("*"));
+                return true;
+            }
+            if (string.Equals(pattern, "about:blank", StringComparison.OrdinalIgnoreCase))
+            {
+                result = MatchPattern.AboutBlank();
                 return true;
             }
 
@@ -321,8 +351,12 @@ namespace Mzying2001.MonkeySharp.Core.Matching
 
         internal static string NormalizeUrl(Uri uri)
         {
+            var scheme = uri.Scheme.ToLowerInvariant();
+            if (scheme == "about")
+                return scheme + ":" + uri.AbsolutePath + uri.Query;
+
             var builder = new StringBuilder();
-            builder.Append(uri.Scheme.ToLowerInvariant()).Append("://");
+            builder.Append(scheme).Append("://");
             if (uri.Scheme != "file")
             {
                 builder.Append(new IdnMapping().GetAscii(uri.IdnHost).ToLowerInvariant());

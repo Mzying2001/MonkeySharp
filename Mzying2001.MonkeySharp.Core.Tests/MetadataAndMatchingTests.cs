@@ -93,6 +93,21 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Fact]
+        public void AboutBlankMatchIsExactAndIgnoresOnlyFragments()
+        {
+            var result = _parser.Parse(Script("// @name about blank\n// @match about:blank"));
+            var pattern = MatchPatternCompiler.Compile("about:blank");
+
+            Assert.True(result.CanEnable);
+            Assert.True(pattern.IsMatch(new Uri("about:blank")));
+            Assert.True(pattern.IsMatch(new Uri("about:blank#section")));
+            Assert.False(pattern.IsMatch(new Uri("about:blank?query=1")));
+            Assert.False(pattern.IsMatch(new Uri("about:srcdoc")));
+            Assert.False(pattern.IsMatch(new Uri("about://blank")));
+            Assert.False(MatchPatternCompiler.Compile("<all_urls>").IsMatch(new Uri("about:blank")));
+        }
+
+        [Fact]
         public void MatchPatternRequiresAnActualSubdomain()
         {
             var pattern = MatchPatternCompiler.Compile("*://*.example.com/*");
@@ -136,6 +151,24 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 "// @exclude https://example.com/private/*")).Metadata;
 
             Assert.False(new UserScriptMatcher().IsMatch(metadata, new Uri("https://example.com/private/a")));
+        }
+
+        [Fact]
+        public void AboutBlankIncludeUsesTheCanonicalOpaqueUrl()
+        {
+            var matcher = new UserScriptMatcher();
+            var include = _parser.Parse(Script("// @name about include\n// @include about:blank")).Metadata;
+            var legacy = _parser.Parse(Script("// @name legacy about include\n// @include about://blank")).Metadata;
+            var excluded = _parser.Parse(Script(
+                "// @name about exclude\n// @include about:blank\n// @exclude about:blank")).Metadata;
+            var excludeMatch = _parser.Parse(Script(
+                "// @name about exclude match\n// @include about:blank\n// @exclude-match about:blank")).Metadata;
+
+            Assert.True(matcher.IsMatch(include, new Uri("about:blank#section")));
+            Assert.False(matcher.IsMatch(include, new Uri("about:blank?query=1")));
+            Assert.False(matcher.IsMatch(legacy, new Uri("about:blank")));
+            Assert.False(matcher.IsMatch(excluded, new Uri("about:blank")));
+            Assert.False(matcher.IsMatch(excludeMatch, new Uri("about:blank")));
         }
 
         internal static string Script(string metadataLines, string body = "")

@@ -110,6 +110,22 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
         }
 
         [Fact]
+        public async Task AboutBlankContextExecutesAnAboutBlankMatch()
+        {
+            using (var host = await CreateHostAsync(
+                Script("none", "document-start", "about-blank", "about:blank")))
+            {
+                var browser = new BrowserFixture(url: "about:blank");
+                host.Attach(browser.Browser.Object);
+
+                browser.CreateContext();
+                await browser.WaitForScriptCountAsync(1);
+
+                Assert.Contains("__MonkeySharpRuntime", Assert.Single(browser.Scripts));
+            }
+        }
+
+        [Fact]
         public async Task DefaultModeSuppressesHostApisAndTrustedModeReportsRisk()
         {
             using (var safeHost = await CreateHostAsync(Script("GM.getValue", "document-start")))
@@ -671,11 +687,15 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
             return builder.Build();
         }
 
-        private static string Script(string grant, string runAt, string name = "fixture")
+        private static string Script(
+            string grant,
+            string runAt,
+            string name = "fixture",
+            string match = "https://example.com/*")
         {
             return "// ==UserScript==\n" +
                 "// @name " + name + "\n" +
-                "// @match https://example.com/*\n" +
+                "// @match " + match + "\n" +
                 "// @grant " + grant + "\n" +
                 "// @run-at " + runAt + "\n" +
                 "// ==/UserScript==\n" +
@@ -686,7 +706,10 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
         {
             private bool _bound;
 
-            public BrowserFixture(bool initialized = false, IRequestContext requestContext = null)
+            public BrowserFixture(
+                bool initialized = false,
+                IRequestContext requestContext = null,
+                string url = "https://example.com/page")
             {
                 Repository = new Mock<IJavascriptObjectRepository>();
                 Repository.Setup(item => item.IsBound(It.IsAny<string>())).Returns(() => _bound);
@@ -720,7 +743,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
 #else
                 Frame.SetupGet(item => item.Identifier).Returns(42);
 #endif
-                Frame.SetupGet(item => item.Url).Returns("https://example.com/page");
+                Frame.SetupGet(item => item.Url).Returns(url);
                 Frame.SetupGet(item => item.IsMain).Returns(true);
                 Frame.SetupGet(item => item.IsValid).Returns(true);
                 Frame.SetupGet(item => item.IsDisposed).Returns(false);
@@ -768,7 +791,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
 #else
                 refreshed.SetupGet(item => item.Identifier).Returns(42);
 #endif
-                refreshed.SetupGet(item => item.Url).Returns("https://example.com/page");
+                refreshed.SetupGet(item => item.Url).Returns(Frame.Object.Url);
                 refreshed.SetupGet(item => item.IsMain).Returns(true);
                 refreshed.SetupGet(item => item.IsValid).Returns(true);
                 refreshed.SetupGet(item => item.IsDisposed).Returns(false);

@@ -32,6 +32,28 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Fact]
+        public async Task AboutBlankMatchProducesAnInjectionPlanOncePerDocument()
+        {
+            var repository = new InMemoryUserScriptRepository();
+            await repository.InstallAsync(
+                MetadataAndMatchingTests.Script(
+                    "// @name about blank\n// @match about:blank\n// @grant none\n// @run-at document-start",
+                    "window.aboutBlankExecuted = true;"),
+                "about-blank", true, CancellationToken.None);
+            using (var engine = new UserScriptEngine(repository))
+            {
+                var frame = Frame("about-blank", true, new Uri("about:blank#section"));
+                var first = await engine.ProcessLifecycleAsync(
+                    new DocumentLifecycleEventArgs(DocumentLifecycleKind.DocumentStart, frame), CancellationToken.None);
+                var duplicate = await engine.ProcessLifecycleAsync(
+                    new DocumentLifecycleEventArgs(DocumentLifecycleKind.DocumentStart, frame), CancellationToken.None);
+
+                Assert.Single(first.Invocations);
+                Assert.Empty(duplicate.Invocations);
+            }
+        }
+
+        [Fact]
         public async Task NoFramesSkipsChildFrame()
         {
             var repository = new InMemoryUserScriptRepository();
@@ -202,11 +224,16 @@ namespace Mzying2001.MonkeySharp.Core.Tests
 
         private static DocumentFrame Frame(string documentId, bool mainFrame)
         {
+            return Frame(documentId, mainFrame, new Uri("https://example.com/page"));
+        }
+
+        private static DocumentFrame Frame(string documentId, bool mainFrame, Uri url)
+        {
             return new DocumentFrame(
                 "browser",
                 documentId,
                 mainFrame ? "main" : "sub",
-                new Uri("https://example.com/page"),
+                url,
                 mainFrame,
                 TimingGuarantee.BestEffortDocumentStart,
                 BridgeIntegrityGuarantee.Unverified);
