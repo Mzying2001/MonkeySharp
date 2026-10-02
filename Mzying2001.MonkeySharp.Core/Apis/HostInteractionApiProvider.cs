@@ -292,11 +292,21 @@ namespace Mzying2001.MonkeySharp.Core.Apis
 
         private void TrackTab(ApiInvocationContext context, ITabHandle tab)
         {
-            tab.OnClose += (_, __) => Notification?.Invoke(this, new ApiNotificationEventArgs(
-                context.Installation.ScriptKey, context.ExecutionId, "tab-closed",
-                JsonSerializer.Serialize(new { tabId = tab.TabId })));
+            var notified = 0;
+            EventHandler closed = null;
+            closed = (_, __) =>
+            {
+                if (Interlocked.Exchange(ref notified, 1) != 0)
+                    return;
+                Notification?.Invoke(this, new ApiNotificationEventArgs(
+                    context.Installation.ScriptKey, context.ExecutionId, "tab-closed",
+                    JsonSerializer.Serialize(new { tabId = tab.TabId })));
+            };
+            tab.OnClose += closed;
             lock (_sync)
                 _tabHandles[context.ExecutionId + ":" + tab.TabId] = tab;
+            if (tab.Closed)
+                closed(tab, EventArgs.Empty);
         }
 
         private ApiResult AbortDownload(ApiInvocationContext context)

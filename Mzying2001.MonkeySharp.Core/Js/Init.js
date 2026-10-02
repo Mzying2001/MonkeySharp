@@ -744,15 +744,64 @@
                     };
                 }
                 if (enabled("GM.openInTab")) {
-                    api.openInTab = async function (url, options) {
+                    api.openInTab = function (url, options) {
                         if (typeof url !== "string") throw new TypeError("url must be a string.");
                         options = options || {};
-                        return call(record, "GM.openInTab", {
+                        const state = {
+                            id: null,
+                            closed: false,
+                            closeRequested: false,
+                            closePromise: null,
+                            closeResolve: null,
+                            closeReject: null,
+                            onclose: null,
+                            closeSent: false
+                        };
+                        const sendClose = function () {
+                            if (!state.id || state.closeSent) return state.closePromise || Promise.resolve(false);
+                            state.closeSent = true;
+                            const request = call(record, "GM.openInTab", { close: true, tabId: state.id });
+                            request.then(value => {
+                                if (state.closeResolve) state.closeResolve(value);
+                            }, error => {
+                                if (state.closeReject) state.closeReject(error);
+                            });
+                            return request;
+                        };
+                        const handle = {};
+                        Object.defineProperties(handle, {
+                            id: { enumerable: true, get: () => state.id },
+                            closed: { enumerable: true, get: () => state.closed },
+                            onclose: {
+                                enumerable: true,
+                                get: () => state.onclose,
+                                set: value => { state.onclose = value; }
+                            }
+                        });
+                        handle.close = function () {
+                            if (state.closed || state.closeRequested) return state.closePromise || Promise.resolve(false);
+                            state.closeRequested = true;
+                            state.closePromise = new Promise((resolve, reject) => {
+                                state.closeResolve = resolve;
+                                state.closeReject = reject;
+                            });
+                            if (state.id) sendClose();
+                            return state.closePromise;
+                        };
+                        record.tabHandlers.push(state);
+                        call(record, "GM.openInTab", {
                             url: url,
-                            active: typeof options.active === "boolean" ? options.active : true,
+                            active: typeof options.active === "boolean" ? options.active : false,
                             insert: Boolean(options.insert),
                             setParent: Boolean(options.setParent)
+                        }).then(result => {
+                            state.id = result && result.id;
+                            if (state.closeRequested) sendClose();
+                        }).catch(error => {
+                            if (state.closeReject) state.closeReject(error);
+                            else if (root.console) console.error("[MonkeySharp] tab open failed", error);
                         });
+                        return handle;
                     };
                 }
                 if (enabled("GM.download")) {
@@ -1033,24 +1082,12 @@
                     api.notification(details).catch(error => console.error("[MonkeySharp] legacy notification failed", error));
                 };
                 if (api.openInTab) facade.GM_openInTab = function (url, options) {
-                    const state = { closed: false, id: null, closeRequested: false };
-                    const handle = {
-                        close: function () {
-                            state.closeRequested = true;
-                            if (!state.id) return;
-                            call(record, "GM.openInTab", { close: true, tabId: state.id })
-                                .then(() => { state.closed = true; })
-                                .catch(error => console.error("[MonkeySharp] legacy tab close failed", error));
-                        },
-                        get closed() { return state.closed; }
-                    };
-                    api.openInTab(url, options).then(result => {
-                        state.id = result && result.id;
-                        if (state.closeRequested && state.id) handle.close();
-                    })
-                        .catch(error => console.error("[MonkeySharp] legacy tab open failed", error));
-                    record.tabHandlers.push(state);
-                    return handle;
+                    if (typeof options === "boolean") options = { active: !options };
+                    options = options || {};
+                    if (typeof options.active !== "boolean" && typeof options.loadInBackground === "boolean") {
+                        options = Object.assign({}, options, { active: !options.loadInBackground });
+                    }
+                    return api.openInTab(url, options);
                 };
                 if (api.download) facade.GM_download = function (details, onload, onerror) {
                     if (typeof details === "string" && typeof onload === "string") {
@@ -1254,7 +1291,13 @@
                     }
                     if (notification.event === "tab-closed") {
                         record.tabHandlers.forEach(state => {
-                            if (state.id === data.tabId) state.closed = true;
+                            if (state.id === data.tabId && !state.closed) {
+                                state.closed = true;
+                                if (typeof state.onclose === "function") {
+                                    try { state.onclose(); } catch (error) { console.error("[MonkeySharp] tab onclose failed", error); }
+                                }
+                                if (state.closeResolve) state.closeResolve(true);
+                            }
                         });
                         return true;
                     }
