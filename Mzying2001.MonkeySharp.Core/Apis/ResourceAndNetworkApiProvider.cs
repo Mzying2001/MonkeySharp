@@ -784,40 +784,66 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             if (declarations == null || declarations.Count == 0 || target == null || !target.IsAbsoluteUri ||
                 (target.Scheme != Uri.UriSchemeHttp && target.Scheme != Uri.UriSchemeHttps))
                 return false;
-            var targetHost = new IdnMapping().GetAscii(target.IdnHost).ToLowerInvariant();
+            var targetHost = NormalizeConnectHost(target);
             foreach (var declaration in declarations)
             {
                 if (declaration == "*")
                     return true;
                 if (declaration == "self" && source != null &&
-                    source.Scheme == target.Scheme &&
-                    string.Equals(source.IdnHost, target.IdnHost, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(source.Scheme, target.Scheme, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(NormalizeConnectHost(source), targetHost, StringComparison.Ordinal) &&
                     source.Port == target.Port)
                     return true;
                 var value = declaration;
                 if (Uri.TryCreate(declaration, UriKind.Absolute, out var declaredUri))
                 {
-                    if (declaredUri.Scheme != target.Scheme || declaredUri.Port != target.Port)
+                    if (!string.Equals(declaredUri.Scheme, target.Scheme, StringComparison.OrdinalIgnoreCase))
                         continue;
-                    value = declaredUri.IdnHost;
+                    if (declaredUri.Port != target.Port)
+                        continue;
+                    value = NormalizeConnectHost(declaredUri);
                 }
                 var subdomains = value.StartsWith("*.", StringComparison.Ordinal);
                 if (subdomains)
                     value = value.Substring(2);
                 try
                 {
-                    value = new IdnMapping().GetAscii(value).ToLowerInvariant();
+                    value = NormalizeConnectHost(value);
                 }
                 catch (ArgumentException)
                 {
                     continue;
                 }
-                if (subdomains
-                    ? targetHost.Length > value.Length + 1 && targetHost.EndsWith("." + value, StringComparison.Ordinal)
-                    : targetHost == value)
+                var exactOnly = IsIpAddress(value) || string.Equals(value, "localhost", StringComparison.Ordinal);
+                var matches = exactOnly
+                    ? targetHost == value
+                    : subdomains
+                        ? targetHost.Length > value.Length + 1 && targetHost.EndsWith("." + value, StringComparison.Ordinal)
+                        : targetHost == value || targetHost.EndsWith("." + value, StringComparison.Ordinal);
+                if (matches)
                     return true;
             }
             return false;
+        }
+
+        private static string NormalizeConnectHost(Uri uri)
+        {
+            return NormalizeConnectHost(uri.IdnHost);
+        }
+
+        private static string NormalizeConnectHost(string host)
+        {
+            if (string.IsNullOrWhiteSpace(host))
+                throw new ArgumentException("The connect host is empty.", nameof(host));
+            host = host.Trim().TrimEnd('.');
+            if (IsIpAddress(host))
+                return host.ToLowerInvariant();
+            return new IdnMapping().GetAscii(host).ToLowerInvariant();
+        }
+
+        private static bool IsIpAddress(string host)
+        {
+            return System.Net.IPAddress.TryParse(host, out _);
         }
 
     }

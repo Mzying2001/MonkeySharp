@@ -270,6 +270,25 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             }, authorized);
         }
 
+        [Theory]
+        [InlineData("example.com", "https://example.com/path", true)]
+        [InlineData("example.com", "https://api.example.com/path", true)]
+        [InlineData("example.com", "https://badexample.com/path", false)]
+        [InlineData("*.example.com", "https://api.example.com/path", true)]
+        [InlineData("*.example.com", "https://example.com/path", false)]
+        [InlineData("localhost", "http://localhost:8080/path", true)]
+        [InlineData("localhost", "http://api.localhost/path", false)]
+        [InlineData("127.0.0.1", "http://127.0.0.1:8080/path", true)]
+        [InlineData("127.0.0.1", "http://127.0.0.2:8080/path", false)]
+        [InlineData("例子.测试", "https://api.xn--fsqu00a.xn--0zwm56d/path", true)]
+        [InlineData("https://example.com:8443", "https://api.example.com:8443/path", true)]
+        [InlineData("https://example.com:8443", "https://api.example.com/path", false)]
+        public void ConnectHostRulesNormalizeDomainsAndPorts(string declaration, string target, bool expected)
+        {
+            Assert.Equal(expected, ResourceAndNetworkApiProvider.ConnectAllows(
+                new[] { declaration }, new Uri("https://example.com/source"), new Uri(target)));
+        }
+
         [Fact]
         public async Task HttpStreamPublishesRawChunksAndCompletesWithoutBuffering()
         {
