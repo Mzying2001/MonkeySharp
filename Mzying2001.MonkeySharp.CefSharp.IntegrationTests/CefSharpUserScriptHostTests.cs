@@ -944,6 +944,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
             public event EventHandler Completed;
             public event EventHandler<UserScriptDownloadFailure> Failed;
             public event EventHandler Aborted;
+            public event EventHandler TimedOut;
             public void Abort() { }
             public void Dispose() { }
         }

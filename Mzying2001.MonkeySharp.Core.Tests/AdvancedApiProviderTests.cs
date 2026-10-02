@@ -402,7 +402,15 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 var download = await provider.InvokeAsync(Context(
                     installation,
                     "GM.download",
-                    new { url = "https://example.com/file", name = "file", saveAs = true }), CancellationToken.None);
+                    new
+                    {
+                        url = "https://example.com/file",
+                        name = "file",
+                        saveAs = true,
+                        headers = new { Authorization = "Bearer test" },
+                        conflictAction = "overwrite",
+                        timeout = 2500
+                    }), CancellationToken.None);
                 var removed = await provider.InvokeAsync(Context(
                     installation,
                     "GM.unregisterMenuCommand",
@@ -414,6 +422,9 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 Assert.False(services.OpenTab.Active);
                 Assert.Equal("tab", Json(tab.Json).GetProperty("id").GetString());
                 Assert.Equal("download", Json(download.Json).GetProperty("id").GetString());
+                Assert.Equal("Bearer test", services.Download.Headers["Authorization"]);
+                Assert.Equal("overwrite", services.Download.ConflictAction);
+                Assert.Equal(TimeSpan.FromMilliseconds(2500), services.Download.Timeout);
                 Assert.True(Json(removed.Json).GetBoolean());
                 Assert.True(services.MenuRegistration.Disposed);
             }
@@ -568,6 +579,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             public FakeMenuRegistration MenuRegistration { get; } = new FakeMenuRegistration();
             public string ClipboardText { get; private set; }
             public OpenTabRequest OpenTab { get; private set; }
+            public DownloadRequest Download { get; private set; }
 
             public Task<IMenuRegistration> RegisterAsync(MenuCommandRequest request, Action invoked, CancellationToken cancellationToken)
             {
@@ -588,7 +600,10 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 return Task.FromResult<ITabHandle>(new FakeTabHandle("tab"));
             }
             public Task<IDownloadOperation> DownloadAsync(DownloadRequest request, CancellationToken cancellationToken)
-                => Task.FromResult<IDownloadOperation>(new FakeDownloadOperation("download"));
+            {
+                Download = request;
+                return Task.FromResult<IDownloadOperation>(new FakeDownloadOperation("download"));
+            }
         }
 
         private sealed class FakeNotificationHandle : INotificationHandle
@@ -622,6 +637,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             public event EventHandler Completed { add { } remove { } }
             public event EventHandler<UserScriptDownloadFailure> Failed { add { } remove { } }
             public event EventHandler Aborted;
+            public event EventHandler TimedOut { add { } remove { } }
             public void Abort() { Aborted?.Invoke(this, EventArgs.Empty); }
             public void Dispose() { }
         }

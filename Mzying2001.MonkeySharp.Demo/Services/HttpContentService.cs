@@ -97,23 +97,36 @@ namespace Mzying2001.MonkeySharp.Demo.Services
             return uri;
         }
 
-        internal static async Task<HttpResponseMessage> GetResponseAsync(HttpClient client, Uri uri, CancellationToken token)
+        internal static Task<HttpResponseMessage> GetResponseAsync(HttpClient client, Uri uri, CancellationToken token)
+            => GetResponseAsync(client, uri, null, token);
+
+        internal static async Task<HttpResponseMessage> GetResponseAsync(
+            HttpClient client,
+            Uri uri,
+            IReadOnlyDictionary<string, string> headers,
+            CancellationToken token)
         {
             for (var redirects = 0; redirects <= 10; redirects++)
             {
-                var response = await client.GetAsync(RequireHttp(uri.AbsoluteUri), HttpCompletionOption.ResponseHeadersRead, token).ConfigureAwait(false);
-                var status = (int)response.StatusCode;
-                if (status == 301 || status == 302 || status == 303 || status == 307 || status == 308)
+                using (var request = new HttpRequestMessage(HttpMethod.Get, RequireHttp(uri.AbsoluteUri)))
                 {
-                    using (response)
+                    if (headers != null)
+                        foreach (var header in headers)
+                            request.Headers.TryAddWithoutValidation(header.Key, header.Value);
+                    var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, token).ConfigureAwait(false);
+                    var status = (int)response.StatusCode;
+                    if (status == 301 || status == 302 || status == 303 || status == 307 || status == 308)
                     {
-                        if (response.Headers.Location == null) throw new HttpRequestException("Redirect has no Location header.");
-                        uri = new Uri(uri, response.Headers.Location);
+                        using (response)
+                        {
+                            if (response.Headers.Location == null) throw new HttpRequestException("Redirect has no Location header.");
+                            uri = new Uri(uri, response.Headers.Location);
+                        }
+                        continue;
                     }
-                    continue;
+                    try { response.EnsureSuccessStatusCode(); return response; }
+                    catch { response.Dispose(); throw; }
                 }
-                try { response.EnsureSuccessStatusCode(); return response; }
-                catch { response.Dispose(); throw; }
             }
             throw new HttpRequestException("Too many redirects.");
         }

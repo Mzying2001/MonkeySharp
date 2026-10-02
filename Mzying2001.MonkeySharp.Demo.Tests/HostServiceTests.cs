@@ -4,6 +4,7 @@ using Mzying2001.MonkeySharp.Demo.Runtime;
 using Mzying2001.MonkeySharp.Demo.Services;
 using Mzying2001.MonkeySharp.Demo.ViewModels;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -154,7 +155,13 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
                 var key = ScriptKey.Parse(Guid.NewGuid().ToString());
                 using (var service = new DownloadService(fixture.Paths.DownloadsDirectory, Dispatcher.CurrentDispatcher, main))
                 {
-                    var operation = await service.DownloadAsync(new DownloadRequest(key, new Uri(server.BaseUrl + "/download"), "../result.txt", false), CancellationToken.None);
+                    var operation = await service.DownloadAsync(new DownloadRequest(
+                        key,
+                        new Uri(server.BaseUrl + "/download"),
+                        "../result.txt",
+                        false,
+                        new Dictionary<string, string> { ["X-MonkeySharp-Test"] = "download" },
+                        "overwrite"), CancellationToken.None);
                     var progress = 0;
                     var completed = 0;
                     operation.Progress += (sender, args) => progress++;
@@ -171,6 +178,18 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
                     await service.DrainAsync();
                     Assert.False(File.Exists(Path.Combine(fixture.Paths.DownloadsDirectory, "cancel.txt")));
                     Assert.Empty(Directory.GetFiles(fixture.Paths.DownloadsDirectory, "*.part"));
+                    var timedOut = await service.DownloadAsync(new DownloadRequest(
+                        key,
+                        new Uri(server.BaseUrl + "/slow"),
+                        "timeout.txt",
+                        false,
+                        null,
+                        "uniquify",
+                        TimeSpan.FromMilliseconds(20)), CancellationToken.None);
+                    var timeoutCallbacks = 0;
+                    timedOut.TimedOut += (sender, args) => timeoutCallbacks++;
+                    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => timedOut.Completion);
+                    Assert.Equal(1, timeoutCallbacks);
                 }
             }
         });

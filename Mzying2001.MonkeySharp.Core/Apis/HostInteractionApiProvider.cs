@@ -126,16 +126,22 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                     TrackTab(context, tab);
                     return ApiResult.FromValue(new { id = tab.TabId });
                 case "GM.download":
+                    if (string.Equals(ProviderParameters.OptionalString(context.Parameters, "operation"), "abort", StringComparison.Ordinal))
+                        return AbortDownload(context);
                     var download = await _downloads.DownloadAsync(new DownloadRequest(
                         context.Installation.ScriptKey,
                         ReadHttpUrl(context.Parameters, "url"),
                         ProviderParameters.OptionalString(context.Parameters, "name"),
-                        ProviderParameters.OptionalBoolean(context.Parameters, "saveAs")), cancellationToken)
+                        ProviderParameters.OptionalBoolean(context.Parameters, "saveAs"),
+                        ReadHeaders(context.Parameters),
+                        ReadConflictAction(context.Parameters),
+                        ReadTimeout(context.Parameters)), cancellationToken)
                         .ConfigureAwait(false);
                     if (download == null || string.IsNullOrEmpty(download.DownloadId))
                         throw new InvalidOperationException("The download service returned no operation.");
-                    TrackDownload(context, download);
-                    return ApiResult.FromValue(new { id = download.DownloadId });
+                    var clientId = ProviderParameters.OptionalString(context.Parameters, "clientId") ?? Guid.NewGuid().ToString("D");
+                    TrackDownload(context, clientId, download);
+                    return ApiResult.FromValue(new { id = download.DownloadId, clientId = clientId });
                 case "GM.getTab":
                     return ApiResult.FromJson(ValidateJson(await _tabState.GetAsync(
                         context.Installation.ScriptKey, context.Frame, cancellationToken).ConfigureAwait(false)));
@@ -293,23 +299,74 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 _tabHandles[context.ExecutionId + ":" + tab.TabId] = tab;
         }
 
-        private void TrackDownload(ApiInvocationContext context, IDownloadOperation operation)
+        private ApiResult AbortDownload(ApiInvocationContext context)
+        {
+            var downloadId = ProviderParameters.RequiredString(context.Parameters, "downloadId");
+            IDownloadOperation operation;
+            lock (_sync)
+                _downloadOperations.TryGetValue(context.ExecutionId + ":" + downloadId, out operation);
+            if (operation == null)
+                return ApiResult.FromValue(false);
+            operation.Abort();
+            return ApiResult.FromValue(true);
+        }
+
+        private void TrackDownload(ApiInvocationContext context, string clientId, IDownloadOperation operation)
         {
             var key = context.ExecutionId + ":" + operation.DownloadId;
             operation.Progress += (_, progress) => Notification?.Invoke(this, new ApiNotificationEventArgs(
                 context.Installation.ScriptKey, context.ExecutionId, "download-progress",
-                JsonSerializer.Serialize(new { downloadId = operation.DownloadId, loaded = progress.Loaded, total = progress.Total })));
+                JsonSerializer.Serialize(new { downloadId = operation.DownloadId, clientId, loaded = progress.Loaded, total = progress.Total })));
             operation.Completed += (_, __) => Notification?.Invoke(this, new ApiNotificationEventArgs(
                 context.Installation.ScriptKey, context.ExecutionId, "download-complete",
-                JsonSerializer.Serialize(new { downloadId = operation.DownloadId })));
+                JsonSerializer.Serialize(new { downloadId = operation.DownloadId, clientId })));
             operation.Failed += (_, failure) => Notification?.Invoke(this, new ApiNotificationEventArgs(
                 context.Installation.ScriptKey, context.ExecutionId, "download-error",
-                JsonSerializer.Serialize(new { downloadId = operation.DownloadId, message = failure.Error?.Message })));
+                JsonSerializer.Serialize(new { downloadId = operation.DownloadId, clientId,
+                    error = "not_succeeded", details = failure.Error?.Message })));
             operation.Aborted += (_, __) => Notification?.Invoke(this, new ApiNotificationEventArgs(
                 context.Installation.ScriptKey, context.ExecutionId, "download-aborted",
-                JsonSerializer.Serialize(new { downloadId = operation.DownloadId })));
+                JsonSerializer.Serialize(new { downloadId = operation.DownloadId, clientId,
+                    error = "not_succeeded", details = "The download was aborted." })));
+            operation.TimedOut += (_, __) => Notification?.Invoke(this, new ApiNotificationEventArgs(
+                context.Installation.ScriptKey, context.ExecutionId, "download-timeout",
+                JsonSerializer.Serialize(new { downloadId = operation.DownloadId, clientId,
+                    error = "timeout", details = "The download timed out." })));
             lock (_sync)
                 _downloadOperations[key] = operation;
+        }
+
+        private static IDictionary<string, string> ReadHeaders(JsonElement parameters)
+        {
+            if (!parameters.TryGetProperty("headers", out var value))
+                return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (value.ValueKind != JsonValueKind.Object)
+                throw ProviderParameters.Invalid("headers must be an object.");
+            var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var header in value.EnumerateObject())
+            {
+                if (header.Value.ValueKind != JsonValueKind.String)
+                    throw ProviderParameters.Invalid("headers." + header.Name + " must be a string.");
+                headers[header.Name] = header.Value.GetString();
+            }
+            return headers;
+        }
+
+        private static string ReadConflictAction(JsonElement parameters)
+        {
+            var value = ProviderParameters.OptionalString(parameters, "conflictAction") ?? "uniquify";
+            if (value != "uniquify" && value != "overwrite" && value != "prompt")
+                throw ProviderParameters.Invalid("conflictAction must be 'uniquify', 'overwrite', or 'prompt'.");
+            return value;
+        }
+
+        private static TimeSpan? ReadTimeout(JsonElement parameters)
+        {
+            if (!parameters.TryGetProperty("timeout", out var value))
+                return null;
+            if (value.ValueKind != JsonValueKind.Number || !value.TryGetInt32(out var milliseconds) || milliseconds <= 0)
+                throw ProviderParameters.Invalid("timeout must be a positive integer.");
+            return TimeSpan.FromMilliseconds(milliseconds);
         }
 
         private async Task<ApiResult> RegisterMenuAsync(

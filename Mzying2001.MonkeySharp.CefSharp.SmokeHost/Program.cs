@@ -789,6 +789,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
         public event EventHandler Completed;
         public event EventHandler<UserScriptDownloadFailure> Failed;
         public event EventHandler Aborted;
+        public event EventHandler TimedOut;
 
         public void Abort()
         {

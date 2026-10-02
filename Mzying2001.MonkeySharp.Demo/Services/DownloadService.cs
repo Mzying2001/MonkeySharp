@@ -4,6 +4,7 @@ using Microsoft.Win32;
 using Mzying2001.MonkeySharp.Core.Apis;
 using Mzying2001.MonkeySharp.Demo.ViewModels;
 using System;
+using System.Collections.Generic;
 using System.Collections.Concurrent;
 using System.IO;
 using System.Linq;
@@ -51,7 +52,7 @@ namespace Mzying2001.MonkeySharp.Demo.Services
             HttpContentService.RequireHttp(request.Url.AbsoluteUri);
             var name = SafeFileName(string.IsNullOrWhiteSpace(request.Name) ? Path.GetFileName(request.Url.AbsolutePath) : request.Name);
             var path = Path.Combine(_directory, name);
-            if (request.SaveAs)
+            if (request.SaveAs || request.ConflictAction == "prompt")
             {
                 path = await _dispatcher.InvokeAsync(() =>
                 {
@@ -63,7 +64,14 @@ namespace Mzying2001.MonkeySharp.Demo.Services
             }
             cancellationToken.ThrowIfCancellationRequested();
             if (_disposed) throw new ObjectDisposedException(nameof(DownloadService));
-            var operation = new DownloadOperation(_client, request.Url, path, request.SaveAs, cancellationToken);
+            var operation = new DownloadOperation(
+                _client,
+                request.Url,
+                path,
+                request.ConflictAction == "overwrite",
+                request.Headers,
+                request.Timeout,
+                cancellationToken);
             _operations.TryAdd(operation.DownloadId, operation);
             var item = new DownloadItemViewModel(name, operation.Abort);
             Post(() => _main.Downloads.Add(item));
@@ -108,20 +116,43 @@ namespace Mzying2001.MonkeySharp.Demo.Services
             private readonly Uri _url;
             private readonly string _path;
             private readonly bool _overwrite;
+            private readonly IReadOnlyDictionary<string, string> _headers;
             private readonly CancellationTokenSource _cancellation;
+            private readonly CancellationTokenSource _timeoutCancellation;
             private readonly TaskCompletionSource<object> _completion = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
             private readonly object _sync = new object();
             private bool _finished;
             private int _terminal;
+            private bool _timedOut;
             private Exception _error;
             private EventHandler _completed;
             private EventHandler<UserScriptDownloadFailure> _failed;
             private EventHandler _aborted;
-            public DownloadOperation(HttpClient client, Uri url, string path, bool overwrite, CancellationToken token)
+            private EventHandler _timeout;
+            public DownloadOperation(
+                HttpClient client,
+                Uri url,
+                string path,
+                bool overwrite,
+                IReadOnlyDictionary<string, string> headers,
+                TimeSpan? timeout,
+                CancellationToken token)
             {
-                _client = client; _url = url; _path = path; _overwrite = overwrite;
+                _client = client; _url = url; _path = path; _overwrite = overwrite; _headers = headers;
                 _cancellation = CancellationTokenSource.CreateLinkedTokenSource(token);
-                _cancellation.CancelAfter(TimeSpan.FromMinutes(10));
+                _timeoutCancellation = new CancellationTokenSource();
+                var effectiveTimeout = timeout ?? TimeSpan.FromMinutes(10);
+                if (effectiveTimeout <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(timeout));
+                _timeoutCancellation.CancelAfter(effectiveTimeout);
+                _timeoutCancellation.Token.Register(() =>
+                {
+                    lock (_sync)
+                    {
+                        if (_terminal != 0) return;
+                        _timedOut = true;
+                    }
+                    try { _cancellation.Cancel(); } catch (ObjectDisposedException) { }
+                });
             }
             public string DownloadId { get; } = Guid.NewGuid().ToString("N");
             public Task Completion => _completion.Task;
@@ -142,8 +173,16 @@ namespace Mzying2001.MonkeySharp.Demo.Services
                 add { bool replay; lock (_sync) { _aborted += value; replay = _terminal == 3; } if (replay) Raise(() => value(this, EventArgs.Empty)); }
                 remove { lock (_sync) _aborted -= value; }
             }
+            public event EventHandler TimedOut
+            {
+                add { bool replay; lock (_sync) { _timeout += value; replay = _terminal == 4; } if (replay) Raise(() => value(this, EventArgs.Empty)); }
+                remove { lock (_sync) _timeout -= value; }
+            }
             public void Start() { Work = Task.Run(RunAsync); }
-            public void Abort() { lock (_sync) if (!_finished) _cancellation.Cancel(); }
+            public void Abort()
+            {
+                lock (_sync) if (!_finished && _terminal == 0) _cancellation.Cancel();
+            }
             public void Dispose() => Abort();
 
             private async Task RunAsync()
@@ -151,7 +190,7 @@ namespace Mzying2001.MonkeySharp.Demo.Services
                 var partial = _path + "." + DownloadId + ".part";
                 try
                 {
-                    using (var response = await HttpContentService.GetResponseAsync(_client, _url, _cancellation.Token).ConfigureAwait(false))
+                    using (var response = await HttpContentService.GetResponseAsync(_client, _url, _headers, _cancellation.Token).ConfigureAwait(false))
                     using (var input = await response.Content.ReadAsStreamAsync().ConfigureAwait(false))
                     using (var output = new FileStream(partial, FileMode.CreateNew, FileAccess.Write, FileShare.None, 65536, true))
                     {
@@ -168,6 +207,7 @@ namespace Mzying2001.MonkeySharp.Demo.Services
                     }
                     _cancellation.Token.ThrowIfCancellationRequested();
                     if (_overwrite && File.Exists(_path)) File.Replace(partial, _path, null);
+                    else if (_overwrite) File.Move(partial, _path);
                     else
                     {
                         var destination = _path;
@@ -183,7 +223,9 @@ namespace Mzying2001.MonkeySharp.Demo.Services
                 }
                 catch (OperationCanceledException)
                 {
-                    Finish(3, null);
+                    bool timedOut;
+                    lock (_sync) timedOut = _timedOut;
+                    Finish(timedOut ? 4 : 3, timedOut ? new TimeoutException("The download timed out.") : null);
                     _completion.TrySetCanceled();
                 }
                 catch (Exception exception)
@@ -193,7 +235,7 @@ namespace Mzying2001.MonkeySharp.Demo.Services
                 }
                 finally
                 {
-                    lock (_sync) { _finished = true; _cancellation.Dispose(); }
+                    lock (_sync) { _finished = true; _cancellation.Dispose(); _timeoutCancellation.Dispose(); }
                     try { if (File.Exists(partial)) File.Delete(partial); }
                     catch (IOException) { }
                     catch (UnauthorizedAccessException) { }
@@ -205,13 +247,16 @@ namespace Mzying2001.MonkeySharp.Demo.Services
                 EventHandler completed;
                 EventHandler aborted;
                 EventHandler<UserScriptDownloadFailure> failed;
+                EventHandler timeout;
                 lock (_sync)
                 {
+                    if (_terminal != 0) return;
                     _terminal = terminal; _error = error;
-                    completed = _completed; aborted = _aborted; failed = _failed;
+                    completed = _completed; aborted = _aborted; failed = _failed; timeout = _timeout;
                 }
                 if (terminal == 1) Raise(() => completed?.Invoke(this, EventArgs.Empty));
                 else if (terminal == 2) Raise(() => failed?.Invoke(this, new UserScriptDownloadFailure(error)));
+                else if (terminal == 4) Raise(() => timeout?.Invoke(this, EventArgs.Empty));
                 else Raise(() => aborted?.Invoke(this, EventArgs.Empty));
             }
 

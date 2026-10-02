@@ -490,12 +490,20 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         /// <param name="url">The absolute HTTP or HTTPS download URL.</param>
         /// <param name="name">The optional suggested file name.</param>
         /// <param name="saveAs">Whether the host should prompt for a destination.</param>
-        public DownloadRequest(ScriptKey scriptKey, Uri url, string name, bool saveAs)
+        /// <param name="headers">Optional HTTP request headers.</param>
+        /// <param name="conflictAction">The conflict policy: uniquify, overwrite, or prompt.</param>
+        /// <param name="timeout">An optional download timeout.</param>
+        public DownloadRequest(ScriptKey scriptKey, Uri url, string name, bool saveAs,
+            IDictionary<string, string> headers = null, string conflictAction = "uniquify", TimeSpan? timeout = null)
         {
             ScriptKey = scriptKey;
             Url = url ?? throw new ArgumentNullException(nameof(url));
             Name = name;
             SaveAs = saveAs;
+            Headers = new ReadOnlyDictionary<string, string>(new Dictionary<string, string>(
+                headers ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase));
+            ConflictAction = string.IsNullOrEmpty(conflictAction) ? "uniquify" : conflictAction;
+            Timeout = timeout;
         }
 
         /// <summary>Gets the requesting script installation.</summary>
@@ -509,6 +517,12 @@ namespace Mzying2001.MonkeySharp.Core.Apis
 
         /// <summary>Gets whether the host should prompt for a destination.</summary>
         public bool SaveAs { get; }
+        /// <summary>Gets request headers supplied to the download.</summary>
+        public IReadOnlyDictionary<string, string> Headers { get; }
+        /// <summary>Gets the host conflict policy: uniquify, overwrite, or prompt.</summary>
+        public string ConflictAction { get; }
+        /// <summary>Gets the optional operation timeout.</summary>
+        public TimeSpan? Timeout { get; }
     }
 
     /// <summary>
@@ -559,6 +573,9 @@ namespace Mzying2001.MonkeySharp.Core.Apis
 
         /// <summary>Occurs when the download is aborted.</summary>
         event EventHandler Aborted;
+
+        /// <summary>Occurs when the download reaches its configured timeout.</summary>
+        event EventHandler TimedOut;
 
         /// <summary>Aborts the download.</summary>
         void Abort();

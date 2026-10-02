@@ -31,6 +31,24 @@
 
             const decodeResult = value => value && value.$monkeySharpType === "undefined" ? undefined : value;
 
+            const downloadError = function (error, fallback) {
+                if (error && typeof error === "object" && typeof error.error === "string") {
+                    return { error: error.error, details: error.details || null };
+                }
+                const code = error && error.code;
+                const mapped = {
+                    MSP004_GRANT_DENIED: "not_permitted",
+                    MSP005_PERMISSION_DENIED: "not_whitelisted",
+                    MSP006_NOT_SUPPORTED: "not_supported",
+                    MSP009_TIMEOUT: "timeout",
+                    MSP010_CANCELED: "not_succeeded"
+                };
+                return {
+                    error: mapped[code] || fallback || "not_succeeded",
+                    details: error && error.message ? error.message : String(error || "The download failed.")
+                };
+            };
+
             const serializableValue = function (value) {
                 if (typeof value === "undefined" || typeof value === "function" || typeof value === "symbol") {
                     throw new TypeError("The value is not JSON serializable.");
@@ -738,14 +756,44 @@
                     };
                 }
                 if (enabled("GM.download")) {
-                    api.download = async function (details) {
+                    api.download = async function (details, state) {
                         if (typeof details === "string") details = { url: details };
                         if (!details || typeof details !== "object") throw new TypeError("details must be an object.");
-                        return call(record, "GM.download", {
+                        const clientId = uuid();
+                        state = state || { clientId: clientId, id: null, abortRequested: false, callbacks: {} };
+                        state.clientId = clientId;
+                        record.downloadHandlers.set(clientId, state);
+                        const request = {
+                            operation: "start",
+                            clientId: clientId,
                             url: details.url,
                             name: details.name || null,
-                            saveAs: Boolean(details.saveAs)
-                        });
+                            headers: details.headers ? serializableValue(details.headers) : {},
+                            saveAs: Boolean(details.saveAs),
+                            conflictAction: details.conflictAction || "uniquify",
+                            timeout: typeof details.timeout === "number" ? details.timeout : undefined
+                        };
+                        const handle = {
+                            id: null,
+                            abort: function () {
+                                if (state.aborted) return Promise.resolve(false);
+                                state.aborted = true;
+                                state.abortRequested = true;
+                                if (!state.id) return Promise.resolve(false);
+                                return call(record, "GM.download", { operation: "abort", downloadId: state.id });
+                            }
+                        };
+                        state.handle = handle;
+                        try {
+                            const result = await call(record, "GM.download", request);
+                            state.id = result && result.id;
+                            handle.id = state.id;
+                            if (state.abortRequested) await handle.abort();
+                            return handle;
+                        } catch (error) {
+                            record.downloadHandlers.delete(clientId);
+                            throw downloadError(error);
+                        }
                     };
                 }
                 if (enabled("GM.getTab")) api.getTab = async () => call(record, "GM.getTab", {});
@@ -1005,23 +1053,36 @@
                     return handle;
                 };
                 if (api.download) facade.GM_download = function (details, onload, onerror) {
+                    if (typeof details === "string" && typeof onload === "string") {
+                        details = { url: details, name: onload };
+                        onload = undefined;
+                    }
                     if (typeof details === "string") details = { url: details };
                     if (!details || typeof details !== "object") throw new TypeError("details must be an object.");
-                    ["onload", "onerror", "onprogress"].forEach(name => {
+                    ["onload", "onerror", "onprogress", "ontimeout"].forEach(name => {
                         if (typeof details[name] !== "undefined" && typeof details[name] !== "function") {
                             throw new TypeError(name + " must be a function.");
                         }
                     });
-                    const state = { id: null, callbacks: { onload: onload || details.onload, onerror: onerror || details.onerror, onprogress: details.onprogress }, aborted: false };
-                    const handle = { abort: function () { state.aborted = true; if (state.id) record.downloadHandlers.get(state.id)?.abort(); } };
-                    api.download(details).then(result => {
-                        state.id = result && result.id;
-                        if (state.id) record.downloadHandlers.set(state.id, state);
-                    }).catch(error => {
-                        if (typeof state.callbacks.onerror === "function") state.callbacks.onerror(error);
+                    const state = { id: null, callbacks: {
+                        onload: onload || details.onload,
+                        onerror: onerror || details.onerror,
+                        onprogress: details.onprogress,
+                        ontimeout: details.ontimeout
+                    } };
+                    const handlePromise = api.download(details, state);
+                    handlePromise.catch(error => {
+                        if (typeof state.callbacks.onerror === "function") state.callbacks.onerror(downloadError(error));
                         else console.error("[MonkeySharp] legacy download failed", error);
                     });
-                    return handle;
+                    return {
+                        abort: function () {
+                            if (state.abortRequested) return Promise.resolve(false);
+                            state.abortRequested = true;
+                            return state.handle ? state.handle.abort() : Promise.resolve(false);
+                        },
+                        get id() { return state.id; }
+                    };
                 };
                 if (api.cookie) facade.GM_cookie = {
                     list: function (details, callback) {
@@ -1198,17 +1259,22 @@
                         return true;
                     }
                     if (notification.event === "download-progress" || notification.event === "download-complete" ||
-                        notification.event === "download-error" || notification.event === "download-aborted") {
-                        const state = record.downloadHandlers.get(data.downloadId);
+                        notification.event === "download-error" || notification.event === "download-aborted" ||
+                        notification.event === "download-timeout") {
+                        const state = record.downloadHandlers.get(data.clientId || data.downloadId);
                         if (!state) return false;
                         if (notification.event === "download-progress") {
                             if (state.callbacks.onprogress) state.callbacks.onprogress({ loaded: data.loaded, total: data.total });
                         } else if (notification.event === "download-complete") {
                             if (state.callbacks.onload) state.callbacks.onload({ id: data.downloadId });
-                            record.downloadHandlers.delete(data.downloadId);
+                            record.downloadHandlers.delete(data.clientId || data.downloadId);
+                        } else if (notification.event === "download-timeout") {
+                            if (state.callbacks.ontimeout) state.callbacks.ontimeout({ error: data.error || "timeout", details: data.details || null });
+                            else if (state.callbacks.onerror) state.callbacks.onerror({ error: data.error || "timeout", details: data.details || null });
+                            record.downloadHandlers.delete(data.clientId || data.downloadId);
                         } else {
-                            if (state.callbacks.onerror) state.callbacks.onerror(new Error(data.message || "The download failed."));
-                            record.downloadHandlers.delete(data.downloadId);
+                            if (state.callbacks.onerror) state.callbacks.onerror({ error: data.error || "not_succeeded", details: data.details || null });
+                            record.downloadHandlers.delete(data.clientId || data.downloadId);
                         }
                         return true;
                     }
