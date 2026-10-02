@@ -71,7 +71,7 @@ CefSharp 宿主默认提供 `GM.xmlHttpRequest`、`GM.cookie` 和 `GM.webRequest
 
 ### Cookie
 
-声明 `@grant GM.cookie` 或 `@grant GM_cookie`。默认提供程序使用已附加浏览器的请求上下文。URL 必须是绝对 HTTP(S) 地址；Core 校验 domain、path、secure、SameSite 和过期字段。
+声明 `@grant GM.cookie` 或 `@grant GM_cookie`。默认提供程序使用已附加浏览器的请求上下文。省略 `details.url` 时使用当前文档 URL；显式 URL 必须被脚本的 `@match` 或 `@include` 覆盖。Core 校验 domain、path、secure、SameSite、`expirationDate`、`httpOnly` 和第一方字段。
 
 ```javascript
 const cookies = await GM.cookie.list({ url: location.href });
@@ -80,7 +80,7 @@ await GM.cookie.delete({ url: location.href, name: "session" });
 const listenerId = GM.cookie.addListener({}, change => console.log(change.cause));
 ```
 
-`GM_cookie.list/set/delete` 使用回调，`addListener/removeListener` 使用数字 ID。执行、文档、框架或宿主释放时会清理监听器。
+`GM_cookie.list` 回调签名为 `(cookies, error)`，`set` 和 `delete` 回调签名为 `(error)`；成功时错误值为 `null` 或 `undefined`。`addListener/removeListener` 使用数字 ID。执行、文档、框架或宿主释放时会清理监听器。
 
 ### Web Request
 

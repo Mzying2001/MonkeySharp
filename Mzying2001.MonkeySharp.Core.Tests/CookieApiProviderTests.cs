@@ -1,4 +1,5 @@
 using Mzying2001.MonkeySharp.Core.Apis;
+using Mzying2001.MonkeySharp.Core.Bridge;
 using Mzying2001.MonkeySharp.Core.Domain;
 using Mzying2001.MonkeySharp.Core.Repository;
 using Mzying2001.MonkeySharp.Core.Runtime;
@@ -78,6 +79,52 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 {
                     operation = "removeListener", listenerId = 1
                 }), CancellationToken.None)).Json).GetBoolean() == false);
+            }
+        }
+
+        [Fact]
+        public async Task CookieDefaultsToFrameUrlAndUsesTampermonkeyFields()
+        {
+            var installation = await InstallAsync("// @grant GM.cookie");
+            using (var service = new InMemoryCookieService())
+            using (var provider = new CookieApiProvider(service))
+            {
+                var result = await provider.InvokeAsync(Context(installation, new
+                {
+                    operation = "set",
+                    details = new
+                    {
+                        name = "sid", value = "abc", httpOnly = true,
+                        expirationDate = DateTimeOffset.UtcNow.AddMinutes(5).ToUnixTimeSeconds(),
+                        firstPartyDomain = "example.com"
+                    }
+                }), CancellationToken.None);
+
+                var cookie = Json(result.Json);
+                Assert.Equal("example.com", cookie.GetProperty("domain").GetString());
+                Assert.True(cookie.GetProperty("httpOnly").GetBoolean());
+                Assert.Equal("example.com", cookie.GetProperty("firstPartyDomain").GetString());
+                Assert.True(cookie.GetProperty("hostOnly").GetBoolean());
+                Assert.False(cookie.GetProperty("session").GetBoolean());
+                Assert.True(cookie.GetProperty("expirationDate").GetInt64() > 0);
+            }
+        }
+
+        [Fact]
+        public async Task CookieRejectsUrlsOutsideScriptMatchRules()
+        {
+            var installation = await InstallAsync("// @grant GM.cookie");
+            using (var service = new InMemoryCookieService())
+            using (var provider = new CookieApiProvider(service))
+            {
+                var exception = await Assert.ThrowsAsync<BridgeProtocolException>(() => provider.InvokeAsync(
+                    Context(installation, new
+                    {
+                        operation = "list",
+                        details = new { url = "https://outside.example/" }
+                    }), CancellationToken.None));
+
+                Assert.Equal(BridgeErrorCodes.PermissionDenied, exception.Code);
             }
         }
 

@@ -1026,16 +1026,28 @@
                 if (api.cookie) facade.GM_cookie = {
                     list: function (details, callback) {
                         if (typeof details === "function") { callback = details; details = {}; }
-                        api.cookie.list(details).then(value => { if (typeof callback === "function") callback(value); })
-                            .catch(error => console.error("[MonkeySharp] legacy cookie list failed", error));
+                        api.cookie.list(details).then(value => {
+                            if (typeof callback === "function") callback(value, null);
+                        }).catch(error => {
+                            if (typeof callback === "function") callback(null, String(error && error.message || error));
+                            else console.error("[MonkeySharp] legacy cookie list failed", error);
+                        });
                     },
                     set: function (details, callback) {
-                        api.cookie.set(details).then(value => { if (typeof callback === "function") callback(value); })
-                            .catch(error => console.error("[MonkeySharp] legacy cookie set failed", error));
+                        api.cookie.set(details).then(() => {
+                            if (typeof callback === "function") callback();
+                        }).catch(error => {
+                            if (typeof callback === "function") callback(String(error && error.message || error));
+                            else console.error("[MonkeySharp] legacy cookie set failed", error);
+                        });
                     },
                     delete: function (details, callback) {
-                        api.cookie.delete(details).then(value => { if (typeof callback === "function") callback(value); })
-                            .catch(error => console.error("[MonkeySharp] legacy cookie delete failed", error));
+                        api.cookie.delete(details).then(() => {
+                            if (typeof callback === "function") callback();
+                        }).catch(error => {
+                            if (typeof callback === "function") callback(String(error && error.message || error));
+                            else console.error("[MonkeySharp] legacy cookie delete failed", error);
+                        });
                     },
                     addListener: function (details, callback) { return api.cookie.addListener(details, callback); },
                     removeListener: function (listenerId) {

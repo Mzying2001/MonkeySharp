@@ -99,6 +99,35 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Fact]
+        public async Task CookieAuthorizationUsesNestedOrFrameUrlTargets()
+        {
+            var policy = new CapturingAllowPolicy();
+            using (var service = new InMemoryCookieService())
+            using (var fixture = await BridgeFixture.CreateAsync(
+                policy,
+                new IUserScriptApiProvider[] { new CookieApiProvider(service) },
+                null,
+                "GM.cookie"))
+            {
+                await fixture.RequestAsync("GM.cookie", new
+                {
+                    operation = "list",
+                    details = new { }
+                });
+
+                Assert.Equal(fixture.Frame.Url.AbsoluteUri, policy.LastRequest.Target);
+
+                await fixture.RequestAsync("GM.cookie", new
+                {
+                    operation = "list",
+                    details = new { url = "https://example.com/other" }
+                });
+
+                Assert.Equal("https://example.com/other", policy.LastRequest.Target);
+            }
+        }
+
+        [Fact]
         public async Task BasicStorageApiPreservesJsonNullAndMissing()
         {
             using (var fixture = await BridgeFixture.CreateAsync(
@@ -531,6 +560,18 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             public Task<PermissionDecision> AuthorizeAsync(ApiAuthorizationRequest request, CancellationToken cancellationToken)
             {
                 return Task.FromResult(PermissionDecision.Deny);
+            }
+        }
+
+        private sealed class CapturingAllowPolicy : IUserScriptPermissionPolicy
+        {
+            public ApiAuthorizationRequest LastRequest { get; private set; }
+
+            public Task<PermissionDecision> AuthorizeAsync(
+                ApiAuthorizationRequest request, CancellationToken cancellationToken)
+            {
+                LastRequest = request;
+                return Task.FromResult(PermissionDecision.Allow);
             }
         }
 

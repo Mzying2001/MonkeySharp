@@ -466,7 +466,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                         execution.Installation,
                         execution.Frame,
                         method,
-                        ReadTarget(parameters),
+                        ReadTarget(method, parameters, execution.Frame.Url),
                         Summarize(parameters),
                         SupportedApis());
                     var decision = await _permissionPolicy.AuthorizeAsync(authorization, linked.Token).ConfigureAwait(false);
@@ -953,10 +953,21 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                 requestId));
         }
 
-        private static string ReadTarget(JsonElement parameters)
+        private static string ReadTarget(string method, JsonElement parameters, Uri frameUrl)
         {
             if (parameters.ValueKind != JsonValueKind.Object)
                 return null;
+            if (string.Equals(method, "GM.cookie", StringComparison.Ordinal))
+            {
+                if (parameters.TryGetProperty("details", out var details) &&
+                    details.ValueKind == JsonValueKind.Object &&
+                    details.TryGetProperty("url", out var nestedUrl) &&
+                    nestedUrl.ValueKind == JsonValueKind.String)
+                    return nestedUrl.GetString();
+                if (parameters.TryGetProperty("url", out var directUrl) && directUrl.ValueKind == JsonValueKind.String)
+                    return directUrl.GetString();
+                return frameUrl?.AbsoluteUri;
+            }
             foreach (var name in new[] { "url", "name", "key" })
             {
                 if (parameters.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String)

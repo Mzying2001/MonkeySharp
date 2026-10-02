@@ -71,7 +71,7 @@ Request and response sizes are unlimited by default. Each direction stays in mem
 
 ### Cookies
 
-Declare `@grant GM.cookie` or `@grant GM_cookie`. The default provider uses the attached browser request context. URLs must be absolute HTTP(S) URLs; Core validates domain, path, secure, SameSite, and expiration fields.
+Declare `@grant GM.cookie` or `@grant GM_cookie`. The default provider uses the attached browser request context. An omitted `details.url` uses the current document URL; an explicit URL must be covered by the script's `@match` or `@include` rules. Core validates domain, path, secure, SameSite, `expirationDate`, `httpOnly`, and first-party fields.
 
 ```javascript
 const cookies = await GM.cookie.list({ url: location.href });
@@ -80,7 +80,7 @@ await GM.cookie.delete({ url: location.href, name: "session" });
 const listenerId = GM.cookie.addListener({}, change => console.log(change.cause));
 ```
 
-`GM_cookie.list/set/delete` use callbacks, while `addListener/removeListener` use numeric IDs. Listener registrations are released with the execution, document, frame, or host.
+`GM_cookie.list` calls back as `(cookies, error)`, while `set` and `delete` call back as `(error)`. Successful operations pass `null`/`undefined` for the error value. `addListener/removeListener` use numeric IDs. Listener registrations are released with the execution, document, frame, or host.
 
 ### Web Requests
 
