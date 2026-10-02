@@ -84,19 +84,20 @@ const listenerId = GM.cookie.addListener({}, change => console.log(change.cause)
 
 ### Web Request
 
-声明 `@grant GM.webRequest` 或 `@grant GM_webRequest`。默认内存服务会挂载 `CefSharpWebRequestHandler`。规则在注册时校验，并在每次请求时重新通过权限策略检查。阻止、重定向、请求头修改和身份验证决策是预注册的宿主规则；JavaScript 回调不会阻塞网络线程。
+声明 `@grant GM.webRequest` 或 `@grant GM_webRequest`。默认内存服务会挂载 `CefSharpWebRequestHandler`。注册使用 Tampermonkey selector/action 合约并返回可移除 handle。字符串 selector 是 URL glob（或 `/regexp/`）；对象 selector 支持字符串或数组形式的 `include`、WebExtension `match` 和 `exclude`。action 支持 `cancel`、静态 HTTP(S) 重定向，或 `{ from, to }` 动态替换。重定向目标会在注册时及实际求值时按脚本 URL 规则检查。JavaScript 回调不会阻塞网络线程。
 
 ```javascript
-const ruleId = await GM.webRequest.addRule({
-  id: "strip-tracking",
-  phase: "OnBeforeRequest",
-  priority: 100,
-  filter: { urlPatterns: ["https://example.com/*"], resourceTypes: ["Script"] },
-  action: { kind: "ModifyRequestHeaders", headers: { "X-Userscript": "1" } }
+const registration = GM.webRequest([
+  { selector: "https://example.com/*", action: "cancel" },
+  { selector: { match: "https://example.com/*", exclude: "https://example.com/ignore" },
+    action: { from: "/old", to: "/new" } }
+], (info, message, details) => {
+  console.log(info.url, message, details);
 });
+registration.remove();
 ```
 
-`GM_webRequest(rules, listener)` 是旧式注册形式。规则按优先级降序、注册顺序升序执行；阻止和重定向会结束求值，较后的请求头规则覆盖较早的值。适配器会拒绝已被占用且未复用的请求处理器，而不会静默替换。
+`GM_webRequest(rules, listener)` 是同一注册函数的 legacy 别名。listener 使用 `(info, message, details)`，只报告 `cancel` 或 `redirect` 结果。适配器会拒绝已被占用且未复用的请求处理器，而不会静默替换。
 
 ## 宿主服务契约
 

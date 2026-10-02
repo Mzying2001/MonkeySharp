@@ -37,6 +37,7 @@
                 }
                 const code = error && error.code;
                 const mapped = {
+                    MSP003_SESSION_EXPIRED: "not_enabled",
                     MSP004_GRANT_DENIED: "not_permitted",
                     MSP005_PERMISSION_DENIED: "not_whitelisted",
                     MSP006_NOT_SUPPORTED: "not_supported",
@@ -877,30 +878,53 @@
                     });
                 }
                 if (enabled("GM.webRequest")) {
-                    api.webRequest = Object.freeze({
-                        addRule: rule => call(record, "GM.webRequest", { operation: "addRule", rule: serializableValue(rule || {}) }),
-                        removeRule: id => call(record, "GM.webRequest", { operation: "removeRule", id: id }),
-                        listRules: () => call(record, "GM.webRequest", { operation: "listRules" }),
-                        addListener: function (filter, callback) {
-                            if (typeof filter === "function") { callback = filter; filter = {}; }
-                            if (typeof callback !== "function") throw new TypeError("callback must be a function.");
-                            const listenerId = nextListenerId++;
-                            record.webRequestHandlers.set(listenerId, callback);
-                            call(record, "GM.webRequest", {
-                                operation: "addListener", listenerId: listenerId,
-                                filter: serializableValue(filter || {})
-                            }).catch(error => {
-                                record.webRequestHandlers.delete(listenerId);
-                                console.error("[MonkeySharp] webRequest listener registration failed", error);
-                            });
-                            return listenerId;
-                        },
-                        removeListener: async function (listenerId) {
-                            const removed = await call(record, "GM.webRequest", { operation: "removeListener", listenerId: listenerId });
-                            if (removed) record.webRequestHandlers.delete(listenerId);
-                            return removed;
+                    api.webRequest = function (rules, listener) {
+                        if (!Array.isArray(rules)) rules = [rules];
+                        if (typeof listener !== "undefined" && typeof listener !== "function") {
+                            throw new TypeError("listener must be a function.");
                         }
-                    });
+                        const listenerId = typeof listener === "function" ? nextListenerId++ : 0;
+                        if (listenerId) record.webRequestHandlers.set(listenerId, listener);
+                        const state = { id: null, removeRequested: false, removePromise: null, removeResolve: null, removeReject: null };
+                        const sendRemove = function () {
+                            if (!state.id) return state.removePromise || Promise.resolve(false);
+                            const request = call(record, "GM.webRequest", { operation: "remove", id: state.id });
+                            request.then(value => {
+                                if (state.removeResolve) state.removeResolve(value);
+                                if (listenerId) record.webRequestHandlers.delete(listenerId);
+                            }, error => {
+                                if (state.removeReject) state.removeReject(error);
+                            });
+                            return request;
+                        };
+                        const handle = {};
+                        Object.defineProperties(handle, {
+                            id: { enumerable: true, get: () => state.id }
+                        });
+                        handle.remove = function () {
+                            if (state.removeRequested) return state.removePromise || Promise.resolve(false);
+                            state.removeRequested = true;
+                            state.removePromise = new Promise((resolve, reject) => {
+                                state.removeResolve = resolve;
+                                state.removeReject = reject;
+                            });
+                            if (state.id) sendRemove();
+                            return state.removePromise;
+                        };
+                        call(record, "GM.webRequest", {
+                            operation: "register",
+                            rules: serializableValue(rules),
+                            listenerId: listenerId || undefined
+                        }).then(result => {
+                            state.id = result && result.id;
+                            if (state.removeRequested) sendRemove();
+                        }).catch(error => {
+                            if (listenerId) record.webRequestHandlers.delete(listenerId);
+                            if (state.removeReject) state.removeReject(error);
+                            else console.error("[MonkeySharp] webRequest registration failed", error);
+                        });
+                        return handle;
+                    };
                 }
                 return Object.freeze(api);
             };
@@ -1153,19 +1177,7 @@
                     }
                 };
                 if (api.webRequest) facade.GM_webRequest = function (rules, listener) {
-                    if (!Array.isArray(rules)) rules = [rules];
-                    const listenerId = typeof listener === "function" ? api.webRequest.addListener({}, listener) : null;
-                    const ids = [];
-                    rules.forEach(rule => api.webRequest.addRule(rule).then(id => ids.push(id))
-                        .catch(error => console.error("[MonkeySharp] legacy webRequest rule failed", error)));
-                    return {
-                        remove: function () {
-                            ids.splice(0).forEach(id => api.webRequest.removeRule(id)
-                                .catch(error => console.error("[MonkeySharp] legacy webRequest removal failed", error)));
-                            if (listenerId) api.webRequest.removeListener(listenerId)
-                                .catch(error => console.error("[MonkeySharp] legacy webRequest listener removal failed", error));
-                        }
-                    };
+                    return api.webRequest(rules, listener);
                 };
                 return facade;
             };
@@ -1327,10 +1339,10 @@
                         callback(data.cookie, data.cause, Boolean(data.removed));
                         return true;
                     }
-                    if (notification.event === "webrequest-event") {
+                    if (notification.event === "webrequest-result") {
                         const callback = record.webRequestHandlers.get(data.listenerId);
                         if (!callback) return false;
-                        callback(data);
+                        callback(data.info, data.message, data.details);
                         return true;
                     }
                     if (notification.event.indexOf("xhr-") === 0) {

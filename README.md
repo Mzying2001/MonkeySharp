@@ -135,7 +135,7 @@ Canonical `GM.*` APIs and legacy aliases are exposed only when the exact grant a
 | `GM.notification`, `GM.setClipboard`, `GM.openInTab`, `GM.download` and aliases | Conditional | Require their corresponding host services. |
 | `GM.getTab`, `GM.saveTab`, `GM.getTabs` and aliases | Conditional | Require `ITabStateService`. |
 | `GM.cookie` / `GM_cookie` | CefSharp default | Structured access to the attached browser request context. |
-| `GM.webRequest` / `GM_webRequest` | CefSharp default | Pre-registered request rules and event observation. |
+| `GM.webRequest` / `GM_webRequest` | CefSharp default | Tampermonkey selector/action registrations with removable handles and cancel/redirect result callbacks. |
 | `unsafeWindow` | Trusted page world only | Exposed only for its exact grant. |
 
 Modern storage and resource reads return Promises; their legacy aliases use bounded synchronous bootstrap snapshots. Legacy callback APIs return their handle or ID immediately and report callback failures as diagnostics.

@@ -84,19 +84,20 @@ const listenerId = GM.cookie.addListener({}, change => console.log(change.cause)
 
 ### Web Requests
 
-Declare `@grant GM.webRequest` or `@grant GM_webRequest`. The default in-memory service mounts a `CefSharpWebRequestHandler`. Rules are validated at registration and rechecked against the permission policy for every request. Blocking, redirect, header modification, and authentication decisions are pre-registered host rules; JavaScript callbacks never block the network thread.
+Declare `@grant GM.webRequest` or `@grant GM_webRequest`. The default in-memory service mounts a `CefSharpWebRequestHandler`. Registration uses the Tampermonkey selector/action contract and returns a removable handle. String selectors are URL globs (or `/regexp/`); object selectors support `include`, WebExtension `match`, and `exclude` strings or arrays. Actions are `cancel`, a static HTTP(S) redirect, or `{ from, to }` dynamic replacement. Redirect targets are checked against the script's URL rules at registration and evaluation time. JavaScript callbacks never block the network thread.
 
 ```javascript
-const ruleId = await GM.webRequest.addRule({
-  id: "strip-tracking",
-  phase: "OnBeforeRequest",
-  priority: 100,
-  filter: { urlPatterns: ["https://example.com/*"], resourceTypes: ["Script"] },
-  action: { kind: "ModifyRequestHeaders", headers: { "X-Userscript": "1" } }
+const registration = GM.webRequest([
+  { selector: "https://example.com/*", action: "cancel" },
+  { selector: { match: "https://example.com/*", exclude: "https://example.com/ignore" },
+    action: { from: "/old", to: "/new" } }
+], (info, message, details) => {
+  console.log(info.url, message, details);
 });
+registration.remove();
 ```
 
-`GM_webRequest(rules, listener)` is the legacy registration form. Rules run by descending priority and then registration order. Block and redirect end evaluation; later header rules replace earlier values. The adapter rejects an occupied non-multiplexer request handler rather than replacing it.
+`GM_webRequest(rules, listener)` is the legacy alias of the same registration function. Listener calls use `(info, message, details)` and report only `cancel` or `redirect` results. The adapter rejects an occupied non-multiplexer request handler rather than replacing it.
 
 ## Host Service Contracts
 

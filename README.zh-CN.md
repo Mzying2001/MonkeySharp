@@ -135,7 +135,7 @@ var host = new CefSharpUserScriptHostBuilder(repository)
 | `GM.notification`、`GM.setClipboard`、`GM.openInTab`、`GM.download` 及别名 | 条件支持 | 需要对应宿主服务。 |
 | `GM.getTab`、`GM.saveTab`、`GM.getTabs` 及别名 | 条件支持 | 需要 `ITabStateService`。 |
 | `GM.cookie` / `GM_cookie` | CefSharp 默认提供 | 结构化访问浏览器请求上下文。 |
-| `GM.webRequest` / `GM_webRequest` | CefSharp 默认提供 | 预注册请求规则和事件观察。 |
+| `GM.webRequest` / `GM_webRequest` | CefSharp 默认提供 | Tampermonkey selector/action 注册、可移除 handle，以及 cancel/redirect 结果回调。 |
 | `unsafeWindow` | 仅可信页面世界 | 仅在精确授权时公开。 |
 
 现代存储和资源读取返回 Promise；旧式别名使用有界的同步引导快照。旧式回调 API 会立即返回句柄或 ID，并将回调故障报告为诊断。

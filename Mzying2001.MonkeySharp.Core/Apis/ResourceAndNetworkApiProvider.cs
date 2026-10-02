@@ -856,6 +856,21 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 throw Invalid("params must be an object.");
         }
 
+        public static JsonElement RequireObject(JsonElement value, string displayName)
+        {
+            if (value.ValueKind != JsonValueKind.Object)
+                throw Invalid((displayName ?? "value") + " must be an object.");
+            return value;
+        }
+
+        public static JsonElement RequiredProperty(JsonElement parameters, string name, string displayName = null)
+        {
+            RequireObject(parameters);
+            if (!parameters.TryGetProperty(name, out var value))
+                throw Invalid((displayName ?? name) + " is required.");
+            return value;
+        }
+
         public static string RequiredString(
             JsonElement parameters,
             string name,
