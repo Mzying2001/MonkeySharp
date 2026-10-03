@@ -89,8 +89,8 @@ host.Attach(browser);
 
 CefSharp's public APIs execute bootstrap code in the page's main world, so MonkeySharp reports this bridge as `Unverified`.
 
-- The default policy runs scripts without host-backed grants. A script with no `@grant` receives no `GM` facade; an explicit `@grant none` script receives only `GM.info`/`GM_info`. Scripts that request host-backed APIs are suppressed unless the application opts into `TrustedPageWorld`.
-- `TrustedPageWorld` enables host APIs only when the application trusts both the page and installed scripts.
+- The default policy runs scripts with no explicit API grants. A script with no `@grant` receives no `GM` facade; an explicit `@grant none` script receives only `GM.info`/`GM_info`. Scripts with any other explicit grants are suppressed unless the application opts into `TrustedPageWorld`.
+- `TrustedPageWorld` enables explicitly granted APIs only when the application trusts both the page and installed scripts.
 - Per-execution capabilities prevent unrelated callers from impersonating an installation, but they are not an extension-style isolation boundary. Hostile page code can intercept a capability and invoke APIs granted to that script.
 - Installed userscripts are trusted code. Applications need their own review, signature, or trust policy for unknown sources.
 
@@ -102,7 +102,7 @@ var host = new CefSharpUserScriptHostBuilder(repository)
     .Build();
 ```
 
-Affected executions emit `MSR200_UNVERIFIED_BRIDGE`; the adapter cannot claim verified integrity.
+Default-mode suppressions emit `MSR201_BRIDGE_INTEGRITY_REQUIRED`; trusted-mode executions emit `MSR200_UNVERIFIED_BRIDGE` and the adapter cannot claim verified integrity.
 
 ## Metadata
 
@@ -164,6 +164,7 @@ var host = new CefSharpUserScriptHostBuilder(repository)
     .UseTabService(tabService)
     .UseDownloadService(downloadService)
     .UseTabStateService(tabStateService)
+    .UseWindowService(windowService)
     .UseCookieService(cookieService)          // optional default override
     .UseWebRequestService(webRequestService) // optional default override
     .LogTo(entry => applicationLog.Write(entry.JsonValue))

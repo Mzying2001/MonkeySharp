@@ -89,8 +89,8 @@ host.Attach(browser);
 
 CefSharp 公开 API 会在页面主世界执行引导代码，因此 MonkeySharp 将该桥接报告为 `Unverified`。
 
-- 默认策略执行不需要宿主特权的脚本。缺少 `@grant` 的脚本不会获得 `GM` 门面；显式声明 `@grant none` 的脚本只获得 `GM.info`/`GM_info`。请求宿主 API 的脚本必须在应用选择 `TrustedPageWorld` 后才会执行。
-- 只有应用程序同时信任页面和已安装脚本时，才应通过 `TrustedPageWorld` 启用宿主 API。
+- 默认策略执行没有显式 API 授权的脚本。缺少 `@grant` 的脚本不会获得 `GM` 门面；显式声明 `@grant none` 的脚本只获得 `GM.info`/`GM_info`。其他显式授权的脚本必须在应用选择 `TrustedPageWorld` 后才会执行。
+- 只有应用程序同时信任页面和已安装脚本时，才应通过 `TrustedPageWorld` 启用显式授权的 API。
 - 每次执行的能力令牌能防止无关调用者冒充安装实例，但不是浏览器扩展式隔离边界。恶意页面代码可以截获令牌并调用已授予脚本的 API。
 - 已安装用户脚本属于可信代码；未知来源需要应用层审核、签名或信任策略。
 
@@ -102,7 +102,7 @@ var host = new CefSharpUserScriptHostBuilder(repository)
     .Build();
 ```
 
-受影响的执行会产生 `MSR200_UNVERIFIED_BRIDGE`；适配器不能声明已验证的完整性。
+默认模式跳过的执行会产生 `MSR201_BRIDGE_INTEGRITY_REQUIRED`；可信页面模式的执行会产生 `MSR200_UNVERIFIED_BRIDGE`，适配器不能声明已验证的完整性。
 
 ## 元数据
 
@@ -164,6 +164,7 @@ var host = new CefSharpUserScriptHostBuilder(repository)
     .UseTabService(tabService)
     .UseDownloadService(downloadService)
     .UseTabStateService(tabStateService)
+    .UseWindowService(windowService)
     .UseCookieService(cookieService)          // 可选：替换默认服务
     .UseWebRequestService(webRequestService) // 可选：替换默认服务
     .LogTo(entry => applicationLog.Write(entry.JsonValue))
