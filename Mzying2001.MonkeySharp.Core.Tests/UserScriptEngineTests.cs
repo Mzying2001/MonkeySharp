@@ -241,6 +241,8 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                     Assert.Equal("info", root.GetProperty("script").GetProperty("name").GetString());
                     Assert.Equal("document-end", root.GetProperty("script").GetProperty("run-at").GetString());
                     Assert.Equal("icon", root.GetProperty("script").GetProperty("resources")[0].GetProperty("name").GetString());
+                    Assert.Equal("raw", root.GetProperty("sandboxMode").GetString());
+                    Assert.True(root.GetProperty("script").GetProperty("webRequest").ValueKind == JsonValueKind.Null);
                     Assert.Contains("@name info", root.GetProperty("scriptMetaStr").GetString());
                 }
             }

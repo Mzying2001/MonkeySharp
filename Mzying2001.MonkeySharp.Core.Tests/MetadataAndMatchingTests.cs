@@ -91,6 +91,42 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Fact]
+        public void ExtendedTampermonkeyMetadataIsTypedAndValidated()
+        {
+            var result = _parser.Parse(Script(
+                "// @name extended\n// @match https://example.com/*\n" +
+                "// @copyright Example\n// @icon64URL https://example.com/icon64.png\n" +
+                "// @homepage https://example.com/home\n// @website https://example.com/site\n" +
+                "// @source https://example.com/source\n// @sandbox JavaScript\n// @unwrap\n" +
+                "// @antifeature ads Shows ads\n// @antifeature:de tracking Verfolgt Nutzer\n" +
+                "// @webRequest {\"selector\":\"https://example.com/*\",\"action\":\"cancel\"}"));
+
+            Assert.True(result.CanEnable);
+            Assert.Equal("Example", result.Metadata.Copyright);
+            Assert.Equal("https://example.com/icon64.png", result.Metadata.Icon64Url);
+            Assert.Equal("https://example.com/home", result.Metadata.HomepageUrl);
+            Assert.Equal("https://example.com/site", result.Metadata.WebsiteUrl);
+            Assert.Equal("https://example.com/source", result.Metadata.SourceUrl);
+            Assert.Equal("JavaScript", result.Metadata.Sandbox);
+            Assert.True(result.Metadata.Unwrap);
+            Assert.Equal(2, result.Metadata.Antifeatures.Count);
+            Assert.Equal("de", result.Metadata.Antifeatures[1].Locale);
+            Assert.Single(result.Metadata.WebRequest);
+            Assert.Equal("cancel", result.Metadata.WebRequest[0].Action.GetString());
+        }
+
+        [Fact]
+        public void InvalidStaticWebRequestMetadataIsAnError()
+        {
+            var result = _parser.Parse(Script(
+                "// @name invalid webrequest\n// @match https://example.com/*\n" +
+                "// @webRequest {\"selector\":{},\"action\":\"cancel\"}"));
+
+            Assert.False(result.CanEnable);
+            Assert.Contains(result.Diagnostics, item => item.Code == "MSM062_INVALID_WEBREQUEST");
+        }
+
+        [Fact]
         public void InvalidMatchCannotBeEnabled()
         {
             var result = _parser.Parse(Script("// @name invalid\n// @match https://foo.*.example/*"));

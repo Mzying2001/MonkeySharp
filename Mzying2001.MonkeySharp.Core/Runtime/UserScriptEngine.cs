@@ -382,13 +382,27 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                 ["name"] = resource.Name,
                 ["url"] = resource.Url
             }).ToArray();
+            var antifeatures = metadata.Antifeatures
+                .GroupBy(item => item.Type, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(
+                    group => group.Key,
+                    group => (object)group.ToDictionary(
+                        item => item.Locale ?? "default",
+                        item => item.Description,
+                        StringComparer.OrdinalIgnoreCase),
+                    StringComparer.OrdinalIgnoreCase);
+            var webRequest = metadata.WebRequest.Select(rule => new Dictionary<string, object>
+            {
+                ["selector"] = rule.Selector,
+                ["action"] = rule.Action
+            }).ToArray();
             var script = new Dictionary<string, object>
             {
-                ["antifeatures"] = new Dictionary<string, object>(),
+                ["antifeatures"] = antifeatures,
                 ["author"] = metadata.Author,
                 ["blockers"] = new string[0],
                 ["connects"] = metadata.Connects,
-                ["copyright"] = null,
+                ["copyright"] = metadata.Copyright,
                 ["description_i18n"] = metadata.LocalizedDescriptions.Count == 0 ? null : metadata.LocalizedDescriptions,
                 ["description"] = metadata.Description,
                 ["downloadURL"] = metadata.DownloadUrl,
@@ -398,7 +412,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                 ["header"] = header,
                 ["homepage"] = metadata.HomepageUrl,
                 ["icon"] = metadata.IconUrl,
-                ["icon64"] = null,
+                ["icon64"] = metadata.Icon64Url,
                 ["includes"] = metadata.Includes,
                 ["lastModified"] = installation.UpdatedAt.ToUnixTimeMilliseconds(),
                 ["matches"] = metadata.Matches,
@@ -409,15 +423,15 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                 ["resources"] = resources,
                 ["supportURL"] = metadata.SupportUrl,
                 ["run-at"] = ToMetadataRunAt(metadata.RunAt),
-                ["unwrap"] = false,
+                ["unwrap"] = metadata.Unwrap,
                 ["updateURL"] = metadata.UpdateUrl,
                 ["version"] = metadata.Version,
-                ["webRequest"] = null,
+                ["webRequest"] = metadata.WebRequest.Count == 0 ? null : webRequest,
                 ["options"] = new Dictionary<string, object>
                 {
-                    ["sandbox"] = metadata.InjectInto,
+                    ["sandbox"] = metadata.Sandbox,
                     ["noframes"] = metadata.NoFrames,
-                    ["unwrap"] = false,
+                    ["unwrap"] = metadata.Unwrap,
                     ["run_at"] = ToMetadataRunAt(metadata.RunAt)
                 }
             };

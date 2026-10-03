@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Text.Json;
 
 namespace Mzying2001.MonkeySharp.Core.Domain
 {
@@ -126,6 +127,42 @@ namespace Mzying2001.MonkeySharp.Core.Domain
         public string Url { get; }
     }
 
+    /// <summary>Describes one localized antifeature declaration.</summary>
+    public sealed class AntifeatureDeclaration
+    {
+        internal AntifeatureDeclaration(string type, string description, string locale)
+        {
+            Type = type;
+            Description = description;
+            Locale = locale;
+        }
+
+        /// <summary>Gets the antifeature type.</summary>
+        public string Type { get; }
+
+        /// <summary>Gets the disclosure description.</summary>
+        public string Description { get; }
+
+        /// <summary>Gets the normalized locale, or <see langword="null"/> for the default locale.</summary>
+        public string Locale { get; }
+    }
+
+    /// <summary>Contains one validated static <c>@webRequest</c> rule.</summary>
+    public sealed class UserScriptWebRequestRule
+    {
+        internal UserScriptWebRequestRule(JsonElement selector, JsonElement action)
+        {
+            Selector = selector.Clone();
+            Action = action.Clone();
+        }
+
+        /// <summary>Gets the selector JSON value, either a string or selector object.</summary>
+        public JsonElement Selector { get; }
+
+        /// <summary>Gets the action JSON value.</summary>
+        public JsonElement Action { get; }
+    }
+
     /// <summary>
     /// Contains normalized metadata parsed from a userscript header.
     /// </summary>
@@ -138,16 +175,22 @@ namespace Mzying2001.MonkeySharp.Core.Domain
             string description,
             string author,
             string license,
+            string copyright,
             string iconUrl,
+            string icon64Url,
             string downloadUrl,
             string updateUrl,
             string homepageUrl,
+            string websiteUrl,
+            string sourceUrl,
             string supportUrl,
             UserScriptRunAt runAt,
             GrantDeclarationState grantDeclarationState,
             bool noFrames,
             string runIn,
             string injectInto,
+            string sandbox,
+            bool unwrap,
             IDictionary<string, string> localizedNames,
             IDictionary<string, string> localizedDescriptions,
             IEnumerable<string> matches,
@@ -159,6 +202,8 @@ namespace Mzying2001.MonkeySharp.Core.Domain
             IEnumerable<string> connects,
             IEnumerable<string> requires,
             IEnumerable<ResourceDeclaration> resources,
+            IEnumerable<AntifeatureDeclaration> antifeatures,
+            IEnumerable<UserScriptWebRequestRule> webRequest,
             IDictionary<string, IReadOnlyList<string>> additionalEntries)
         {
             Name = name;
@@ -167,16 +212,22 @@ namespace Mzying2001.MonkeySharp.Core.Domain
             Description = description;
             Author = author;
             License = license;
+            Copyright = copyright;
             IconUrl = iconUrl;
+            Icon64Url = icon64Url;
             DownloadUrl = downloadUrl;
             UpdateUrl = updateUrl;
             HomepageUrl = homepageUrl;
+            WebsiteUrl = websiteUrl;
+            SourceUrl = sourceUrl;
             SupportUrl = supportUrl;
             RunAt = runAt;
             GrantDeclarationState = grantDeclarationState;
             NoFrames = noFrames;
             RunIn = runIn;
             InjectInto = injectInto;
+            Sandbox = sandbox;
+            Unwrap = unwrap;
             LocalizedNames = ReadOnlyDictionary(localizedNames);
             LocalizedDescriptions = ReadOnlyDictionary(localizedDescriptions);
             Matches = ReadOnlyList(matches);
@@ -188,6 +239,8 @@ namespace Mzying2001.MonkeySharp.Core.Domain
             Connects = ReadOnlyList(connects);
             Requires = ReadOnlyList(requires);
             Resources = new ReadOnlyCollection<ResourceDeclaration>(resources.ToList());
+            Antifeatures = new ReadOnlyCollection<AntifeatureDeclaration>(antifeatures.ToList());
+            WebRequest = new ReadOnlyCollection<UserScriptWebRequestRule>(webRequest.ToList());
             AdditionalEntries = new ReadOnlyDictionary<string, IReadOnlyList<string>>(
                 new Dictionary<string, IReadOnlyList<string>>(additionalEntries, StringComparer.OrdinalIgnoreCase));
         }
@@ -210,8 +263,14 @@ namespace Mzying2001.MonkeySharp.Core.Domain
         /// <summary>Gets the script license declaration.</summary>
         public string License { get; }
 
+        /// <summary>Gets the copyright declaration.</summary>
+        public string Copyright { get; }
+
         /// <summary>Gets the icon URL.</summary>
         public string IconUrl { get; }
+
+        /// <summary>Gets the 64px icon URL.</summary>
+        public string Icon64Url { get; }
 
         /// <summary>Gets the script download URL.</summary>
         public string DownloadUrl { get; }
@@ -221,6 +280,12 @@ namespace Mzying2001.MonkeySharp.Core.Domain
 
         /// <summary>Gets the script homepage URL.</summary>
         public string HomepageUrl { get; }
+
+        /// <summary>Gets the optional website alias.</summary>
+        public string WebsiteUrl { get; }
+
+        /// <summary>Gets the optional source URL alias.</summary>
+        public string SourceUrl { get; }
 
         /// <summary>Gets the support URL.</summary>
         public string SupportUrl { get; }
@@ -239,6 +304,12 @@ namespace Mzying2001.MonkeySharp.Core.Domain
 
         /// <summary>Gets the declared JavaScript world into which the script should be injected.</summary>
         public string InjectInto { get; }
+
+        /// <summary>Gets the declared Tampermonkey sandbox mode.</summary>
+        public string Sandbox { get; }
+
+        /// <summary>Gets whether the script requested wrapper removal.</summary>
+        public bool Unwrap { get; }
 
         /// <summary>Gets localized names keyed by normalized culture name.</summary>
         public IReadOnlyDictionary<string, string> LocalizedNames { get; }
@@ -272,6 +343,12 @@ namespace Mzying2001.MonkeySharp.Core.Domain
 
         /// <summary>Gets named external resource declarations.</summary>
         public IReadOnlyList<ResourceDeclaration> Resources { get; }
+
+        /// <summary>Gets structured antifeature disclosures.</summary>
+        public IReadOnlyList<AntifeatureDeclaration> Antifeatures { get; }
+
+        /// <summary>Gets parsed static webRequest rules.</summary>
+        public IReadOnlyList<UserScriptWebRequestRule> WebRequest { get; }
 
         /// <summary>Gets unrecognized metadata entries, preserving their values in declaration order.</summary>
         public IReadOnlyDictionary<string, IReadOnlyList<string>> AdditionalEntries { get; }
