@@ -126,13 +126,15 @@ test("bootstrap exposes only granted Promise APIs and authenticates notification
         invocations: [{
             executionId: "grant-none",
             scriptKey: "11111111-1111-1111-1111-111111111111",
-            source: "globalThis.__grantNoneType = typeof GM; globalThis.__grantNoneDone = true;",
+            source: "globalThis.__grantNoneType = typeof GM; globalThis.__grantNoneInfoType = typeof GM.info; globalThis.__grantNoneDone = true;",
             grants: ["none"],
+            grantDeclarationState: "ExplicitNone",
             info: {},
             capability: "unused",
             deliveryToken: "unused"
         }]
     });
     await waitFor(() => globalThis.__grantNoneDone);
-    assert.equal(globalThis.__grantNoneType, "undefined");
+    assert.equal(globalThis.__grantNoneType, "object");
+    assert.equal(globalThis.__grantNoneInfoType, "object");
 });
