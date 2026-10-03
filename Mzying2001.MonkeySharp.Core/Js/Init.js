@@ -973,7 +973,12 @@
                                 return target.removeEventListener.call(target, type, listener, options);
                             };
                         }
-                        return Reflect.get(target, property, receiver);
+                        const value = Reflect.get(target, property, target);
+                        if ((property === "top" || property === "parent" || property === "self" ||
+                            property === "window" || property === "globalThis") && value === target) {
+                            return receiver;
+                        }
+                        return value;
                     },
                     set: function (target, property, value, receiver) {
                         if (property === "onurlchange" && urlEnabled) {
@@ -981,7 +986,7 @@
                             record.urlChangeHandler = value;
                             return true;
                         }
-                        return Reflect.set(target, property, value, receiver);
+                        return Reflect.set(target, property, value, target);
                     }
                 });
             };
