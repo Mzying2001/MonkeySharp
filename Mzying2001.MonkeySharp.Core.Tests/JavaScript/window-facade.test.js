@@ -66,6 +66,83 @@ test("window.onurlchange dispatches property and event-listener handlers", async
     ]);
 });
 
+test("window facade binds native methods while preserving aliases, constructors, and identity", async () => {
+    const calls = [];
+    const aliasNames = ["top", "parent", "self", "window", "globalThis"];
+    const aliasDescriptors = new Map(aliasNames.map(name => [name, Object.getOwnPropertyDescriptor(globalThis, name)]));
+    aliasNames.forEach(name => Object.defineProperty(globalThis, name, {
+        value: globalThis, writable: true, configurable: true, enumerable: false
+    }));
+    globalThis.open = { invoke(url) {
+        if (this !== globalThis) throw new TypeError("Illegal invocation");
+        calls.push(["open", url]);
+    } }.invoke;
+    globalThis.getComputedStyle = { invoke(element, pseudo) {
+        if (this !== globalThis) throw new TypeError("Illegal invocation");
+        calls.push(["getComputedStyle", element, pseudo]);
+        return { getPropertyValue: () => "" };
+    } }.invoke;
+    globalThis.scroll = { invoke(x, y) {
+        if (this !== globalThis) throw new TypeError("Illegal invocation");
+        calls.push(["scroll", x, y]);
+    } }.invoke;
+    globalThis.__nativeWindowStarted = null;
+    globalThis.__nativeWindowComplete = false;
+    install({
+        protocol: 1, documentId: "native-window-document", frameId: "main", runAt: "DocumentEnd",
+        invocations: [{
+            executionId: "native-window-execution", scriptKey: "33333333-3333-3333-3333-333333333333",
+            source: [
+                "globalThis.__nativeWindowStarted = {",
+                "  aliases: window.top === window && window.parent === window && window.self === window &&",
+                "    window.window === window && window.globalThis === window,",
+                "  constructor: window.Array.isArray([]) && new window.Array(1).length === 1,",
+                "  sameOpen: window.open === window.open",
+                "};",
+                "window.open('https://example.test');",
+                "window.getComputedStyle('node', '::before');",
+                "window.scroll(3, 4);",
+                "globalThis.__nativeWindowComplete = true;"
+            ].join("\n"),
+            declaredGrants: [], grants: [], grantDeclarationState: "Missing", info: {},
+            capability: "native-window-capability", deliveryToken: "native-window-delivery",
+            compatibility: { profile: "LegacyCompatible", strict: false, legacyGlobals: true }
+        }]
+    }, {
+        dispatch: async requestJson => {
+            const request = JSON.parse(requestJson);
+            if (request.type === "hello") return JSON.stringify({
+                type: "hello-result", protocol: 1, ok: true, limits: {}, apis: []
+            });
+            return JSON.stringify({ type: "response", protocol: 1, requestId: request.requestId,
+                ok: true, result: { $monkeySharpType: "undefined" } });
+        }
+    });
+    try {
+        await waitFor(() => globalThis.__nativeWindowStarted !== null);
+        assert.deepEqual(globalThis.__nativeWindowStarted, {
+            aliases: true, constructor: true, sameOpen: true
+        });
+        assert.equal(globalThis.__nativeWindowComplete, true);
+        assert.deepEqual(calls, [
+            ["open", "https://example.test"],
+            ["getComputedStyle", "node", "::before"],
+            ["scroll", 3, 4]
+        ]);
+    } finally {
+        aliasNames.forEach(name => {
+            const descriptor = aliasDescriptors.get(name);
+            if (descriptor) Object.defineProperty(globalThis, name, descriptor);
+            else delete globalThis[name];
+        });
+        delete globalThis.open;
+        delete globalThis.getComputedStyle;
+        delete globalThis.scroll;
+        delete globalThis.__nativeWindowStarted;
+        delete globalThis.__nativeWindowComplete;
+    }
+});
+
 test("window.close and window.focus are grant-gated bridge methods", async () => {
     const methods = [];
     globalThis.__windowPromise = null;

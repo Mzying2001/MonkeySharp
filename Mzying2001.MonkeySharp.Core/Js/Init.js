@@ -949,6 +949,17 @@
                 const focusEnabled = grants.has("window.focus") && typeof api.windowFocus === "function";
                 const urlEnabled = grants.has("window.onurlchange");
                 const isUrlEvent = value => value === "urlchange";
+                const nativeFunctionCache = new Map();
+                const bindNativeFunction = function (property, value) {
+                    if (typeof value !== "function" || Object.prototype.hasOwnProperty.call(value, "prototype")) {
+                        return value;
+                    }
+                    const cached = nativeFunctionCache.get(property);
+                    if (cached && cached.value === value) return cached.bound;
+                    const bound = Function.prototype.bind.call(value, root);
+                    nativeFunctionCache.set(property, { value: value, bound: bound });
+                    return bound;
+                };
                 return new Proxy(root, {
                     get: function (target, property, receiver) {
                         if (property === "close") return closeEnabled ? api.windowClose : undefined;
@@ -978,7 +989,7 @@
                             property === "window" || property === "globalThis") && value === target) {
                             return receiver;
                         }
-                        return value;
+                        return bindNativeFunction(property, value);
                     },
                     set: function (target, property, value, receiver) {
                         if (property === "onurlchange" && urlEnabled) {
