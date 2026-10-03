@@ -92,6 +92,19 @@ namespace Mzying2001.MonkeySharp.Core.Domain
         DocumentIdle
     }
 
+    /// <summary>Describes how a script declared its GM grants.</summary>
+    public enum GrantDeclarationState
+    {
+        /// <summary>No <c>@grant</c> entry was declared.</summary>
+        Missing,
+
+        /// <summary>The script explicitly declared <c>@grant none</c>.</summary>
+        ExplicitNone,
+
+        /// <summary>The script declared one or more explicit capabilities.</summary>
+        ExplicitList
+    }
+
     /// <summary>
     /// Describes a named external resource declared by a userscript.
     /// </summary>
@@ -131,6 +144,7 @@ namespace Mzying2001.MonkeySharp.Core.Domain
             string homepageUrl,
             string supportUrl,
             UserScriptRunAt runAt,
+            GrantDeclarationState grantDeclarationState,
             bool noFrames,
             string runIn,
             string injectInto,
@@ -159,6 +173,7 @@ namespace Mzying2001.MonkeySharp.Core.Domain
             HomepageUrl = homepageUrl;
             SupportUrl = supportUrl;
             RunAt = runAt;
+            GrantDeclarationState = grantDeclarationState;
             NoFrames = noFrames;
             RunIn = runIn;
             InjectInto = injectInto;
@@ -212,6 +227,9 @@ namespace Mzying2001.MonkeySharp.Core.Domain
 
         /// <summary>Gets the requested document lifecycle phase.</summary>
         public UserScriptRunAt RunAt { get; }
+
+        /// <summary>Gets whether grants were missing, explicit none, or an explicit list.</summary>
+        public GrantDeclarationState GrantDeclarationState { get; }
 
         /// <summary>Gets whether the script is restricted to the main frame.</summary>
         public bool NoFrames { get; }

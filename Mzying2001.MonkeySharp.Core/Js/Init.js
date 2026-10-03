@@ -344,7 +344,9 @@
 
             const createApi = function (record, invocation, availableApis) {
                 const grants = new Set(invocation.grants);
-                const enabled = name => grants.has(name) && availableApis.has(name);
+                const enabled = name =>
+                    (grants.has(name) || (name === "GM.info" && invocation.grantDeclarationState === "ExplicitNone")) &&
+                    availableApis.has(name);
                 const api = {};
                 if (enabled("GM.info")) {
                     Object.defineProperty(api, "info", { value: Object.freeze(invocation.info), enumerable: true });
@@ -1206,8 +1208,11 @@
                 };
                 executions.set(invocation.executionId, record);
                 let availableApis = new Set();
-                const grantNone = invocation.grants.length === 1 && invocation.grants[0] === "none";
-                if (!grantNone) {
+                const grantState = invocation.grantDeclarationState ||
+                    (invocation.grants.length === 1 && invocation.grants[0] === "none" ? "ExplicitNone" : "ExplicitList");
+                const noGrant = grantState === "Missing";
+                const explicitNone = grantState === "ExplicitNone";
+                if (!noGrant && !explicitNone) {
                     if (!dispatch) throw new Error("MonkeySharp bridge is unavailable.");
                     const hello = await send(dispatch, Object.assign({ type: "hello" }, proof));
                     if (hello.type !== "hello-result" || !hello.ok) {
@@ -1224,7 +1229,8 @@
                         record.resourceMirror = Object.assign({}, hello.compatibility.resources.values);
                     }
                 }
-                const gm = grantNone ? undefined : createApi(record, invocation, availableApis);
+                if (explicitNone) availableApis = new Set(["GM.info"]);
+                const gm = noGrant ? undefined : createApi(record, invocation, availableApis);
                 const compatibility = invocation.compatibility || { strict: true, legacyGlobals: false };
                 const legacy = createLegacyFacade(record, Object.assign({}, invocation, { compatibility: compatibility }), gm);
                 const unsafeWindow = invocation.grants.includes("unsafeWindow") ? root : undefined;

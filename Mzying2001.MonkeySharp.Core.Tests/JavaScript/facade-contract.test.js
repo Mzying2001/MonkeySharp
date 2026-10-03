@@ -144,3 +144,34 @@ test("legacy facade shadows ungranted globals and keeps new APIs absent without 
         webRequest: "undefined"
     });
 });
+
+test("missing grants expose no GM object while explicit none keeps GM.info", async () => {
+    globalThis.__grantState = null;
+    install({
+        protocol: 1,
+        documentId: "grant-state-document",
+        frameId: "main",
+        runAt: "DocumentEnd",
+        invocations: [{
+            executionId: "grant-state-missing",
+            scriptKey: "99999999-9999-9999-9999-999999999999",
+            source: "globalThis.__grantState = [typeof GM, typeof GM_info];",
+            declaredGrants: [], grants: [], grantDeclarationState: "Missing",
+            info: { name: "missing" }, capability: "grant-state-missing-capability",
+            deliveryToken: "grant-state-missing-delivery",
+            compatibility: { profile: "LegacyCompatible", strict: false, legacyGlobals: true }
+        }, {
+            executionId: "grant-state-none",
+            scriptKey: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            source: "globalThis.__grantStateExplicit = [typeof GM, GM.info.name, typeof GM_log];",
+            declaredGrants: ["none"], grants: ["none"], grantDeclarationState: "ExplicitNone",
+            info: { name: "explicit" }, capability: "grant-state-none-capability",
+            deliveryToken: "grant-state-none-delivery",
+            compatibility: { profile: "LegacyCompatible", strict: false, legacyGlobals: true }
+        }]
+    }, null);
+
+    await waitFor(() => globalThis.__grantState && globalThis.__grantStateExplicit);
+    assert.deepEqual(globalThis.__grantState, ["undefined", "undefined"]);
+    assert.deepEqual(globalThis.__grantStateExplicit, ["object", "explicit", "undefined"]);
+});

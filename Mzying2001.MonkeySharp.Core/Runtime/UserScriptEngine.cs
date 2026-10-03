@@ -220,7 +220,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
 
                 if (_options.RequireVerifiedBridge &&
                     frame.BridgeIntegrity == BridgeIntegrityGuarantee.Unverified &&
-                    !IsGrantNone(metadata.Grants))
+                    RequiresBridge(metadata))
                 {
                     diagnostics.Add(new UserScriptDiagnostic(
                         "MSR201_BRIDGE_INTEGRITY_REQUIRED",
@@ -231,7 +231,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                         frameId: frame.FrameId));
                     continue;
                 }
-                if (frame.BridgeIntegrity == BridgeIntegrityGuarantee.TrustedPageWorld && !IsGrantNone(metadata.Grants))
+                if (frame.BridgeIntegrity == BridgeIntegrityGuarantee.TrustedPageWorld && RequiresBridge(metadata))
                 {
                     diagnostics.Add(new UserScriptDiagnostic(
                         "MSR200_UNVERIFIED_BRIDGE",
@@ -366,7 +366,8 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                 ["namespace"] = metadata.Namespace,
                 ["version"] = metadata.Version,
                 ["description"] = metadata.Description,
-                ["grants"] = metadata.DeclaredGrants
+                ["grants"] = metadata.DeclaredGrants,
+                ["grantDeclarationState"] = metadata.GrantDeclarationState.ToString()
             });
             return new ScriptInvocation(
                 Guid.NewGuid().ToString("D"),
@@ -374,6 +375,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                 source,
                 metadata.DeclaredGrants,
                 metadata.Grants,
+                metadata.GrantDeclarationState,
                 info,
                 CreateToken(),
                 CreateToken(),
@@ -398,9 +400,10 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
             return difference == 0;
         }
 
-        private static bool IsGrantNone(IReadOnlyList<string> grants)
+        private static bool RequiresBridge(UserScriptMetadata metadata)
         {
-            return grants.Count == 1 && grants[0] == "none";
+            return metadata.GrantDeclarationState == GrantDeclarationState.ExplicitList &&
+                metadata.Grants.Any(item => !string.Equals(item, "none", StringComparison.Ordinal));
         }
 
         private static UserScriptRunAt ToRunAt(DocumentLifecycleKind kind)

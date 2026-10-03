@@ -31,11 +31,18 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Fact]
-        public void MissingGrantMeansGrantNone()
+        public void MissingGrantIsDistinctFromExplicitNone()
         {
             var result = _parser.Parse(Script("// @name none\n// @match https://example.com/*"));
 
-            Assert.Equal(new[] { "none" }, result.Metadata.Grants);
+            Assert.Empty(result.Metadata.DeclaredGrants);
+            Assert.Empty(result.Metadata.Grants);
+            Assert.Equal(GrantDeclarationState.Missing, result.Metadata.GrantDeclarationState);
+
+            var explicitNone = _parser.Parse(Script("// @name explicit\n// @match https://example.com/*\n// @grant none"));
+            Assert.Equal(new[] { "none" }, explicitNone.Metadata.DeclaredGrants);
+            Assert.Equal(new[] { "none" }, explicitNone.Metadata.Grants);
+            Assert.Equal(GrantDeclarationState.ExplicitNone, explicitNone.Metadata.GrantDeclarationState);
         }
 
         [Fact]

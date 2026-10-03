@@ -101,8 +101,11 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
             ValidateMatchPatterns(excludeMatches, "exclude-match", diagnostics, values);
 
             var declaredGrants = ReadCollection(values, "grant").ToList();
-            if (declaredGrants.Count == 0)
-                declaredGrants.Add("none");
+            var grantDeclarationState = declaredGrants.Count == 0
+                ? GrantDeclarationState.Missing
+                : declaredGrants.Count == 1 && string.Equals(declaredGrants[0], "none", StringComparison.Ordinal)
+                    ? GrantDeclarationState.ExplicitNone
+                    : GrantDeclarationState.ExplicitList;
             if (declaredGrants.Contains("none") && declaredGrants.Count > 1)
             {
                 diagnostics.Add(new MetadataDiagnostic(
@@ -127,7 +130,7 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
                         "Unknown grant '" + declaredGrant + "' will not be exposed."));
                 }
             }
-            if (grants.Count == 0)
+            if (grants.Count == 0 && grantDeclarationState != GrantDeclarationState.Missing)
                 grants.Add("none");
 
             var runAt = ParseRunAt(First(values, "run-at"), diagnostics);
@@ -160,6 +163,7 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
                 First(values, "homepageurl"),
                 First(values, "supporturl"),
                 runAt,
+                grantDeclarationState,
                 values.ContainsKey("noframes"),
                 First(values, "run-in"),
                 First(values, "inject-into"),
