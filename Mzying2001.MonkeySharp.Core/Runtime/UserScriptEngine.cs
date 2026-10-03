@@ -171,8 +171,16 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                     InvalidateDocument(frame.DocumentId);
                     return EmptyPlan(frame, UserScriptRunAt.DocumentIdle);
                 case DocumentLifecycleKind.ContextCreated:
+                    EnsureDocument(frame);
+                    return EmptyPlan(frame, UserScriptRunAt.DocumentIdle);
                 case DocumentLifecycleKind.UrlChanged:
                     EnsureDocument(frame);
+                    lock (_stateLock)
+                    {
+                        foreach (var execution in _executions.Values.Where(item =>
+                            item.Frame.DocumentId == frame.DocumentId))
+                            execution.UpdateFrame(frame);
+                    }
                     return EmptyPlan(frame, UserScriptRunAt.DocumentIdle);
             }
 
@@ -541,10 +549,15 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                 Cancellation = cancellation;
             }
 
-            public DocumentFrame Frame { get; }
+            public DocumentFrame Frame { get; private set; }
             public UserScriptInstallation Installation { get; }
             public ScriptInvocation Invocation { get; }
             public CancellationTokenSource Cancellation { get; }
+
+            public void UpdateFrame(DocumentFrame frame)
+            {
+                Frame = frame ?? throw new ArgumentNullException(nameof(frame));
+            }
         }
 
         private sealed class DocumentState

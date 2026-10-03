@@ -464,6 +464,16 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         Task<ITabHandle> OpenAsync(OpenTabRequest request, CancellationToken cancellationToken);
     }
 
+    /// <summary>Controls the current browser tab for grant-gated window APIs.</summary>
+    public interface IUserScriptWindowService
+    {
+        /// <summary>Closes the current tab unless it is the last available tab.</summary>
+        Task<bool> CloseAsync(DocumentFrame frame, CancellationToken cancellationToken);
+
+        /// <summary>Activates the current tab.</summary>
+        Task<bool> FocusAsync(DocumentFrame frame, CancellationToken cancellationToken);
+    }
+
     /// <summary>Represents a browser tab opened for a userscript.</summary>
     public interface ITabHandle : IDisposable
     {

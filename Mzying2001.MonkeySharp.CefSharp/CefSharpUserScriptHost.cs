@@ -635,6 +635,9 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     var frameId = frameIdValue.GetString();
                     var token = tokenValue.GetString();
                     var stage = stageValue.GetString();
+                    Uri changedUrl = null;
+                    if (root.TryGetProperty("url", out var urlValue) && urlValue.ValueKind == JsonValueKind.String)
+                        changedUrl = ParseUrl(urlValue.GetString());
                     FrameSession session;
                     lock (_sync)
                     {
@@ -642,6 +645,17 @@ namespace Mzying2001.MonkeySharp.CefSharp
                             session.Frame.DocumentId != documentId ||
                             !FixedTimeEquals(session.LifecycleToken, token))
                             return false;
+                    }
+                    if (stage == "url-changed")
+                    {
+                        if (changedUrl == null)
+                            return false;
+                        session.UpdateUrl(changedUrl);
+                        await ProcessLifecycleAsync(
+                            DocumentLifecycleKind.UrlChanged,
+                            session,
+                            session.Cancellation.Token).ConfigureAwait(false);
+                        return true;
                     }
                     var rank = stage == "body" ? 1 : stage == "dom-content-loaded" ? 2 : stage == "load" ? 3 : 0;
                     if (rank == 0)
@@ -954,11 +968,23 @@ namespace Mzying2001.MonkeySharp.CefSharp
             }
 
             public IFrame CefFrame { get; }
-            public DocumentFrame Frame { get; }
+            public DocumentFrame Frame { get; private set; }
             public string LifecycleToken { get; }
             public CancellationTokenSource Cancellation { get; } = new CancellationTokenSource();
             public SemaphoreSlim OperationGate { get; } = new SemaphoreSlim(1, 1);
             public int CompletedRank { get; set; }
+
+            public void UpdateUrl(Uri url)
+            {
+                Frame = new DocumentFrame(
+                    Frame.BrowserSessionId,
+                    Frame.DocumentId,
+                    Frame.FrameId,
+                    url,
+                    Frame.IsMainFrame,
+                    Frame.TimingGuarantee,
+                    Frame.BridgeIntegrity);
+            }
 
             public void Dispose()
             {

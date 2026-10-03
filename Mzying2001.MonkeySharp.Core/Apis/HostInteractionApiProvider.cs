@@ -26,6 +26,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         private readonly ITabService _tabs;
         private readonly IDownloadService _downloads;
         private readonly ITabStateService _tabState;
+        private readonly IUserScriptWindowService _window;
         private readonly IReadOnlyCollection<string> _methods;
         private readonly object _sync = new object();
         private readonly Dictionary<string, IMenuRegistration> _menuRegistrations =
@@ -47,16 +48,18 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         /// <param name="tabs">The optional tab-opening service.</param>
         /// <param name="downloads">The optional download service.</param>
         /// <param name="tabState">The optional tab-state service.</param>
+        /// <param name="window">The optional current-window service.</param>
         public HostInteractionApiProvider(
             IMenuService menu = null,
             INotificationService notifications = null,
             IClipboardService clipboard = null,
             ITabService tabs = null,
             IDownloadService downloads = null,
-            ITabStateService tabState = null)
+            ITabStateService tabState = null,
+            IUserScriptWindowService window = null)
         {
             if (menu == null && notifications == null && clipboard == null && tabs == null &&
-                downloads == null && tabState == null)
+                downloads == null && tabState == null && window == null)
                 throw new ArgumentException("At least one host interaction service is required.");
             _menu = menu;
             _notifications = notifications;
@@ -64,6 +67,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             _tabs = tabs;
             _downloads = downloads;
             _tabState = tabState;
+            _window = window;
             var methods = new List<string>();
             if (menu != null)
             {
@@ -79,6 +83,11 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 methods.Add("GM.getTab");
                 methods.Add("GM.saveTab");
                 methods.Add("GM.getTabs");
+            }
+            if (window != null)
+            {
+                methods.Add("window.close");
+                methods.Add("window.focus");
             }
             _methods = new ReadOnlyCollection<string>(methods);
         }
@@ -160,6 +169,10 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 case "GM.getTabs":
                     return ApiResult.FromJson(BuildTabsJson(await _tabState.GetAllAsync(
                         context.Installation.ScriptKey, cancellationToken).ConfigureAwait(false)));
+                case "window.close":
+                    return ApiResult.FromValue(await _window.CloseAsync(context.Frame, cancellationToken).ConfigureAwait(false));
+                case "window.focus":
+                    return ApiResult.FromValue(await _window.FocusAsync(context.Frame, cancellationToken).ConfigureAwait(false));
                 default:
                     throw new UnsupportedApiException("The API '" + context.Method + "' is not supported.");
             }

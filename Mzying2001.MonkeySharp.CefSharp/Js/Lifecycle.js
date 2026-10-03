@@ -17,6 +17,29 @@
         const send = stage => signal(JSON.stringify(Object.assign({ stage: stage }, proof)))
             .catch(error => console.warn("[MonkeySharp] lifecycle signal failed", error));
 
+        let lastUrl = globalThis.location && globalThis.location.href;
+        const checkUrl = function () {
+            const current = globalThis.location && globalThis.location.href;
+            if (!current || current === lastUrl) return;
+            const oldUrl = lastUrl;
+            lastUrl = current;
+            if (globalThis.__MonkeySharpRuntime && typeof globalThis.__MonkeySharpRuntime.urlChanged === "function") {
+                globalThis.__MonkeySharpRuntime.urlChanged({ url: current, oldURL: oldUrl });
+            }
+            signal(JSON.stringify(Object.assign({ stage: "url-changed", url: current, oldURL: oldUrl }, proof)))
+                .catch(error => console.warn("[MonkeySharp] URL lifecycle signal failed", error));
+        };
+        ["popstate", "hashchange"].forEach(name => globalThis.addEventListener(name, checkUrl));
+        ["pushState", "replaceState"].forEach(name => {
+            const original = globalThis.history && globalThis.history[name];
+            if (typeof original !== "function") return;
+            globalThis.history[name] = function () {
+                const result = original.apply(this, arguments);
+                checkUrl();
+                return result;
+            };
+        });
+
         let bodySent = false;
         const sendBody = function () {
             if (!bodySent && document.body) {
