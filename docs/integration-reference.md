@@ -86,6 +86,8 @@ const listenerId = GM.cookie.addListener({}, change => console.log(change.cause)
 
 Declare `@grant GM.webRequest` or `@grant GM_webRequest`. The default in-memory service mounts a `CefSharpWebRequestHandler`. Registration uses the Tampermonkey selector/action contract and returns a removable handle. String selectors are URL globs (or `/regexp/`); object selectors support `include`, WebExtension `match`, and `exclude` strings or arrays. Actions are `cancel`, a static HTTP(S) redirect, or `{ from, to }` dynamic replacement. Redirect targets are checked against the script's URL rules at registration and evaluation time. JavaScript callbacks never block the network thread.
 
+Static `@webRequest` metadata is parsed and included in `GM.info.script.webRequest` for inspection, but it is deliberately not registered with the network service. Use `GM.webRequest(...)` when a script needs an active registration.
+
 ```javascript
 const registration = GM.webRequest([
   { selector: "https://example.com/*", action: "cancel" },
@@ -111,12 +113,17 @@ Provider requirements:
 - `IResourceProvider` returns previously authorized content for a declared resource. Resource data is limited by `BridgeOptions.MaxResourceBytes`.
 - `IHttpRequestService` receives a repeatable `IUserScriptHttpBody` and observer before work begins. It reports metadata before body data, honors `MaxResponseBytes`, calls `RedirectAllowed` before following redirects, and records followed URLs for Core to recheck against `@connect`.
 - `IUserScriptPermissionPolicy` receives the installation, frame, method, target summary, and current capabilities for every host-backed request.
+- `IUserScriptWindowService` backs the exact `window.close` and `window.focus` grants. `CloseAsync` may refuse to close the last tab; omit `UseWindowService` to leave both properties unavailable. `window.onurlchange` is core-only and reports same-document `pushState`, `replaceState`, `popstate`, and `hashchange` changes.
 
 ## Lifecycle and Diagnostics
 
 The adapter creates an identity per frame document and executes each `(document, frame, script, run-at)` once. Navigation, context release, detach, and disposal invalidate capabilities and cancel pending work.
 
+Grant state is significant: a missing `@grant` declaration exposes no `GM` facade, while explicit `@grant none` exposes only `GM.info`/`GM_info`. `GM.info` is a deep-frozen snapshot of normalized metadata, grants, URL rules, resources, update state, handler, sandbox mode, and raw metadata text.
+
 CefSharp exposes only best-effort document-start hooks. Selected document-start executions emit `MSR100_DOCUMENT_START_BEST_EFFORT`. Set `RequireGuaranteedDocumentStart = true` to skip them with `MSR101_DOCUMENT_START_UNAVAILABLE`.
+
+`@sandbox` values other than `raw` emit `MSR212_UNSUPPORTED_SANDBOX`, and `@unwrap` emits `MSR213_UNSUPPORTED_UNWRAP`. Both declarations are preserved in metadata and `GM.info`, but execution remains in the page world and inside the MonkeySharp wrapper.
 
 Protocol errors use stable codes `MSP001` through `MSP010` and `MSP999`. Diagnostics never include capability tokens or stored values. Default bridge limits are 1 MiB per request, 1 MiB per response, 10 MiB per resource, 30 seconds per ordinary request, and 64 pending requests per document; configure them through `CefSharpHostOptions.Bridge`.
 

@@ -89,7 +89,7 @@ host.Attach(browser);
 
 CefSharp 公开 API 会在页面主世界执行引导代码，因此 MonkeySharp 将该桥接报告为 `Unverified`。
 
-- 默认策略执行 `@grant none` 脚本，并跳过请求宿主 API 的脚本。
+- 默认策略执行不需要宿主特权的脚本。缺少 `@grant` 的脚本不会获得 `GM` 门面；显式声明 `@grant none` 的脚本只获得 `GM.info`/`GM_info`。请求宿主 API 的脚本必须在应用选择 `TrustedPageWorld` 后才会执行。
 - 只有应用程序同时信任页面和已安装脚本时，才应通过 `TrustedPageWorld` 启用宿主 API。
 - 每次执行的能力令牌能防止无关调用者冒充安装实例，但不是浏览器扩展式隔离边界。恶意页面代码可以截获令牌并调用已授予脚本的 API。
 - 已安装用户脚本属于可信代码；未知来源需要应用层审核、签名或信任策略。
@@ -110,13 +110,16 @@ var host = new CefSharpUserScriptHostBuilder(repository)
 
 支持的字段包括：
 
-- 身份：`@name`、本地化名称、`@namespace`、`@version`、`@description`、`@author`、`@license` 和图标。
+- 身份：`@name`、本地化名称、`@namespace`、`@version`、`@description`、`@author`、`@license`、`@copyright` 和图标（包括 `@icon64`/`@icon64URL`）。
 - 选择：`@match`、`@include`、`@exclude`、`@exclude-match` 和 `@noframes`。
-- 执行：`@run-at`，以及保留的 `@run-in`、`@inject-into` 值。
+- 执行：`@run-at`、`@run-in`、`@inject-into`、`@sandbox` 和 `@unwrap`。不支持的 sandbox 模式和 wrapper 移除会分别产生 `MSR212_UNSUPPORTED_SANDBOX` 与 `MSR213_UNSUPPORTED_UNWRAP`；脚本仍在页面世界和 MonkeySharp wrapper 内执行。
 - 能力与资源：`@grant`、`@connect`、`@require` 和 `@resource`。
-- 源地址：`@downloadURL`、`@updateURL`、`@homepageURL` 和 `@supportURL`。
+- 源地址：`@downloadURL`、`@updateURL`、`@homepageURL`、`@website`、`@source` 和 `@supportURL`。
+- 披露与请求元数据：`@antifeature`（包括本地化形式）和经过校验的静态 `@webRequest` JSON 规则。
 
-排除规则优先于正向规则。URL 片段会被忽略，主机名经过 IDN 规范化，显式端口会被检查，且 `*.example.com` 不匹配裸域名。缺少 `@grant` 等同于 `@grant none`；已知旧式别名会被规范化，未知授权保持大小写敏感且不会公开。
+排除规则优先于正向规则。URL 片段会被忽略，主机名经过 IDN 规范化，显式端口会被检查，且 `*.example.com` 不匹配裸域名。授权状态会区分缺少 `@grant`、显式 `@grant none` 和显式授权列表。已知旧式别名会被规范化，未知授权保持大小写敏感且不会公开。
+
+`GM.info` 和 `GM_info` 暴露不可变快照，包含脚本元数据、声明及规范化授权、URL 规则、资源、更新/来源地址、handler、sandbox 模式和原始元数据头。静态 `@webRequest` 条目会被校验并写入该快照，但不会安装到宿主网络拦截器；需要影响请求时请使用运行时 `GM.webRequest(...)` API。
 
 ## GM API 支持
 
@@ -136,11 +139,14 @@ var host = new CefSharpUserScriptHostBuilder(repository)
 | `GM.getTab`、`GM.saveTab`、`GM.getTabs` 及别名 | 条件支持 | 需要 `ITabStateService`。 |
 | `GM.cookie` / `GM_cookie` | CefSharp 默认提供 | 结构化访问浏览器请求上下文。 |
 | `GM.webRequest` / `GM_webRequest` | CefSharp 默认提供 | Tampermonkey selector/action 注册、可移除 handle，以及 cancel/redirect 结果回调。 |
+| `window.close` | 条件支持 | 需要精确的 `window.close` 授权和 `IUserScriptWindowService`；宿主可以拒绝关闭最后一个标签页。 |
+| `window.focus` | 条件支持 | 需要精确的 `window.focus` 授权和 `IUserScriptWindowService`。 |
+| `window.onurlchange` | Core | 需要精确授权；监听 `pushState`、`replaceState`、`popstate` 和 `hashchange` URL 变化。 |
 | `unsafeWindow` | 仅可信页面世界 | 仅在精确授权时公开。 |
 
 现代存储和资源读取返回 Promise；旧式别名使用有界的同步引导快照。旧式回调 API 会立即返回句柄或 ID，并将回调故障报告为诊断。
 
-缺少提供程序时，已声明 API 通常不会公开，直接桥接调用返回 `MSP006_NOT_SUPPORTED`；未声明的方法返回 `MSP004_GRANT_DENIED`。XHR、Cookie 和 webRequest 的详细行为见[网络 API 参考](docs/integration-reference.zh-CN.md#网络-api)。
+缺少提供程序时，已声明 API 通常不会公开，直接桥接调用返回 `MSP006_NOT_SUPPORTED`；未声明的方法返回 `MSP004_GRANT_DENIED`。`window.close` 和 `window.focus` 需要通过 `UseWindowService` 注册服务；即使已授权，未注册时对应属性仍不可用。XHR、Cookie 和 webRequest 的详细行为见[网络 API 参考](docs/integration-reference.zh-CN.md#网络-api)。
 
 ## 宿主服务
 
@@ -170,6 +176,8 @@ var host = new CefSharpUserScriptHostBuilder(repository)
 ## 生命周期与诊断
 
 每个 `(document, frame, script, run-at)` 组合只执行一次。导航、上下文释放、分离和宿主释放都会使能力失效并取消待处理工作；`@noframes` 阻止子框架执行。
+
+适配器会把 `history.pushState`、`history.replaceState`、`popstate` 和 `hashchange` 产生的同文档 URL 变化报告为生命周期事件。获得 `window.onurlchange` 授权的脚本可通过 `window.onurlchange` 属性或 `addEventListener("urlchange", ...)` 接收事件；后续匹配和 `GM.info` 快照会使用当前 URL。
 
 CefSharp 只能提供尽力而为的 document-start 注入。此类执行产生 `MSR100_DOCUMENT_START_BEST_EFFORT`；设置 `RequireGuaranteedDocumentStart = true` 后会跳过并产生 `MSR101_DOCUMENT_START_UNAVAILABLE`。
 

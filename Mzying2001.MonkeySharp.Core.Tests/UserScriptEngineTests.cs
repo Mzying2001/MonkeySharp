@@ -248,6 +248,29 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             }
         }
 
+        [Fact]
+        public async Task SandboxAndUnwrapDeclarationsProduceExplicitWarnings()
+        {
+            var repository = new InMemoryUserScriptRepository();
+            await repository.InstallAsync(
+                MetadataAndMatchingTests.Script(
+                    "// @name isolation\n// @match https://example.com/*\n// @grant none\n" +
+                    "// @sandbox DOM\n// @unwrap\n// @run-at document-end"),
+                "test", true, CancellationToken.None);
+            using (var engine = new UserScriptEngine(repository))
+            {
+                var diagnostics = new List<UserScriptDiagnostic>();
+                engine.Diagnostic += (_, item) => diagnostics.Add(item);
+                var plan = await engine.ProcessLifecycleAsync(
+                    new DocumentLifecycleEventArgs(DocumentLifecycleKind.DomContentLoaded, Frame("isolation", true)),
+                    CancellationToken.None);
+
+                Assert.Single(plan.Invocations);
+                Assert.Contains(diagnostics, item => item.Code == "MSR212_UNSUPPORTED_SANDBOX");
+                Assert.Contains(diagnostics, item => item.Code == "MSR213_UNSUPPORTED_UNWRAP");
+            }
+        }
+
         private static string Script(string runAt)
         {
             return MetadataAndMatchingTests.Script(

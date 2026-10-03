@@ -271,6 +271,27 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                         documentId: frame.DocumentId,
                         frameId: frame.FrameId));
                 }
+                if (!string.IsNullOrEmpty(metadata.Sandbox) &&
+                    !string.Equals(metadata.Sandbox, "raw", StringComparison.OrdinalIgnoreCase))
+                {
+                    diagnostics.Add(new UserScriptDiagnostic(
+                        "MSR212_UNSUPPORTED_SANDBOX",
+                        DiagnosticSeverity.Warning,
+                        "The requested @sandbox mode is not available; the script remains in the page world.",
+                        scriptKey: installation.ScriptKey,
+                        documentId: frame.DocumentId,
+                        frameId: frame.FrameId));
+                }
+                if (metadata.Unwrap)
+                {
+                    diagnostics.Add(new UserScriptDiagnostic(
+                        "MSR213_UNSUPPORTED_UNWRAP",
+                        DiagnosticSeverity.Warning,
+                        "@unwrap is not available; the script remains inside the MonkeySharp wrapper.",
+                        scriptKey: installation.ScriptKey,
+                        documentId: frame.DocumentId,
+                        frameId: frame.FrameId));
+                }
                 if (_options.Compatibility.Profile == UserScriptCompatibilityProfile.LegacyCompatible &&
                     metadata.Requires.Count != 0 && _sourceResolver == null)
                 {
