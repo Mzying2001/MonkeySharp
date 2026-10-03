@@ -89,7 +89,7 @@ host.Attach(browser);
 
 CefSharp's public APIs execute bootstrap code in the page's main world, so MonkeySharp reports this bridge as `Unverified`.
 
-- The default policy runs `@grant none` scripts and suppresses scripts that request host-backed APIs.
+- The default policy runs scripts without host-backed grants. A script with no `@grant` receives no `GM` facade; an explicit `@grant none` script receives only `GM.info`/`GM_info`. Scripts that request host-backed APIs are suppressed unless the application opts into `TrustedPageWorld`.
 - `TrustedPageWorld` enables host APIs only when the application trusts both the page and installed scripts.
 - Per-execution capabilities prevent unrelated callers from impersonating an installation, but they are not an extension-style isolation boundary. Hostile page code can intercept a capability and invoke APIs granted to that script.
 - Installed userscripts are trusted code. Applications need their own review, signature, or trust policy for unknown sources.
@@ -110,13 +110,16 @@ The default parser accepts a bounded preamble before `// ==UserScript==`; `Moder
 
 Supported fields include:
 
-- Identity: `@name`, localized names, `@namespace`, `@version`, `@description`, `@author`, `@license`, and icons.
+- Identity: `@name`, localized names, `@namespace`, `@version`, `@description`, `@author`, `@license`, `@copyright`, and icons including `@icon64`/`@icon64URL`.
 - Selection: `@match`, `@include`, `@exclude`, `@exclude-match`, and `@noframes`.
-- Execution: `@run-at`, plus preserved `@run-in` and `@inject-into` values.
+- Execution: `@run-at`, `@run-in`, `@inject-into`, `@sandbox`, and `@unwrap`. Unsupported sandbox modes and wrapper removal emit `MSR212_UNSUPPORTED_SANDBOX` and `MSR213_UNSUPPORTED_UNWRAP`; execution remains in the page world and inside the MonkeySharp wrapper.
 - Capabilities and assets: `@grant`, `@connect`, `@require`, and `@resource`.
-- Source links: `@downloadURL`, `@updateURL`, `@homepageURL`, and `@supportURL`.
+- Source links: `@downloadURL`, `@updateURL`, `@homepageURL`, `@website`, `@source`, and `@supportURL`.
+- Disclosure and request metadata: `@antifeature` (including localized forms) and validated static `@webRequest` JSON rules.
 
-Exclusions override positive rules. URL fragments are ignored, hosts are IDN-normalized, explicit ports are checked, and `*.example.com` does not match the bare domain. Missing `@grant` means `@grant none`; recognized legacy aliases are normalized, while unknown grants remain case-sensitive and are never exposed.
+Exclusions override positive rules. URL fragments are ignored, hosts are IDN-normalized, explicit ports are checked, and `*.example.com` does not match the bare domain. Grant state distinguishes a missing `@grant`, explicit `@grant none`, and an explicit grant list. Recognized legacy aliases are normalized, while unknown grants remain case-sensitive and are never exposed.
+
+`GM.info` and `GM_info` expose a frozen snapshot containing script metadata, declared and normalized grants, URL rules, resources, update/source links, handler, sandbox mode, and the raw metadata header. Static `@webRequest` entries are validated and included in this snapshot; they are not installed into the host network interceptor. Use the runtime `GM.webRequest(...)` API for registrations that affect requests.
 
 ## GM API Support
 
@@ -136,11 +139,14 @@ Canonical `GM.*` APIs and legacy aliases are exposed only when the exact grant a
 | `GM.getTab`, `GM.saveTab`, `GM.getTabs` and aliases | Conditional | Require `ITabStateService`. |
 | `GM.cookie` / `GM_cookie` | CefSharp default | Structured access to the attached browser request context. |
 | `GM.webRequest` / `GM_webRequest` | CefSharp default | Tampermonkey selector/action registrations with removable handles and cancel/redirect result callbacks. |
+| `window.close` | Conditional | Requires the exact `window.close` grant and `IUserScriptWindowService`; the host may refuse to close the last tab. |
+| `window.focus` | Conditional | Requires the exact `window.focus` grant and `IUserScriptWindowService`. |
+| `window.onurlchange` | Core | Requires the exact grant; observes `pushState`, `replaceState`, `popstate`, and `hashchange` URL changes. |
 | `unsafeWindow` | Trusted page world only | Exposed only for its exact grant. |
 
 Modern storage and resource reads return Promises; their legacy aliases use bounded synchronous bootstrap snapshots. Legacy callback APIs return their handle or ID immediately and report callback failures as diagnostics.
 
-If a declared API has no provider, it is normally absent and direct bridge calls return `MSP006_NOT_SUPPORTED`. Undeclared methods return `MSP004_GRANT_DENIED`. Detailed XHR, Cookie, and webRequest behavior is documented in the [network API reference](docs/integration-reference.md#network-apis).
+If a declared API has no provider, it is normally absent and direct bridge calls return `MSP006_NOT_SUPPORTED`. Undeclared methods return `MSP004_GRANT_DENIED`. `UseWindowService` is required for `window.close` and `window.focus`; without it those properties remain unavailable even when granted. Detailed XHR, Cookie, and webRequest behavior is documented in the [network API reference](docs/integration-reference.md#network-apis).
 
 ## Host Services
 
@@ -170,6 +176,8 @@ The application owns the repository, browser, and supplied services. The host ow
 ## Lifecycle and Diagnostics
 
 Each `(document, frame, script, run-at)` combination executes once. Navigation, context release, detach, and disposal invalidate capabilities and cancel pending work. `@noframes` suppresses child-frame execution.
+
+The adapter reports same-document URL changes from `history.pushState`, `history.replaceState`, `popstate`, and `hashchange` as lifecycle events. Scripts granted `window.onurlchange` receive those events through the `window.onurlchange` property or `addEventListener("urlchange", ...)`; the current URL is reflected in subsequent matching and `GM.info` snapshots.
 
 CefSharp provides only best-effort document-start injection. Such executions emit `MSR100_DOCUMENT_START_BEST_EFFORT`; set `RequireGuaranteedDocumentStart = true` to skip them with `MSR101_DOCUMENT_START_UNAVAILABLE`.
 

@@ -54,7 +54,7 @@ test("modern info, log, style, and element facades use granted capabilities", as
             scriptKey: "77777777-7777-7777-7777-777777777777",
             source: [
                 "globalThis.__contractPromise = (async function () {",
-                "  globalThis.__infoFrozen = Object.isFrozen(GM.info);",
+                "  globalThis.__infoFrozen = Object.isFrozen(GM.info) && Object.isFrozen(GM.info.script);",
                 "  await GM.log({ event: 'log' });",
                 "  globalThis.__style = await GM.addStyle('body { color: red; }');",
                 "  globalThis.__element = await GM.addElement('div', { id: 'marker', textContent: 'ok' });",
@@ -143,4 +143,35 @@ test("legacy facade shadows ungranted globals and keeps new APIs absent without 
         cookie: "object",
         webRequest: "undefined"
     });
+});
+
+test("missing grants expose no GM object while explicit none keeps GM.info", async () => {
+    globalThis.__grantState = null;
+    install({
+        protocol: 1,
+        documentId: "grant-state-document",
+        frameId: "main",
+        runAt: "DocumentEnd",
+        invocations: [{
+            executionId: "grant-state-missing",
+            scriptKey: "99999999-9999-9999-9999-999999999999",
+            source: "globalThis.__grantState = [typeof GM, typeof GM_info];",
+            declaredGrants: [], grants: [], grantDeclarationState: "Missing",
+            info: { name: "missing" }, capability: "grant-state-missing-capability",
+            deliveryToken: "grant-state-missing-delivery",
+            compatibility: { profile: "LegacyCompatible", strict: false, legacyGlobals: true }
+        }, {
+            executionId: "grant-state-none",
+            scriptKey: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+            source: "globalThis.__grantStateExplicit = [typeof GM, GM.info.name, typeof GM_log];",
+            declaredGrants: ["none"], grants: ["none"], grantDeclarationState: "ExplicitNone",
+            info: { name: "explicit" }, capability: "grant-state-none-capability",
+            deliveryToken: "grant-state-none-delivery",
+            compatibility: { profile: "LegacyCompatible", strict: false, legacyGlobals: true }
+        }]
+    }, null);
+
+    await waitFor(() => globalThis.__grantState && globalThis.__grantStateExplicit);
+    assert.deepEqual(globalThis.__grantState, ["undefined", "undefined"]);
+    assert.deepEqual(globalThis.__grantStateExplicit, ["object", "explicit", "undefined"]);
 });

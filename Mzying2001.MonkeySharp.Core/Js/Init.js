@@ -67,6 +67,12 @@
                 return serializableValue(value);
             };
 
+            const deepFreeze = function (value) {
+                if (!value || typeof value !== "object" || Object.isFrozen(value)) return value;
+                Object.getOwnPropertyNames(value).forEach(name => deepFreeze(value[name]));
+                return Object.freeze(value);
+            };
+
             const resolveDispatch = async function () {
                 if (root.CefSharp && typeof root.CefSharp.BindObjectAsync === "function") {
                     await root.CefSharp.BindObjectAsync("__MonkeySharpBridge");
@@ -344,10 +350,12 @@
 
             const createApi = function (record, invocation, availableApis) {
                 const grants = new Set(invocation.grants);
-                const enabled = name => grants.has(name) && availableApis.has(name);
+                const enabled = name =>
+                    (grants.has(name) || (name === "GM.info" && invocation.grantDeclarationState === "ExplicitNone")) &&
+                    availableApis.has(name);
                 const api = {};
                 if (enabled("GM.info")) {
-                    Object.defineProperty(api, "info", { value: Object.freeze(invocation.info), enumerable: true });
+                    Object.defineProperty(api, "info", { value: deepFreeze(invocation.info), enumerable: true });
                 }
                 if (enabled("GM.log")) api.log = async value => call(record, "GM.log", { value: serializableValue(value) });
                 if (enabled("GM.getValue")) {
@@ -447,6 +455,12 @@
                         parent.appendChild(element);
                         return element;
                     };
+                }
+                if (enabled("window.close")) {
+                    api.windowClose = async function () { return call(record, "window.close", {}); };
+                }
+                if (enabled("window.focus")) {
+                    api.windowFocus = async function () { return call(record, "window.focus", {}); };
                 }
                 if (enabled("GM.getResourceText")) {
                     api.getResourceText = async function (name) {
@@ -929,6 +943,54 @@
                 return Object.freeze(api);
             };
 
+            const createWindowFacade = function (record, invocation, api) {
+                const grants = new Set(invocation.grants);
+                const closeEnabled = grants.has("window.close") && typeof api.windowClose === "function";
+                const focusEnabled = grants.has("window.focus") && typeof api.windowFocus === "function";
+                const urlEnabled = grants.has("window.onurlchange");
+                const isUrlEvent = value => value === "urlchange";
+                return new Proxy(root, {
+                    get: function (target, property, receiver) {
+                        if (property === "close") return closeEnabled ? api.windowClose : undefined;
+                        if (property === "focus") return focusEnabled ? api.windowFocus : undefined;
+                        if (property === "onurlchange") return urlEnabled ? record.urlChangeHandler : undefined;
+                        if (property === "addEventListener") {
+                            return function (type, listener, options) {
+                                if (urlEnabled && isUrlEvent(type)) {
+                                    if (typeof listener !== "function") throw new TypeError("listener must be a function.");
+                                    record.urlChangeHandlers.add(listener);
+                                    return;
+                                }
+                                return target.addEventListener.call(target, type, listener, options);
+                            };
+                        }
+                        if (property === "removeEventListener") {
+                            return function (type, listener, options) {
+                                if (urlEnabled && isUrlEvent(type)) {
+                                    record.urlChangeHandlers.delete(listener);
+                                    return;
+                                }
+                                return target.removeEventListener.call(target, type, listener, options);
+                            };
+                        }
+                        const value = Reflect.get(target, property, target);
+                        if ((property === "top" || property === "parent" || property === "self" ||
+                            property === "window" || property === "globalThis") && value === target) {
+                            return receiver;
+                        }
+                        return value;
+                    },
+                    set: function (target, property, value, receiver) {
+                        if (property === "onurlchange" && urlEnabled) {
+                            if (value !== null && typeof value !== "function") throw new TypeError("onurlchange must be a function or null.");
+                            record.urlChangeHandler = value;
+                            return true;
+                        }
+                        return Reflect.set(target, property, value, target);
+                    }
+                });
+            };
+
             const legacyNames = [
                 "GM_info", "GM_log", "GM_getValue", "GM_setValue", "GM_deleteValue", "GM_listValues",
                 "GM_addValueChangeListener", "GM_removeValueChangeListener", "GM_addStyle", "GM_addElement",
@@ -1203,11 +1265,15 @@
                     pendingStorageMutations: [],
                     lastStorageSequence: 0,
                     resourceMirror: null
+                    , urlChangeHandlers: new Set(), urlChangeHandler: null, windowFacade: null
                 };
                 executions.set(invocation.executionId, record);
                 let availableApis = new Set();
-                const grantNone = invocation.grants.length === 1 && invocation.grants[0] === "none";
-                if (!grantNone) {
+                const grantState = invocation.grantDeclarationState ||
+                    (invocation.grants.length === 1 && invocation.grants[0] === "none" ? "ExplicitNone" : "ExplicitList");
+                const noGrant = grantState === "Missing";
+                const explicitNone = grantState === "ExplicitNone";
+                if (!noGrant && !explicitNone) {
                     if (!dispatch) throw new Error("MonkeySharp bridge is unavailable.");
                     const hello = await send(dispatch, Object.assign({ type: "hello" }, proof));
                     if (hello.type !== "hello-result" || !hello.ok) {
@@ -1224,16 +1290,18 @@
                         record.resourceMirror = Object.assign({}, hello.compatibility.resources.values);
                     }
                 }
-                const gm = grantNone ? undefined : createApi(record, invocation, availableApis);
+                if (explicitNone) availableApis = new Set(["GM.info"]);
+                const gm = noGrant ? undefined : createApi(record, invocation, availableApis);
+                record.windowFacade = createWindowFacade(record, invocation, gm || {});
                 const compatibility = invocation.compatibility || { strict: true, legacyGlobals: false };
                 const legacy = createLegacyFacade(record, Object.assign({}, invocation, { compatibility: compatibility }), gm);
                 const unsafeWindow = invocation.grants.includes("unsafeWindow") ? root : undefined;
                 try {
                     const names = ["GM", "unsafeWindow", "window"].concat(legacyNames);
-                    const values = [gm, unsafeWindow, root].concat(legacyNames.map(name => legacy[name]));
+                    const values = [gm, unsafeWindow, record.windowFacade].concat(legacyNames.map(name => legacy[name]));
                     const prefix = compatibility.strict ? "\"use strict\";\n" : "";
                     const execute = new Function(...names, prefix + invocation.source);
-                    await execute.call(compatibility.strict ? undefined : root, ...values);
+                    await execute.call(compatibility.strict ? undefined : record.windowFacade, ...values);
                 } catch (error) {
                     if (dispatch) {
                         await call(record, "runtime.reportError", {
@@ -1398,7 +1466,22 @@
                 }
             };
 
-            return Object.freeze({ install: install, receive: receive });
+            const urlChanged = function (data) {
+                if (!data || typeof data.url !== "string") return false;
+                const info = { url: data.url, oldURL: typeof data.oldURL === "string" ? data.oldURL : "" };
+                executions.forEach(record => {
+                    if (!record.urlChangeHandler && record.urlChangeHandlers.size === 0) return;
+                    try {
+                        if (typeof record.urlChangeHandler === "function") record.urlChangeHandler.call(record.windowFacade, info);
+                        record.urlChangeHandlers.forEach(handler => handler.call(record.windowFacade, info));
+                    } catch (error) {
+                        console.error("[MonkeySharp] urlchange callback failed", error);
+                    }
+                });
+                return true;
+            };
+
+            return Object.freeze({ install: install, receive: receive, urlChanged: urlChanged });
         })();
 
         Object.defineProperty(root, runtimeName, {

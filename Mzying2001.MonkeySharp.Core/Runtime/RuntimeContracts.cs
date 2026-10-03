@@ -161,6 +161,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
             string source,
             IReadOnlyList<string> declaredGrants,
             IReadOnlyList<string> grants,
+            GrantDeclarationState grantDeclarationState,
             string serializedInfo,
             string capability,
             string deliveryToken,
@@ -171,6 +172,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
             Source = source;
             DeclaredGrants = declaredGrants;
             Grants = grants;
+            GrantDeclarationState = grantDeclarationState;
             SerializedInfo = serializedInfo;
             Capability = capability;
             DeliveryToken = deliveryToken;
@@ -191,6 +193,9 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
 
         /// <summary>Gets the normalized API capabilities exposed to this execution.</summary>
         public IReadOnlyList<string> Grants { get; }
+
+        /// <summary>Gets how the script declared its grants.</summary>
+        public GrantDeclarationState GrantDeclarationState { get; }
 
         /// <summary>Gets the serialized metadata object exposed to the script.</summary>
         public string SerializedInfo { get; }

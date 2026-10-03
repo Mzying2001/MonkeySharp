@@ -431,6 +431,23 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Fact]
+        public async Task WindowServicesAreExposedAsGrantGatedMethods()
+        {
+            var installation = await InstallAsync("// @grant window.close\n// @grant window.focus");
+            var services = new FakeHostServices();
+            using (var provider = new HostInteractionApiProvider(window: services))
+            {
+                var closed = await provider.InvokeAsync(Context(installation, "window.close", new { }), CancellationToken.None);
+                var focused = await provider.InvokeAsync(Context(installation, "window.focus", new { }), CancellationToken.None);
+
+                Assert.True(Json(closed.Json).GetBoolean());
+                Assert.True(Json(focused.Json).GetBoolean());
+                Assert.Equal(1, services.CloseCalls);
+                Assert.Equal(1, services.FocusCalls);
+            }
+        }
+
+        [Fact]
         public async Task ExecutionEndDisposesRegisteredMenuCommands()
         {
             var installation = await InstallAsync(
@@ -573,13 +590,15 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         private sealed class FakeHostServices :
-            IMenuService, INotificationService, IClipboardService, ITabService, IDownloadService
+            IMenuService, INotificationService, IClipboardService, ITabService, IDownloadService, IUserScriptWindowService
         {
             private Action _menuCallback;
             public FakeMenuRegistration MenuRegistration { get; } = new FakeMenuRegistration();
             public string ClipboardText { get; private set; }
             public OpenTabRequest OpenTab { get; private set; }
             public DownloadRequest Download { get; private set; }
+            public int CloseCalls { get; private set; }
+            public int FocusCalls { get; private set; }
 
             public Task<IMenuRegistration> RegisterAsync(MenuCommandRequest request, Action invoked, CancellationToken cancellationToken)
             {
@@ -603,6 +622,16 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             {
                 Download = request;
                 return Task.FromResult<IDownloadOperation>(new FakeDownloadOperation("download"));
+            }
+            public Task<bool> CloseAsync(DocumentFrame frame, CancellationToken cancellationToken)
+            {
+                CloseCalls++;
+                return Task.FromResult(true);
+            }
+            public Task<bool> FocusAsync(DocumentFrame frame, CancellationToken cancellationToken)
+            {
+                FocusCalls++;
+                return Task.FromResult(true);
             }
         }
 

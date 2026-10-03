@@ -86,6 +86,8 @@ const listenerId = GM.cookie.addListener({}, change => console.log(change.cause)
 
 声明 `@grant GM.webRequest` 或 `@grant GM_webRequest`。默认内存服务会挂载 `CefSharpWebRequestHandler`。注册使用 Tampermonkey selector/action 合约并返回可移除 handle。字符串 selector 是 URL glob（或 `/regexp/`）；对象 selector 支持字符串或数组形式的 `include`、WebExtension `match` 和 `exclude`。action 支持 `cancel`、静态 HTTP(S) 重定向，或 `{ from, to }` 动态替换。重定向目标会在注册时及实际求值时按脚本 URL 规则检查。JavaScript 回调不会阻塞网络线程。
 
+静态 `@webRequest` 元数据会被解析并写入 `GM.info.script.webRequest` 供检查，但不会注册到网络服务。脚本需要活动注册时必须使用 `GM.webRequest(...)`。
+
 ```javascript
 const registration = GM.webRequest([
   { selector: "https://example.com/*", action: "cancel" },
@@ -111,12 +113,17 @@ Builder 只能使用一次。应用程序拥有仓库、浏览器以及通过 `U
 - `IResourceProvider` 返回事先授权的已声明资源，内容受 `BridgeOptions.MaxResourceBytes` 限制。
 - `IHttpRequestService` 在工作开始前接收可重复读取的 `IUserScriptHttpBody` 和观察者；它应先报告元数据再报告正文、遵守 `MaxResponseBytes`、在每次重定向前调用 `RedirectAllowed`，并记录已跟随 URL 供 Core 重新检查 `@connect`。
 - 每个宿主支持的请求都会将安装实例、框架、方法、目标摘要和当前能力传给 `IUserScriptPermissionPolicy`。
+- `IUserScriptWindowService` 为精确的 `window.close` 和 `window.focus` 授权提供实现。`CloseAsync` 可以拒绝关闭最后一个标签页；不调用 `UseWindowService` 时两个属性都不可用。`window.onurlchange` 由 Core 提供，报告同文档的 `pushState`、`replaceState`、`popstate` 和 `hashchange` 变化。
 
 ## 生命周期与诊断
 
 适配器为每个框架文档建立身份，并对每个 `(document, frame, script, run-at)` 组合执行一次。导航、上下文释放、分离和宿主释放都会使能力失效并取消待处理工作。
 
+授权状态具有语义差异：缺少 `@grant` 时不会公开 `GM` 门面；显式 `@grant none` 时只公开 `GM.info`/`GM_info`。`GM.info` 是包含规范化元数据、授权、URL 规则、资源、更新状态、handler、sandbox 模式和原始元数据文本的深度冻结快照。
+
 CefSharp 只能提供尽力而为的 document-start 钩子。相应执行产生 `MSR100_DOCUMENT_START_BEST_EFFORT`；设置 `RequireGuaranteedDocumentStart = true` 后会跳过并产生 `MSR101_DOCUMENT_START_UNAVAILABLE`。
+
+除 `raw` 外的 `@sandbox` 值会产生 `MSR212_UNSUPPORTED_SANDBOX`，`@unwrap` 会产生 `MSR213_UNSUPPORTED_UNWRAP`。这两个声明仍保留在元数据和 `GM.info` 中，但脚本仍在页面世界和 MonkeySharp wrapper 内执行。
 
 协议错误使用稳定代码 `MSP001` 至 `MSP010` 以及 `MSP999`。诊断不会包含能力令牌或存储值。默认限制为每个请求 1 MiB、每个响应 1 MiB、每个资源 10 MiB、普通请求 30 秒以及每个文档 64 个待处理请求；通过 `CefSharpHostOptions.Bridge` 配置。
 

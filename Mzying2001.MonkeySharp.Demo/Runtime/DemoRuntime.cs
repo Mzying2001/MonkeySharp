@@ -86,6 +86,7 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                 .UseNotificationService(new WpfNotificationService(_dispatcher, Content))
                 .UseClipboardService(new WpfClipboardService(_dispatcher))
                 .UseTabService(new WpfTabService(MainWindow, tab, _dispatcher))
+                .UseWindowService(new WpfWindowService(MainWindow, tab, _dispatcher))
                 .UseDownloadService(downloads).UseTabStateService(_tabStates.ForTab(tab.TabId))
                 .UseResourceProvider(Content).UseDependencyProvider(Content)
                 .Configure(new CefSharpHostOptions { TrustedPageWorld = true })

@@ -31,11 +31,18 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Fact]
-        public void MissingGrantMeansGrantNone()
+        public void MissingGrantIsDistinctFromExplicitNone()
         {
             var result = _parser.Parse(Script("// @name none\n// @match https://example.com/*"));
 
-            Assert.Equal(new[] { "none" }, result.Metadata.Grants);
+            Assert.Empty(result.Metadata.DeclaredGrants);
+            Assert.Empty(result.Metadata.Grants);
+            Assert.Equal(GrantDeclarationState.Missing, result.Metadata.GrantDeclarationState);
+
+            var explicitNone = _parser.Parse(Script("// @name explicit\n// @match https://example.com/*\n// @grant none"));
+            Assert.Equal(new[] { "none" }, explicitNone.Metadata.DeclaredGrants);
+            Assert.Equal(new[] { "none" }, explicitNone.Metadata.Grants);
+            Assert.Equal(GrantDeclarationState.ExplicitNone, explicitNone.Metadata.GrantDeclarationState);
         }
 
         [Fact]
@@ -81,6 +88,42 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 "// @name custom\n// @match https://example.com/*\n// @custom first\n// @custom second"));
 
             Assert.Equal(new[] { "first", "second" }, result.Metadata.AdditionalEntries["custom"]);
+        }
+
+        [Fact]
+        public void ExtendedTampermonkeyMetadataIsTypedAndValidated()
+        {
+            var result = _parser.Parse(Script(
+                "// @name extended\n// @match https://example.com/*\n" +
+                "// @copyright Example\n// @icon64URL https://example.com/icon64.png\n" +
+                "// @homepage https://example.com/home\n// @website https://example.com/site\n" +
+                "// @source https://example.com/source\n// @sandbox JavaScript\n// @unwrap\n" +
+                "// @antifeature ads Shows ads\n// @antifeature:de tracking Verfolgt Nutzer\n" +
+                "// @webRequest {\"selector\":\"https://example.com/*\",\"action\":\"cancel\"}"));
+
+            Assert.True(result.CanEnable);
+            Assert.Equal("Example", result.Metadata.Copyright);
+            Assert.Equal("https://example.com/icon64.png", result.Metadata.Icon64Url);
+            Assert.Equal("https://example.com/home", result.Metadata.HomepageUrl);
+            Assert.Equal("https://example.com/site", result.Metadata.WebsiteUrl);
+            Assert.Equal("https://example.com/source", result.Metadata.SourceUrl);
+            Assert.Equal("JavaScript", result.Metadata.Sandbox);
+            Assert.True(result.Metadata.Unwrap);
+            Assert.Equal(2, result.Metadata.Antifeatures.Count);
+            Assert.Equal("de", result.Metadata.Antifeatures[1].Locale);
+            Assert.Single(result.Metadata.WebRequest);
+            Assert.Equal("cancel", result.Metadata.WebRequest[0].Action.GetString());
+        }
+
+        [Fact]
+        public void InvalidStaticWebRequestMetadataIsAnError()
+        {
+            var result = _parser.Parse(Script(
+                "// @name invalid webrequest\n// @match https://example.com/*\n" +
+                "// @webRequest {\"selector\":{},\"action\":\"cancel\"}"));
+
+            Assert.False(result.CanEnable);
+            Assert.Contains(result.Diagnostics, item => item.Code == "MSM062_INVALID_WEBREQUEST");
         }
 
         [Fact]

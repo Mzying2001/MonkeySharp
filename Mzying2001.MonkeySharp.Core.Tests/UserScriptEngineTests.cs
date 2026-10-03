@@ -4,6 +4,7 @@ using Mzying2001.MonkeySharp.Core.Repository;
 using Mzying2001.MonkeySharp.Core.Runtime;
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
@@ -212,6 +213,61 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 Assert.Single(plan.Invocations);
                 Assert.Contains(diagnostics, item => item.Code == "MSR210_UNSUPPORTED_INJECT_WORLD");
                 Assert.Contains(diagnostics, item => item.Code == "MSR211_UNSUPPORTED_RUN_IN");
+            }
+        }
+
+        [Fact]
+        public async Task InvocationContainsTampermonkeyInfoSnapshot()
+        {
+            var repository = new InMemoryUserScriptRepository();
+            await repository.InstallAsync(
+                MetadataAndMatchingTests.Script(
+                    "// @name info\n// @namespace tests\n// @version 1.2.3\n" +
+                    "// @description details\n// @author author\n// @match https://example.com/*\n" +
+                    "// @grant GM.info\n// @connect api.example.com\n// @resource icon https://example.com/icon.png\n// @run-at document-end"),
+                "origin", true, CancellationToken.None);
+            using (var engine = new UserScriptEngine(repository,
+                options: new UserScriptEngineOptions { RequireVerifiedBridge = false }))
+            {
+                var plan = await engine.ProcessLifecycleAsync(
+                    new DocumentLifecycleEventArgs(DocumentLifecycleKind.DomContentLoaded, Frame("info", true)),
+                    CancellationToken.None);
+                var invocation = Assert.Single(plan.Invocations);
+                using (var document = JsonDocument.Parse(invocation.SerializedInfo))
+                {
+                    var root = document.RootElement;
+                    Assert.Equal("MonkeySharp", root.GetProperty("scriptHandler").GetString());
+                    Assert.Equal("disabled", root.GetProperty("downloadMode").GetString());
+                    Assert.Equal("info", root.GetProperty("script").GetProperty("name").GetString());
+                    Assert.Equal("document-end", root.GetProperty("script").GetProperty("run-at").GetString());
+                    Assert.Equal("icon", root.GetProperty("script").GetProperty("resources")[0].GetProperty("name").GetString());
+                    Assert.Equal("raw", root.GetProperty("sandboxMode").GetString());
+                    Assert.True(root.GetProperty("script").GetProperty("webRequest").ValueKind == JsonValueKind.Null);
+                    Assert.Contains("@name info", root.GetProperty("scriptMetaStr").GetString());
+                }
+            }
+        }
+
+        [Fact]
+        public async Task SandboxAndUnwrapDeclarationsProduceExplicitWarnings()
+        {
+            var repository = new InMemoryUserScriptRepository();
+            await repository.InstallAsync(
+                MetadataAndMatchingTests.Script(
+                    "// @name isolation\n// @match https://example.com/*\n// @grant none\n" +
+                    "// @sandbox DOM\n// @unwrap\n// @run-at document-end"),
+                "test", true, CancellationToken.None);
+            using (var engine = new UserScriptEngine(repository))
+            {
+                var diagnostics = new List<UserScriptDiagnostic>();
+                engine.Diagnostic += (_, item) => diagnostics.Add(item);
+                var plan = await engine.ProcessLifecycleAsync(
+                    new DocumentLifecycleEventArgs(DocumentLifecycleKind.DomContentLoaded, Frame("isolation", true)),
+                    CancellationToken.None);
+
+                Assert.Single(plan.Invocations);
+                Assert.Contains(diagnostics, item => item.Code == "MSR212_UNSUPPORTED_SANDBOX");
+                Assert.Contains(diagnostics, item => item.Code == "MSR213_UNSUPPORTED_UNWRAP");
             }
         }
 
