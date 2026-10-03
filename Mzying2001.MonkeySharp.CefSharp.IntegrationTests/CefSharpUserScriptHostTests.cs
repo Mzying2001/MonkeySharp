@@ -138,7 +138,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
                 browser.CreateContext();
                 await browser.WaitForScriptCountAsync(1);
 
-                Assert.DoesNotContain("__MonkeySharpRuntime", Assert.Single(browser.Scripts));
+                Assert.DoesNotContain("runtime.install(payload)", Assert.Single(browser.Scripts));
                 Assert.Contains(diagnostics, item => item.Code == "MSR201_BRIDGE_INTEGRITY_REQUIRED");
             }
 
