@@ -1296,7 +1296,7 @@
                     const values = [gm, unsafeWindow, record.windowFacade].concat(legacyNames.map(name => legacy[name]));
                     const prefix = compatibility.strict ? "\"use strict\";\n" : "";
                     const execute = new Function(...names, prefix + invocation.source);
-                    await execute.call(compatibility.strict ? undefined : root, ...values);
+                    await execute.call(compatibility.strict ? undefined : record.windowFacade, ...values);
                 } catch (error) {
                     if (dispatch) {
                         await call(record, "runtime.reportError", {
