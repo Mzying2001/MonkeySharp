@@ -359,16 +359,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
         private ScriptInvocation CreateInvocation(UserScriptInstallation installation, string source)
         {
             var metadata = installation.Definition.Metadata;
-            var info = JsonSerializer.Serialize(new Dictionary<string, object>
-            {
-                ["scriptKey"] = installation.ScriptKey.ToString(),
-                ["name"] = metadata.Name,
-                ["namespace"] = metadata.Namespace,
-                ["version"] = metadata.Version,
-                ["description"] = metadata.Description,
-                ["grants"] = metadata.DeclaredGrants,
-                ["grantDeclarationState"] = metadata.GrantDeclarationState.ToString()
-            });
+            var info = JsonSerializer.Serialize(BuildInfo(installation));
             return new ScriptInvocation(
                 Guid.NewGuid().ToString("D"),
                 installation.ScriptKey,
@@ -380,6 +371,99 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                 CreateToken(),
                 CreateToken(),
                 new ScriptCompatibilityDescriptor(_options.Compatibility));
+        }
+
+        private static object BuildInfo(UserScriptInstallation installation)
+        {
+            var metadata = installation.Definition.Metadata;
+            var header = ExtractMetadataHeader(installation.Definition.Source);
+            var resources = metadata.Resources.Select(resource => new Dictionary<string, object>
+            {
+                ["name"] = resource.Name,
+                ["url"] = resource.Url
+            }).ToArray();
+            var script = new Dictionary<string, object>
+            {
+                ["antifeatures"] = new Dictionary<string, object>(),
+                ["author"] = metadata.Author,
+                ["blockers"] = new string[0],
+                ["connects"] = metadata.Connects,
+                ["copyright"] = null,
+                ["description_i18n"] = metadata.LocalizedDescriptions.Count == 0 ? null : metadata.LocalizedDescriptions,
+                ["description"] = metadata.Description,
+                ["downloadURL"] = metadata.DownloadUrl,
+                ["excludes"] = metadata.Excludes.Concat(metadata.ExcludeMatches).ToArray(),
+                ["fileURL"] = installation.SourceOrigin,
+                ["grant"] = metadata.DeclaredGrants,
+                ["header"] = header,
+                ["homepage"] = metadata.HomepageUrl,
+                ["icon"] = metadata.IconUrl,
+                ["icon64"] = null,
+                ["includes"] = metadata.Includes,
+                ["lastModified"] = installation.UpdatedAt.ToUnixTimeMilliseconds(),
+                ["matches"] = metadata.Matches,
+                ["name_i18n"] = metadata.LocalizedNames.Count == 0 ? null : metadata.LocalizedNames,
+                ["name"] = metadata.Name,
+                ["namespace"] = metadata.Namespace,
+                ["position"] = 0,
+                ["resources"] = resources,
+                ["supportURL"] = metadata.SupportUrl,
+                ["run-at"] = ToMetadataRunAt(metadata.RunAt),
+                ["unwrap"] = false,
+                ["updateURL"] = metadata.UpdateUrl,
+                ["version"] = metadata.Version,
+                ["webRequest"] = null,
+                ["options"] = new Dictionary<string, object>
+                {
+                    ["sandbox"] = metadata.InjectInto,
+                    ["noframes"] = metadata.NoFrames,
+                    ["unwrap"] = false,
+                    ["run_at"] = ToMetadataRunAt(metadata.RunAt)
+                }
+            };
+            return new Dictionary<string, object>
+            {
+                ["scriptKey"] = installation.ScriptKey.ToString(),
+                ["name"] = metadata.Name,
+                ["namespace"] = metadata.Namespace,
+                ["version"] = metadata.Version,
+                ["description"] = metadata.Description,
+                ["grants"] = metadata.DeclaredGrants,
+                ["grantDeclarationState"] = metadata.GrantDeclarationState.ToString(),
+                ["downloadMode"] = "disabled",
+                ["isIncognito"] = false,
+                ["sandboxMode"] = "raw",
+                ["scriptHandler"] = "MonkeySharp",
+                ["scriptMetaStr"] = header,
+                ["scriptUpdateURL"] = metadata.UpdateUrl,
+                ["scriptWillUpdate"] = false,
+                ["script"] = script
+            };
+        }
+
+        private static string ToMetadataRunAt(UserScriptRunAt runAt)
+        {
+            switch (runAt)
+            {
+                case UserScriptRunAt.DocumentStart: return "document-start";
+                case UserScriptRunAt.DocumentBody: return "document-body";
+                case UserScriptRunAt.DocumentEnd: return "document-end";
+                default: return "document-idle";
+            }
+        }
+
+        private static string ExtractMetadataHeader(string source)
+        {
+            if (string.IsNullOrEmpty(source))
+                return null;
+            var start = source.IndexOf("// ==UserScript==", StringComparison.Ordinal);
+            if (start < 0)
+                return null;
+            var end = source.IndexOf("// ==/UserScript==", start, StringComparison.Ordinal);
+            if (end < 0)
+                return source.Substring(start);
+            end += "// ==/UserScript==".Length;
+            return source.Substring(start, end - start);
         }
 
         private static string CreateToken()

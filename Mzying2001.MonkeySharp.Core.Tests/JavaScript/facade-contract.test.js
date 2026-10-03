@@ -54,7 +54,7 @@ test("modern info, log, style, and element facades use granted capabilities", as
             scriptKey: "77777777-7777-7777-7777-777777777777",
             source: [
                 "globalThis.__contractPromise = (async function () {",
-                "  globalThis.__infoFrozen = Object.isFrozen(GM.info);",
+                "  globalThis.__infoFrozen = Object.isFrozen(GM.info) && Object.isFrozen(GM.info.script);",
                 "  await GM.log({ event: 'log' });",
                 "  globalThis.__style = await GM.addStyle('body { color: red; }');",
                 "  globalThis.__element = await GM.addElement('div', { id: 'marker', textContent: 'ok' });",

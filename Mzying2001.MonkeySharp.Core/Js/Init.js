@@ -67,6 +67,12 @@
                 return serializableValue(value);
             };
 
+            const deepFreeze = function (value) {
+                if (!value || typeof value !== "object" || Object.isFrozen(value)) return value;
+                Object.getOwnPropertyNames(value).forEach(name => deepFreeze(value[name]));
+                return Object.freeze(value);
+            };
+
             const resolveDispatch = async function () {
                 if (root.CefSharp && typeof root.CefSharp.BindObjectAsync === "function") {
                     await root.CefSharp.BindObjectAsync("__MonkeySharpBridge");
@@ -349,7 +355,7 @@
                     availableApis.has(name);
                 const api = {};
                 if (enabled("GM.info")) {
-                    Object.defineProperty(api, "info", { value: Object.freeze(invocation.info), enumerable: true });
+                    Object.defineProperty(api, "info", { value: deepFreeze(invocation.info), enumerable: true });
                 }
                 if (enabled("GM.log")) api.log = async value => call(record, "GM.log", { value: serializableValue(value) });
                 if (enabled("GM.getValue")) {
