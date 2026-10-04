@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Mzying2001.MonkeySharp.Core.Apis;
+using Mzying2001.MonkeySharp.Core.Runtime;
 using Mzying2001.MonkeySharp.Demo.ViewModels;
 using System;
 using System.IO;
@@ -123,6 +124,7 @@ namespace Mzying2001.MonkeySharp.Demo.Services
             private readonly TaskCompletionSource<object> _completion = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
             private CancellationTokenRegistration _registration;
             private readonly CancellationTokenSource _images = new CancellationTokenSource();
+            private DispatcherTimer _timeout;
             private Window _window;
             private int _closed;
 
@@ -153,8 +155,23 @@ namespace Mzying2001.MonkeySharp.Demo.Services
                     };
                     _window.Closed += (sender, args) => Finish();
                     _window.Show();
+                    if (request.Timeout.HasValue && request.Timeout.Value > 0)
+                    {
+                        _timeout = new DispatcherTimer(DispatcherPriority.Normal, dispatcher)
+                        {
+                            Interval = TimeSpan.FromMilliseconds(request.Timeout.Value)
+                        };
+                        _timeout.Tick += TimeoutElapsed;
+                        _timeout.Start();
+                    }
                     if (!string.IsNullOrWhiteSpace(request.ImageUrl)) _ = LoadImageAsync(content, request.ImageUrl, panel);
                 }));
+            }
+
+            private void TimeoutElapsed(object sender, EventArgs args)
+            {
+                _timeout?.Stop();
+                Dispose();
             }
 
             private async Task LoadImageAsync(HttpContentService content, string url, StackPanel panel)
@@ -181,6 +198,12 @@ namespace Mzying2001.MonkeySharp.Demo.Services
             private void Finish()
             {
                 if (Interlocked.Exchange(ref _closed, 1) != 0) return;
+                if (_timeout != null)
+                {
+                    _timeout.Stop();
+                    _timeout.Tick -= TimeoutElapsed;
+                    _timeout = null;
+                }
                 _images.Cancel();
                 _registration.Dispose();
                 Closed?.Invoke(this, EventArgs.Empty);
@@ -255,6 +278,42 @@ namespace Mzying2001.MonkeySharp.Demo.Services
             {
                 _tab.Closed -= TabClosed;
             }
+        }
+    }
+
+    public sealed class WpfWindowService : IUserScriptWindowService
+    {
+        private readonly MainWindowViewModel _main;
+        private readonly BrowserTabViewModel _origin;
+        private readonly Dispatcher _dispatcher;
+
+        public WpfWindowService(MainWindowViewModel main, BrowserTabViewModel origin, Dispatcher dispatcher)
+        {
+            _main = main;
+            _origin = origin;
+            _dispatcher = dispatcher;
+        }
+
+        public async Task<bool> CloseAsync(DocumentFrame frame, CancellationToken cancellationToken)
+        {
+            return await _dispatcher.InvokeAsync(() =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (_origin.IsClosed || _main.Tabs.Count <= 1) return false;
+                _main.CloseTab(_origin);
+                return true;
+            });
+        }
+
+        public async Task<bool> FocusAsync(DocumentFrame frame, CancellationToken cancellationToken)
+        {
+            return await _dispatcher.InvokeAsync(() =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (_origin.IsClosed || !_main.Tabs.Contains(_origin)) return false;
+                _main.SelectedTab = _origin;
+                return true;
+            });
         }
     }
 }

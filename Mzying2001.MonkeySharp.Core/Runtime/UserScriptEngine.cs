@@ -1,4 +1,6 @@
 using Mzying2001.MonkeySharp.Core.Domain;
+using Mzying2001.MonkeySharp.Core.Apis;
+using Mzying2001.MonkeySharp.Core.Security;
 using Mzying2001.MonkeySharp.Core.Compatibility;
 using Mzying2001.MonkeySharp.Core.Matching;
 using Mzying2001.MonkeySharp.Core.Repository;
@@ -171,8 +173,16 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                     InvalidateDocument(frame.DocumentId);
                     return EmptyPlan(frame, UserScriptRunAt.DocumentIdle);
                 case DocumentLifecycleKind.ContextCreated:
+                    EnsureDocument(frame);
+                    return EmptyPlan(frame, UserScriptRunAt.DocumentIdle);
                 case DocumentLifecycleKind.UrlChanged:
                     EnsureDocument(frame);
+                    lock (_stateLock)
+                    {
+                        foreach (var execution in _executions.Values.Where(item =>
+                            item.Frame.DocumentId == frame.DocumentId))
+                            execution.UpdateFrame(frame);
+                    }
                     return EmptyPlan(frame, UserScriptRunAt.DocumentIdle);
             }
 
@@ -220,7 +230,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
 
                 if (_options.RequireVerifiedBridge &&
                     frame.BridgeIntegrity == BridgeIntegrityGuarantee.Unverified &&
-                    !IsGrantNone(metadata.Grants))
+                    RequiresBridge(metadata))
                 {
                     diagnostics.Add(new UserScriptDiagnostic(
                         "MSR201_BRIDGE_INTEGRITY_REQUIRED",
@@ -231,7 +241,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                         frameId: frame.FrameId));
                     continue;
                 }
-                if (frame.BridgeIntegrity == BridgeIntegrityGuarantee.TrustedPageWorld && !IsGrantNone(metadata.Grants))
+                if (frame.BridgeIntegrity == BridgeIntegrityGuarantee.TrustedPageWorld && RequiresBridge(metadata))
                 {
                     diagnostics.Add(new UserScriptDiagnostic(
                         "MSR200_UNVERIFIED_BRIDGE",
@@ -259,6 +269,27 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                         "MSR211_UNSUPPORTED_RUN_IN",
                         DiagnosticSeverity.Warning,
                         "The requested @run-in environment is preserved but not implemented by this host.",
+                        scriptKey: installation.ScriptKey,
+                        documentId: frame.DocumentId,
+                        frameId: frame.FrameId));
+                }
+                if (!string.IsNullOrEmpty(metadata.Sandbox) &&
+                    !string.Equals(metadata.Sandbox, "raw", StringComparison.OrdinalIgnoreCase))
+                {
+                    diagnostics.Add(new UserScriptDiagnostic(
+                        "MSR212_UNSUPPORTED_SANDBOX",
+                        DiagnosticSeverity.Warning,
+                        "The requested @sandbox mode is not available; the script remains in the page world.",
+                        scriptKey: installation.ScriptKey,
+                        documentId: frame.DocumentId,
+                        frameId: frame.FrameId));
+                }
+                if (metadata.Unwrap)
+                {
+                    diagnostics.Add(new UserScriptDiagnostic(
+                        "MSR213_UNSUPPORTED_UNWRAP",
+                        DiagnosticSeverity.Warning,
+                        "@unwrap is not available; the script remains inside the MonkeySharp wrapper.",
                         scriptKey: installation.ScriptKey,
                         documentId: frame.DocumentId,
                         frameId: frame.FrameId));
@@ -292,7 +323,9 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                 catch (Exception exception)
                 {
                     diagnostics.Add(new UserScriptDiagnostic(
-                        "MSR400_DEPENDENCY_RESOLUTION_FAILED",
+                        exception is ResourceIntegrityException integrityException
+                            ? integrityException.Code
+                            : "MSR400_DEPENDENCY_RESOLUTION_FAILED",
                         DiagnosticSeverity.Error,
                         "The script dependencies could not be resolved.",
                         exception,
@@ -359,25 +392,130 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
         private ScriptInvocation CreateInvocation(UserScriptInstallation installation, string source)
         {
             var metadata = installation.Definition.Metadata;
-            var info = JsonSerializer.Serialize(new Dictionary<string, object>
-            {
-                ["scriptKey"] = installation.ScriptKey.ToString(),
-                ["name"] = metadata.Name,
-                ["namespace"] = metadata.Namespace,
-                ["version"] = metadata.Version,
-                ["description"] = metadata.Description,
-                ["grants"] = metadata.DeclaredGrants
-            });
+            var info = JsonSerializer.Serialize(BuildInfo(installation));
             return new ScriptInvocation(
                 Guid.NewGuid().ToString("D"),
                 installation.ScriptKey,
                 source,
                 metadata.DeclaredGrants,
                 metadata.Grants,
+                metadata.GrantDeclarationState,
                 info,
                 CreateToken(),
                 CreateToken(),
                 new ScriptCompatibilityDescriptor(_options.Compatibility));
+        }
+
+        private static object BuildInfo(UserScriptInstallation installation)
+        {
+            var metadata = installation.Definition.Metadata;
+            var header = ExtractMetadataHeader(installation.Definition.Source);
+            var resources = metadata.Resources.Select(resource => new Dictionary<string, object>
+            {
+                ["name"] = resource.Name,
+                ["url"] = resource.Url,
+                ["integrity"] = resource.Integrity.Select(item => new Dictionary<string, object>
+                {
+                    ["algorithm"] = item.Algorithm,
+                    ["digest"] = item.Digest
+                }).ToArray()
+            }).ToArray();
+            var antifeatures = metadata.Antifeatures
+                .GroupBy(item => item.Type, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(
+                    group => group.Key,
+                    group => (object)group.ToDictionary(
+                        item => item.Locale ?? "default",
+                        item => item.Description,
+                        StringComparer.OrdinalIgnoreCase),
+                    StringComparer.OrdinalIgnoreCase);
+            var webRequest = metadata.WebRequest.Select(rule => new Dictionary<string, object>
+            {
+                ["selector"] = rule.Selector,
+                ["action"] = rule.Action
+            }).ToArray();
+            var script = new Dictionary<string, object>
+            {
+                ["antifeatures"] = antifeatures,
+                ["author"] = metadata.Author,
+                ["blockers"] = new string[0],
+                ["connects"] = metadata.Connects,
+                ["copyright"] = metadata.Copyright,
+                ["description_i18n"] = metadata.LocalizedDescriptions.Count == 0 ? null : metadata.LocalizedDescriptions,
+                ["description"] = metadata.Description,
+                ["downloadURL"] = metadata.DownloadUrl,
+                ["excludes"] = metadata.Excludes.Concat(metadata.ExcludeMatches).ToArray(),
+                ["fileURL"] = installation.SourceOrigin,
+                ["grant"] = metadata.DeclaredGrants,
+                ["header"] = header,
+                ["homepage"] = metadata.HomepageUrl,
+                ["icon"] = metadata.IconUrl,
+                ["icon64"] = metadata.Icon64Url,
+                ["includes"] = metadata.Includes,
+                ["lastModified"] = installation.UpdatedAt.ToUnixTimeMilliseconds(),
+                ["matches"] = metadata.Matches,
+                ["name_i18n"] = metadata.LocalizedNames.Count == 0 ? null : metadata.LocalizedNames,
+                ["name"] = metadata.Name,
+                ["namespace"] = metadata.Namespace,
+                ["position"] = 0,
+                ["resources"] = resources,
+                ["supportURL"] = metadata.SupportUrl,
+                ["run-at"] = ToMetadataRunAt(metadata.RunAt),
+                ["unwrap"] = metadata.Unwrap,
+                ["updateURL"] = metadata.UpdateUrl,
+                ["version"] = metadata.Version,
+                ["webRequest"] = metadata.WebRequest.Count == 0 ? null : webRequest,
+                ["options"] = new Dictionary<string, object>
+                {
+                    ["sandbox"] = metadata.Sandbox,
+                    ["noframes"] = metadata.NoFrames,
+                    ["unwrap"] = metadata.Unwrap,
+                    ["run_at"] = ToMetadataRunAt(metadata.RunAt)
+                }
+            };
+            return new Dictionary<string, object>
+            {
+                ["scriptKey"] = installation.ScriptKey.ToString(),
+                ["name"] = metadata.Name,
+                ["namespace"] = metadata.Namespace,
+                ["version"] = metadata.Version,
+                ["description"] = metadata.Description,
+                ["grants"] = metadata.DeclaredGrants,
+                ["grantDeclarationState"] = metadata.GrantDeclarationState.ToString(),
+                ["downloadMode"] = "disabled",
+                ["isIncognito"] = false,
+                ["sandboxMode"] = "raw",
+                ["scriptHandler"] = "MonkeySharp",
+                ["scriptMetaStr"] = header,
+                ["scriptUpdateURL"] = metadata.UpdateUrl,
+                ["scriptWillUpdate"] = false,
+                ["script"] = script
+            };
+        }
+
+        private static string ToMetadataRunAt(UserScriptRunAt runAt)
+        {
+            switch (runAt)
+            {
+                case UserScriptRunAt.DocumentStart: return "document-start";
+                case UserScriptRunAt.DocumentBody: return "document-body";
+                case UserScriptRunAt.DocumentEnd: return "document-end";
+                default: return "document-idle";
+            }
+        }
+
+        private static string ExtractMetadataHeader(string source)
+        {
+            if (string.IsNullOrEmpty(source))
+                return null;
+            var start = source.IndexOf("// ==UserScript==", StringComparison.Ordinal);
+            if (start < 0)
+                return null;
+            var end = source.IndexOf("// ==/UserScript==", start, StringComparison.Ordinal);
+            if (end < 0)
+                return source.Substring(start);
+            end += "// ==/UserScript==".Length;
+            return source.Substring(start, end - start);
         }
 
         private static string CreateToken()
@@ -398,9 +536,10 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
             return difference == 0;
         }
 
-        private static bool IsGrantNone(IReadOnlyList<string> grants)
+        private static bool RequiresBridge(UserScriptMetadata metadata)
         {
-            return grants.Count == 1 && grants[0] == "none";
+            return metadata.GrantDeclarationState == GrantDeclarationState.ExplicitList &&
+                metadata.Grants.Any(item => !string.Equals(item, "none", StringComparison.Ordinal));
         }
 
         private static UserScriptRunAt ToRunAt(DocumentLifecycleKind kind)
@@ -440,10 +579,15 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                 Cancellation = cancellation;
             }
 
-            public DocumentFrame Frame { get; }
+            public DocumentFrame Frame { get; private set; }
             public UserScriptInstallation Installation { get; }
             public ScriptInvocation Invocation { get; }
             public CancellationTokenSource Cancellation { get; }
+
+            public void UpdateFrame(DocumentFrame frame)
+            {
+                Frame = frame ?? throw new ArgumentNullException(nameof(frame));
+            }
         }
 
         private sealed class DocumentState

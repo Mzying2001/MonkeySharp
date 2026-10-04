@@ -5,6 +5,7 @@ using Mzying2001.MonkeySharp.Core.Repository;
 using Mzying2001.MonkeySharp.Demo.Persistence;
 using Mzying2001.MonkeySharp.Demo.Services;
 using Mzying2001.MonkeySharp.Demo.ViewModels;
+using Mzying2001.MonkeySharp.Core.Updates;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -30,6 +31,7 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
         public AppDataPaths Paths { get; }
         public PersistentUserScriptRepository Repository { get; private set; }
         public HttpContentService Content { get; private set; }
+        public UserScriptUpdateService Updates { get; private set; }
         public MainWindowViewModel MainWindow { get; private set; }
         public IRequestContext RequestContext { get; private set; }
 
@@ -49,6 +51,7 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                 runtime._values = new SqliteUserScriptValueStore(runtime._database);
                 runtime._tabStates = new SqliteTabStateService(runtime._database);
                 runtime.Content = new HttpContentService(runtime.Paths);
+                runtime.Updates = new UserScriptUpdateService(runtime.Repository, runtime.Content);
                 await dispatcher.InvokeAsync(() =>
                 {
                     CefSharpSettings.WcfEnabled = false;
@@ -86,6 +89,7 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                 .UseNotificationService(new WpfNotificationService(_dispatcher, Content))
                 .UseClipboardService(new WpfClipboardService(_dispatcher))
                 .UseTabService(new WpfTabService(MainWindow, tab, _dispatcher))
+                .UseWindowService(new WpfWindowService(MainWindow, tab, _dispatcher))
                 .UseDownloadService(downloads).UseTabStateService(_tabStates.ForTab(tab.TabId))
                 .UseResourceProvider(Content).UseDependencyProvider(Content)
                 .Configure(new CefSharpHostOptions { TrustedPageWorld = true })

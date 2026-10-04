@@ -26,6 +26,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         private readonly ITabService _tabs;
         private readonly IDownloadService _downloads;
         private readonly ITabStateService _tabState;
+        private readonly IUserScriptWindowService _window;
         private readonly IReadOnlyCollection<string> _methods;
         private readonly object _sync = new object();
         private readonly Dictionary<string, IMenuRegistration> _menuRegistrations =
@@ -47,16 +48,18 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         /// <param name="tabs">The optional tab-opening service.</param>
         /// <param name="downloads">The optional download service.</param>
         /// <param name="tabState">The optional tab-state service.</param>
+        /// <param name="window">The optional current-window service.</param>
         public HostInteractionApiProvider(
             IMenuService menu = null,
             INotificationService notifications = null,
             IClipboardService clipboard = null,
             ITabService tabs = null,
             IDownloadService downloads = null,
-            ITabStateService tabState = null)
+            ITabStateService tabState = null,
+            IUserScriptWindowService window = null)
         {
             if (menu == null && notifications == null && clipboard == null && tabs == null &&
-                downloads == null && tabState == null)
+                downloads == null && tabState == null && window == null)
                 throw new ArgumentException("At least one host interaction service is required.");
             _menu = menu;
             _notifications = notifications;
@@ -64,6 +67,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             _tabs = tabs;
             _downloads = downloads;
             _tabState = tabState;
+            _window = window;
             var methods = new List<string>();
             if (menu != null)
             {
@@ -79,6 +83,11 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 methods.Add("GM.getTab");
                 methods.Add("GM.saveTab");
                 methods.Add("GM.getTabs");
+            }
+            if (window != null)
+            {
+                methods.Add("window.close");
+                methods.Add("window.focus");
             }
             _methods = new ReadOnlyCollection<string>(methods);
         }
@@ -126,16 +135,22 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                     TrackTab(context, tab);
                     return ApiResult.FromValue(new { id = tab.TabId });
                 case "GM.download":
+                    if (string.Equals(ProviderParameters.OptionalString(context.Parameters, "operation"), "abort", StringComparison.Ordinal))
+                        return AbortDownload(context);
                     var download = await _downloads.DownloadAsync(new DownloadRequest(
                         context.Installation.ScriptKey,
                         ReadHttpUrl(context.Parameters, "url"),
                         ProviderParameters.OptionalString(context.Parameters, "name"),
-                        ProviderParameters.OptionalBoolean(context.Parameters, "saveAs")), cancellationToken)
+                        ProviderParameters.OptionalBoolean(context.Parameters, "saveAs"),
+                        ReadHeaders(context.Parameters),
+                        ReadConflictAction(context.Parameters),
+                        ReadTimeout(context.Parameters)), cancellationToken)
                         .ConfigureAwait(false);
                     if (download == null || string.IsNullOrEmpty(download.DownloadId))
                         throw new InvalidOperationException("The download service returned no operation.");
-                    TrackDownload(context, download);
-                    return ApiResult.FromValue(new { id = download.DownloadId });
+                    var clientId = ProviderParameters.OptionalString(context.Parameters, "clientId") ?? Guid.NewGuid().ToString("D");
+                    TrackDownload(context, clientId, download);
+                    return ApiResult.FromValue(new { id = download.DownloadId, clientId = clientId });
                 case "GM.getTab":
                     return ApiResult.FromJson(ValidateJson(await _tabState.GetAsync(
                         context.Installation.ScriptKey, context.Frame, cancellationToken).ConfigureAwait(false)));
@@ -154,6 +169,10 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 case "GM.getTabs":
                     return ApiResult.FromJson(BuildTabsJson(await _tabState.GetAllAsync(
                         context.Installation.ScriptKey, cancellationToken).ConfigureAwait(false)));
+                case "window.close":
+                    return ApiResult.FromValue(await _window.CloseAsync(context.Frame, cancellationToken).ConfigureAwait(false));
+                case "window.focus":
+                    return ApiResult.FromValue(await _window.FocusAsync(context.Frame, cancellationToken).ConfigureAwait(false));
                 default:
                     throw new UnsupportedApiException("The API '" + context.Method + "' is not supported.");
             }
@@ -244,12 +263,19 @@ namespace Mzying2001.MonkeySharp.Core.Apis
 
         private ApiResult ShowNotification(ApiInvocationContext context, CancellationToken cancellationToken)
         {
+            var text = ProviderParameters.OptionalString(context.Parameters, "text");
+            var highlight = ProviderParameters.OptionalBoolean(context.Parameters, "highlight");
+            if (string.IsNullOrEmpty(text) && !highlight)
+                throw ProviderParameters.Invalid("text is required unless highlight is true.");
             var handle = _notifications.ShowAsync(new UserScriptNotificationRequest(
                 context.Installation.ScriptKey,
                 ProviderParameters.OptionalString(context.Parameters, "title") ??
                     context.Installation.Definition.Metadata.Name,
-                ProviderParameters.RequiredString(context.Parameters, "text"),
-                ProviderParameters.OptionalString(context.Parameters, "imageUrl")), cancellationToken);
+                text,
+                ProviderParameters.OptionalString(context.Parameters, "imageUrl"),
+                highlight,
+                ProviderParameters.OptionalBoolean(context.Parameters, "silent"),
+                ProviderParameters.OptionalInt32(context.Parameters, "timeout")), cancellationToken);
             if (handle == null)
                 throw new InvalidOperationException("The notification service returned no handle.");
             var notificationId = Guid.NewGuid().ToString("D");
@@ -286,30 +312,91 @@ namespace Mzying2001.MonkeySharp.Core.Apis
 
         private void TrackTab(ApiInvocationContext context, ITabHandle tab)
         {
-            tab.OnClose += (_, __) => Notification?.Invoke(this, new ApiNotificationEventArgs(
-                context.Installation.ScriptKey, context.ExecutionId, "tab-closed",
-                JsonSerializer.Serialize(new { tabId = tab.TabId })));
+            var notified = 0;
+            EventHandler closed = null;
+            closed = (_, __) =>
+            {
+                if (Interlocked.Exchange(ref notified, 1) != 0)
+                    return;
+                Notification?.Invoke(this, new ApiNotificationEventArgs(
+                    context.Installation.ScriptKey, context.ExecutionId, "tab-closed",
+                    JsonSerializer.Serialize(new { tabId = tab.TabId })));
+            };
+            tab.OnClose += closed;
             lock (_sync)
                 _tabHandles[context.ExecutionId + ":" + tab.TabId] = tab;
+            if (tab.Closed)
+                closed(tab, EventArgs.Empty);
         }
 
-        private void TrackDownload(ApiInvocationContext context, IDownloadOperation operation)
+        private ApiResult AbortDownload(ApiInvocationContext context)
+        {
+            var downloadId = ProviderParameters.RequiredString(context.Parameters, "downloadId");
+            IDownloadOperation operation;
+            lock (_sync)
+                _downloadOperations.TryGetValue(context.ExecutionId + ":" + downloadId, out operation);
+            if (operation == null)
+                return ApiResult.FromValue(false);
+            operation.Abort();
+            return ApiResult.FromValue(true);
+        }
+
+        private void TrackDownload(ApiInvocationContext context, string clientId, IDownloadOperation operation)
         {
             var key = context.ExecutionId + ":" + operation.DownloadId;
             operation.Progress += (_, progress) => Notification?.Invoke(this, new ApiNotificationEventArgs(
                 context.Installation.ScriptKey, context.ExecutionId, "download-progress",
-                JsonSerializer.Serialize(new { downloadId = operation.DownloadId, loaded = progress.Loaded, total = progress.Total })));
+                JsonSerializer.Serialize(new { downloadId = operation.DownloadId, clientId, loaded = progress.Loaded, total = progress.Total })));
             operation.Completed += (_, __) => Notification?.Invoke(this, new ApiNotificationEventArgs(
                 context.Installation.ScriptKey, context.ExecutionId, "download-complete",
-                JsonSerializer.Serialize(new { downloadId = operation.DownloadId })));
+                JsonSerializer.Serialize(new { downloadId = operation.DownloadId, clientId })));
             operation.Failed += (_, failure) => Notification?.Invoke(this, new ApiNotificationEventArgs(
                 context.Installation.ScriptKey, context.ExecutionId, "download-error",
-                JsonSerializer.Serialize(new { downloadId = operation.DownloadId, message = failure.Error?.Message })));
+                JsonSerializer.Serialize(new { downloadId = operation.DownloadId, clientId,
+                    error = "not_succeeded", details = failure.Error?.Message })));
             operation.Aborted += (_, __) => Notification?.Invoke(this, new ApiNotificationEventArgs(
                 context.Installation.ScriptKey, context.ExecutionId, "download-aborted",
-                JsonSerializer.Serialize(new { downloadId = operation.DownloadId })));
+                JsonSerializer.Serialize(new { downloadId = operation.DownloadId, clientId,
+                    error = "not_succeeded", details = "The download was aborted." })));
+            operation.TimedOut += (_, __) => Notification?.Invoke(this, new ApiNotificationEventArgs(
+                context.Installation.ScriptKey, context.ExecutionId, "download-timeout",
+                JsonSerializer.Serialize(new { downloadId = operation.DownloadId, clientId,
+                    error = "timeout", details = "The download timed out." })));
             lock (_sync)
                 _downloadOperations[key] = operation;
+        }
+
+        private static IDictionary<string, string> ReadHeaders(JsonElement parameters)
+        {
+            if (!parameters.TryGetProperty("headers", out var value))
+                return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (value.ValueKind != JsonValueKind.Object)
+                throw ProviderParameters.Invalid("headers must be an object.");
+            var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var header in value.EnumerateObject())
+            {
+                if (header.Value.ValueKind != JsonValueKind.String)
+                    throw ProviderParameters.Invalid("headers." + header.Name + " must be a string.");
+                headers[header.Name] = header.Value.GetString();
+            }
+            return headers;
+        }
+
+        private static string ReadConflictAction(JsonElement parameters)
+        {
+            var value = ProviderParameters.OptionalString(parameters, "conflictAction") ?? "uniquify";
+            if (value != "uniquify" && value != "overwrite" && value != "prompt")
+                throw ProviderParameters.Invalid("conflictAction must be 'uniquify', 'overwrite', or 'prompt'.");
+            return value;
+        }
+
+        private static TimeSpan? ReadTimeout(JsonElement parameters)
+        {
+            if (!parameters.TryGetProperty("timeout", out var value))
+                return null;
+            if (value.ValueKind != JsonValueKind.Number || !value.TryGetInt32(out var milliseconds) || milliseconds <= 0)
+                throw ProviderParameters.Invalid("timeout must be a positive integer.");
+            return TimeSpan.FromMilliseconds(milliseconds);
         }
 
         private async Task<ApiResult> RegisterMenuAsync(

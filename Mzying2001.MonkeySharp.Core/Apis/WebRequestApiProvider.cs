@@ -1,5 +1,6 @@
 using Mzying2001.MonkeySharp.Core.Bridge;
 using Mzying2001.MonkeySharp.Core.Domain;
+using Mzying2001.MonkeySharp.Core.Matching;
 using Mzying2001.MonkeySharp.Core.Runtime;
 using System;
 using System.Collections.Generic;
@@ -51,6 +52,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
     /// <summary>Matches requests by URL glob, resource type, and HTTP method.</summary>
     public sealed class WebRequestFilter
     {
+        private readonly Func<string, bool> _urlMatcher;
         /// <summary>Initializes a request filter. Empty collections match every value.</summary>
         public WebRequestFilter(IEnumerable<string> urlPatterns = null, IEnumerable<string> resourceTypes = null, IEnumerable<string> methods = null)
         {
@@ -62,6 +64,15 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 .Where(item => !string.IsNullOrWhiteSpace(item))
                 .Select(item => item.ToUpperInvariant()).ToArray());
         }
+
+        internal WebRequestFilter(
+            Func<string, bool> urlMatcher,
+            IEnumerable<string> resourceTypes = null,
+            IEnumerable<string> methods = null)
+            : this((IEnumerable<string>)null, resourceTypes, methods)
+        {
+            _urlMatcher = urlMatcher;
+        }
         /// <summary>Gets case-insensitive URL globs.</summary>
         public IReadOnlyList<string> UrlPatterns { get; }
         /// <summary>Gets matched Chromium resource type names.</summary>
@@ -71,7 +82,8 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         /// <summary>Returns whether all configured constraints match a request.</summary>
         public bool Matches(WebRequestEvent request)
         {
-            if (UrlPatterns.Count > 0 && !UrlPatterns.Any(pattern => GlobMatch(pattern, request.Url))) return false;
+            if (_urlMatcher != null && !_urlMatcher(request.Url)) return false;
+            if (_urlMatcher == null && UrlPatterns.Count > 0 && !UrlPatterns.Any(pattern => GlobMatch(pattern, request.Url))) return false;
             if (ResourceTypes.Count > 0 && !ResourceTypes.Contains(request.ResourceType, StringComparer.OrdinalIgnoreCase)) return false;
             if (Methods.Count > 0 && !Methods.Contains(request.Method, StringComparer.OrdinalIgnoreCase)) return false;
             return true;
@@ -87,7 +99,8 @@ namespace Mzying2001.MonkeySharp.Core.Apis
     public sealed class WebRequestAction
     {
         /// <summary>Initializes a rule action and copies its header mutations.</summary>
-        public WebRequestAction(WebRequestActionKind kind, string redirectUrl = null, IDictionary<string, string> headers = null, string username = null, string password = null)
+        public WebRequestAction(WebRequestActionKind kind, string redirectUrl = null, IDictionary<string, string> headers = null, string username = null, string password = null,
+            string from = null, string to = null, Func<Uri, bool> redirectAllowed = null)
         {
             Kind = kind;
             RedirectUrl = redirectUrl;
@@ -95,6 +108,9 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             Password = password;
             Headers = new ReadOnlyDictionary<string, string>(new Dictionary<string, string>(
                 headers ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase));
+            From = from;
+            To = to;
+            RedirectAllowed = redirectAllowed;
         }
         /// <summary>Gets the action kind.</summary>
         public WebRequestActionKind Kind { get; }
@@ -106,6 +122,18 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         public string Username { get; }
         /// <summary>Gets the authentication password.</summary>
         public string Password { get; }
+        /// <summary>Gets the source text for a dynamic redirect.</summary>
+        public string From { get; }
+        /// <summary>Gets the replacement text for a dynamic redirect.</summary>
+        public string To { get; }
+        internal Func<Uri, bool> RedirectAllowed { get; }
+
+        internal string ResolveRedirect(string url)
+        {
+            if (From == null) return RedirectUrl;
+            var index = (url ?? string.Empty).IndexOf(From, StringComparison.Ordinal);
+            return index < 0 ? url : url.Substring(0, index) + (To ?? string.Empty) + url.Substring(index + From.Length);
+        }
     }
 
     /// <summary>Defines a prioritized action for one request lifecycle phase.</summary>
@@ -239,66 +267,80 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             cancellationToken.ThrowIfCancellationRequested();
             lock (_sync) ThrowIfDisposed();
             ProviderParameters.RequireObject(context.Parameters);
-            var operation = ProviderParameters.OptionalString(context.Parameters, "operation") ?? "listRules";
-            if (operation == "addRule")
+            var operation = ProviderParameters.RequiredString(context.Parameters, "operation");
+            if (operation == "register")
             {
-                var rule = ReadRule(ProviderParameters.RequiredObject(context.Parameters, "rule"));
-                var registrationKey = RuleKey(context.ExecutionId, rule.Id);
-                var serviceRule = new WebRequestRule(
-                    Guid.NewGuid().ToString("D"),
-                    rule.Filter,
-                    rule.Phase,
-                    rule.Priority,
-                    rule.Action);
-                Register(registrationKey, () => _service.AddRule(serviceRule),
-                    "The rule ID is already registered by this execution.");
-                return Task.FromResult(ApiResult.FromValue(rule.Id));
+                var rulesValue = ProviderParameters.RequiredProperty(context.Parameters, "rules");
+                if (rulesValue.ValueKind != JsonValueKind.Array)
+                    throw ProviderParameters.Invalid("rules must be an array.");
+                var parsed = new List<WebRequestRule>();
+                foreach (var item in rulesValue.EnumerateArray())
+                {
+                    var value = ProviderParameters.RequireObject(item, "rules[]");
+                    var selector = ProviderParameters.RequiredProperty(value, "selector", "rules[].selector");
+                    var action = ProviderParameters.RequiredProperty(value, "action", "rules[].action");
+                    parsed.Add(new WebRequestRule(
+                        Guid.NewGuid().ToString("D"),
+                        ReadSelector(selector),
+                        WebRequestPhase.OnBeforeRequest,
+                        parsed.Count,
+                        ReadTampermonkeyAction(action, context.Installation)));
+                }
+                var listenerId = 0;
+                if (context.Parameters.TryGetProperty("listenerId", out var listenerValue))
+                {
+                    if (listenerValue.ValueKind != JsonValueKind.Number || !listenerValue.TryGetInt32(out listenerId) || listenerId <= 0)
+                        throw ProviderParameters.Invalid("listenerId must be a positive integer.");
+                }
+                if (parsed.Count == 0 && listenerId == 0)
+                    throw ProviderParameters.Invalid("At least one rule or listener is required.");
+                var id = Guid.NewGuid().ToString("D");
+                var registrationKey = context.ExecutionId + ":registration:" + id;
+                Register(registrationKey, () =>
+                {
+                    var registrations = new List<IWebRequestRegistration>();
+                    try
+                    {
+                        foreach (var rule in parsed)
+                            registrations.Add(_service.AddRule(rule));
+                        if (listenerId != 0)
+                        {
+                            var listenerRules = parsed.ToArray();
+                            registrations.Add(_service.AddListener(new WebRequestFilter(), (_, item) =>
+                            {
+                                var terminal = listenerRules
+                                    .Where(rule => rule.Filter.Matches(item))
+                                    .OrderByDescending(rule => rule.Priority)
+                                    .Select(rule => rule.Action)
+                                    .FirstOrDefault(action => action.Kind == WebRequestActionKind.Block || action.Kind == WebRequestActionKind.Redirect);
+                                if (terminal == null) return;
+                                var message = terminal.Kind == WebRequestActionKind.Block ? "cancel" : "redirect";
+                                var target = terminal.Kind == WebRequestActionKind.Redirect ? terminal.ResolveRedirect(item.Url) : null;
+                                Notification?.Invoke(this, new ApiNotificationEventArgs(
+                                    context.Installation.ScriptKey, context.ExecutionId, "webrequest-result",
+                                    JsonSerializer.Serialize(new
+                                    {
+                                        listenerId,
+                                        info = new { requestId = item.RequestId, url = item.Url, method = item.Method, type = item.ResourceType },
+                                        message,
+                                        details = new { phase = item.Phase.ToString(), redirectUrl = target, error = item.Error }
+                                    })));
+                            }));
+                        }
+                        return new CompositeRegistration(id, registrations);
+                    }
+                    catch
+                    {
+                        foreach (var registration in registrations) registration.Dispose();
+                        throw;
+                    }
+                }, "The webRequest registration is already registered.");
+                return Task.FromResult(ApiResult.FromValue(new { id, listenerId = listenerId == 0 ? (int?)null : listenerId }));
             }
-            if (operation == "removeRule")
+            if (operation == "remove")
             {
                 var id = ProviderParameters.RequiredString(context.Parameters, "id");
-                var key = RuleKey(context.ExecutionId, id);
-                var registration = RemoveRegistration(key);
-                registration?.Dispose();
-                return Task.FromResult(ApiResult.FromValue(registration != null));
-            }
-            if (operation == "listRules")
-            {
-                var prefix = RulePrefix(context.ExecutionId);
-                string[] rules;
-                lock (_sync)
-                {
-                    ThrowIfDisposed();
-                    rules = _registrations.Keys
-                        .Where(item => item.StartsWith(prefix, StringComparison.Ordinal))
-                        .Select(item => item.Substring(prefix.Length))
-                        .OrderBy(item => item, StringComparer.Ordinal)
-                        .ToArray();
-                }
-                return Task.FromResult(ApiResult.FromValue(rules));
-            }
-            if (operation == "addListener")
-            {
-                var listenerId = ProviderParameters.RequiredInt32(context.Parameters, "listenerId");
-                var registrationKey = ListenerKey(context.ExecutionId, listenerId);
-                var filter = ReadFilter(
-                    ProviderParameters.RequiredObject(context.Parameters, "filter"),
-                    "filter");
-                Register(registrationKey, () => _service.AddListener(filter, (_, item) =>
-                    Notification?.Invoke(this, new ApiNotificationEventArgs(
-                        context.Installation.ScriptKey, context.ExecutionId, "webrequest-event", JsonSerializer.Serialize(new
-                        {
-                            listenerId, phase = item.Phase.ToString(), requestId = item.RequestId, url = item.Url,
-                            method = item.Method, resourceType = item.ResourceType, headers = item.Headers,
-                            statusCode = item.StatusCode, error = item.Error
-                        })))), "listenerId is already registered.");
-                return Task.FromResult(ApiResult.FromValue(listenerId));
-            }
-            if (operation == "removeListener")
-            {
-                var id = ProviderParameters.RequiredInt32(context.Parameters, "listenerId");
-                var key = ListenerKey(context.ExecutionId, id);
-                var registration = RemoveRegistration(key);
+                var registration = RemoveRegistration(context.ExecutionId + ":registration:" + id);
                 registration?.Dispose();
                 return Task.FromResult(ApiResult.FromValue(registration != null));
             }
@@ -397,69 +439,70 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         {
             if (_disposed) throw new ObjectDisposedException(nameof(WebRequestApiProvider));
         }
-        private static string ListenerKey(string executionId, int listenerId)
+        private static WebRequestFilter ReadSelector(JsonElement value)
         {
-            return executionId + ":listener:" + listenerId;
-        }
-        private static string RuleKey(string executionId, string ruleId)
-        {
-            return RulePrefix(executionId) + ruleId;
-        }
-        private static string RulePrefix(string executionId)
-        {
-            return executionId + ":rule:";
-        }
-        private static WebRequestRule ReadRule(JsonElement value)
-        {
-            ProviderParameters.RequireObject(value);
-            var id = ProviderParameters.RequiredString(value, "id", "rule.id");
-            var phaseText = ProviderParameters.RequiredString(value, "phase", "rule.phase");
-            if (!Enum.TryParse(phaseText, true, out WebRequestPhase phase))
-                throw ProviderParameters.Invalid("rule.phase is invalid.");
-            var filter = ReadFilter(
-                ProviderParameters.RequiredObject(value, "filter", "rule.filter"),
-                "rule.filter");
-            var actionValue = ProviderParameters.RequiredObject(value, "action", "rule.action");
-            var actionText = ProviderParameters.RequiredString(actionValue, "kind", "rule.action.kind");
-            if (!Enum.TryParse(actionText, true, out WebRequestActionKind kind))
-                throw ProviderParameters.Invalid("rule.action.kind is invalid.");
-            var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            if (actionValue.TryGetProperty("headers", out var headerValues))
+            if (value.ValueKind == JsonValueKind.String)
             {
-                if (headerValues.ValueKind != JsonValueKind.Object)
-                    throw ProviderParameters.Invalid("rule.action.headers must be an object.");
-                foreach (var header in headerValues.EnumerateObject())
+                var matcher = CompileSelector(value.GetString(), "selector");
+                return new WebRequestFilter(matcher);
+            }
+            if (value.ValueKind != JsonValueKind.Object)
+                throw ProviderParameters.Invalid("selector must be a string or object.");
+            var includes = ReadStringValues(value, "include", "selector.include");
+            var matches = ReadStringValues(value, "match", "selector.match");
+            var excludes = ReadStringValues(value, "exclude", "selector.exclude");
+            if (includes.Count == 0 && matches.Count == 0 && excludes.Count == 0)
+                throw ProviderParameters.Invalid("selector must contain include, match, or exclude.");
+            var includeMatchers = includes.Select(item => CompileSelector(item, "selector.include")).ToArray();
+            var matchers = matches.Select(item =>
+            {
+                if (!MatchPatternCompiler.TryCompile(item, out var pattern, out var error))
+                    throw ProviderParameters.Invalid("selector.match contains an invalid match pattern: " + error);
+                return pattern;
+            }).ToArray();
+            var excludeMatchers = excludes.Select(item => CompileSelector(item, "selector.exclude")).ToArray();
+            return new WebRequestFilter(url =>
+            {
+                var excluded = excludeMatchers.Any(matcher => matcher(url));
+                if (excluded) return false;
+                if (includeMatchers.Length == 0 && matchers.Length == 0) return true;
+                var uri = Uri.TryCreate(url, UriKind.Absolute, out var parsed) ? parsed : null;
+                return includeMatchers.Any(matcher => matcher(url)) ||
+                    (uri != null && matchers.Any(matcher => matcher.IsMatch(uri)));
+            });
+        }
+
+        private static Func<string, bool> CompileSelector(string value, string path)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                throw ProviderParameters.Invalid(path + " cannot contain an empty pattern.");
+            if (value.Length > 2 && value[0] == '/' && value[value.Length - 1] == '/')
+            {
+                try
                 {
-                    if (header.Value.ValueKind != JsonValueKind.String)
-                        throw ProviderParameters.Invalid(
-                            "rule.action.headers." + header.Name + " must be a string.");
-                    headers[header.Name] = header.Value.GetString();
+                    var expression = new Regex(value.Substring(1, value.Length - 2), RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+                    return url => expression.IsMatch(url ?? string.Empty);
+                }
+                catch (ArgumentException exception)
+                {
+                    throw ProviderParameters.Invalid(path + " contains an invalid regular expression: " + exception.Message);
                 }
             }
-            var priority = 0;
-            if (value.TryGetProperty("priority", out var priorityValue) &&
-                (priorityValue.ValueKind != JsonValueKind.Number || !priorityValue.TryGetInt32(out priority)))
-                throw ProviderParameters.Invalid("rule.priority must be an integer.");
-            return new WebRequestRule(id, filter, phase, priority,
-                new WebRequestAction(kind,
-                    ProviderParameters.OptionalString(actionValue, "redirectUrl", "rule.action.redirectUrl"),
-                    headers,
-                    ProviderParameters.OptionalString(actionValue, "username", "rule.action.username"),
-                    ProviderParameters.OptionalString(actionValue, "password", "rule.action.password")));
+            if (MatchPatternCompiler.TryCompile(value, out var matchPattern, out _))
+                return url => Uri.TryCreate(url, UriKind.Absolute, out var uri) && matchPattern.IsMatch(uri);
+            var glob = new Regex("^" + Regex.Escape(value).Replace("\\*", ".*").Replace("\\?", ".") + "$",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            return url => glob.IsMatch(url ?? string.Empty);
         }
-        private static WebRequestFilter ReadFilter(JsonElement value, string path)
+
+        private static List<string> ReadStringValues(JsonElement value, string name, string path)
         {
-            ProviderParameters.RequireObject(value);
-            return new WebRequestFilter(
-                ReadStrings(value, "urlPatterns", path + ".urlPatterns"),
-                ReadStrings(value, "resourceTypes", path + ".resourceTypes"),
-                ReadStrings(value, "methods", path + ".methods"));
-        }
-        private static IEnumerable<string> ReadStrings(JsonElement value, string name, string path)
-        {
-            if (!value.TryGetProperty(name, out var items)) return Enumerable.Empty<string>();
+            if (!value.TryGetProperty(name, out var items) || items.ValueKind == JsonValueKind.Null)
+                return new List<string>();
+            if (items.ValueKind == JsonValueKind.String)
+                return new List<string> { items.GetString() };
             if (items.ValueKind != JsonValueKind.Array)
-                throw ProviderParameters.Invalid(path + " must be an array.");
+                throw ProviderParameters.Invalid(path + " must be a string or array.");
             var result = new List<string>();
             var index = 0;
             foreach (var item in items.EnumerateArray())
@@ -471,6 +514,53 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             }
             return result;
         }
+
+        private static WebRequestAction ReadTampermonkeyAction(JsonElement value, UserScriptInstallation installation)
+        {
+            if (value.ValueKind == JsonValueKind.String)
+            {
+                var action = value.GetString();
+                if (string.Equals(action, "cancel", StringComparison.OrdinalIgnoreCase))
+                    return new WebRequestAction(WebRequestActionKind.Block);
+                var target = RequireRedirectTarget(action, installation, "action");
+                return new WebRequestAction(WebRequestActionKind.Redirect, target,
+                    redirectAllowed: uri => new UserScriptMatcher().IsMatch(installation.Definition.Metadata, uri));
+            }
+            if (value.ValueKind != JsonValueKind.Object)
+                throw ProviderParameters.Invalid("action must be a string or object.");
+            var from = ProviderParameters.RequiredString(value, "from", "action.from");
+            var to = ProviderParameters.RequiredString(value, "to", "action.to");
+            return new WebRequestAction(WebRequestActionKind.Redirect, from: from, to: to,
+                redirectAllowed: uri => new UserScriptMatcher().IsMatch(installation.Definition.Metadata, uri));
+        }
+
+        private static string RequireRedirectTarget(string value, UserScriptInstallation installation, string path)
+        {
+            if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) ||
+                (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) ||
+                !new UserScriptMatcher().IsMatch(installation.Definition.Metadata, uri))
+                throw new BridgeProtocolException(BridgeErrorCodes.PermissionDenied,
+                    path + " redirect target is not allowed by the script URL rules.");
+            return uri.AbsoluteUri;
+        }
+
+        private sealed class CompositeRegistration : IWebRequestRegistration
+        {
+            private readonly IReadOnlyList<IWebRequestRegistration> _registrations;
+            private int _disposed;
+            public CompositeRegistration(string id, IReadOnlyList<IWebRequestRegistration> registrations)
+            {
+                Id = id;
+                _registrations = registrations;
+            }
+            public string Id { get; }
+            public void Dispose()
+            {
+                if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+                foreach (var registration in _registrations) registration.Dispose();
+            }
+        }
+
     }
 
     /// <summary>
@@ -570,8 +660,15 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 var action = item.Item1.Action;
                 if (action.Kind == WebRequestActionKind.Block || action.Kind == WebRequestActionKind.Redirect)
                 {
-                    kind = action.Kind;
-                    redirect = action.RedirectUrl;
+                    redirect = action.ResolveRedirect(request.Url);
+                    if (action.Kind == WebRequestActionKind.Redirect && action.RedirectAllowed != null &&
+                        (!Uri.TryCreate(redirect, UriKind.Absolute, out var redirectUri) || !action.RedirectAllowed(redirectUri)))
+                    {
+                        kind = WebRequestActionKind.Block;
+                        redirect = null;
+                    }
+                    else
+                        kind = action.Kind;
                     break;
                 }
                 if (action.Kind == WebRequestActionKind.AuthResponse)

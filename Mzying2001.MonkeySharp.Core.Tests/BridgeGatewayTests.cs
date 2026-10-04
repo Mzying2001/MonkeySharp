@@ -34,6 +34,28 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Fact]
+        public async Task LegacyFixtureMetadataAndCookieGrantReachTheBridgeProvider()
+        {
+            using (var cookies = new InMemoryCookieService())
+            using (var provider = new CookieApiProvider(cookies))
+            using (var fixture = await BridgeFixture.CreateFromSourceAsync(
+                LegacyUserscriptFixture.Read(), new IUserScriptApiProvider[] { provider }))
+            {
+                var hello = await fixture.HelloAsync();
+                Assert.Contains("GM.cookie", hello.GetProperty("apis").EnumerateArray().Select(item => item.GetString()));
+
+                var result = await fixture.RequestAsync("GM.cookie", new
+                {
+                    operation = "set",
+                    details = new { name = "bridge-fixture", value = "ok" }
+                });
+
+                Assert.True(result.GetProperty("ok").GetBoolean());
+                Assert.Equal("example.com", result.GetProperty("result").GetProperty("domain").GetString());
+            }
+        }
+
+        [Fact]
         public async Task HelloReturnsAtomicCompatibilityStorageSnapshot()
         {
             using (var fixture = await BridgeFixture.CreateAsync("GM.getValue", "GM.listValues"))
@@ -95,6 +117,35 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 var webRequest = await fixture.RequestAsync("GM.webRequest", new { });
                 AssertError(cookie, BridgeErrorCodes.NotSupported);
                 AssertError(webRequest, BridgeErrorCodes.NotSupported);
+            }
+        }
+
+        [Fact]
+        public async Task CookieAuthorizationUsesNestedOrFrameUrlTargets()
+        {
+            var policy = new CapturingAllowPolicy();
+            using (var service = new InMemoryCookieService())
+            using (var fixture = await BridgeFixture.CreateAsync(
+                policy,
+                new IUserScriptApiProvider[] { new CookieApiProvider(service) },
+                null,
+                "GM.cookie"))
+            {
+                await fixture.RequestAsync("GM.cookie", new
+                {
+                    operation = "list",
+                    details = new { }
+                });
+
+                Assert.Equal(fixture.Frame.Url.AbsoluteUri, policy.LastRequest.Target);
+
+                await fixture.RequestAsync("GM.cookie", new
+                {
+                    operation = "list",
+                    details = new { url = "https://example.com/other" }
+                });
+
+                Assert.Equal("https://example.com/other", policy.LastRequest.Target);
             }
         }
 
@@ -534,6 +585,18 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             }
         }
 
+        private sealed class CapturingAllowPolicy : IUserScriptPermissionPolicy
+        {
+            public ApiAuthorizationRequest LastRequest { get; private set; }
+
+            public Task<PermissionDecision> AuthorizeAsync(
+                ApiAuthorizationRequest request, CancellationToken cancellationToken)
+            {
+                LastRequest = request;
+                return Task.FromResult(PermissionDecision.Allow);
+            }
+        }
+
         private sealed class BlockingProvider : IUserScriptApiProvider
         {
             public BlockingProvider(string method = "GM.download")
@@ -730,6 +793,23 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 return new BridgeFixture(store, engine, gateway, frame, plan);
             }
 
+            public static async Task<BridgeFixture> CreateFromSourceAsync(
+                string source,
+                IEnumerable<IUserScriptApiProvider> providers)
+            {
+                var repository = new InMemoryUserScriptRepository();
+                await repository.InstallAsync(source, "fixture", true, CancellationToken.None);
+                var engine = new UserScriptEngine(repository, sourceResolver: new ResourceScriptSourceResolver(
+                    new FixtureDependencyProvider(), 4096));
+                var frame = CreateFrame("legacy-fixture-document");
+                var plan = await engine.ProcessLifecycleAsync(
+                    new DocumentLifecycleEventArgs(DocumentLifecycleKind.DomContentLoaded, frame),
+                    CancellationToken.None);
+                var store = new InMemoryUserScriptValueStore();
+                var gateway = new UserScriptBridgeGateway(engine, store, providers: providers);
+                return new BridgeFixture(store, engine, gateway, frame, plan);
+            }
+
             public static DocumentFrame CreateFrame(string documentId)
             {
                 return new DocumentFrame(
@@ -809,6 +889,18 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                     ["scriptKey"] = invocation.ScriptKey.ToString(),
                     ["capability"] = invocation.Capability
                 };
+            }
+
+            private sealed class FixtureDependencyProvider : IUserScriptDependencyProvider
+            {
+                public Task<ResourceContent> GetScriptAsync(
+                    UserScriptInstallation installation,
+                    UserScriptDependencyDeclaration dependency,
+                    CancellationToken cancellationToken)
+                {
+                    var text = "/* legacy fixture dependency */";
+                    return Task.FromResult(new ResourceContent(Encoding.UTF8.GetBytes(text), "application/javascript", text));
+                }
             }
         }
     }

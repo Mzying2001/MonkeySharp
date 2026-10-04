@@ -1,10 +1,12 @@
 using Mzying2001.MonkeySharp.Core.Domain;
 using Mzying2001.MonkeySharp.Core.Compatibility;
+using Mzying2001.MonkeySharp.Core.Security;
 using Mzying2001.MonkeySharp.Core.Matching;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Text.Json;
 
 namespace Mzying2001.MonkeySharp.Core.Parsing
 {
@@ -28,13 +30,15 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
 
         private static readonly HashSet<string> CollectionKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "match", "include", "exclude", "exclude-match", "grant", "connect", "require", "resource"
+            "match", "include", "exclude", "exclude-match", "grant", "connect", "require", "resource",
+            "antifeature", "webrequest"
         };
 
         private static readonly HashSet<string> SingletonKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "name", "namespace", "version", "description", "author", "license", "icon", "iconurl",
-            "downloadurl", "updateurl", "homepageurl", "supporturl", "noframes", "run-at", "run-in", "inject-into"
+            "name", "namespace", "version", "description", "author", "license", "copyright", "icon", "iconurl",
+            "icon64", "icon64url", "downloadurl", "updateurl", "homepage", "homepageurl", "website", "source",
+            "supporturl", "noframes", "run-at", "run-in", "inject-into", "sandbox", "unwrap"
         };
 
         /// <summary>Initializes a parser with the default legacy-compatible rules.</summary>
@@ -95,14 +99,20 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
 
             var localizedNames = ReadLocalized(values, "name", diagnostics);
             var localizedDescriptions = ReadLocalized(values, "description", diagnostics);
+            var antifeatures = ParseAntifeatures(values, diagnostics);
             var matches = ReadCollection(values, "match");
             var excludeMatches = ReadCollection(values, "exclude-match");
+            ValidateUrlPatterns(ReadCollection(values, "include"), "include", diagnostics, values);
+            ValidateUrlPatterns(ReadCollection(values, "exclude"), "exclude", diagnostics, values);
             ValidateMatchPatterns(matches, "match", diagnostics, values);
             ValidateMatchPatterns(excludeMatches, "exclude-match", diagnostics, values);
 
             var declaredGrants = ReadCollection(values, "grant").ToList();
-            if (declaredGrants.Count == 0)
-                declaredGrants.Add("none");
+            var grantDeclarationState = declaredGrants.Count == 0
+                ? GrantDeclarationState.Missing
+                : declaredGrants.Count == 1 && string.Equals(declaredGrants[0], "none", StringComparison.Ordinal)
+                    ? GrantDeclarationState.ExplicitNone
+                    : GrantDeclarationState.ExplicitList;
             if (declaredGrants.Contains("none") && declaredGrants.Count > 1)
             {
                 diagnostics.Add(new MetadataDiagnostic(
@@ -127,18 +137,20 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
                         "Unknown grant '" + declaredGrant + "' will not be exposed."));
                 }
             }
-            if (grants.Count == 0)
+            if (grants.Count == 0 && grantDeclarationState != GrantDeclarationState.Missing)
                 grants.Add("none");
 
             var runAt = ParseRunAt(First(values, "run-at"), diagnostics);
             var resources = ParseResources(values, diagnostics);
+            var requires = ParseDependencies(values, diagnostics);
+            var webRequest = ParseWebRequest(values, diagnostics);
             ValidateConnects(ReadCollection(values, "connect"), diagnostics, values);
             var knownKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
             {
-                "name", "namespace", "version", "description", "author", "license", "icon", "iconurl",
-                "downloadurl", "updateurl", "homepageurl", "supporturl", "match", "include", "exclude",
-                "exclude-match", "noframes", "run-at", "run-in", "inject-into", "grant", "connect",
-                "require", "resource"
+                "name", "namespace", "version", "description", "author", "license", "copyright", "icon", "iconurl",
+                "icon64", "icon64url", "downloadurl", "updateurl", "homepage", "homepageurl", "website", "source",
+                "supporturl", "match", "include", "exclude", "exclude-match", "noframes", "run-at", "run-in",
+                "inject-into", "sandbox", "unwrap", "grant", "connect", "require", "resource", "antifeature", "webrequest"
             };
             var additional = values
                 .Where(pair => !knownKeys.Contains(BaseKey(pair.Key)))
@@ -154,15 +166,22 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
                 First(values, "description"),
                 First(values, "author"),
                 First(values, "license"),
+                First(values, "copyright"),
                 First(values, "iconurl") ?? First(values, "icon"),
+                First(values, "icon64url") ?? First(values, "icon64"),
                 First(values, "downloadurl"),
                 First(values, "updateurl"),
-                First(values, "homepageurl"),
+                First(values, "homepageurl") ?? First(values, "homepage") ?? First(values, "website") ?? First(values, "source"),
+                First(values, "website"),
+                First(values, "source"),
                 First(values, "supporturl"),
                 runAt,
+                grantDeclarationState,
                 values.ContainsKey("noframes"),
                 First(values, "run-in"),
                 First(values, "inject-into"),
+                First(values, "sandbox"),
+                values.ContainsKey("unwrap"),
                 localizedNames,
                 localizedDescriptions,
                 matches,
@@ -172,8 +191,10 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
                 declaredGrants,
                 grants,
                 ReadCollection(values, "connect"),
-                ReadCollection(values, "require"),
+                requires,
                 resources,
+                antifeatures,
+                webRequest,
                 additional);
 
             return new MetadataParseResult(metadata, diagnostics);
@@ -354,9 +375,264 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
                         entry.Line));
                     continue;
                 }
-                result.Add(new ResourceDeclaration(name, entry.Value.Substring(separator).Trim()));
+                var parsed = ParseExternalUrl(entry.Value.Substring(separator).Trim(), diagnostics, entry.Line);
+                if (parsed != null)
+                    result.Add(new ResourceDeclaration(name, parsed.Url, parsed.Integrity));
             }
             return result.AsReadOnly();
+        }
+
+        private static IReadOnlyList<UserScriptDependencyDeclaration> ParseDependencies(
+            IDictionary<string, List<Entry>> values,
+            ICollection<MetadataDiagnostic> diagnostics)
+        {
+            var result = new List<UserScriptDependencyDeclaration>();
+            if (!values.TryGetValue("require", out var requirements))
+                return result.AsReadOnly();
+            foreach (var entry in requirements)
+            {
+                var parsed = ParseExternalUrl(entry.Value, diagnostics, entry.Line);
+                if (parsed != null)
+                    result.Add(new UserScriptDependencyDeclaration(parsed.Url, parsed.Integrity));
+            }
+            return result.AsReadOnly();
+        }
+
+        private static ParsedExternalUrl ParseExternalUrl(
+            string raw,
+            ICollection<MetadataDiagnostic> diagnostics,
+            int line)
+        {
+            var separator = raw == null ? -1 : raw.IndexOf('#');
+            var url = separator < 0 ? raw : raw.Substring(0, separator);
+            if (string.IsNullOrWhiteSpace(url))
+            {
+                diagnostics.Add(new MetadataDiagnostic(
+                    "MSM070_INVALID_SRI",
+                    DiagnosticSeverity.Error,
+                    "An external resource URL is required.",
+                    line));
+                return null;
+            }
+
+            var integrity = new List<ResourceIntegrityDeclaration>();
+            if (separator < 0)
+                return new ParsedExternalUrl(url.Trim(), integrity);
+
+            var fragment = raw.Substring(separator + 1);
+            if (string.IsNullOrWhiteSpace(fragment))
+            {
+                diagnostics.Add(new MetadataDiagnostic(
+                    "MSM070_INVALID_SRI",
+                    DiagnosticSeverity.Error,
+                    "An integrity fragment cannot be empty.",
+                    line));
+                return null;
+            }
+
+            var supportedAlgorithm = false;
+            var usableDigest = false;
+            foreach (var token in fragment.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                var value = token.Trim();
+                var equals = value.IndexOf('=');
+                var dash = value.IndexOf('-');
+                var split = dash >= 0 && (equals < 0 || dash < equals) ? dash : equals;
+                if (split <= 0 || split == value.Length - 1)
+                {
+                    diagnostics.Add(new MetadataDiagnostic(
+                        "MSM070_INVALID_SRI",
+                        DiagnosticSeverity.Error,
+                        "An integrity declaration must use algorithm=value or algorithm-value.",
+                        line));
+                    continue;
+                }
+                var algorithm = value.Substring(0, split).Trim().ToLowerInvariant();
+                var digest = value.Substring(split + 1).Trim();
+                var declaration = new ResourceIntegrityDeclaration(algorithm, digest);
+                integrity.Add(declaration);
+                if (!declaration.IsSupported)
+                {
+                    diagnostics.Add(new MetadataDiagnostic(
+                        "MSM071_UNSUPPORTED_SRI",
+                        DiagnosticSeverity.Warning,
+                        "Integrity algorithm '" + algorithm + "' is not supported.",
+                        line));
+                    continue;
+                }
+
+                supportedAlgorithm = true;
+                if (ResourceIntegrityVerifier.TryDecode(algorithm, digest, out var unused))
+                    usableDigest = true;
+                else
+                    diagnostics.Add(new MetadataDiagnostic(
+                        "MSM070_INVALID_SRI",
+                        DiagnosticSeverity.Error,
+                        "The " + algorithm + " integrity digest is not valid hexadecimal or Base64.",
+                        line));
+            }
+
+            if (!supportedAlgorithm || !usableDigest)
+            {
+                diagnostics.Add(new MetadataDiagnostic(
+                    "MSM072_NO_SUPPORTED_SRI",
+                    DiagnosticSeverity.Error,
+                    "The integrity fragment does not contain a usable MD5 or SHA-256 digest.",
+                    line));
+                return null;
+            }
+            return new ParsedExternalUrl(url.Trim(), integrity);
+        }
+
+        private sealed class ParsedExternalUrl
+        {
+            public ParsedExternalUrl(string url, IReadOnlyList<ResourceIntegrityDeclaration> integrity)
+            {
+                Url = url;
+                Integrity = integrity;
+            }
+
+            public string Url { get; }
+            public IReadOnlyList<ResourceIntegrityDeclaration> Integrity { get; }
+        }
+
+        private static IReadOnlyList<AntifeatureDeclaration> ParseAntifeatures(
+            IDictionary<string, List<Entry>> values,
+            ICollection<MetadataDiagnostic> diagnostics)
+        {
+            var result = new List<AntifeatureDeclaration>();
+            foreach (var pair in values.Where(item => item.Key == "antifeature" ||
+                item.Key.StartsWith("antifeature:", StringComparison.OrdinalIgnoreCase)))
+            {
+                var locale = pair.Key.Length == "antifeature".Length
+                    ? null
+                    : pair.Key.Substring("antifeature:".Length);
+                if (!string.IsNullOrEmpty(locale))
+                {
+                    try { locale = CultureInfo.GetCultureInfo(locale).Name; }
+                    catch (CultureNotFoundException)
+                    {
+                        diagnostics.Add(new MetadataDiagnostic(
+                            "MSM060_INVALID_ANTIFEATURE_LOCALE",
+                            DiagnosticSeverity.Warning,
+                            "The antifeature locale '" + locale + "' is invalid.",
+                            pair.Value[0].Line));
+                        continue;
+                    }
+                }
+                foreach (var entry in pair.Value)
+                {
+                    var separator = entry.Value.IndexOfAny(new[] { ' ', '\t' });
+                    if (separator <= 0 || separator == entry.Value.Length - 1)
+                    {
+                        diagnostics.Add(new MetadataDiagnostic(
+                            "MSM061_INVALID_ANTIFEATURE",
+                            DiagnosticSeverity.Error,
+                            "@antifeature requires a type and description.",
+                            entry.Line));
+                        continue;
+                    }
+                    result.Add(new AntifeatureDeclaration(
+                        entry.Value.Substring(0, separator),
+                        entry.Value.Substring(separator).Trim(),
+                        locale));
+                }
+            }
+            return result.AsReadOnly();
+        }
+
+        private static IReadOnlyList<UserScriptWebRequestRule> ParseWebRequest(
+            IDictionary<string, List<Entry>> values,
+            ICollection<MetadataDiagnostic> diagnostics)
+        {
+            var result = new List<UserScriptWebRequestRule>();
+            if (!values.TryGetValue("webrequest", out var entries))
+                return result.AsReadOnly();
+            foreach (var entry in entries)
+            {
+                try
+                {
+                    using (var document = JsonDocument.Parse(entry.Value))
+                    {
+                        var root = document.RootElement;
+                        if (root.ValueKind != JsonValueKind.Object ||
+                            !root.TryGetProperty("selector", out var selector) ||
+                            !root.TryGetProperty("action", out var action) ||
+                            !IsValidWebRequestSelector(selector) ||
+                            !IsValidWebRequestAction(action))
+                            throw new FormatException("A webRequest rule requires a valid selector and action.");
+                        result.Add(new UserScriptWebRequestRule(selector, action));
+                    }
+                }
+                catch (JsonException exception)
+                {
+                    diagnostics.Add(new MetadataDiagnostic(
+                        "MSM062_INVALID_WEBREQUEST",
+                        DiagnosticSeverity.Error,
+                        "@webRequest is not valid JSON: " + exception.Message,
+                        entry.Line));
+                }
+                catch (FormatException exception)
+                {
+                    diagnostics.Add(new MetadataDiagnostic(
+                        "MSM062_INVALID_WEBREQUEST",
+                        DiagnosticSeverity.Error,
+                        exception.Message,
+                        entry.Line));
+                }
+            }
+            return result.AsReadOnly();
+        }
+
+        private static bool IsValidWebRequestSelector(JsonElement value)
+        {
+            if (value.ValueKind == JsonValueKind.String)
+                return !string.IsNullOrWhiteSpace(value.GetString());
+            if (value.ValueKind != JsonValueKind.Object)
+                return false;
+            var found = false;
+            foreach (var name in new[] { "include", "match", "exclude" })
+            {
+                if (!value.TryGetProperty(name, out var item))
+                    continue;
+                found = true;
+                if (item.ValueKind == JsonValueKind.String)
+                {
+                    if (string.IsNullOrWhiteSpace(item.GetString())) return false;
+                }
+                else if (item.ValueKind == JsonValueKind.Array)
+                {
+                    if (!item.EnumerateArray().Any(element => element.ValueKind != JsonValueKind.String ||
+                        string.IsNullOrWhiteSpace(element.GetString()))) return false;
+                }
+                else return false;
+            }
+            return found;
+        }
+
+        private static bool IsValidWebRequestAction(JsonElement value)
+        {
+            if (value.ValueKind == JsonValueKind.String)
+                return string.Equals(value.GetString(), "cancel", StringComparison.OrdinalIgnoreCase) ||
+                    IsHttpUrl(value.GetString());
+            if (value.ValueKind != JsonValueKind.Object)
+                return false;
+            if (value.TryGetProperty("cancel", out var cancel) &&
+                cancel.ValueKind == JsonValueKind.True)
+                return true;
+            if (!value.TryGetProperty("redirect", out var redirect))
+                return false;
+            if (redirect.ValueKind == JsonValueKind.String)
+                return IsHttpUrl(redirect.GetString()) || !string.IsNullOrWhiteSpace(redirect.GetString());
+            return redirect.ValueKind == JsonValueKind.Object &&
+                redirect.TryGetProperty("from", out var from) && from.ValueKind == JsonValueKind.String &&
+                redirect.TryGetProperty("to", out var to) && to.ValueKind == JsonValueKind.String;
+        }
+
+        private static bool IsHttpUrl(string value)
+        {
+            return Uri.TryCreate(value, UriKind.Absolute, out var uri) &&
+                (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
         }
 
         private static void ValidateConnects(
@@ -401,6 +677,26 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
                         "MSM020_INVALID_MATCH",
                         DiagnosticSeverity.Error,
                         "Invalid @" + key + " pattern: " + error,
+                        line));
+                }
+            }
+        }
+
+        private static void ValidateUrlPatterns(
+            IEnumerable<string> patterns,
+            string key,
+            ICollection<MetadataDiagnostic> diagnostics,
+            IDictionary<string, List<Entry>> values)
+        {
+            foreach (var pattern in patterns)
+            {
+                if (!UserScriptUrlPattern.TryValidate(pattern, out var error))
+                {
+                    var line = values[key].First(item => item.Value == pattern).Line;
+                    diagnostics.Add(new MetadataDiagnostic(
+                        "MSM021_INVALID_URL_REGEX",
+                        DiagnosticSeverity.Error,
+                        "Invalid @" + key + " regular expression: " + error,
                         line));
                 }
             }

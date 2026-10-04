@@ -1,5 +1,6 @@
 using Mzying2001.MonkeySharp.Core.Domain;
 using Mzying2001.MonkeySharp.Core.Runtime;
+using Mzying2001.MonkeySharp.Core.Security;
 using System;
 using System.Text;
 using System.Threading;
@@ -41,11 +42,13 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                     requirement,
                     cancellationToken).ConfigureAwait(false);
                 if (dependency == null)
-                    throw new InvalidOperationException("The dependency provider returned null for '" + requirement + "'.");
-                totalBytes += Encoding.UTF8.GetByteCount(dependency);
+                    throw new InvalidOperationException("The dependency provider returned null for '" + requirement.Url + "'.");
+                ResourceIntegrityVerifier.Verify(dependency.Bytes, requirement.Integrity, requirement.Url);
+                var dependencyText = dependency.Text ?? new UTF8Encoding(false, true).GetString(dependency.Bytes);
+                totalBytes += dependency.Bytes.Length;
                 if (totalBytes > _maxDependencyBytes)
                     throw new InvalidOperationException("The combined @require payload exceeds the configured limit.");
-                source.AppendLine(dependency);
+                source.AppendLine(dependencyText);
             }
             source.Append(installation.Definition.Source);
             return source.ToString();

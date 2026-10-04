@@ -29,6 +29,27 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Fact]
+        public async Task ConditionalRepositoryUpdateRejectsStaleRevisionWithoutReplacingLatestSource()
+        {
+            var repository = new InMemoryUserScriptRepository();
+            var source = MetadataAndMatchingTests.Script(
+                "// @name conditional\n// @namespace test\n// @version 1\n// @match https://example.com/*");
+            var installation = await repository.InstallAsync(source, "origin", true, CancellationToken.None);
+            var expectedRevisionId = installation.RevisionId;
+            var latestSource = source.Replace("@version 1", "@version 2");
+            await repository.UpdateIfUnchangedAsync(
+                installation.ScriptKey, expectedRevisionId, latestSource, "latest", CancellationToken.None);
+
+            var staleSource = source.Replace("@version 1", "@version 3");
+            await Assert.ThrowsAsync<RepositoryRevisionMismatchException>(() => repository.UpdateIfUnchangedAsync(
+                installation.ScriptKey, expectedRevisionId, staleSource, "stale", CancellationToken.None));
+
+            var current = await repository.GetAsync(installation.ScriptKey, CancellationToken.None);
+            Assert.Equal(latestSource, current.Definition.Source);
+            Assert.Equal("latest", current.SourceOrigin);
+        }
+
+        [Fact]
         public async Task SetThenDeleteIsLinearizedAndNotifiedInOrder()
         {
             using (var store = new BarrierStore())

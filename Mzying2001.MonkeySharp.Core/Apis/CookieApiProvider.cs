@@ -1,5 +1,6 @@
 using Mzying2001.MonkeySharp.Core.Bridge;
 using Mzying2001.MonkeySharp.Core.Domain;
+using Mzying2001.MonkeySharp.Core.Matching;
 using Mzying2001.MonkeySharp.Core.Runtime;
 using System;
 using System.Collections.Generic;
@@ -71,17 +72,21 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         /// <summary>Initializes an immutable userscript cookie value.</summary>
         public UserScriptCookie(
             string name, string value, string domain, string path,
-            DateTime? expiration = null, bool secure = false, bool httpOnly = false, string sameSite = null)
+            DateTime? expirationDate = null, bool secure = false, bool httpOnly = false, string sameSite = null,
+            string firstPartyDomain = null, bool hostOnly = false, bool? session = null)
         {
             if (string.IsNullOrEmpty(name)) throw new ArgumentException("Cookie name is required.", nameof(name));
             Name = name;
             Value = value ?? string.Empty;
             Domain = string.IsNullOrEmpty(domain) ? throw new ArgumentException("Cookie domain is required.", nameof(domain)) : domain;
             Path = string.IsNullOrEmpty(path) ? "/" : path;
-            Expiration = expiration;
+            ExpirationDate = expirationDate;
             Secure = secure;
             HttpOnly = httpOnly;
             SameSite = sameSite;
+            FirstPartyDomain = firstPartyDomain;
+            HostOnly = hostOnly;
+            Session = session ?? !expirationDate.HasValue;
         }
 
         /// <summary>Gets the cookie name.</summary>
@@ -93,13 +98,19 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         /// <summary>Gets the cookie path.</summary>
         public string Path { get; }
         /// <summary>Gets the UTC expiration time, or <see langword="null"/> for a session cookie.</summary>
-        public DateTime? Expiration { get; }
+        public DateTime? ExpirationDate { get; }
         /// <summary>Gets whether the cookie requires a secure transport.</summary>
         public bool Secure { get; }
         /// <summary>Gets whether scripts are prohibited from reading the cookie.</summary>
         public bool HttpOnly { get; }
         /// <summary>Gets the SameSite mode reported by the browser service.</summary>
         public string SameSite { get; }
+        /// <summary>Gets the first-party domain associated with the cookie.</summary>
+        public string FirstPartyDomain { get; }
+        /// <summary>Gets whether the cookie is restricted to the exact host.</summary>
+        public bool HostOnly { get; }
+        /// <summary>Gets whether the cookie is a session cookie.</summary>
+        public bool Session { get; }
     }
 
     /// <summary>Describes a cookie mutation requested by a userscript.</summary>
@@ -108,17 +119,21 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         /// <summary>Initializes a set or delete request and derives omitted domain/path defaults.</summary>
         public UserScriptCookieMutation(
             Uri url, string name, string value = null, string domain = null, string path = "/",
-            DateTime? expiration = null, bool secure = false, string sameSite = null, string originExecutionId = null)
+            DateTime? expirationDate = null, bool secure = false, bool httpOnly = false, string sameSite = null,
+            string firstPartyDomain = null, string originExecutionId = null)
         {
             Url = UserScriptCookieQuery.ValidateUrl(url);
             if (string.IsNullOrEmpty(name)) throw new ArgumentException("Cookie name is required.", nameof(name));
             Name = name;
             Value = value ?? string.Empty;
-            Domain = string.IsNullOrEmpty(domain) ? url.Host : domain.TrimStart('.');
+            HostOnly = string.IsNullOrEmpty(domain);
+            Domain = HostOnly ? url.Host : domain.TrimStart('.');
             Path = string.IsNullOrEmpty(path) ? "/" : path;
-            Expiration = expiration;
+            ExpirationDate = expirationDate;
             Secure = secure;
+            HttpOnly = httpOnly;
             SameSite = sameSite;
+            FirstPartyDomain = firstPartyDomain;
             OriginExecutionId = originExecutionId;
         }
 
@@ -133,11 +148,17 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         /// <summary>Gets the cookie path.</summary>
         public string Path { get; }
         /// <summary>Gets the expiration time.</summary>
-        public DateTime? Expiration { get; }
+        public DateTime? ExpirationDate { get; }
         /// <summary>Gets whether the cookie requires a secure transport.</summary>
         public bool Secure { get; }
+        /// <summary>Gets whether the cookie is HTTP-only.</summary>
+        public bool HttpOnly { get; }
         /// <summary>Gets the requested SameSite mode.</summary>
         public string SameSite { get; }
+        /// <summary>Gets the first-party domain requested by the script.</summary>
+        public string FirstPartyDomain { get; }
+        /// <summary>Gets whether the mutation targets an exact host.</summary>
+        public bool HostOnly { get; }
         /// <summary>Gets the execution that initiated the change, when known.</summary>
         public string OriginExecutionId { get; }
     }
@@ -272,24 +293,28 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 ? detailsValue : context.Parameters;
             if (operation == "list")
             {
-                var query = ReadQuery(details);
+                var query = ReadQuery(details, context.Frame.Url);
+                EnsureAccessible(context, query.Url);
                 var cookies = await _cookies.ListAsync(query, cancellationToken).ConfigureAwait(false);
                 return ApiResult.FromValue(cookies.Select(ToJson).ToArray());
             }
             if (operation == "set")
             {
-                var mutation = ReadMutation(details, context.ExecutionId);
+                var mutation = ReadMutation(details, context.Frame.Url, context.ExecutionId);
+                EnsureAccessible(context, mutation.Url);
                 var cookie = await _cookies.SetAsync(mutation, cancellationToken).ConfigureAwait(false);
                 return ApiResult.FromValue(ToJson(cookie));
             }
             if (operation == "delete")
             {
-                var mutation = ReadMutation(details, context.ExecutionId);
+                var mutation = ReadMutation(details, context.Frame.Url, context.ExecutionId);
+                EnsureAccessible(context, mutation.Url);
                 return ApiResult.FromValue(await _cookies.DeleteAsync(mutation, cancellationToken).ConfigureAwait(false));
             }
             if (operation == "addListener")
             {
-                var query = ReadQuery(details);
+                var query = ReadQuery(details, context.Frame.Url);
+                EnsureAccessible(context, query.Url);
                 var listenerId = ProviderParameters.RequiredInt32(context.Parameters, "listenerId");
                 var key = context.ExecutionId + ":" + listenerId;
                 RegisterListener(key, () => _cookies.AddListener(query, (_, change) => Notification?.Invoke(this,
@@ -372,10 +397,10 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             if (_disposed) throw new ObjectDisposedException(nameof(CookieApiProvider));
         }
 
-        private static UserScriptCookieQuery ReadQuery(JsonElement details)
+        private static UserScriptCookieQuery ReadQuery(JsonElement details, Uri defaultUrl)
         {
             ProviderParameters.RequireObject(details);
-            var urlText = ProviderParameters.RequiredString(details, "url");
+            var urlText = ProviderParameters.OptionalString(details, "url") ?? defaultUrl?.AbsoluteUri;
             if (!Uri.TryCreate(urlText, UriKind.Absolute, out var url) ||
                 (url.Scheme != Uri.UriSchemeHttp && url.Scheme != Uri.UriSchemeHttps))
                 throw ProviderParameters.Invalid("url must be an absolute HTTP or HTTPS URL.");
@@ -392,20 +417,29 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             }
         }
 
-        private static UserScriptCookieMutation ReadMutation(JsonElement details, string originExecutionId)
+        private static UserScriptCookieMutation ReadMutation(JsonElement details, Uri defaultUrl, string originExecutionId)
         {
-            var query = ReadQuery(details);
+            var query = ReadQuery(details, defaultUrl);
             var value = ProviderParameters.OptionalString(details, "value");
             var expiration = ReadExpiration(details);
             return new UserScriptCookieMutation(query.Url, query.Name,
-                value, query.Domain, query.Path, expiration,
+                value, OptionalDomain(details), query.Path, expiration,
                 ProviderParameters.OptionalBoolean(details, "secure"),
-                ProviderParameters.OptionalString(details, "sameSite"), originExecutionId);
+                ProviderParameters.OptionalBoolean(details, "httpOnly"),
+                ProviderParameters.OptionalString(details, "sameSite"),
+                ProviderParameters.OptionalString(details, "firstPartyDomain"), originExecutionId);
+        }
+
+        private static string OptionalDomain(JsonElement details)
+        {
+            return details.TryGetProperty("domain", out var value) && value.ValueKind == JsonValueKind.String
+                ? value.GetString()
+                : null;
         }
 
         private static DateTime? ReadExpiration(JsonElement details)
         {
-            if (!details.TryGetProperty("expiration", out var value) && !details.TryGetProperty("expirationDate", out value))
+            if (!details.TryGetProperty("expirationDate", out var value))
                 return null;
             if (value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out var seconds))
             {
@@ -413,12 +447,19 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                     seconds != Math.Truncate(seconds) ||
                     seconds < DateTimeOffset.MinValue.ToUnixTimeSeconds() ||
                     seconds > DateTimeOffset.MaxValue.ToUnixTimeSeconds())
-                    throw ProviderParameters.Invalid("expiration must be an integral Unix timestamp in range.");
+                    throw ProviderParameters.Invalid("expirationDate must be an integral Unix timestamp in range.");
                 return DateTimeOffset.FromUnixTimeSeconds((long)seconds).UtcDateTime;
             }
             if (value.ValueKind == JsonValueKind.String && DateTime.TryParse(value.GetString(), out var date))
                 return date.ToUniversalTime();
-            throw ProviderParameters.Invalid("expiration must be Unix seconds or an ISO date.");
+            throw ProviderParameters.Invalid("expirationDate must be Unix seconds or an ISO date.");
+        }
+
+        private static void EnsureAccessible(ApiInvocationContext context, Uri url)
+        {
+            if (!new UserScriptMatcher().IsMatch(context.Installation.Definition.Metadata, url))
+                throw new BridgeProtocolException(BridgeErrorCodes.PermissionDenied,
+                    "The cookie URL is not covered by the script's @match or @include rules.");
         }
 
         private static object ToJson(UserScriptCookie cookie)
@@ -426,7 +467,8 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             return cookie == null ? null : new
             {
                 name = cookie.Name, value = cookie.Value, domain = cookie.Domain, path = cookie.Path,
-                expiration = cookie.Expiration.HasValue ? new DateTimeOffset(cookie.Expiration.Value).ToUnixTimeSeconds() : (long?)null,
+                expirationDate = cookie.ExpirationDate.HasValue ? new DateTimeOffset(cookie.ExpirationDate.Value).ToUnixTimeSeconds() : (long?)null,
+                firstPartyDomain = cookie.FirstPartyDomain, hostOnly = cookie.HostOnly, session = cookie.Session,
                 secure = cookie.Secure, httpOnly = cookie.HttpOnly, sameSite = cookie.SameSite
             };
         }
@@ -465,7 +507,8 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 old = _cookies.FirstOrDefault(item => item.Name == mutation.Name && item.Domain == mutation.Domain && item.Path == mutation.Path);
                 if (old != null) _cookies.Remove(old);
                 cookie = new UserScriptCookie(mutation.Name, mutation.Value, mutation.Domain, mutation.Path,
-                    mutation.Expiration, mutation.Secure, false, mutation.SameSite);
+                    mutation.ExpirationDate, mutation.Secure, mutation.HttpOnly, mutation.SameSite,
+                    mutation.FirstPartyDomain, mutation.HostOnly);
                 _cookies.Add(cookie);
             }
             Publish(new UserScriptCookieChangedEventArgs(cookie, old == null ? "explicit" : "overwrite", false,

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Text.Json;
 
 namespace Mzying2001.MonkeySharp.Core.Domain
 {
@@ -92,6 +93,19 @@ namespace Mzying2001.MonkeySharp.Core.Domain
         DocumentIdle
     }
 
+    /// <summary>Describes how a script declared its GM grants.</summary>
+    public enum GrantDeclarationState
+    {
+        /// <summary>No <c>@grant</c> entry was declared.</summary>
+        Missing,
+
+        /// <summary>The script explicitly declared <c>@grant none</c>.</summary>
+        ExplicitNone,
+
+        /// <summary>The script declared one or more explicit capabilities.</summary>
+        ExplicitList
+    }
+
     /// <summary>
     /// Describes a named external resource declared by a userscript.
     /// </summary>
@@ -100,10 +114,12 @@ namespace Mzying2001.MonkeySharp.Core.Domain
         /// <summary>Initializes a resource declaration.</summary>
         /// <param name="name">The name used to reference the resource.</param>
         /// <param name="url">The resource URL from the metadata block.</param>
-        public ResourceDeclaration(string name, string url)
+        /// <param name="integrity">The optional subresource integrity declarations.</param>
+        internal ResourceDeclaration(string name, string url, IEnumerable<ResourceIntegrityDeclaration> integrity)
         {
             Name = name ?? throw new ArgumentNullException(nameof(name));
             Url = url ?? throw new ArgumentNullException(nameof(url));
+            Integrity = new ReadOnlyCollection<ResourceIntegrityDeclaration>((integrity ?? Enumerable.Empty<ResourceIntegrityDeclaration>()).ToList());
         }
 
         /// <summary>Gets the resource name.</summary>
@@ -111,6 +127,85 @@ namespace Mzying2001.MonkeySharp.Core.Domain
 
         /// <summary>Gets the resource URL.</summary>
         public string Url { get; }
+
+        /// <summary>Gets the optional subresource integrity declarations.</summary>
+        public IReadOnlyList<ResourceIntegrityDeclaration> Integrity { get; }
+    }
+
+    /// <summary>
+    /// Describes one hash declaration attached to an external userscript resource.
+    /// </summary>
+    public sealed class ResourceIntegrityDeclaration
+    {
+        internal ResourceIntegrityDeclaration(string algorithm, string digest)
+        {
+            Algorithm = algorithm ?? throw new ArgumentNullException(nameof(algorithm));
+            Digest = digest ?? throw new ArgumentNullException(nameof(digest));
+        }
+
+        /// <summary>Gets the normalized hash algorithm name.</summary>
+        public string Algorithm { get; }
+
+        /// <summary>Gets the hexadecimal or Base64 digest text.</summary>
+        public string Digest { get; }
+
+        /// <summary>Gets whether the runtime can verify this algorithm.</summary>
+        public bool IsSupported => string.Equals(Algorithm, "md5", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(Algorithm, "sha256", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Describes one JavaScript dependency declared with <c>@require</c>.
+    /// </summary>
+    public sealed class UserScriptDependencyDeclaration
+    {
+        internal UserScriptDependencyDeclaration(string url, IEnumerable<ResourceIntegrityDeclaration> integrity)
+        {
+            Url = url ?? throw new ArgumentNullException(nameof(url));
+            Integrity = new ReadOnlyCollection<ResourceIntegrityDeclaration>((integrity ?? Enumerable.Empty<ResourceIntegrityDeclaration>()).ToList());
+        }
+
+        /// <summary>Gets the dependency URL without its integrity fragment.</summary>
+        public string Url { get; }
+
+        /// <summary>Gets the optional subresource integrity declarations.</summary>
+        public IReadOnlyList<ResourceIntegrityDeclaration> Integrity { get; }
+    }
+
+    /// <summary>Describes one localized antifeature declaration.</summary>
+    public sealed class AntifeatureDeclaration
+    {
+        internal AntifeatureDeclaration(string type, string description, string locale)
+        {
+            Type = type;
+            Description = description;
+            Locale = locale;
+        }
+
+        /// <summary>Gets the antifeature type.</summary>
+        public string Type { get; }
+
+        /// <summary>Gets the disclosure description.</summary>
+        public string Description { get; }
+
+        /// <summary>Gets the normalized locale, or <see langword="null"/> for the default locale.</summary>
+        public string Locale { get; }
+    }
+
+    /// <summary>Contains one validated static <c>@webRequest</c> rule.</summary>
+    public sealed class UserScriptWebRequestRule
+    {
+        internal UserScriptWebRequestRule(JsonElement selector, JsonElement action)
+        {
+            Selector = selector.Clone();
+            Action = action.Clone();
+        }
+
+        /// <summary>Gets the selector JSON value, either a string or selector object.</summary>
+        public JsonElement Selector { get; }
+
+        /// <summary>Gets the action JSON value.</summary>
+        public JsonElement Action { get; }
     }
 
     /// <summary>
@@ -125,15 +220,22 @@ namespace Mzying2001.MonkeySharp.Core.Domain
             string description,
             string author,
             string license,
+            string copyright,
             string iconUrl,
+            string icon64Url,
             string downloadUrl,
             string updateUrl,
             string homepageUrl,
+            string websiteUrl,
+            string sourceUrl,
             string supportUrl,
             UserScriptRunAt runAt,
+            GrantDeclarationState grantDeclarationState,
             bool noFrames,
             string runIn,
             string injectInto,
+            string sandbox,
+            bool unwrap,
             IDictionary<string, string> localizedNames,
             IDictionary<string, string> localizedDescriptions,
             IEnumerable<string> matches,
@@ -143,8 +245,10 @@ namespace Mzying2001.MonkeySharp.Core.Domain
             IEnumerable<string> declaredGrants,
             IEnumerable<string> grants,
             IEnumerable<string> connects,
-            IEnumerable<string> requires,
+            IEnumerable<UserScriptDependencyDeclaration> requires,
             IEnumerable<ResourceDeclaration> resources,
+            IEnumerable<AntifeatureDeclaration> antifeatures,
+            IEnumerable<UserScriptWebRequestRule> webRequest,
             IDictionary<string, IReadOnlyList<string>> additionalEntries)
         {
             Name = name;
@@ -153,15 +257,22 @@ namespace Mzying2001.MonkeySharp.Core.Domain
             Description = description;
             Author = author;
             License = license;
+            Copyright = copyright;
             IconUrl = iconUrl;
+            Icon64Url = icon64Url;
             DownloadUrl = downloadUrl;
             UpdateUrl = updateUrl;
             HomepageUrl = homepageUrl;
+            WebsiteUrl = websiteUrl;
+            SourceUrl = sourceUrl;
             SupportUrl = supportUrl;
             RunAt = runAt;
+            GrantDeclarationState = grantDeclarationState;
             NoFrames = noFrames;
             RunIn = runIn;
             InjectInto = injectInto;
+            Sandbox = sandbox;
+            Unwrap = unwrap;
             LocalizedNames = ReadOnlyDictionary(localizedNames);
             LocalizedDescriptions = ReadOnlyDictionary(localizedDescriptions);
             Matches = ReadOnlyList(matches);
@@ -171,8 +282,10 @@ namespace Mzying2001.MonkeySharp.Core.Domain
             DeclaredGrants = ReadOnlyList(declaredGrants);
             Grants = ReadOnlyList(grants);
             Connects = ReadOnlyList(connects);
-            Requires = ReadOnlyList(requires);
+            Requires = new ReadOnlyCollection<UserScriptDependencyDeclaration>(requires.ToList());
             Resources = new ReadOnlyCollection<ResourceDeclaration>(resources.ToList());
+            Antifeatures = new ReadOnlyCollection<AntifeatureDeclaration>(antifeatures.ToList());
+            WebRequest = new ReadOnlyCollection<UserScriptWebRequestRule>(webRequest.ToList());
             AdditionalEntries = new ReadOnlyDictionary<string, IReadOnlyList<string>>(
                 new Dictionary<string, IReadOnlyList<string>>(additionalEntries, StringComparer.OrdinalIgnoreCase));
         }
@@ -195,8 +308,14 @@ namespace Mzying2001.MonkeySharp.Core.Domain
         /// <summary>Gets the script license declaration.</summary>
         public string License { get; }
 
+        /// <summary>Gets the copyright declaration.</summary>
+        public string Copyright { get; }
+
         /// <summary>Gets the icon URL.</summary>
         public string IconUrl { get; }
+
+        /// <summary>Gets the 64px icon URL.</summary>
+        public string Icon64Url { get; }
 
         /// <summary>Gets the script download URL.</summary>
         public string DownloadUrl { get; }
@@ -207,11 +326,20 @@ namespace Mzying2001.MonkeySharp.Core.Domain
         /// <summary>Gets the script homepage URL.</summary>
         public string HomepageUrl { get; }
 
+        /// <summary>Gets the optional website alias.</summary>
+        public string WebsiteUrl { get; }
+
+        /// <summary>Gets the optional source URL alias.</summary>
+        public string SourceUrl { get; }
+
         /// <summary>Gets the support URL.</summary>
         public string SupportUrl { get; }
 
         /// <summary>Gets the requested document lifecycle phase.</summary>
         public UserScriptRunAt RunAt { get; }
+
+        /// <summary>Gets whether grants were missing, explicit none, or an explicit list.</summary>
+        public GrantDeclarationState GrantDeclarationState { get; }
 
         /// <summary>Gets whether the script is restricted to the main frame.</summary>
         public bool NoFrames { get; }
@@ -221,6 +349,12 @@ namespace Mzying2001.MonkeySharp.Core.Domain
 
         /// <summary>Gets the declared JavaScript world into which the script should be injected.</summary>
         public string InjectInto { get; }
+
+        /// <summary>Gets the declared Tampermonkey sandbox mode.</summary>
+        public string Sandbox { get; }
+
+        /// <summary>Gets whether the script requested wrapper removal.</summary>
+        public bool Unwrap { get; }
 
         /// <summary>Gets localized names keyed by normalized culture name.</summary>
         public IReadOnlyDictionary<string, string> LocalizedNames { get; }
@@ -250,10 +384,16 @@ namespace Mzying2001.MonkeySharp.Core.Domain
         public IReadOnlyList<string> Connects { get; }
 
         /// <summary>Gets dependency URLs in declaration order.</summary>
-        public IReadOnlyList<string> Requires { get; }
+        public IReadOnlyList<UserScriptDependencyDeclaration> Requires { get; }
 
         /// <summary>Gets named external resource declarations.</summary>
         public IReadOnlyList<ResourceDeclaration> Resources { get; }
+
+        /// <summary>Gets structured antifeature disclosures.</summary>
+        public IReadOnlyList<AntifeatureDeclaration> Antifeatures { get; }
+
+        /// <summary>Gets parsed static webRequest rules.</summary>
+        public IReadOnlyList<UserScriptWebRequestRule> WebRequest { get; }
 
         /// <summary>Gets unrecognized metadata entries, preserving their values in declaration order.</summary>
         public IReadOnlyDictionary<string, IReadOnlyList<string>> AdditionalEntries { get; }
@@ -329,6 +469,7 @@ namespace Mzying2001.MonkeySharp.Core.Domain
             DateTimeOffset updatedAt)
         {
             ScriptKey = scriptKey;
+            RevisionId = Guid.NewGuid();
             Definition = definition ?? throw new ArgumentNullException(nameof(definition));
             SourceOrigin = sourceOrigin;
             IsEnabled = isEnabled;
@@ -338,6 +479,9 @@ namespace Mzying2001.MonkeySharp.Core.Domain
 
         /// <summary>Gets the stable installation key.</summary>
         public ScriptKey ScriptKey { get; }
+
+        /// <summary>Gets the immutable revision identity for optimistic concurrency.</summary>
+        public Guid RevisionId { get; }
 
         /// <summary>Gets the installed script definition.</summary>
         public UserScriptDefinition Definition { get; }

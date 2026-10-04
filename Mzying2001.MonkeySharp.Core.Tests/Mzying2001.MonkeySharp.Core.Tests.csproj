@@ -15,4 +15,8 @@
   <ItemGroup>
     <ProjectReference Include="..\Mzying2001.MonkeySharp.Core\Mzying2001.MonkeySharp.Core.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="JavaScript\fixtures\legacy-userscript.user.js"
+                      LogicalName="Mzying2001.MonkeySharp.Core.Tests.legacy-userscript.user.js" />
+  </ItemGroup>
 </Project>

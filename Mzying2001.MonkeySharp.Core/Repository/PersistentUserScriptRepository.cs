@@ -132,6 +132,23 @@ namespace Mzying2001.MonkeySharp.Core.Repository
         }
 
         /// <inheritdoc />
+        public Task<UserScriptInstallation> UpdateIfUnchangedAsync(
+            ScriptKey scriptKey,
+            Guid expectedRevisionId,
+            string source,
+            string sourceOrigin,
+            CancellationToken cancellationToken)
+        {
+            return SaveAsync(() =>
+            {
+                var current = GetRequired(scriptKey);
+                if (current.RevisionId != expectedRevisionId)
+                    throw new RepositoryRevisionMismatchException(scriptKey);
+                return current.WithDefinition(Parse(source), sourceOrigin, DateTimeOffset.UtcNow);
+            }, RepositoryChangeKind.Updated, cancellationToken);
+        }
+
+        /// <inheritdoc />
         public Task<UserScriptInstallation> SetEnabledAsync(ScriptKey scriptKey, bool enabled, CancellationToken cancellationToken)
         {
             return SaveAsync(() =>

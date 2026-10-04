@@ -31,6 +31,25 @@
 
             const decodeResult = value => value && value.$monkeySharpType === "undefined" ? undefined : value;
 
+            const downloadError = function (error, fallback) {
+                if (error && typeof error === "object" && typeof error.error === "string") {
+                    return { error: error.error, details: error.details || null };
+                }
+                const code = error && error.code;
+                const mapped = {
+                    MSP003_SESSION_EXPIRED: "not_enabled",
+                    MSP004_GRANT_DENIED: "not_permitted",
+                    MSP005_PERMISSION_DENIED: "not_whitelisted",
+                    MSP006_NOT_SUPPORTED: "not_supported",
+                    MSP009_TIMEOUT: "timeout",
+                    MSP010_CANCELED: "not_succeeded"
+                };
+                return {
+                    error: mapped[code] || fallback || "not_succeeded",
+                    details: error && error.message ? error.message : String(error || "The download failed.")
+                };
+            };
+
             const serializableValue = function (value) {
                 if (typeof value === "undefined" || typeof value === "function" || typeof value === "symbol") {
                     throw new TypeError("The value is not JSON serializable.");
@@ -46,6 +65,12 @@
 
             const cloneValue = function (value) {
                 return serializableValue(value);
+            };
+
+            const deepFreeze = function (value) {
+                if (!value || typeof value !== "object" || Object.isFrozen(value)) return value;
+                Object.getOwnPropertyNames(value).forEach(name => deepFreeze(value[name]));
+                return Object.freeze(value);
             };
 
             const resolveDispatch = async function () {
@@ -325,10 +350,12 @@
 
             const createApi = function (record, invocation, availableApis) {
                 const grants = new Set(invocation.grants);
-                const enabled = name => grants.has(name) && availableApis.has(name);
+                const enabled = name =>
+                    (grants.has(name) || (name === "GM.info" && invocation.grantDeclarationState === "ExplicitNone")) &&
+                    availableApis.has(name);
                 const api = {};
                 if (enabled("GM.info")) {
-                    Object.defineProperty(api, "info", { value: Object.freeze(invocation.info), enumerable: true });
+                    Object.defineProperty(api, "info", { value: deepFreeze(invocation.info), enumerable: true });
                 }
                 if (enabled("GM.log")) api.log = async value => call(record, "GM.log", { value: serializableValue(value) });
                 if (enabled("GM.getValue")) {
@@ -428,6 +455,12 @@
                         parent.appendChild(element);
                         return element;
                     };
+                }
+                if (enabled("window.close")) {
+                    api.windowClose = async function () { return call(record, "window.close", {}); };
+                }
+                if (enabled("window.focus")) {
+                    api.windowFocus = async function () { return call(record, "window.focus", {}); };
                 }
                 if (enabled("GM.getResourceText")) {
                     api.getResourceText = async function (name) {
@@ -707,7 +740,10 @@
                         const result = await call(record, "GM.notification", {
                             title: details.title || null,
                             text: details.text,
-                            imageUrl: details.imageUrl || details.image || null
+                            imageUrl: details.imageUrl || details.image || null,
+                            highlight: Boolean(details.highlight),
+                            silent: Boolean(details.silent),
+                            timeout: typeof details.timeout === "number" ? details.timeout : null
                         });
                         if (result && result.id) {
                             record.notificationHandlers.set(result.id, {
@@ -726,26 +762,105 @@
                     };
                 }
                 if (enabled("GM.openInTab")) {
-                    api.openInTab = async function (url, options) {
+                    api.openInTab = function (url, options) {
                         if (typeof url !== "string") throw new TypeError("url must be a string.");
                         options = options || {};
-                        return call(record, "GM.openInTab", {
+                        const state = {
+                            id: null,
+                            closed: false,
+                            closeRequested: false,
+                            closePromise: null,
+                            closeResolve: null,
+                            closeReject: null,
+                            onclose: null,
+                            closeSent: false
+                        };
+                        const sendClose = function () {
+                            if (!state.id || state.closeSent) return state.closePromise || Promise.resolve(false);
+                            state.closeSent = true;
+                            const request = call(record, "GM.openInTab", { close: true, tabId: state.id });
+                            request.then(value => {
+                                if (state.closeResolve) state.closeResolve(value);
+                            }, error => {
+                                if (state.closeReject) state.closeReject(error);
+                            });
+                            return request;
+                        };
+                        const handle = {};
+                        Object.defineProperties(handle, {
+                            id: { enumerable: true, get: () => state.id },
+                            closed: { enumerable: true, get: () => state.closed },
+                            onclose: {
+                                enumerable: true,
+                                get: () => state.onclose,
+                                set: value => { state.onclose = value; }
+                            }
+                        });
+                        handle.close = function () {
+                            if (state.closed || state.closeRequested) return state.closePromise || Promise.resolve(false);
+                            state.closeRequested = true;
+                            state.closePromise = new Promise((resolve, reject) => {
+                                state.closeResolve = resolve;
+                                state.closeReject = reject;
+                            });
+                            if (state.id) sendClose();
+                            return state.closePromise;
+                        };
+                        record.tabHandlers.push(state);
+                        call(record, "GM.openInTab", {
                             url: url,
-                            active: typeof options.active === "boolean" ? options.active : true,
+                            active: typeof options.active === "boolean" ? options.active : false,
                             insert: Boolean(options.insert),
                             setParent: Boolean(options.setParent)
+                        }).then(result => {
+                            state.id = result && result.id;
+                            if (state.closeRequested) sendClose();
+                        }).catch(error => {
+                            if (state.closeReject) state.closeReject(error);
+                            else if (root.console) console.error("[MonkeySharp] tab open failed", error);
                         });
+                        return handle;
                     };
                 }
                 if (enabled("GM.download")) {
-                    api.download = async function (details) {
+                    api.download = async function (details, state) {
                         if (typeof details === "string") details = { url: details };
                         if (!details || typeof details !== "object") throw new TypeError("details must be an object.");
-                        return call(record, "GM.download", {
+                        const clientId = uuid();
+                        state = state || { clientId: clientId, id: null, abortRequested: false, callbacks: {} };
+                        state.clientId = clientId;
+                        record.downloadHandlers.set(clientId, state);
+                        const request = {
+                            operation: "start",
+                            clientId: clientId,
                             url: details.url,
                             name: details.name || null,
-                            saveAs: Boolean(details.saveAs)
-                        });
+                            headers: details.headers ? serializableValue(details.headers) : {},
+                            saveAs: Boolean(details.saveAs),
+                            conflictAction: details.conflictAction || "uniquify",
+                            timeout: typeof details.timeout === "number" ? details.timeout : undefined
+                        };
+                        const handle = {
+                            id: null,
+                            abort: function () {
+                                if (state.aborted) return Promise.resolve(false);
+                                state.aborted = true;
+                                state.abortRequested = true;
+                                if (!state.id) return Promise.resolve(false);
+                                return call(record, "GM.download", { operation: "abort", downloadId: state.id });
+                            }
+                        };
+                        state.handle = handle;
+                        try {
+                            const result = await call(record, "GM.download", request);
+                            state.id = result && result.id;
+                            handle.id = state.id;
+                            if (state.abortRequested) await handle.abort();
+                            return handle;
+                        } catch (error) {
+                            record.downloadHandlers.delete(clientId);
+                            throw downloadError(error);
+                        }
                     };
                 }
                 if (enabled("GM.getTab")) api.getTab = async () => call(record, "GM.getTab", {});
@@ -780,32 +895,115 @@
                     });
                 }
                 if (enabled("GM.webRequest")) {
-                    api.webRequest = Object.freeze({
-                        addRule: rule => call(record, "GM.webRequest", { operation: "addRule", rule: serializableValue(rule || {}) }),
-                        removeRule: id => call(record, "GM.webRequest", { operation: "removeRule", id: id }),
-                        listRules: () => call(record, "GM.webRequest", { operation: "listRules" }),
-                        addListener: function (filter, callback) {
-                            if (typeof filter === "function") { callback = filter; filter = {}; }
-                            if (typeof callback !== "function") throw new TypeError("callback must be a function.");
-                            const listenerId = nextListenerId++;
-                            record.webRequestHandlers.set(listenerId, callback);
-                            call(record, "GM.webRequest", {
-                                operation: "addListener", listenerId: listenerId,
-                                filter: serializableValue(filter || {})
-                            }).catch(error => {
-                                record.webRequestHandlers.delete(listenerId);
-                                console.error("[MonkeySharp] webRequest listener registration failed", error);
-                            });
-                            return listenerId;
-                        },
-                        removeListener: async function (listenerId) {
-                            const removed = await call(record, "GM.webRequest", { operation: "removeListener", listenerId: listenerId });
-                            if (removed) record.webRequestHandlers.delete(listenerId);
-                            return removed;
+                    api.webRequest = function (rules, listener) {
+                        if (!Array.isArray(rules)) rules = [rules];
+                        if (typeof listener !== "undefined" && typeof listener !== "function") {
+                            throw new TypeError("listener must be a function.");
                         }
-                    });
+                        const listenerId = typeof listener === "function" ? nextListenerId++ : 0;
+                        if (listenerId) record.webRequestHandlers.set(listenerId, listener);
+                        const state = { id: null, removeRequested: false, removePromise: null, removeResolve: null, removeReject: null };
+                        const sendRemove = function () {
+                            if (!state.id) return state.removePromise || Promise.resolve(false);
+                            const request = call(record, "GM.webRequest", { operation: "remove", id: state.id });
+                            request.then(value => {
+                                if (state.removeResolve) state.removeResolve(value);
+                                if (listenerId) record.webRequestHandlers.delete(listenerId);
+                            }, error => {
+                                if (state.removeReject) state.removeReject(error);
+                            });
+                            return request;
+                        };
+                        const handle = {};
+                        Object.defineProperties(handle, {
+                            id: { enumerable: true, get: () => state.id }
+                        });
+                        handle.remove = function () {
+                            if (state.removeRequested) return state.removePromise || Promise.resolve(false);
+                            state.removeRequested = true;
+                            state.removePromise = new Promise((resolve, reject) => {
+                                state.removeResolve = resolve;
+                                state.removeReject = reject;
+                            });
+                            if (state.id) sendRemove();
+                            return state.removePromise;
+                        };
+                        call(record, "GM.webRequest", {
+                            operation: "register",
+                            rules: serializableValue(rules),
+                            listenerId: listenerId || undefined
+                        }).then(result => {
+                            state.id = result && result.id;
+                            if (state.removeRequested) sendRemove();
+                        }).catch(error => {
+                            if (listenerId) record.webRequestHandlers.delete(listenerId);
+                            if (state.removeReject) state.removeReject(error);
+                            else console.error("[MonkeySharp] webRequest registration failed", error);
+                        });
+                        return handle;
+                    };
                 }
                 return Object.freeze(api);
+            };
+
+            const createWindowFacade = function (record, invocation, api) {
+                const grants = new Set(invocation.grants);
+                const closeEnabled = grants.has("window.close") && typeof api.windowClose === "function";
+                const focusEnabled = grants.has("window.focus") && typeof api.windowFocus === "function";
+                const urlEnabled = grants.has("window.onurlchange");
+                const isUrlEvent = value => value === "urlchange";
+                const nativeFunctionCache = new Map();
+                const bindNativeFunction = function (property, value) {
+                    if (typeof value !== "function" || Object.prototype.hasOwnProperty.call(value, "prototype")) {
+                        return value;
+                    }
+                    const cached = nativeFunctionCache.get(property);
+                    if (cached && cached.value === value) return cached.bound;
+                    const bound = Function.prototype.bind.call(value, root);
+                    nativeFunctionCache.set(property, { value: value, bound: bound });
+                    return bound;
+                };
+                const windowTarget = Object.create(root);
+                return new Proxy(windowTarget, {
+                    get: function (target, property, receiver) {
+                        if (property === "close") return closeEnabled ? api.windowClose : undefined;
+                        if (property === "focus") return focusEnabled ? api.windowFocus : undefined;
+                        if (property === "onurlchange") return urlEnabled ? record.urlChangeHandler : undefined;
+                        if (property === "addEventListener") {
+                            return function (type, listener, options) {
+                                if (urlEnabled && isUrlEvent(type)) {
+                                    if (typeof listener !== "function") throw new TypeError("listener must be a function.");
+                                    record.urlChangeHandlers.add(listener);
+                                    return;
+                                }
+                                return root.addEventListener.call(root, type, listener, options);
+                            };
+                        }
+                        if (property === "removeEventListener") {
+                            return function (type, listener, options) {
+                                if (urlEnabled && isUrlEvent(type)) {
+                                    record.urlChangeHandlers.delete(listener);
+                                    return;
+                                }
+                                return root.removeEventListener.call(root, type, listener, options);
+                            };
+                        }
+                        const value = Reflect.get(root, property, root);
+                        if ((property === "top" || property === "parent" || property === "self" ||
+                            property === "window" || property === "globalThis") && value === root) {
+                            return receiver;
+                        }
+                        return bindNativeFunction(property, value);
+                    },
+                    set: function (target, property, value, receiver) {
+                        if (property === "onurlchange" && urlEnabled) {
+                            if (value !== null && typeof value !== "function") throw new TypeError("onurlchange must be a function or null.");
+                            record.urlChangeHandler = value;
+                            return true;
+                        }
+                        return Reflect.set(root, property, value, root);
+                    }
+                });
             };
 
             const legacyNames = [
@@ -979,63 +1177,88 @@
                 if (api.setClipboard) facade.GM_setClipboard = function (text, type) {
                     api.setClipboard(text, type).catch(error => console.error("[MonkeySharp] legacy clipboard failed", error));
                 };
-                if (api.notification) facade.GM_notification = function (details, ondone) {
-                    if (typeof details === "string") details = { text: details };
-                    details = Object.assign({}, details || {}, { ondone: ondone });
+                if (api.notification) facade.GM_notification = function (details, title, image, onclick) {
+                    if (typeof details === "string") {
+                        const options = { text: details };
+                        if (typeof title === "function") {
+                            options.ondone = title;
+                        } else if (arguments.length > 1) {
+                            if (typeof title !== "undefined") options.title = title;
+                            if (typeof image !== "undefined") options.image = image;
+                            if (typeof onclick === "function") options.onclick = onclick;
+                        }
+                        details = options;
+                    } else {
+                        details = Object.assign({}, details || {});
+                        if (typeof title === "function") details.ondone = title;
+                    }
                     api.notification(details).catch(error => console.error("[MonkeySharp] legacy notification failed", error));
                 };
                 if (api.openInTab) facade.GM_openInTab = function (url, options) {
-                    const state = { closed: false, id: null, closeRequested: false };
-                    const handle = {
-                        close: function () {
-                            state.closeRequested = true;
-                            if (!state.id) return;
-                            call(record, "GM.openInTab", { close: true, tabId: state.id })
-                                .then(() => { state.closed = true; })
-                                .catch(error => console.error("[MonkeySharp] legacy tab close failed", error));
-                        },
-                        get closed() { return state.closed; }
-                    };
-                    api.openInTab(url, options).then(result => {
-                        state.id = result && result.id;
-                        if (state.closeRequested && state.id) handle.close();
-                    })
-                        .catch(error => console.error("[MonkeySharp] legacy tab open failed", error));
-                    record.tabHandlers.push(state);
-                    return handle;
+                    if (typeof options === "boolean") options = { active: !options };
+                    options = options || {};
+                    if (typeof options.active !== "boolean" && typeof options.loadInBackground === "boolean") {
+                        options = Object.assign({}, options, { active: !options.loadInBackground });
+                    }
+                    return api.openInTab(url, options);
                 };
                 if (api.download) facade.GM_download = function (details, onload, onerror) {
+                    if (typeof details === "string" && typeof onload === "string") {
+                        details = { url: details, name: onload };
+                        onload = undefined;
+                    }
                     if (typeof details === "string") details = { url: details };
                     if (!details || typeof details !== "object") throw new TypeError("details must be an object.");
-                    ["onload", "onerror", "onprogress"].forEach(name => {
+                    ["onload", "onerror", "onprogress", "ontimeout"].forEach(name => {
                         if (typeof details[name] !== "undefined" && typeof details[name] !== "function") {
                             throw new TypeError(name + " must be a function.");
                         }
                     });
-                    const state = { id: null, callbacks: { onload: onload || details.onload, onerror: onerror || details.onerror, onprogress: details.onprogress }, aborted: false };
-                    const handle = { abort: function () { state.aborted = true; if (state.id) record.downloadHandlers.get(state.id)?.abort(); } };
-                    api.download(details).then(result => {
-                        state.id = result && result.id;
-                        if (state.id) record.downloadHandlers.set(state.id, state);
-                    }).catch(error => {
-                        if (typeof state.callbacks.onerror === "function") state.callbacks.onerror(error);
+                    const state = { id: null, callbacks: {
+                        onload: onload || details.onload,
+                        onerror: onerror || details.onerror,
+                        onprogress: details.onprogress,
+                        ontimeout: details.ontimeout
+                    } };
+                    const handlePromise = api.download(details, state);
+                    handlePromise.catch(error => {
+                        if (typeof state.callbacks.onerror === "function") state.callbacks.onerror(downloadError(error));
                         else console.error("[MonkeySharp] legacy download failed", error);
                     });
-                    return handle;
+                    return {
+                        abort: function () {
+                            if (state.abortRequested) return Promise.resolve(false);
+                            state.abortRequested = true;
+                            return state.handle ? state.handle.abort() : Promise.resolve(false);
+                        },
+                        get id() { return state.id; }
+                    };
                 };
                 if (api.cookie) facade.GM_cookie = {
                     list: function (details, callback) {
                         if (typeof details === "function") { callback = details; details = {}; }
-                        api.cookie.list(details).then(value => { if (typeof callback === "function") callback(value); })
-                            .catch(error => console.error("[MonkeySharp] legacy cookie list failed", error));
+                        api.cookie.list(details).then(value => {
+                            if (typeof callback === "function") callback(value, null);
+                        }).catch(error => {
+                            if (typeof callback === "function") callback(null, String(error && error.message || error));
+                            else console.error("[MonkeySharp] legacy cookie list failed", error);
+                        });
                     },
                     set: function (details, callback) {
-                        api.cookie.set(details).then(value => { if (typeof callback === "function") callback(value); })
-                            .catch(error => console.error("[MonkeySharp] legacy cookie set failed", error));
+                        api.cookie.set(details).then(() => {
+                            if (typeof callback === "function") callback();
+                        }).catch(error => {
+                            if (typeof callback === "function") callback(String(error && error.message || error));
+                            else console.error("[MonkeySharp] legacy cookie set failed", error);
+                        });
                     },
                     delete: function (details, callback) {
-                        api.cookie.delete(details).then(value => { if (typeof callback === "function") callback(value); })
-                            .catch(error => console.error("[MonkeySharp] legacy cookie delete failed", error));
+                        api.cookie.delete(details).then(() => {
+                            if (typeof callback === "function") callback();
+                        }).catch(error => {
+                            if (typeof callback === "function") callback(String(error && error.message || error));
+                            else console.error("[MonkeySharp] legacy cookie delete failed", error);
+                        });
                     },
                     addListener: function (details, callback) { return api.cookie.addListener(details, callback); },
                     removeListener: function (listenerId) {
@@ -1043,19 +1266,7 @@
                     }
                 };
                 if (api.webRequest) facade.GM_webRequest = function (rules, listener) {
-                    if (!Array.isArray(rules)) rules = [rules];
-                    const listenerId = typeof listener === "function" ? api.webRequest.addListener({}, listener) : null;
-                    const ids = [];
-                    rules.forEach(rule => api.webRequest.addRule(rule).then(id => ids.push(id))
-                        .catch(error => console.error("[MonkeySharp] legacy webRequest rule failed", error)));
-                    return {
-                        remove: function () {
-                            ids.splice(0).forEach(id => api.webRequest.removeRule(id)
-                                .catch(error => console.error("[MonkeySharp] legacy webRequest removal failed", error)));
-                            if (listenerId) api.webRequest.removeListener(listenerId)
-                                .catch(error => console.error("[MonkeySharp] legacy webRequest listener removal failed", error));
-                        }
-                    };
+                    return api.webRequest(rules, listener);
                 };
                 return facade;
             };
@@ -1081,11 +1292,15 @@
                     pendingStorageMutations: [],
                     lastStorageSequence: 0,
                     resourceMirror: null
+                    , urlChangeHandlers: new Set(), urlChangeHandler: null, windowFacade: null
                 };
                 executions.set(invocation.executionId, record);
                 let availableApis = new Set();
-                const grantNone = invocation.grants.length === 1 && invocation.grants[0] === "none";
-                if (!grantNone) {
+                const grantState = invocation.grantDeclarationState ||
+                    (invocation.grants.length === 1 && invocation.grants[0] === "none" ? "ExplicitNone" : "ExplicitList");
+                const noGrant = grantState === "Missing";
+                const explicitNone = grantState === "ExplicitNone";
+                if (!noGrant && !explicitNone) {
                     if (!dispatch) throw new Error("MonkeySharp bridge is unavailable.");
                     const hello = await send(dispatch, Object.assign({ type: "hello" }, proof));
                     if (hello.type !== "hello-result" || !hello.ok) {
@@ -1102,16 +1317,18 @@
                         record.resourceMirror = Object.assign({}, hello.compatibility.resources.values);
                     }
                 }
-                const gm = grantNone ? undefined : createApi(record, invocation, availableApis);
+                if (explicitNone) availableApis = new Set(["GM.info"]);
+                const gm = noGrant ? undefined : createApi(record, invocation, availableApis);
+                record.windowFacade = createWindowFacade(record, invocation, gm || {});
                 const compatibility = invocation.compatibility || { strict: true, legacyGlobals: false };
                 const legacy = createLegacyFacade(record, Object.assign({}, invocation, { compatibility: compatibility }), gm);
                 const unsafeWindow = invocation.grants.includes("unsafeWindow") ? root : undefined;
                 try {
                     const names = ["GM", "unsafeWindow", "window"].concat(legacyNames);
-                    const values = [gm, unsafeWindow, root].concat(legacyNames.map(name => legacy[name]));
+                    const values = [gm, unsafeWindow, record.windowFacade].concat(legacyNames.map(name => legacy[name]));
                     const prefix = compatibility.strict ? "\"use strict\";\n" : "";
                     const execute = new Function(...names, prefix + invocation.source);
-                    await execute.call(compatibility.strict ? undefined : root, ...values);
+                    await execute.call(compatibility.strict ? undefined : record.windowFacade, ...values);
                 } catch (error) {
                     if (dispatch) {
                         await call(record, "runtime.reportError", {
@@ -1181,22 +1398,33 @@
                     }
                     if (notification.event === "tab-closed") {
                         record.tabHandlers.forEach(state => {
-                            if (state.id === data.tabId) state.closed = true;
+                            if (state.id === data.tabId && !state.closed) {
+                                state.closed = true;
+                                if (typeof state.onclose === "function") {
+                                    try { state.onclose(); } catch (error) { console.error("[MonkeySharp] tab onclose failed", error); }
+                                }
+                                if (state.closeResolve) state.closeResolve(true);
+                            }
                         });
                         return true;
                     }
                     if (notification.event === "download-progress" || notification.event === "download-complete" ||
-                        notification.event === "download-error" || notification.event === "download-aborted") {
-                        const state = record.downloadHandlers.get(data.downloadId);
+                        notification.event === "download-error" || notification.event === "download-aborted" ||
+                        notification.event === "download-timeout") {
+                        const state = record.downloadHandlers.get(data.clientId || data.downloadId);
                         if (!state) return false;
                         if (notification.event === "download-progress") {
                             if (state.callbacks.onprogress) state.callbacks.onprogress({ loaded: data.loaded, total: data.total });
                         } else if (notification.event === "download-complete") {
                             if (state.callbacks.onload) state.callbacks.onload({ id: data.downloadId });
-                            record.downloadHandlers.delete(data.downloadId);
+                            record.downloadHandlers.delete(data.clientId || data.downloadId);
+                        } else if (notification.event === "download-timeout") {
+                            if (state.callbacks.ontimeout) state.callbacks.ontimeout({ error: data.error || "timeout", details: data.details || null });
+                            else if (state.callbacks.onerror) state.callbacks.onerror({ error: data.error || "timeout", details: data.details || null });
+                            record.downloadHandlers.delete(data.clientId || data.downloadId);
                         } else {
-                            if (state.callbacks.onerror) state.callbacks.onerror(new Error(data.message || "The download failed."));
-                            record.downloadHandlers.delete(data.downloadId);
+                            if (state.callbacks.onerror) state.callbacks.onerror({ error: data.error || "not_succeeded", details: data.details || null });
+                            record.downloadHandlers.delete(data.clientId || data.downloadId);
                         }
                         return true;
                     }
@@ -1206,10 +1434,10 @@
                         callback(data.cookie, data.cause, Boolean(data.removed));
                         return true;
                     }
-                    if (notification.event === "webrequest-event") {
+                    if (notification.event === "webrequest-result") {
                         const callback = record.webRequestHandlers.get(data.listenerId);
                         if (!callback) return false;
-                        callback(data);
+                        callback(data.info, data.message, data.details);
                         return true;
                     }
                     if (notification.event.indexOf("xhr-") === 0) {
@@ -1265,7 +1493,22 @@
                 }
             };
 
-            return Object.freeze({ install: install, receive: receive });
+            const urlChanged = function (data) {
+                if (!data || typeof data.url !== "string") return false;
+                const info = { url: data.url, oldURL: typeof data.oldURL === "string" ? data.oldURL : "" };
+                executions.forEach(record => {
+                    if (!record.urlChangeHandler && record.urlChangeHandlers.size === 0) return;
+                    try {
+                        if (typeof record.urlChangeHandler === "function") record.urlChangeHandler.call(record.windowFacade, info);
+                        record.urlChangeHandlers.forEach(handler => handler.call(record.windowFacade, info));
+                    } catch (error) {
+                        console.error("[MonkeySharp] urlchange callback failed", error);
+                    }
+                });
+                return true;
+            };
+
+            return Object.freeze({ install: install, receive: receive, urlChanged: urlChanged });
         })();
 
         Object.defineProperty(root, runtimeName, {

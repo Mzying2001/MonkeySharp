@@ -1,5 +1,7 @@
 using Mzying2001.MonkeySharp.Core.Apis;
 using Mzying2001.MonkeySharp.Core.Domain;
+using Mzying2001.MonkeySharp.Core.Security;
+using Mzying2001.MonkeySharp.Core.Updates;
 using Mzying2001.MonkeySharp.Demo.Persistence;
 using System;
 using System.Collections.Generic;
@@ -12,7 +14,7 @@ using System.Threading.Tasks;
 
 namespace Mzying2001.MonkeySharp.Demo.Services
 {
-    public sealed class HttpContentService : IResourceProvider, IUserScriptDependencyProvider, IDisposable
+    public sealed class HttpContentService : IResourceProvider, IUserScriptDependencyProvider, IUserScriptUpdateFetcher, IDisposable
     {
         private readonly HttpClient _client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false })
         { Timeout = Timeout.InfiniteTimeSpan };
@@ -21,9 +23,9 @@ namespace Mzying2001.MonkeySharp.Demo.Services
         public HttpContentService(AppDataPaths paths) { _directory = paths.DependenciesDirectory; }
 
         public Task<ResourceContent> GetAsync(UserScriptInstallation installation, ResourceDeclaration resource, CancellationToken cancellationToken)
-            => CachedAsync(installation, resource.Url, cancellationToken);
-        public async Task<string> GetScriptAsync(UserScriptInstallation installation, string url, CancellationToken cancellationToken)
-            => (await CachedAsync(installation, url, cancellationToken).ConfigureAwait(false)).Text;
+            => CachedAsync(installation, resource.Url, resource.Integrity, cancellationToken);
+        public Task<ResourceContent> GetScriptAsync(UserScriptInstallation installation, UserScriptDependencyDeclaration dependency, CancellationToken cancellationToken)
+            => CachedAsync(installation, dependency.Url, dependency.Integrity, cancellationToken);
 
         public async Task<ResourceContent> FetchAsync(string url, CancellationToken cancellationToken)
         {
@@ -53,7 +55,19 @@ namespace Mzying2001.MonkeySharp.Demo.Services
             }
         }
 
-        private async Task<ResourceContent> CachedAsync(UserScriptInstallation installation, string url, CancellationToken cancellationToken)
+        public async Task<string> FetchSourceAsync(
+            UserScriptInstallation installation,
+            string url,
+            CancellationToken cancellationToken)
+        {
+            return (await FetchAsync(url, cancellationToken).ConfigureAwait(false)).Text;
+        }
+
+        private async Task<ResourceContent> CachedAsync(
+            UserScriptInstallation installation,
+            string url,
+            IReadOnlyList<ResourceIntegrityDeclaration> integrity,
+            CancellationToken cancellationToken)
         {
             RequireHttp(url);
             var cacheKey = installation.ScriptKey + ":" + installation.UpdatedAt.ToString("O") + ":" + url;
@@ -68,14 +82,19 @@ namespace Mzying2001.MonkeySharp.Demo.Services
                         using (var document = JsonDocument.Parse(File.ReadAllText(path)))
                         {
                             var root = document.RootElement;
-                            return new ResourceContent(Convert.FromBase64String(root.GetProperty("bytes").GetString()),
+                            var cached = new ResourceContent(Convert.FromBase64String(root.GetProperty("bytes").GetString()),
                                 root.GetProperty("mime").GetString(), root.GetProperty("text").GetString());
+                            ResourceIntegrityVerifier.Verify(cached.Bytes, integrity, url);
+                            return cached;
                         }
                     }
+                    catch (ResourceIntegrityException)
+                    { File.Delete(path); }
                     catch (Exception exception) when (exception is JsonException || exception is FormatException || exception is KeyNotFoundException)
                     { File.Delete(path); }
                 }
                 var content = await FetchAsync(url, cancellationToken).ConfigureAwait(false);
+                ResourceIntegrityVerifier.Verify(content.Bytes, integrity, url);
                 var temporary = path + ".tmp";
                 try
                 {
@@ -97,23 +116,36 @@ namespace Mzying2001.MonkeySharp.Demo.Services
             return uri;
         }
 
-        internal static async Task<HttpResponseMessage> GetResponseAsync(HttpClient client, Uri uri, CancellationToken token)
+        internal static Task<HttpResponseMessage> GetResponseAsync(HttpClient client, Uri uri, CancellationToken token)
+            => GetResponseAsync(client, uri, null, token);
+
+        internal static async Task<HttpResponseMessage> GetResponseAsync(
+            HttpClient client,
+            Uri uri,
+            IReadOnlyDictionary<string, string> headers,
+            CancellationToken token)
         {
             for (var redirects = 0; redirects <= 10; redirects++)
             {
-                var response = await client.GetAsync(RequireHttp(uri.AbsoluteUri), HttpCompletionOption.ResponseHeadersRead, token).ConfigureAwait(false);
-                var status = (int)response.StatusCode;
-                if (status == 301 || status == 302 || status == 303 || status == 307 || status == 308)
+                using (var request = new HttpRequestMessage(HttpMethod.Get, RequireHttp(uri.AbsoluteUri)))
                 {
-                    using (response)
+                    if (headers != null)
+                        foreach (var header in headers)
+                            request.Headers.TryAddWithoutValidation(header.Key, header.Value);
+                    var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, token).ConfigureAwait(false);
+                    var status = (int)response.StatusCode;
+                    if (status == 301 || status == 302 || status == 303 || status == 307 || status == 308)
                     {
-                        if (response.Headers.Location == null) throw new HttpRequestException("Redirect has no Location header.");
-                        uri = new Uri(uri, response.Headers.Location);
+                        using (response)
+                        {
+                            if (response.Headers.Location == null) throw new HttpRequestException("Redirect has no Location header.");
+                            uri = new Uri(uri, response.Headers.Location);
+                        }
+                        continue;
                     }
-                    continue;
+                    try { response.EnsureSuccessStatusCode(); return response; }
+                    catch { response.Dispose(); throw; }
                 }
-                try { response.EnsureSuccessStatusCode(); return response; }
-                catch { response.Dispose(); throw; }
             }
             throw new HttpRequestException("Too many redirects.");
         }

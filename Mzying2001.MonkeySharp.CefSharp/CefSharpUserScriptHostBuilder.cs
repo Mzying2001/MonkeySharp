@@ -30,6 +30,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
         private ITabService _tabs;
         private IDownloadService _downloads;
         private ITabStateService _tabState;
+        private IUserScriptWindowService _window;
         private ICookieService _cookies;
         private IWebRequestService _webRequests;
         private IUserScriptDependencyProvider _dependencies;
@@ -150,6 +151,13 @@ namespace Mzying2001.MonkeySharp.CefSharp
             return this;
         }
 
+        /// <summary>Enables grant-gated <c>window.close</c> and <c>window.focus</c>.</summary>
+        public CefSharpUserScriptHostBuilder UseWindowService(IUserScriptWindowService window)
+        {
+            _window = window ?? throw new ArgumentNullException(nameof(window));
+            return this;
+        }
+
         /// <summary>Enables <c>GM.cookie</c> with a host cookie service.</summary>
         /// <param name="cookies">The cookie service to use.</param>
         /// <returns>This builder.</returns>
@@ -245,7 +253,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                         _options.Bridge));
                 }
                 if (_menu != null || _notifications != null || _clipboard != null || _tabs != null ||
-                    _downloads != null || _tabState != null)
+                    _downloads != null || _tabState != null || _window != null)
                 {
                     providers.Add(new HostInteractionApiProvider(
                         _menu,
@@ -253,7 +261,8 @@ namespace Mzying2001.MonkeySharp.CefSharp
                         _clipboard,
                         _tabs,
                         _downloads,
-                        _tabState));
+                        _tabState,
+                        _window));
                 }
                 if (effectiveCookies != null)
                     providers.Add(new CookieApiProvider(effectiveCookies));

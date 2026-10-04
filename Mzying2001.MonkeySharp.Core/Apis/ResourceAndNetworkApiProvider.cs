@@ -1,5 +1,6 @@
 using Mzying2001.MonkeySharp.Core.Bridge;
 using Mzying2001.MonkeySharp.Core.Domain;
+using Mzying2001.MonkeySharp.Core.Security;
 using Mzying2001.MonkeySharp.Core.Runtime;
 using System;
 using System.Collections.Generic;
@@ -97,6 +98,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                     .ConfigureAwait(false);
                 if (content == null)
                     throw new BridgeProtocolException(BridgeErrorCodes.Internal, "The resource provider returned no content.");
+                ResourceIntegrityVerifier.Verify(content.Bytes, declaration.Integrity, declaration.Url);
                 if (content.Bytes.Length > _options.MaxResourceBytes ||
                     (content.Text != null && Encoding.UTF8.GetByteCount(content.Text) > _options.MaxResourceBytes))
                     throw new BridgeProtocolException(BridgeErrorCodes.PayloadTooLarge, "The resource exceeds the configured limit.");
@@ -137,6 +139,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 cancellationToken);
             if (content == null)
                 throw new BridgeProtocolException(BridgeErrorCodes.Internal, "The resource provider returned no content.");
+            ResourceIntegrityVerifier.Verify(content.Bytes, declaration.Integrity, declaration.Url);
             if (content.Bytes.Length > _options.MaxResourceBytes ||
                 (content.Text != null && Encoding.UTF8.GetByteCount(content.Text) > _options.MaxResourceBytes))
                 throw new BridgeProtocolException(BridgeErrorCodes.PayloadTooLarge, "The resource exceeds the configured limit.");
@@ -784,40 +787,66 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             if (declarations == null || declarations.Count == 0 || target == null || !target.IsAbsoluteUri ||
                 (target.Scheme != Uri.UriSchemeHttp && target.Scheme != Uri.UriSchemeHttps))
                 return false;
-            var targetHost = new IdnMapping().GetAscii(target.IdnHost).ToLowerInvariant();
+            var targetHost = NormalizeConnectHost(target);
             foreach (var declaration in declarations)
             {
                 if (declaration == "*")
                     return true;
                 if (declaration == "self" && source != null &&
-                    source.Scheme == target.Scheme &&
-                    string.Equals(source.IdnHost, target.IdnHost, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(source.Scheme, target.Scheme, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(NormalizeConnectHost(source), targetHost, StringComparison.Ordinal) &&
                     source.Port == target.Port)
                     return true;
                 var value = declaration;
                 if (Uri.TryCreate(declaration, UriKind.Absolute, out var declaredUri))
                 {
-                    if (declaredUri.Scheme != target.Scheme || declaredUri.Port != target.Port)
+                    if (!string.Equals(declaredUri.Scheme, target.Scheme, StringComparison.OrdinalIgnoreCase))
                         continue;
-                    value = declaredUri.IdnHost;
+                    if (declaredUri.Port != target.Port)
+                        continue;
+                    value = NormalizeConnectHost(declaredUri);
                 }
                 var subdomains = value.StartsWith("*.", StringComparison.Ordinal);
                 if (subdomains)
                     value = value.Substring(2);
                 try
                 {
-                    value = new IdnMapping().GetAscii(value).ToLowerInvariant();
+                    value = NormalizeConnectHost(value);
                 }
                 catch (ArgumentException)
                 {
                     continue;
                 }
-                if (subdomains
-                    ? targetHost.Length > value.Length + 1 && targetHost.EndsWith("." + value, StringComparison.Ordinal)
-                    : targetHost == value)
+                var exactOnly = IsIpAddress(value) || string.Equals(value, "localhost", StringComparison.Ordinal);
+                var matches = exactOnly
+                    ? targetHost == value
+                    : subdomains
+                        ? targetHost.Length > value.Length + 1 && targetHost.EndsWith("." + value, StringComparison.Ordinal)
+                        : targetHost == value || targetHost.EndsWith("." + value, StringComparison.Ordinal);
+                if (matches)
                     return true;
             }
             return false;
+        }
+
+        private static string NormalizeConnectHost(Uri uri)
+        {
+            return NormalizeConnectHost(uri.IdnHost);
+        }
+
+        private static string NormalizeConnectHost(string host)
+        {
+            if (string.IsNullOrWhiteSpace(host))
+                throw new ArgumentException("The connect host is empty.", nameof(host));
+            host = host.Trim().TrimEnd('.');
+            if (IsIpAddress(host))
+                return host.ToLowerInvariant();
+            return new IdnMapping().GetAscii(host).ToLowerInvariant();
+        }
+
+        private static bool IsIpAddress(string host)
+        {
+            return System.Net.IPAddress.TryParse(host, out _);
         }
 
     }
@@ -828,6 +857,21 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         {
             if (parameters.ValueKind != JsonValueKind.Object)
                 throw Invalid("params must be an object.");
+        }
+
+        public static JsonElement RequireObject(JsonElement value, string displayName)
+        {
+            if (value.ValueKind != JsonValueKind.Object)
+                throw Invalid((displayName ?? "value") + " must be an object.");
+            return value;
+        }
+
+        public static JsonElement RequiredProperty(JsonElement parameters, string name, string displayName = null)
+        {
+            RequireObject(parameters);
+            if (!parameters.TryGetProperty(name, out var value))
+                throw Invalid((displayName ?? name) + " is required.");
+            return value;
         }
 
         public static string RequiredString(
@@ -874,6 +918,16 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             if (!parameters.TryGetProperty(name, out var value) ||
                 value.ValueKind != JsonValueKind.Number || !value.TryGetInt32(out var result))
                 throw Invalid(name + " must be an integer.");
+            return result;
+        }
+
+        public static int? OptionalInt32(JsonElement parameters, string name)
+        {
+            RequireObject(parameters);
+            if (!parameters.TryGetProperty(name, out var value) || value.ValueKind == JsonValueKind.Null)
+                return null;
+            if (value.ValueKind != JsonValueKind.Number || !value.TryGetInt32(out var result) || result < 0)
+                throw Invalid(name + " must be a non-negative integer.");
             return result;
         }
 

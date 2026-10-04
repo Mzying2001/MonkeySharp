@@ -40,6 +40,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                     ["source"] = invocation.Source,
                     ["declaredGrants"] = invocation.DeclaredGrants,
                     ["grants"] = invocation.Grants,
+                    ["grantDeclarationState"] = invocation.GrantDeclarationState.ToString(),
                     ["info"] = ParseElement(invocation.SerializedInfo),
                     ["capability"] = invocation.Capability,
                     ["deliveryToken"] = invocation.DeliveryToken,

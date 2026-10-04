@@ -4,8 +4,12 @@ using Mzying2001.MonkeySharp.Demo.Runtime;
 using Mzying2001.MonkeySharp.Demo.Services;
 using Mzying2001.MonkeySharp.Demo.ViewModels;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Controls;
@@ -134,13 +138,47 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
             using (var server = new LocalHttpFixture())
             using (var content = new HttpContentService(fixture.Paths))
             {
-                var script = await fixture.Repository.InstallAsync(PersistenceTests.Source, "origin", true, CancellationToken.None);
+                var source = PersistenceTests.Source.Replace("// @grant none", "// @grant none\n// @require " + server.BaseUrl + "/dependency.js");
+                var script = await fixture.Repository.InstallAsync(source, "origin", true, CancellationToken.None);
                 Assert.Equal("demo-resource", (await content.FetchAsync(server.BaseUrl + "/redirect", CancellationToken.None)).Text);
                 await Assert.ThrowsAsync<ArgumentException>(() => content.FetchAsync(server.BaseUrl + "/bad-redirect", CancellationToken.None));
                 await Assert.ThrowsAsync<IOException>(() => content.FetchAsync(server.BaseUrl + "/oversize", CancellationToken.None));
-                var first = await content.GetScriptAsync(script, server.BaseUrl + "/dependency.js", CancellationToken.None);
+                var dependency = script.Definition.Metadata.Requires[0];
+                var first = await content.GetScriptAsync(script, dependency, CancellationToken.None);
                 server.Dispose();
-                Assert.Equal(first, await content.GetScriptAsync(script, server.BaseUrl + "/dependency.js", CancellationToken.None));
+                Assert.Equal(first.Text, (await content.GetScriptAsync(script, dependency, CancellationToken.None)).Text);
+            }
+        }
+
+        [Fact]
+        public async Task DependencyCacheVerifiesSRIBeforeReturningCachedContent()
+        {
+            using (var fixture = await PersistenceTests.Fixture.Create())
+            using (var server = new LocalHttpFixture())
+            using (var content = new HttpContentService(fixture.Paths))
+            {
+                var expectedBytes = Encoding.UTF8.GetBytes("window.__demoDependency = true;");
+                string digest;
+                using (var sha = SHA256.Create())
+                    digest = Convert.ToBase64String(sha.ComputeHash(expectedBytes));
+                var source = PersistenceTests.Source.Replace("// @grant none", "// @grant none\n// @require " +
+                    server.BaseUrl + "/dependency.js#sha256=" + digest);
+                var script = await fixture.Repository.InstallAsync(source, "origin", true, CancellationToken.None);
+                var dependency = script.Definition.Metadata.Requires.Single();
+                var first = await content.GetScriptAsync(script, dependency, CancellationToken.None);
+                Assert.Equal(Encoding.UTF8.GetString(expectedBytes), first.Text);
+
+                var cachePath = Assert.Single(Directory.GetFiles(fixture.Paths.DependenciesDirectory, "*.json"));
+                var cachedJson = File.ReadAllText(cachePath, Encoding.UTF8);
+                cachedJson = cachedJson.Replace(
+                    Convert.ToBase64String(expectedBytes),
+                    Convert.ToBase64String(Encoding.UTF8.GetBytes("tampered")));
+                File.WriteAllText(cachePath, cachedJson, new UTF8Encoding(false));
+
+                var refreshed = await content.GetScriptAsync(script, dependency, CancellationToken.None);
+                Assert.Equal(Encoding.UTF8.GetString(expectedBytes), refreshed.Text);
+                using (var document = JsonDocument.Parse(File.ReadAllText(cachePath, Encoding.UTF8)))
+                    Assert.Equal(Convert.ToBase64String(expectedBytes), document.RootElement.GetProperty("bytes").GetString());
             }
         }
 
@@ -154,7 +192,13 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
                 var key = ScriptKey.Parse(Guid.NewGuid().ToString());
                 using (var service = new DownloadService(fixture.Paths.DownloadsDirectory, Dispatcher.CurrentDispatcher, main))
                 {
-                    var operation = await service.DownloadAsync(new DownloadRequest(key, new Uri(server.BaseUrl + "/download"), "../result.txt", false), CancellationToken.None);
+                    var operation = await service.DownloadAsync(new DownloadRequest(
+                        key,
+                        new Uri(server.BaseUrl + "/download"),
+                        "../result.txt",
+                        false,
+                        new Dictionary<string, string> { ["X-MonkeySharp-Test"] = "download" },
+                        "overwrite"), CancellationToken.None);
                     var progress = 0;
                     var completed = 0;
                     operation.Progress += (sender, args) => progress++;
@@ -171,6 +215,18 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
                     await service.DrainAsync();
                     Assert.False(File.Exists(Path.Combine(fixture.Paths.DownloadsDirectory, "cancel.txt")));
                     Assert.Empty(Directory.GetFiles(fixture.Paths.DownloadsDirectory, "*.part"));
+                    var timedOut = await service.DownloadAsync(new DownloadRequest(
+                        key,
+                        new Uri(server.BaseUrl + "/slow"),
+                        "timeout.txt",
+                        false,
+                        null,
+                        "uniquify",
+                        TimeSpan.FromMilliseconds(20)), CancellationToken.None);
+                    var timeoutCallbacks = 0;
+                    timedOut.TimedOut += (sender, args) => timeoutCallbacks++;
+                    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => timedOut.Completion);
+                    Assert.Equal(1, timeoutCallbacks);
                 }
             }
         });

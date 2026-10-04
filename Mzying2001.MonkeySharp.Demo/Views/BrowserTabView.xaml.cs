@@ -83,25 +83,31 @@ namespace Mzying2001.MonkeySharp.Demo.Views
                 string targetUrl, WindowOpenDisposition disposition, bool userGesture)
             { _open(targetUrl, disposition != WindowOpenDisposition.NewBackgroundTab); return true; }
         }
-        private sealed class PopupHandler : LifeSpanHandler
+        private sealed class PopupHandler : ILifeSpanHandler
         {
             private readonly Action<string, bool> _open;
             public PopupHandler(Action<string, bool> open) { _open = open; }
-            protected override bool OnBeforePopup(IWebBrowser control, IBrowser browser, IFrame frame,
+            public bool OnBeforePopup(IWebBrowser control, IBrowser browser, IFrame frame,
                 string targetUrl, string targetFrameName, WindowOpenDisposition disposition, bool userGesture,
                 IPopupFeatures popupFeatures, IWindowInfo windowInfo, IBrowserSettings settings,
                 ref bool noJavascriptAccess, out IWebBrowser newBrowser)
             { newBrowser = null; _open(targetUrl, disposition != WindowOpenDisposition.NewBackgroundTab); return true; }
+            public void OnAfterCreated(IWebBrowser control, IBrowser browser) { }
+            public bool DoClose(IWebBrowser control, IBrowser browser) => !browser.IsPopup;
+            public void OnBeforeClose(IWebBrowser control, IBrowser browser) { }
         }
-        private sealed class BrowserDownloadHandler : DownloadHandler
+        private sealed class BrowserDownloadHandler : IDownloadHandler
         {
             private readonly string _directory;
             private readonly Action<string> _report;
             public BrowserDownloadHandler(string directory, Action<string> report) { _directory = directory; _report = report; }
+#if CEF_SHARP_HAS_DOWNLOAD_CAN_DOWNLOAD
+            public bool CanDownload(IWebBrowser control, IBrowser browser, string url, string requestMethod) => true;
+#endif
 #if CEF_SHARP_BOOLEAN_DOWNLOAD
-            protected override bool OnBeforeDownload(IWebBrowser control, IBrowser browser, DownloadItem item, IBeforeDownloadCallback callback)
+            public bool OnBeforeDownload(IWebBrowser control, IBrowser browser, DownloadItem item, IBeforeDownloadCallback callback)
 #else
-            protected override void OnBeforeDownload(IWebBrowser control, IBrowser browser, DownloadItem item, IBeforeDownloadCallback callback)
+            public void OnBeforeDownload(IWebBrowser control, IBrowser browser, DownloadItem item, IBeforeDownloadCallback callback)
 #endif
             {
                 using (callback) callback.Continue(System.IO.Path.Combine(_directory, Services.DownloadService.SafeFileName(item.SuggestedFileName)), true);
@@ -109,7 +115,7 @@ namespace Mzying2001.MonkeySharp.Demo.Views
                 return true;
 #endif
             }
-            protected override void OnDownloadUpdated(IWebBrowser control, IBrowser browser, DownloadItem item, IDownloadItemCallback callback)
+            public void OnDownloadUpdated(IWebBrowser control, IBrowser browser, DownloadItem item, IDownloadItemCallback callback)
             { if (item.IsComplete) _report("浏览器下载完成：" + item.FullPath); }
         }
     }

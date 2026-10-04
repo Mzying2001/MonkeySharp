@@ -31,11 +31,18 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Fact]
-        public void MissingGrantMeansGrantNone()
+        public void MissingGrantIsDistinctFromExplicitNone()
         {
             var result = _parser.Parse(Script("// @name none\n// @match https://example.com/*"));
 
-            Assert.Equal(new[] { "none" }, result.Metadata.Grants);
+            Assert.Empty(result.Metadata.DeclaredGrants);
+            Assert.Empty(result.Metadata.Grants);
+            Assert.Equal(GrantDeclarationState.Missing, result.Metadata.GrantDeclarationState);
+
+            var explicitNone = _parser.Parse(Script("// @name explicit\n// @match https://example.com/*\n// @grant none"));
+            Assert.Equal(new[] { "none" }, explicitNone.Metadata.DeclaredGrants);
+            Assert.Equal(new[] { "none" }, explicitNone.Metadata.Grants);
+            Assert.Equal(GrantDeclarationState.ExplicitNone, explicitNone.Metadata.GrantDeclarationState);
         }
 
         [Fact]
@@ -84,12 +91,63 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Fact]
+        public void ExtendedTampermonkeyMetadataIsTypedAndValidated()
+        {
+            var result = _parser.Parse(Script(
+                "// @name extended\n// @match https://example.com/*\n" +
+                "// @copyright Example\n// @icon64URL https://example.com/icon64.png\n" +
+                "// @homepage https://example.com/home\n// @website https://example.com/site\n" +
+                "// @source https://example.com/source\n// @sandbox JavaScript\n// @unwrap\n" +
+                "// @antifeature ads Shows ads\n// @antifeature:de tracking Verfolgt Nutzer\n" +
+                "// @webRequest {\"selector\":\"https://example.com/*\",\"action\":\"cancel\"}"));
+
+            Assert.True(result.CanEnable);
+            Assert.Equal("Example", result.Metadata.Copyright);
+            Assert.Equal("https://example.com/icon64.png", result.Metadata.Icon64Url);
+            Assert.Equal("https://example.com/home", result.Metadata.HomepageUrl);
+            Assert.Equal("https://example.com/site", result.Metadata.WebsiteUrl);
+            Assert.Equal("https://example.com/source", result.Metadata.SourceUrl);
+            Assert.Equal("JavaScript", result.Metadata.Sandbox);
+            Assert.True(result.Metadata.Unwrap);
+            Assert.Equal(2, result.Metadata.Antifeatures.Count);
+            Assert.Equal("de", result.Metadata.Antifeatures[1].Locale);
+            Assert.Single(result.Metadata.WebRequest);
+            Assert.Equal("cancel", result.Metadata.WebRequest[0].Action.GetString());
+        }
+
+        [Fact]
+        public void InvalidStaticWebRequestMetadataIsAnError()
+        {
+            var result = _parser.Parse(Script(
+                "// @name invalid webrequest\n// @match https://example.com/*\n" +
+                "// @webRequest {\"selector\":{},\"action\":\"cancel\"}"));
+
+            Assert.False(result.CanEnable);
+            Assert.Contains(result.Diagnostics, item => item.Code == "MSM062_INVALID_WEBREQUEST");
+        }
+
+        [Fact]
         public void InvalidMatchCannotBeEnabled()
         {
             var result = _parser.Parse(Script("// @name invalid\n// @match https://foo.*.example/*"));
 
             Assert.False(result.CanEnable);
             Assert.Contains(result.Diagnostics, item => item.Code == "MSM020_INVALID_MATCH");
+        }
+
+        [Fact]
+        public void AboutBlankMatchIsExactAndIgnoresOnlyFragments()
+        {
+            var result = _parser.Parse(Script("// @name about blank\n// @match about:blank"));
+            var pattern = MatchPatternCompiler.Compile("about:blank");
+
+            Assert.True(result.CanEnable);
+            Assert.True(pattern.IsMatch(new Uri("about:blank")));
+            Assert.True(pattern.IsMatch(new Uri("about:blank#section")));
+            Assert.False(pattern.IsMatch(new Uri("about:blank?query=1")));
+            Assert.False(pattern.IsMatch(new Uri("about:srcdoc")));
+            Assert.False(pattern.IsMatch(new Uri("about://blank")));
+            Assert.False(MatchPatternCompiler.Compile("<all_urls>").IsMatch(new Uri("about:blank")));
         }
 
         [Fact]
@@ -136,6 +194,79 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 "// @exclude https://example.com/private/*")).Metadata;
 
             Assert.False(new UserScriptMatcher().IsMatch(metadata, new Uri("https://example.com/private/a")));
+        }
+
+        [Fact]
+        public void IncludeAndExcludeAcceptSlashDelimitedRegularExpressions()
+        {
+            var metadata = _parser.Parse(Script(
+                "// @name regex rules\n" +
+                "// @include /^https?:\\/\\/example\\.com\\/products\\/.*$/\n" +
+                "// @exclude /\\/private\\//"));
+            var matcher = new UserScriptMatcher();
+
+            Assert.True(metadata.CanEnable);
+            Assert.True(matcher.IsMatch(metadata.Metadata, new Uri("https://example.com/products/one")));
+            Assert.False(matcher.IsMatch(metadata.Metadata, new Uri("https://example.com/products/private/one")));
+            Assert.False(matcher.IsMatch(metadata.Metadata, new Uri("https://example.com/other")));
+        }
+
+        [Fact]
+        public void InvalidIncludeRegularExpressionIsAMetadataError()
+        {
+            var result = _parser.Parse(Script("// @name invalid regex\n// @include /[abc/"));
+
+            Assert.False(result.CanEnable);
+            Assert.Contains(result.Diagnostics, item =>
+                item.Code == "MSM021_INVALID_URL_REGEX" && item.Severity == DiagnosticSeverity.Error);
+        }
+
+        [Fact]
+        public void HttpWildcardMatchCoversBothHttpAndHttps()
+        {
+            var result = _parser.Parse(Script("// @name http wildcard\n// @match http*://example.com/*"));
+            var matcher = new UserScriptMatcher();
+
+            Assert.True(result.CanEnable);
+            Assert.True(matcher.IsMatch(result.Metadata, new Uri("http://example.com/path")));
+            Assert.True(matcher.IsMatch(result.Metadata, new Uri("https://example.com/path")));
+            Assert.False(matcher.IsMatch(result.Metadata, new Uri("file:///example.com/path")));
+        }
+
+        [Fact]
+        public void LegacyCompatibilityFixtureParsesItsMetadataAndUrlRules()
+        {
+            var result = _parser.Parse(LegacyUserscriptFixture.Read());
+
+            Assert.True(result.CanEnable);
+            Assert.Equal("Legacy userscript compatibility fixture", result.Metadata.Name);
+            Assert.Contains("GM_cookie", result.Metadata.DeclaredGrants);
+            Assert.Contains("GM.cookie", result.Metadata.Grants);
+            Assert.Single(result.Metadata.Requires);
+            Assert.Single(result.Metadata.Resources);
+            Assert.Single(result.Metadata.WebRequest);
+            var matcher = new UserScriptMatcher();
+            Assert.True(matcher.IsMatch(result.Metadata, new Uri("http://example.com/legacy/install")));
+            Assert.True(matcher.IsMatch(result.Metadata, new Uri("https://example.com/legacy/install")));
+            Assert.False(matcher.IsMatch(result.Metadata, new Uri("https://example.com/blocked/legacy/install")));
+        }
+
+        [Fact]
+        public void AboutBlankIncludeUsesTheCanonicalOpaqueUrl()
+        {
+            var matcher = new UserScriptMatcher();
+            var include = _parser.Parse(Script("// @name about include\n// @include about:blank")).Metadata;
+            var legacy = _parser.Parse(Script("// @name legacy about include\n// @include about://blank")).Metadata;
+            var excluded = _parser.Parse(Script(
+                "// @name about exclude\n// @include about:blank\n// @exclude about:blank")).Metadata;
+            var excludeMatch = _parser.Parse(Script(
+                "// @name about exclude match\n// @include about:blank\n// @exclude-match about:blank")).Metadata;
+
+            Assert.True(matcher.IsMatch(include, new Uri("about:blank#section")));
+            Assert.False(matcher.IsMatch(include, new Uri("about:blank?query=1")));
+            Assert.False(matcher.IsMatch(legacy, new Uri("about:blank")));
+            Assert.False(matcher.IsMatch(excluded, new Uri("about:blank")));
+            Assert.False(matcher.IsMatch(excludeMatch, new Uri("about:blank")));
         }
 
         internal static string Script(string metadataLines, string body = "")

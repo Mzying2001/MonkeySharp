@@ -25,5 +25,12 @@
                 </ControlTemplate></Setter.Value>
             </Setter>
         </Style>
+        <Style x:Key="HideWhenTextEmpty" TargetType="TextBlock">
+            <Style.Triggers>
+                <Trigger Property="Text" Value="">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
     </Application.Resources>
 </Application>

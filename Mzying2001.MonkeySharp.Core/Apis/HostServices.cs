@@ -87,18 +87,18 @@ namespace Mzying2001.MonkeySharp.Core.Apis
     }
 
     /// <summary>
-    /// Loads JavaScript dependencies declared with <c>@require</c>.
+    /// Loads the bytes and decoded text for JavaScript dependencies declared with <c>@require</c>.
     /// </summary>
     public interface IUserScriptDependencyProvider
     {
-        /// <summary>Loads one dependency as JavaScript source text.</summary>
+        /// <summary>Loads one dependency while preserving its original bytes for integrity verification.</summary>
         /// <param name="installation">The userscript requesting the dependency.</param>
-        /// <param name="url">The dependency URL from metadata.</param>
+        /// <param name="dependency">The dependency declaration from metadata.</param>
         /// <param name="cancellationToken">A token that cancels dependency loading.</param>
-        /// <returns>The dependency source text.</returns>
-        Task<string> GetScriptAsync(
+        /// <returns>The dependency bytes and optional decoded text.</returns>
+        Task<ResourceContent> GetScriptAsync(
             UserScriptInstallation installation,
-            string url,
+            UserScriptDependencyDeclaration dependency,
             CancellationToken cancellationToken);
     }
 
@@ -346,12 +346,25 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         /// <param name="title">The notification title.</param>
         /// <param name="text">The notification body text.</param>
         /// <param name="imageUrl">The optional notification image URL.</param>
-        public UserScriptNotificationRequest(ScriptKey scriptKey, string title, string text, string imageUrl)
+        /// <param name="highlight">Whether the current tab should be highlighted.</param>
+        /// <param name="silent">Whether the notification should avoid sound.</param>
+        /// <param name="timeout">Optional timeout in milliseconds.</param>
+        public UserScriptNotificationRequest(
+            ScriptKey scriptKey,
+            string title,
+            string text,
+            string imageUrl,
+            bool highlight,
+            bool silent,
+            int? timeout)
         {
             ScriptKey = scriptKey;
             Title = title;
             Text = text;
             ImageUrl = imageUrl;
+            Highlight = highlight;
+            Silent = silent;
+            Timeout = timeout;
         }
 
         /// <summary>Gets the requesting script installation.</summary>
@@ -365,6 +378,15 @@ namespace Mzying2001.MonkeySharp.Core.Apis
 
         /// <summary>Gets the optional notification image URL.</summary>
         public string ImageUrl { get; }
+
+        /// <summary>Gets whether the current tab should be highlighted.</summary>
+        public bool Highlight { get; }
+
+        /// <summary>Gets whether the notification should avoid sound.</summary>
+        public bool Silent { get; }
+
+        /// <summary>Gets the optional timeout in milliseconds.</summary>
+        public int? Timeout { get; }
     }
 
     /// <summary>
@@ -464,6 +486,16 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         Task<ITabHandle> OpenAsync(OpenTabRequest request, CancellationToken cancellationToken);
     }
 
+    /// <summary>Controls the current browser tab for grant-gated window APIs.</summary>
+    public interface IUserScriptWindowService
+    {
+        /// <summary>Closes the current tab unless it is the last available tab.</summary>
+        Task<bool> CloseAsync(DocumentFrame frame, CancellationToken cancellationToken);
+
+        /// <summary>Activates the current tab.</summary>
+        Task<bool> FocusAsync(DocumentFrame frame, CancellationToken cancellationToken);
+    }
+
     /// <summary>Represents a browser tab opened for a userscript.</summary>
     public interface ITabHandle : IDisposable
     {
@@ -490,12 +522,20 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         /// <param name="url">The absolute HTTP or HTTPS download URL.</param>
         /// <param name="name">The optional suggested file name.</param>
         /// <param name="saveAs">Whether the host should prompt for a destination.</param>
-        public DownloadRequest(ScriptKey scriptKey, Uri url, string name, bool saveAs)
+        /// <param name="headers">Optional HTTP request headers.</param>
+        /// <param name="conflictAction">The conflict policy: uniquify, overwrite, or prompt.</param>
+        /// <param name="timeout">An optional download timeout.</param>
+        public DownloadRequest(ScriptKey scriptKey, Uri url, string name, bool saveAs,
+            IDictionary<string, string> headers = null, string conflictAction = "uniquify", TimeSpan? timeout = null)
         {
             ScriptKey = scriptKey;
             Url = url ?? throw new ArgumentNullException(nameof(url));
             Name = name;
             SaveAs = saveAs;
+            Headers = new ReadOnlyDictionary<string, string>(new Dictionary<string, string>(
+                headers ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase));
+            ConflictAction = string.IsNullOrEmpty(conflictAction) ? "uniquify" : conflictAction;
+            Timeout = timeout;
         }
 
         /// <summary>Gets the requesting script installation.</summary>
@@ -509,6 +549,12 @@ namespace Mzying2001.MonkeySharp.Core.Apis
 
         /// <summary>Gets whether the host should prompt for a destination.</summary>
         public bool SaveAs { get; }
+        /// <summary>Gets request headers supplied to the download.</summary>
+        public IReadOnlyDictionary<string, string> Headers { get; }
+        /// <summary>Gets the host conflict policy: uniquify, overwrite, or prompt.</summary>
+        public string ConflictAction { get; }
+        /// <summary>Gets the optional operation timeout.</summary>
+        public TimeSpan? Timeout { get; }
     }
 
     /// <summary>
@@ -559,6 +605,9 @@ namespace Mzying2001.MonkeySharp.Core.Apis
 
         /// <summary>Occurs when the download is aborted.</summary>
         event EventHandler Aborted;
+
+        /// <summary>Occurs when the download reaches its configured timeout.</summary>
+        event EventHandler TimedOut;
 
         /// <summary>Aborts the download.</summary>
         void Abort();

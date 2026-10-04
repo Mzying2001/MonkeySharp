@@ -85,7 +85,8 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 Domain = mutation.Domain,
                 Path = mutation.Path,
                 Secure = mutation.Secure,
-                Expires = mutation.Expiration
+                HttpOnly = mutation.HttpOnly,
+                Expires = mutation.ExpirationDate
             };
             try
             {
@@ -102,7 +103,8 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 RemovePending(pending);
             }
             var result = new UserScriptCookie(mutation.Name, mutation.Value, mutation.Domain, mutation.Path,
-                mutation.Expiration, mutation.Secure, false, mutation.SameSite);
+                mutation.ExpirationDate, mutation.Secure, mutation.HttpOnly, mutation.SameSite,
+                mutation.FirstPartyDomain, mutation.HostOnly);
             Publish(result, "explicit", false, mutation.OriginExecutionId);
             return result;
         }
@@ -127,7 +129,8 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     var deleted = await completion.Task.ConfigureAwait(false) > 0;
                     if (deleted)
                         Publish(new UserScriptCookie(mutation.Name, mutation.Value, mutation.Domain, mutation.Path,
-                            mutation.Expiration, mutation.Secure, false, mutation.SameSite), "explicit", true,
+                            mutation.ExpirationDate, mutation.Secure, mutation.HttpOnly, mutation.SameSite,
+                            mutation.FirstPartyDomain, mutation.HostOnly), "explicit", true,
                             mutation.OriginExecutionId);
                     return deleted;
                 }
@@ -268,8 +271,11 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     return false;
                 }
                 var sameSite = cookie.GetType().GetProperty("SameSite")?.GetValue(cookie, null)?.ToString();
+                var firstPartyDomain = cookie.GetType().GetProperty("FirstPartyDomain")?.GetValue(cookie, null)?.ToString();
                 var value = new UserScriptCookie(cookie.Name, cookie.Value, cookie.Domain, cookie.Path,
-                    cookie.Expires, cookie.Secure, cookie.HttpOnly, sameSite);
+                    cookie.Expires, cookie.Secure, cookie.HttpOnly, sameSite, firstPartyDomain,
+                    string.IsNullOrEmpty(cookie.Domain) || !cookie.Domain.StartsWith(".", StringComparison.Ordinal),
+                    !cookie.Expires.HasValue);
                 if (_query.Matches(value)) _cookies.Add(value);
                 if (total <= 0 || count + 1 >= total)
                     _completion.TrySetResult(new ReadOnlyCollection<UserScriptCookie>(_cookies));

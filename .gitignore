@@ -399,3 +399,6 @@ FodyWeavers.xsd
 
 # Local Notes
 /local-notes/
+
+# Chromium smoke cache created in the repository root by CefSharp.
+/GPUCache/

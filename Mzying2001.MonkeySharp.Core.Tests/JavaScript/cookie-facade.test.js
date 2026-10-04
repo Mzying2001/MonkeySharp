@@ -49,7 +49,7 @@ test("modern GM.cookie and legacy GM_cookie share CRUD and listener bridge", asy
                 "  await GM.cookie.set({url:'https://example.com/', name:'sid', value:'abc'});",
                 "  globalThis.__modernCookies = await GM.cookie.list({url:'https://example.com/'});",
                 "  globalThis.__cookieListener = GM.cookie.addListener({url:'https://example.com/'}, value => globalThis.__cookieEvent = value);",
-                "  GM_cookie.list({url:'https://example.com/'}, value => globalThis.__legacyCookies = value);",
+                "  GM_cookie.list({url:'https://example.com/'}, (value, error) => { globalThis.__legacyCookies = value; globalThis.__legacyCookieError = error; });",
                 "})();"
             ].join("\n"),
             grants: ["GM.cookie"], declaredGrants: ["GM_cookie"], info: {}, capability: "cookie-capability",
@@ -61,6 +61,7 @@ test("modern GM.cookie and legacy GM_cookie share CRUD and listener bridge", asy
     await waitFor(() => globalThis.__modernCookies && globalThis.__legacyCookies);
     assert.equal(globalThis.__modernCookies[0].value, "abc");
     assert.equal(globalThis.__legacyCookies[0].name, "sid");
+    assert.equal(globalThis.__legacyCookieError, null);
     assert.equal(globalThis.__MonkeySharpRuntime.receive({
         type: "notification", protocol: 1, executionId: "cookie-execution", deliveryToken: "cookie-delivery",
         event: "cookie-change", data: { listenerId: globalThis.__cookieListener,

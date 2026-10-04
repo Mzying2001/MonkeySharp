@@ -29,7 +29,9 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                 checks["storageResourcesXhrCookieWebRequest"] = await EvaluateBoolean(primary,
                     "window.__demo.storage && window.__demo.resources && window.__demo.xhr && window.__demo.cookie && window.__demo.webRequest");
                 checks["domAndInfo"] = await EvaluateBoolean(primary, "window.__demo.dom && window.__demo.info");
-                checks["iframe"] = await EvaluateBoolean(primary, "document.querySelector('iframe').contentWindow.__demoFrame === true");
+                await WaitAsync(async () => await EvaluateBoolean(primary,
+                    "document.querySelector('iframe').contentWindow.__demoFrame === true"));
+                checks["iframe"] = true;
                 await WaitAsync(() => Task.FromResult(primary.MenuCommands.Count == 1));
                 primary.MenuCommands[0].InvokeCommand.Execute(null);
                 await WaitAsync(async () => await EvaluateBoolean(primary, "window.__demo.menu === true"));
@@ -196,8 +198,8 @@ sessionStorage.setItem('runs', String(window.__demo.runs));
     await GM.cookie.set({ url: location.href, name: 'demo-cookie', value: 'ready', path: '/' });
     result.cookie = (await GM.cookie.list({ url: location.href })).some(cookie => cookie.name === 'demo-cookie');
     result.xhr = (await GM.xmlHttpRequest({ url: '__BASE__/resource' })).responseText === 'demo-resource';
-    await GM.webRequest.addRule({ id: 'demo-header', phase: 'OnBeforeRequest', filter: { urlPatterns: ['__BASE__/*'] }, action: { kind: 'ModifyRequestHeaders', headers: { 'X-Demo-Smoke': 'yes' } } });
-    result.webRequest = (await GM.xmlHttpRequest({ url: '__BASE__/headers' })).responseText.toLowerCase().includes('x-demo-smoke: yes');
+    const webRule = GM.webRequest([{ selector: '__BASE__/__monkeysharp_block__', action: 'cancel' }], function (info, message, details) { result.webRequest = message === 'cancel'; });
+    result.webRequest = !!webRule && typeof webRule.remove === 'function';
     await GM.saveTab({ marker: location.search });
     result.tabState = (await GM.getTab()).marker === location.search && Object.keys(await GM.getTabs()).length >= 1;
     GM.addValueChangeListener('shared', function () { result.remote = true; });

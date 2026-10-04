@@ -143,3 +143,52 @@ test("legacy menu and tab facades preserve synchronous registration and callback
     }), true);
     assert.equal(globalThis.__menuCalled, true);
 });
+
+test("menu callbacks can invoke native window methods", async () => {
+    let commandId;
+    globalThis.__menuOpened = null;
+    globalThis.open = { invoke(url) {
+        if (this !== globalThis) throw new TypeError("Illegal invocation");
+        globalThis.__menuOpened = url;
+    } }.invoke;
+    globalThis.__MonkeySharpBridge = {
+        dispatch: async requestJson => {
+            const request = JSON.parse(requestJson);
+            if (request.type === "hello") {
+                return JSON.stringify({
+                    type: "hello-result", protocol: 1, ok: true, limits: {},
+                    apis: ["GM.registerMenuCommand"]
+                });
+            }
+            if (request.method === "GM.registerMenuCommand") commandId = request.params.commandId;
+            return JSON.stringify({
+                type: "response", protocol: 1, requestId: request.requestId, ok: true,
+                result: commandId
+            });
+        }
+    };
+    const payload = {
+        protocol: 1, documentId: "native-menu-document", frameId: "main", runAt: "DocumentEnd",
+        invocations: [{
+            executionId: "native-menu-execution", scriptKey: "88888888-8888-8888-8888-888888888888",
+            source: "globalThis.__menuCommandId = GM_registerMenuCommand('Open', () => window.open('https://example.test'));",
+            declaredGrants: ["GM_registerMenuCommand"], grants: ["GM.registerMenuCommand"], info: {},
+            capability: "native-menu-capability", deliveryToken: "native-menu-delivery",
+            compatibility: { profile: "LegacyCompatible", strict: false, legacyGlobals: true }
+        }]
+    };
+    try {
+        const encoded = Buffer.from(JSON.stringify(payload), "utf8").toString("base64");
+        vm.runInThisContext(template.replace("__MONKEYSHARP_PAYLOAD_BASE64__", encoded));
+        await waitFor(() => typeof globalThis.__menuCommandId === "number");
+        assert.equal(globalThis.__MonkeySharpRuntime.receive({
+            type: "notification", protocol: 1, executionId: "native-menu-execution",
+            deliveryToken: "native-menu-delivery", event: "menu-command", data: { commandId }
+        }), true);
+        assert.equal(globalThis.__menuOpened, "https://example.test");
+    } finally {
+        delete globalThis.open;
+        delete globalThis.__menuOpened;
+        delete globalThis.__menuCommandId;
+    }
+});

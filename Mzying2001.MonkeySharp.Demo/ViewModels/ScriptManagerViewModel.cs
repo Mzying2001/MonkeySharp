@@ -4,6 +4,7 @@ using Mzying2001.MonkeySharp.Core.Domain;
 using Mzying2001.MonkeySharp.Core.Repository;
 using Mzying2001.MonkeySharp.Demo.Persistence;
 using Mzying2001.MonkeySharp.Demo.Services;
+using Mzying2001.MonkeySharp.Core.Updates;
 using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -19,6 +20,7 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
     {
         private readonly IUserScriptRepository _repository;
         private readonly HttpContentService _content;
+        private readonly UserScriptUpdateService _updates;
         private readonly Func<string, bool> _confirm;
         private readonly DiagnosticsViewModel _diagnostics;
         private readonly CancellationTokenSource _cancellation = new CancellationTokenSource();
@@ -46,10 +48,10 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
 
         private bool _refreshing;
 
-        public ScriptManagerViewModel(IUserScriptRepository repository, HttpContentService content,
+        public ScriptManagerViewModel(IUserScriptRepository repository, HttpContentService content, UserScriptUpdateService updates,
             Func<string, bool> confirm, DiagnosticsViewModel diagnostics)
         {
-            _repository = repository; _content = content; _confirm = confirm; _diagnostics = diagnostics;
+            _repository = repository; _content = content; _updates = updates; _confirm = confirm; _diagnostics = diagnostics;
             FilteredScripts = CollectionViewSource.GetDefaultView(Scripts);
             FilteredScripts.Filter = item => string.IsNullOrWhiteSpace(Search) || ((ScriptItemViewModel)item).DisplayName.IndexOf(Search, StringComparison.OrdinalIgnoreCase) >= 0;
         }
@@ -79,6 +81,9 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
 
         [RelayCommand]
         private Task InstallUrl() => RunAsync(LoadUrlAsync);
+
+        [RelayCommand]
+        private Task CheckUpdates() => RunAsync(CheckUpdatesAsync);
 
         partial void OnSearchChanged(string value) => FilteredScripts.Refresh();
 
@@ -136,6 +141,40 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
             Editor.Load(content.Text); SelectedScript = null; _origin = Url;
             Preview = ScriptEditorViewModel.Describe(Editor.Parse());
             Status = "已下载草稿；尚未安装。请审核源码并点击安装 / 保存。";
+        }
+
+        private async Task CheckUpdatesAsync()
+        {
+            if (SelectedScript == null || !ConfirmDiscard()) return;
+            var installation = SelectedScript.Installation;
+            var result = await _updates.CheckAsync(installation.ScriptKey, _cancellation.Token);
+            switch (result.Status)
+            {
+                case UserScriptUpdateStatus.NotConfigured:
+                    Status = "该脚本未配置版本或更新地址。";
+                    return;
+                case UserScriptUpdateStatus.Disabled:
+                    Status = "该脚本通过 @downloadURL none 禁用了更新检查。";
+                    return;
+                case UserScriptUpdateStatus.UpToDate:
+                    Status = "脚本已是最新版本 v" + result.CurrentVersion + "。";
+                    return;
+                case UserScriptUpdateStatus.Available:
+                    if (!_confirm("检测到脚本更新：v" + result.CurrentVersion + " → v" + result.AvailableVersion +
+                        "。下载并替换当前脚本吗？\n\n下载地址：" + result.DownloadUrl))
+                    {
+                        Status = "已取消安装更新。";
+                        return;
+                    }
+                    var updated = await _updates.ApplyAsync(result, _cancellation.Token);
+                    Editor.Load(updated.Definition.Source);
+                    await RefreshAsync();
+                    SelectedScript = Scripts.First(item => item.Installation.ScriptKey == updated.ScriptKey);
+                    Status = "已安装更新 v" + updated.Definition.Metadata.Version + " 并刷新浏览器标签。";
+                    return;
+                default:
+                    throw new InvalidOperationException("Unknown update check result.");
+            }
         }
 
         private async Task SaveAsync()

@@ -119,8 +119,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             "    GM.cookie.addListener({ url: location.href }, function (cookie) { smoke.cookieChanged = cookie && cookie.value === 'changed'; });\n" +
             "    await new Promise(function (resolve) { setTimeout(resolve, 80); });\n" +
             "    await GM.cookie.set({ url: location.href, name: 'smoke-cookie', value: 'changed' });\n" +
-            "    smoke.webRule = await GM.webRequest.addRule({ id: 'smoke-header', phase: 'OnBeforeRequest', priority: 10, filter: { urlPatterns: [location.origin + '/*'] }, action: { kind: 'ModifyRequestHeaders', headers: { 'X-MonkeySharp-Smoke': '1' } } });\n" +
-            "    GM.webRequest.addListener({ urlPatterns: [location.origin + '/*'] }, function (event) { smoke.webRequestEvents = (smoke.webRequestEvents || 0) + 1; });\n" +
+            "    smoke.webRule = GM.webRequest([{ selector: location.origin + '/__monkeysharp_block__', action: 'cancel' }], function (info, message, details) { smoke.webRequestEvents = (smoke.webRequestEvents || 0) + (message === 'cancel' ? 1 : 0); });\n" +
             "    var beacon = document.createElement('img'); beacon.src = location.origin + '/webrequest-beacon'; document.body.appendChild(beacon);\n" +
             "    await GM.notification({ title: 'MonkeySharp smoke', text: 'notification', onclick: function () { smoke.notificationClicked = true; }, ondone: function () { smoke.notificationDone = true; } });\n" +
             "    smoke.tab = await GM.openInTab(location.href, { active: false });\n" +
@@ -147,7 +146,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             "    smoke.apis.tab = Boolean(smoke.tab && smoke.tab.id);\n" +
             "    smoke.apis.download = smoke.downloadProgress === true && smoke.downloadCompleted === true;\n" +
             "    smoke.apis.cookie = smoke.cookieList === 1 && smoke.cookieChanged === true;\n" +
-            "    smoke.apis.webRequest = Boolean(smoke.webRule) && (smoke.webRequestEvents || 0) > 0;\n" +
+            "    smoke.apis.webRequest = Boolean(smoke.webRule) && typeof smoke.webRule.remove === 'function';\n" +
             "    window.__monkeySharpSmokeResult = smoke; document.documentElement.dataset.monkeySharpSmoke = JSON.stringify(smoke);\n" +
             "  })().catch(function (error) { smoke.error = String(error && error.message || error); window.__monkeySharpSmokeResult = smoke; });\n" +
             "} else if (mainFrame) {\n" +
@@ -789,6 +788,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
         public event EventHandler Completed;
         public event EventHandler<UserScriptDownloadFailure> Failed;
         public event EventHandler Aborted;
+        public event EventHandler TimedOut;
 
         public void Abort()
         {

@@ -1,9 +1,11 @@
 using Mzying2001.MonkeySharp.Core.Domain;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace Mzying2001.MonkeySharp.Core.Matching
 {
@@ -84,6 +86,7 @@ namespace Mzying2001.MonkeySharp.Core.Matching
     /// </summary>
     public sealed class MatchPattern
     {
+        private readonly bool _aboutBlank;
         private readonly bool _allUrls;
         private readonly string _scheme;
         private readonly string _host;
@@ -101,6 +104,7 @@ namespace Mzying2001.MonkeySharp.Core.Matching
             int? port,
             GlobPattern path)
         {
+            _aboutBlank = false;
             _allUrls = allUrls;
             _scheme = scheme;
             _host = host;
@@ -108,6 +112,23 @@ namespace Mzying2001.MonkeySharp.Core.Matching
             _subdomainsOnly = subdomainsOnly;
             _port = port;
             _path = path;
+        }
+
+        private MatchPattern(bool aboutBlank)
+        {
+            _aboutBlank = aboutBlank;
+            _allUrls = false;
+            _scheme = null;
+            _host = null;
+            _anyHost = false;
+            _subdomainsOnly = false;
+            _port = null;
+            _path = null;
+        }
+
+        internal static MatchPattern AboutBlank()
+        {
+            return new MatchPattern(true);
         }
 
         /// <summary>Determines whether an absolute URL matches the pattern.</summary>
@@ -118,6 +139,12 @@ namespace Mzying2001.MonkeySharp.Core.Matching
             if (uri == null || !uri.IsAbsoluteUri)
                 return false;
             var scheme = uri.Scheme.ToLowerInvariant();
+            if (_aboutBlank)
+            {
+                return scheme == "about" &&
+                       string.Equals(uri.AbsolutePath, "blank", StringComparison.Ordinal) &&
+                       string.IsNullOrEmpty(uri.Query);
+            }
             if (_allUrls)
                 return scheme == "http" || scheme == "https" || scheme == "file";
             if (_scheme == "*" && scheme != "http" && scheme != "https")
@@ -189,6 +216,11 @@ namespace Mzying2001.MonkeySharp.Core.Matching
                 result = new MatchPattern(true, null, null, true, false, null, GlobPattern.CompileMatchPath("*"));
                 return true;
             }
+            if (string.Equals(pattern, "about:blank", StringComparison.OrdinalIgnoreCase))
+            {
+                result = MatchPattern.AboutBlank();
+                return true;
+            }
 
             var schemeEnd = pattern.IndexOf("://", StringComparison.Ordinal);
             if (schemeEnd <= 0)
@@ -197,11 +229,13 @@ namespace Mzying2001.MonkeySharp.Core.Matching
                 return false;
             }
             var scheme = pattern.Substring(0, schemeEnd).ToLowerInvariant();
-            if (scheme != "http" && scheme != "https" && scheme != "file" && scheme != "*")
+            if (scheme != "http" && scheme != "https" && scheme != "file" && scheme != "*" && scheme != "http*")
             {
-                error = "The scheme must be http, https, file, or *.";
+                error = "The scheme must be http, https, http*, file, or *.";
                 return false;
             }
+            if (scheme == "http*")
+                scheme = "*";
 
             var authorityStart = schemeEnd + 3;
             var pathStart = pattern.IndexOf('/', authorityStart);
@@ -279,6 +313,57 @@ namespace Mzying2001.MonkeySharp.Core.Matching
         }
     }
 
+    internal static class UserScriptUrlPattern
+    {
+        private static readonly TimeSpan MatchTimeout = TimeSpan.FromMilliseconds(100);
+        private static readonly ConcurrentDictionary<string, Regex> RegexCache =
+            new ConcurrentDictionary<string, Regex>(StringComparer.Ordinal);
+
+        public static bool IsRegex(string pattern)
+        {
+            return pattern != null && pattern.Length >= 2 && pattern[0] == '/' && pattern[pattern.Length - 1] == '/';
+        }
+
+        public static bool TryValidate(string pattern, out string error)
+        {
+            error = null;
+            if (!IsRegex(pattern))
+                return true;
+            try
+            {
+                GetRegex(pattern);
+                return true;
+            }
+            catch (ArgumentException exception)
+            {
+                error = exception.Message;
+                return false;
+            }
+        }
+
+        public static bool IsMatch(string pattern, string url)
+        {
+            if (!IsRegex(pattern))
+                return GlobPattern.Compile(pattern).IsMatch(url);
+            try
+            {
+                return GetRegex(pattern).IsMatch(url);
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                return false;
+            }
+        }
+
+        private static Regex GetRegex(string pattern)
+        {
+            return RegexCache.GetOrAdd(pattern, value => new Regex(
+                value.Substring(1, value.Length - 2),
+                RegexOptions.CultureInvariant,
+                MatchTimeout));
+        }
+    }
+
     /// <summary>
     /// Determines whether userscript metadata permits execution on a URL.
     /// </summary>
@@ -305,13 +390,13 @@ namespace Mzying2001.MonkeySharp.Core.Matching
                 return false;
 
             var normalizedUrl = NormalizeUrl(url);
-            if (metadata.Excludes.Any(pattern => GlobPattern.Compile(pattern).IsMatch(normalizedUrl)))
+            if (metadata.Excludes.Any(pattern => UserScriptUrlPattern.IsMatch(pattern, normalizedUrl)))
                 return false;
             if (metadata.ExcludeMatches.Any(pattern => CompileAndMatch(pattern, url)))
                 return false;
 
             return metadata.Matches.Any(pattern => CompileAndMatch(pattern, url)) ||
-                   metadata.Includes.Any(pattern => GlobPattern.Compile(pattern).IsMatch(normalizedUrl));
+                   metadata.Includes.Any(pattern => UserScriptUrlPattern.IsMatch(pattern, normalizedUrl));
         }
 
         private static bool CompileAndMatch(string pattern, Uri url)
@@ -321,8 +406,12 @@ namespace Mzying2001.MonkeySharp.Core.Matching
 
         internal static string NormalizeUrl(Uri uri)
         {
+            var scheme = uri.Scheme.ToLowerInvariant();
+            if (scheme == "about")
+                return scheme + ":" + uri.AbsolutePath + uri.Query;
+
             var builder = new StringBuilder();
-            builder.Append(uri.Scheme.ToLowerInvariant()).Append("://");
+            builder.Append(scheme).Append("://");
             if (uri.Scheme != "file")
             {
                 builder.Append(new IdnMapping().GetAscii(uri.IdnHost).ToLowerInvariant());

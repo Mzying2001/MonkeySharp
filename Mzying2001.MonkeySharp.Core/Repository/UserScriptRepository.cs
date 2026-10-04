@@ -75,6 +75,14 @@ namespace Mzying2001.MonkeySharp.Core.Repository
         /// <returns>The updated installation.</returns>
         Task<UserScriptInstallation> UpdateAsync(ScriptKey scriptKey, string source, string sourceOrigin, CancellationToken cancellationToken);
 
+        /// <summary>Replaces a script only when its immutable revision identity still matches.</summary>
+        Task<UserScriptInstallation> UpdateIfUnchangedAsync(
+            ScriptKey scriptKey,
+            Guid expectedRevisionId,
+            string source,
+            string sourceOrigin,
+            CancellationToken cancellationToken);
+
         /// <summary>Changes whether an installed userscript is enabled.</summary>
         /// <param name="scriptKey">The installation to change.</param>
         /// <param name="enabled">The new enabled state.</param>
@@ -164,6 +172,30 @@ namespace Mzying2001.MonkeySharp.Core.Repository
         }
 
         /// <inheritdoc />
+        public Task<UserScriptInstallation> UpdateIfUnchangedAsync(
+            ScriptKey scriptKey,
+            Guid expectedRevisionId,
+            string source,
+            string sourceOrigin,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var definition = ParseDefinition(source);
+            UserScriptInstallation installation;
+            lock (_sync)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var current = GetRequired(scriptKey);
+                if (current.RevisionId != expectedRevisionId)
+                    throw new RepositoryRevisionMismatchException(scriptKey);
+                installation = current.WithDefinition(definition, sourceOrigin, DateTimeOffset.UtcNow);
+                _installations[scriptKey] = installation;
+            }
+            Changed?.Invoke(this, new UserScriptRepositoryChangedEventArgs(RepositoryChangeKind.Updated, installation));
+            return Task.FromResult(installation);
+        }
+
+        /// <inheritdoc />
         public Task<UserScriptInstallation> SetEnabledAsync(
             ScriptKey scriptKey,
             bool enabled,
@@ -237,5 +269,19 @@ namespace Mzying2001.MonkeySharp.Core.Repository
                 throw new KeyNotFoundException("Script installation '" + scriptKey + "' was not found.");
             return installation;
         }
+    }
+
+    /// <summary>Indicates that an installation changed after it was inspected.</summary>
+    public sealed class RepositoryRevisionMismatchException : InvalidOperationException
+    {
+        /// <summary>Initializes a revision mismatch exception.</summary>
+        public RepositoryRevisionMismatchException(ScriptKey scriptKey)
+            : base("Script installation '" + scriptKey + "' changed after it was inspected.")
+        {
+            ScriptKey = scriptKey;
+        }
+
+        /// <summary>Gets the installation whose revision no longer matches.</summary>
+        public ScriptKey ScriptKey { get; }
     }
 }
