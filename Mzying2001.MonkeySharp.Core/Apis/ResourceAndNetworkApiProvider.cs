@@ -921,6 +921,16 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             return result;
         }
 
+        public static int? OptionalInt32(JsonElement parameters, string name)
+        {
+            RequireObject(parameters);
+            if (!parameters.TryGetProperty(name, out var value) || value.ValueKind == JsonValueKind.Null)
+                return null;
+            if (value.ValueKind != JsonValueKind.Number || !value.TryGetInt32(out var result) || result < 0)
+                throw Invalid(name + " must be a non-negative integer.");
+            return result;
+        }
+
         public static bool OptionalBoolean(JsonElement parameters, string name, bool defaultValue = false)
         {
             RequireObject(parameters);

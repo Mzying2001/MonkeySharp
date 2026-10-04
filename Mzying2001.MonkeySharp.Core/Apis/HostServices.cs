@@ -346,12 +346,25 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         /// <param name="title">The notification title.</param>
         /// <param name="text">The notification body text.</param>
         /// <param name="imageUrl">The optional notification image URL.</param>
-        public UserScriptNotificationRequest(ScriptKey scriptKey, string title, string text, string imageUrl)
+        /// <param name="highlight">Whether the current tab should be highlighted.</param>
+        /// <param name="silent">Whether the notification should avoid sound.</param>
+        /// <param name="timeout">Optional timeout in milliseconds.</param>
+        public UserScriptNotificationRequest(
+            ScriptKey scriptKey,
+            string title,
+            string text,
+            string imageUrl,
+            bool highlight,
+            bool silent,
+            int? timeout)
         {
             ScriptKey = scriptKey;
             Title = title;
             Text = text;
             ImageUrl = imageUrl;
+            Highlight = highlight;
+            Silent = silent;
+            Timeout = timeout;
         }
 
         /// <summary>Gets the requesting script installation.</summary>
@@ -365,6 +378,15 @@ namespace Mzying2001.MonkeySharp.Core.Apis
 
         /// <summary>Gets the optional notification image URL.</summary>
         public string ImageUrl { get; }
+
+        /// <summary>Gets whether the current tab should be highlighted.</summary>
+        public bool Highlight { get; }
+
+        /// <summary>Gets whether the notification should avoid sound.</summary>
+        public bool Silent { get; }
+
+        /// <summary>Gets the optional timeout in milliseconds.</summary>
+        public int? Timeout { get; }
     }
 
     /// <summary>

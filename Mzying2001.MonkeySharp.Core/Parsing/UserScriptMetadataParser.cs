@@ -102,6 +102,8 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
             var antifeatures = ParseAntifeatures(values, diagnostics);
             var matches = ReadCollection(values, "match");
             var excludeMatches = ReadCollection(values, "exclude-match");
+            ValidateUrlPatterns(ReadCollection(values, "include"), "include", diagnostics, values);
+            ValidateUrlPatterns(ReadCollection(values, "exclude"), "exclude", diagnostics, values);
             ValidateMatchPatterns(matches, "match", diagnostics, values);
             ValidateMatchPatterns(excludeMatches, "exclude-match", diagnostics, values);
 
@@ -675,6 +677,26 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
                         "MSM020_INVALID_MATCH",
                         DiagnosticSeverity.Error,
                         "Invalid @" + key + " pattern: " + error,
+                        line));
+                }
+            }
+        }
+
+        private static void ValidateUrlPatterns(
+            IEnumerable<string> patterns,
+            string key,
+            ICollection<MetadataDiagnostic> diagnostics,
+            IDictionary<string, List<Entry>> values)
+        {
+            foreach (var pattern in patterns)
+            {
+                if (!UserScriptUrlPattern.TryValidate(pattern, out var error))
+                {
+                    var line = values[key].First(item => item.Value == pattern).Line;
+                    diagnostics.Add(new MetadataDiagnostic(
+                        "MSM021_INVALID_URL_REGEX",
+                        DiagnosticSeverity.Error,
+                        "Invalid @" + key + " regular expression: " + error,
                         line));
                 }
             }

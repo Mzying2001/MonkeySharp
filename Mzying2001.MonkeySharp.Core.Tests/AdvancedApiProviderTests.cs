@@ -423,7 +423,11 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 await provider.InvokeAsync(Context(
                     installation,
                     "GM.notification",
-                    new { title = "Title", text = "Text", imageUrl = (string)null }), CancellationToken.None);
+                    new
+                    {
+                        title = "Title", text = "Text", imageUrl = "https://example.com/notification.png",
+                        highlight = true, silent = true, timeout = 300
+                    }), CancellationToken.None);
                 await provider.InvokeAsync(Context(
                     installation,
                     "GM.setClipboard",
@@ -451,6 +455,11 @@ namespace Mzying2001.MonkeySharp.Core.Tests
 
                 Assert.Equal(3, Json(registered.Json).GetInt32());
                 Assert.Equal("menu-command", notification.EventName);
+                Assert.Equal("Text", services.Notification.Text);
+                Assert.Equal("https://example.com/notification.png", services.Notification.ImageUrl);
+                Assert.True(services.Notification.Highlight);
+                Assert.True(services.Notification.Silent);
+                Assert.Equal(300, services.Notification.Timeout);
                 Assert.Equal("copy", services.ClipboardText);
                 Assert.False(services.OpenTab.Active);
                 Assert.Equal("tab", Json(tab.Json).GetProperty("id").GetString());
@@ -460,6 +469,14 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 Assert.Equal(TimeSpan.FromMilliseconds(2500), services.Download.Timeout);
                 Assert.True(Json(removed.Json).GetBoolean());
                 Assert.True(services.MenuRegistration.Disposed);
+
+                await provider.InvokeAsync(Context(installation, "GM.notification", new
+                {
+                    highlight = true, silent = true, timeout = 0
+                }), CancellationToken.None);
+                Assert.Null(services.Notification.Text);
+                Assert.True(services.Notification.Highlight);
+                Assert.Equal(0, services.Notification.Timeout);
             }
         }
 
@@ -630,6 +647,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             public string ClipboardText { get; private set; }
             public OpenTabRequest OpenTab { get; private set; }
             public DownloadRequest Download { get; private set; }
+            public UserScriptNotificationRequest Notification { get; private set; }
             public int CloseCalls { get; private set; }
             public int FocusCalls { get; private set; }
 
@@ -640,7 +658,10 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             }
             public void InvokeMenu() => _menuCallback();
             public INotificationHandle ShowAsync(UserScriptNotificationRequest request, CancellationToken cancellationToken)
-                => new FakeNotificationHandle();
+            {
+                Notification = request;
+                return new FakeNotificationHandle();
+            }
             public Task SetTextAsync(string text, string mediaType, CancellationToken cancellationToken)
             {
                 ClipboardText = text;

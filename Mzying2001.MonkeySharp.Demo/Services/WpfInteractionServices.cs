@@ -124,6 +124,7 @@ namespace Mzying2001.MonkeySharp.Demo.Services
             private readonly TaskCompletionSource<object> _completion = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
             private CancellationTokenRegistration _registration;
             private readonly CancellationTokenSource _images = new CancellationTokenSource();
+            private DispatcherTimer _timeout;
             private Window _window;
             private int _closed;
 
@@ -154,8 +155,23 @@ namespace Mzying2001.MonkeySharp.Demo.Services
                     };
                     _window.Closed += (sender, args) => Finish();
                     _window.Show();
+                    if (request.Timeout.HasValue && request.Timeout.Value > 0)
+                    {
+                        _timeout = new DispatcherTimer(DispatcherPriority.Normal, dispatcher)
+                        {
+                            Interval = TimeSpan.FromMilliseconds(request.Timeout.Value)
+                        };
+                        _timeout.Tick += TimeoutElapsed;
+                        _timeout.Start();
+                    }
                     if (!string.IsNullOrWhiteSpace(request.ImageUrl)) _ = LoadImageAsync(content, request.ImageUrl, panel);
                 }));
+            }
+
+            private void TimeoutElapsed(object sender, EventArgs args)
+            {
+                _timeout?.Stop();
+                Dispose();
             }
 
             private async Task LoadImageAsync(HttpContentService content, string url, StackPanel panel)
@@ -182,6 +198,12 @@ namespace Mzying2001.MonkeySharp.Demo.Services
             private void Finish()
             {
                 if (Interlocked.Exchange(ref _closed, 1) != 0) return;
+                if (_timeout != null)
+                {
+                    _timeout.Stop();
+                    _timeout.Tick -= TimeoutElapsed;
+                    _timeout = null;
+                }
                 _images.Cancel();
                 _registration.Dispose();
                 Closed?.Invoke(this, EventArgs.Empty);

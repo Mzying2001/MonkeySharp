@@ -111,6 +111,25 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Fact]
+        public async Task LegacyFixtureCookieCallCanUseTheCurrentPageAsItsDefaultUrl()
+        {
+            var repository = new InMemoryUserScriptRepository();
+            var installation = await repository.InstallAsync(
+                LegacyUserscriptFixture.Read(), "fixture", true, CancellationToken.None);
+            using (var service = new InMemoryCookieService())
+            using (var provider = new CookieApiProvider(service))
+            {
+                var result = await provider.InvokeAsync(Context(installation, new
+                {
+                    operation = "set",
+                    details = new { name = "fixture-cookie", value = "ok" }
+                }), CancellationToken.None);
+
+                Assert.Equal("example.com", Json(result.Json).GetProperty("domain").GetString());
+            }
+        }
+
+        [Fact]
         public async Task CookieRejectsUrlsOutsideScriptMatchRules()
         {
             var installation = await InstallAsync("// @grant GM.cookie");

@@ -197,6 +197,61 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Fact]
+        public void IncludeAndExcludeAcceptSlashDelimitedRegularExpressions()
+        {
+            var metadata = _parser.Parse(Script(
+                "// @name regex rules\n" +
+                "// @include /^https?:\\/\\/example\\.com\\/products\\/.*$/\n" +
+                "// @exclude /\\/private\\//"));
+            var matcher = new UserScriptMatcher();
+
+            Assert.True(metadata.CanEnable);
+            Assert.True(matcher.IsMatch(metadata.Metadata, new Uri("https://example.com/products/one")));
+            Assert.False(matcher.IsMatch(metadata.Metadata, new Uri("https://example.com/products/private/one")));
+            Assert.False(matcher.IsMatch(metadata.Metadata, new Uri("https://example.com/other")));
+        }
+
+        [Fact]
+        public void InvalidIncludeRegularExpressionIsAMetadataError()
+        {
+            var result = _parser.Parse(Script("// @name invalid regex\n// @include /[abc/"));
+
+            Assert.False(result.CanEnable);
+            Assert.Contains(result.Diagnostics, item =>
+                item.Code == "MSM021_INVALID_URL_REGEX" && item.Severity == DiagnosticSeverity.Error);
+        }
+
+        [Fact]
+        public void HttpWildcardMatchCoversBothHttpAndHttps()
+        {
+            var result = _parser.Parse(Script("// @name http wildcard\n// @match http*://example.com/*"));
+            var matcher = new UserScriptMatcher();
+
+            Assert.True(result.CanEnable);
+            Assert.True(matcher.IsMatch(result.Metadata, new Uri("http://example.com/path")));
+            Assert.True(matcher.IsMatch(result.Metadata, new Uri("https://example.com/path")));
+            Assert.False(matcher.IsMatch(result.Metadata, new Uri("file:///example.com/path")));
+        }
+
+        [Fact]
+        public void LegacyCompatibilityFixtureParsesItsMetadataAndUrlRules()
+        {
+            var result = _parser.Parse(LegacyUserscriptFixture.Read());
+
+            Assert.True(result.CanEnable);
+            Assert.Equal("Legacy userscript compatibility fixture", result.Metadata.Name);
+            Assert.Contains("GM_cookie", result.Metadata.DeclaredGrants);
+            Assert.Contains("GM.cookie", result.Metadata.Grants);
+            Assert.Single(result.Metadata.Requires);
+            Assert.Single(result.Metadata.Resources);
+            Assert.Single(result.Metadata.WebRequest);
+            var matcher = new UserScriptMatcher();
+            Assert.True(matcher.IsMatch(result.Metadata, new Uri("http://example.com/legacy/install")));
+            Assert.True(matcher.IsMatch(result.Metadata, new Uri("https://example.com/legacy/install")));
+            Assert.False(matcher.IsMatch(result.Metadata, new Uri("https://example.com/blocked/legacy/install")));
+        }
+
+        [Fact]
         public void AboutBlankIncludeUsesTheCanonicalOpaqueUrl()
         {
             var matcher = new UserScriptMatcher();

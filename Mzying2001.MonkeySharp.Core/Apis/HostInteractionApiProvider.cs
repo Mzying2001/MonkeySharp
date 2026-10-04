@@ -263,12 +263,19 @@ namespace Mzying2001.MonkeySharp.Core.Apis
 
         private ApiResult ShowNotification(ApiInvocationContext context, CancellationToken cancellationToken)
         {
+            var text = ProviderParameters.OptionalString(context.Parameters, "text");
+            var highlight = ProviderParameters.OptionalBoolean(context.Parameters, "highlight");
+            if (string.IsNullOrEmpty(text) && !highlight)
+                throw ProviderParameters.Invalid("text is required unless highlight is true.");
             var handle = _notifications.ShowAsync(new UserScriptNotificationRequest(
                 context.Installation.ScriptKey,
                 ProviderParameters.OptionalString(context.Parameters, "title") ??
                     context.Installation.Definition.Metadata.Name,
-                ProviderParameters.RequiredString(context.Parameters, "text"),
-                ProviderParameters.OptionalString(context.Parameters, "imageUrl")), cancellationToken);
+                text,
+                ProviderParameters.OptionalString(context.Parameters, "imageUrl"),
+                highlight,
+                ProviderParameters.OptionalBoolean(context.Parameters, "silent"),
+                ProviderParameters.OptionalInt32(context.Parameters, "timeout")), cancellationToken);
             if (handle == null)
                 throw new InvalidOperationException("The notification service returned no handle.");
             var notificationId = Guid.NewGuid().ToString("D");

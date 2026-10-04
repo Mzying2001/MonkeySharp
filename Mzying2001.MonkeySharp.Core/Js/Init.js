@@ -740,7 +740,10 @@
                         const result = await call(record, "GM.notification", {
                             title: details.title || null,
                             text: details.text,
-                            imageUrl: details.imageUrl || details.image || null
+                            imageUrl: details.imageUrl || details.image || null,
+                            highlight: Boolean(details.highlight),
+                            silent: Boolean(details.silent),
+                            timeout: typeof details.timeout === "number" ? details.timeout : null
                         });
                         if (result && result.id) {
                             record.notificationHandlers.set(result.id, {
@@ -1173,9 +1176,21 @@
                 if (api.setClipboard) facade.GM_setClipboard = function (text, type) {
                     api.setClipboard(text, type).catch(error => console.error("[MonkeySharp] legacy clipboard failed", error));
                 };
-                if (api.notification) facade.GM_notification = function (details, ondone) {
-                    if (typeof details === "string") details = { text: details };
-                    details = Object.assign({}, details || {}, { ondone: ondone });
+                if (api.notification) facade.GM_notification = function (details, title, image, onclick) {
+                    if (typeof details === "string") {
+                        const options = { text: details };
+                        if (typeof title === "function") {
+                            options.ondone = title;
+                        } else if (arguments.length > 1) {
+                            if (typeof title !== "undefined") options.title = title;
+                            if (typeof image !== "undefined") options.image = image;
+                            if (typeof onclick === "function") options.onclick = onclick;
+                        }
+                        details = options;
+                    } else {
+                        details = Object.assign({}, details || {});
+                        if (typeof title === "function") details.ondone = title;
+                    }
                     api.notification(details).catch(error => console.error("[MonkeySharp] legacy notification failed", error));
                 };
                 if (api.openInTab) facade.GM_openInTab = function (url, options) {
