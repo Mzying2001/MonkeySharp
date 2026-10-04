@@ -111,13 +111,17 @@ var host = new CefSharpUserScriptHostBuilder(repository)
 支持的字段包括：
 
 - 身份：`@name`、本地化名称、`@namespace`、`@version`、`@description`、`@author`、`@license`、`@copyright` 和图标（包括 `@icon64`/`@icon64URL`）。
-- 选择：`@match`、`@include`、`@exclude`、`@exclude-match` 和 `@noframes`。
+- 选择：`@match`、`@include`、`@exclude`、`@exclude-match` 和 `@noframes`。`@include`/`@exclude` 支持 `/.../` 正则，执行时间限制为 100 ms；非法正则是元数据错误。`@match http*://...` 同时匹配 HTTP 和 HTTPS。
 - 执行：`@run-at`、`@run-in`、`@inject-into`、`@sandbox` 和 `@unwrap`。不支持的 sandbox 模式和 wrapper 移除会分别产生 `MSR212_UNSUPPORTED_SANDBOX` 与 `MSR213_UNSUPPORTED_UNWRAP`；脚本仍在页面世界和 MonkeySharp wrapper 内执行。
 - 能力与资源：`@grant`、`@connect`、`@require` 和 `@resource`。
 - 源地址：`@downloadURL`、`@updateURL`、`@homepageURL`、`@website`、`@source` 和 `@supportURL`。
 - 披露与请求元数据：`@antifeature`（包括本地化形式）和经过校验的静态 `@webRequest` JSON 规则。
 
 排除规则优先于正向规则。URL 片段会被忽略，主机名经过 IDN 规范化，显式端口会被检查，且 `*.example.com` 不匹配裸域名。授权状态会区分缺少 `@grant`、显式 `@grant none` 和显式授权列表。已知旧式别名会被规范化，未知授权保持大小写敏感且不会公开。
+
+`@require` 和 `@resource` 支持 `md5`、`sha256` 的十六进制或标准 Base64 完整性摘要，可使用 `#sha256=<摘要>` 或 `#sha256-<摘要>`。请求和缓存键会移除 URL fragment；内容在使用前以及读取缓存时都会按原始字节重新校验。只有不支持的算法、声明格式错误或摘要不匹配时拒绝资源；不支持的算法也会产生 warning。
+
+Demo 脚本管理器支持手动检查并安装更新。检查源优先使用 `@updateURL`，安装源优先使用 `@downloadURL`；`@downloadURL none` 会禁用更新检查。远程脚本必须有相同且非空的 name/namespace，下载版本必须高于当前版本。不会后台定时检查，也不会继承浏览器登录 Cookie；运行时 bridge 不公开更新 API。
 
 `GM.info` 和 `GM_info` 暴露不可变快照，包含脚本元数据、声明及规范化授权、URL 规则、资源、更新/来源地址、handler、sandbox 模式和原始元数据头。静态 `@webRequest` 条目会被校验并写入该快照，但不会安装到宿主网络拦截器；需要影响请求时请使用运行时 `GM.webRequest(...)` API。
 
@@ -135,7 +139,7 @@ var host = new CefSharpUserScriptHostBuilder(repository)
 | `GM.getResourceText`、`GM.getResourceURL` 及别名 | 条件支持 | 需要 `IResourceProvider` 和已声明的 `@resource`。 |
 | `GM.xmlHttpRequest` / `GM_xmlhttpRequest` | CefSharp 默认提供 | 支持重定向、凭据、进度、中止、二进制/多段请求体及多种响应类型；需要 `@connect`。 |
 | `GM.registerMenuCommand`、`GM.unregisterMenuCommand` 及别名 | 条件支持 | 需要 `IMenuService`。 |
-| `GM.notification`、`GM.setClipboard`、`GM.openInTab`、`GM.download` 及别名 | 条件支持 | 需要对应宿主服务。 |
+| `GM.notification`、`GM.setClipboard`、`GM.openInTab`、`GM.download` 及别名 | 条件支持 | 需要对应宿主服务；通知支持四参数旧式重载以及 `highlight`、`silent`、`timeout` 选项。 |
 | `GM.getTab`、`GM.saveTab`、`GM.getTabs` 及别名 | 条件支持 | 需要 `ITabStateService`。 |
 | `GM.cookie` / `GM_cookie` | CefSharp 默认提供 | 结构化访问浏览器请求上下文。 |
 | `GM.webRequest` / `GM_webRequest` | CefSharp 默认提供 | Tampermonkey selector/action 注册、可移除 handle，以及 cancel/redirect 结果回调。 |
@@ -208,12 +212,12 @@ host.Diagnostic += (_, diagnostic) =>
 
 ## 构建与测试
 
-仓库使用 .NET SDK `9.0.315`，默认 CefSharp 版本为 `121.3.70`：
+仓库使用 .NET SDK `9.0.315`，默认 CefSharp 版本为 `121.3.70`。CI 在 x64/x86 上覆盖 `84.4.10`、`121.3.70` 和 `151.3.240`，每个组合都会运行 .NET/JavaScript 测试及真实 Chromium SmokeHost 门禁。WPF Demo smoke 使用默认版本并仅运行 x64。
 
 ```powershell
-dotnet restore MonkeySharp.slnx -p:Platform=x64
-dotnet build MonkeySharp.slnx -c Release -p:Platform=x64 --no-restore
-dotnet test MonkeySharp.slnx -c Release -p:Platform=x64 --no-build
+dotnet restore MonkeySharp.slnx -p:Platform=x64 -p:CefSharpVersion=121.3.70
+dotnet build MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=121.3.70 --no-restore
+dotnet test MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=121.3.70 --no-build
 node --test Mzying2001.MonkeySharp.Core.Tests/JavaScript/*.test.js
 ```
 

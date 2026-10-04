@@ -17,6 +17,8 @@ dotnet build Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csp
 
 The adapter's `CefSharp.Common` reference is private to its NuGet package. Consumers must reference the matching `CefSharp.WinForms`, `CefSharp.Wpf`, or `CefSharp.Common` package and allow the normal .NET Framework binding redirects. Keep the managed packages, native CEF binaries, and MonkeySharp adapter on the same version and process platform.
 
+CI verifies `84.4.10`, `121.3.70`, and `151.3.240` for both x64 and x86. Every matrix entry restores, builds, and tests the solution, runs the JavaScript protocol tests, and executes the SmokeHost against real Chromium. The WPF Demo smoke remains an x64 check on the default `121.3.70` version.
+
 ## Compatibility Profiles
 
 `CefSharpHostOptions.Compatibility` defaults to `LegacyCompatible`. It accepts legacy grants such as `GM_getValue`, exposes `GM_*` globals with their compatibility semantics, and creates bounded synchronous storage and resource mirrors. Legacy callback facades use the same authenticated bridge operations as their `GM.*` counterparts.
@@ -46,6 +48,14 @@ var parser = new UserScriptMetadataParser(
     });
 var repository = new InMemoryUserScriptRepository(parser);
 ```
+
+## Resource Integrity and Update Checks
+
+`@require` and `@resource` may carry `md5` or `sha256` hashes in hexadecimal or standard Base64. Both `#algorithm=value` and `#algorithm-value` forms are accepted, with comma/semicolon-separated hashes; the last supported declaration is selected. The fragment is stripped from the requested and cached URL. The Core resolver, resource API, and Demo HTTP cache verify original bytes before use, and cached bytes are verified again when read. An unsupported algorithm produces a warning; no usable supported hash, malformed declarations, and digest mismatches fail closed and prevent the resource from loading.
+
+The Demo manager offers a manual check-and-install action. `@updateURL` is preferred as the check source and `@downloadURL` as the download source; `@downloadURL none` disables checks. A candidate must have the same non-empty `@name` and `@namespace`, and the downloaded version must be newer than the installed one and no older than the checked version. Applying it preserves the installation key, enabled state, installation time, and GM storage while replacing source and update metadata. Checks use the Demo's separate HTTP client without browser login cookies; there is no background schedule or runtime bridge update API.
+
+For URL rules, slash-delimited regular expressions are supported in `@include` and `@exclude`. They use culture-invariant matching with a 100 ms execution limit, and an invalid expression is a metadata error. `@match http*://host/path` matches both HTTP and HTTPS. Existing glob rules and exclusion precedence are unchanged.
 
 ## Network APIs
 
@@ -144,26 +154,26 @@ Browser-extension-only cookie partitioning, manager UI state, download shelf pre
 Use the same `CefSharpVersion` property for restore, build, test, and package commands:
 
 ```powershell
-dotnet restore MonkeySharp.slnx -p:Platform=x64
-dotnet build MonkeySharp.slnx -c Release -p:Platform=x64 --no-restore
-dotnet test MonkeySharp.slnx -c Release -p:Platform=x64 --no-build
+dotnet restore MonkeySharp.slnx -p:Platform=x64 -p:CefSharpVersion=121.3.70
+dotnet build MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=121.3.70 --no-restore
+dotnet test MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=121.3.70 --no-build
 node --test Mzying2001.MonkeySharp.Core.Tests/JavaScript/*.test.js
 ```
 
 Repeat the .NET commands with `-p:Platform=x86`. The x86 solution configuration excludes the x64-only Demo projects. Package Core and each adapter platform into separate directories:
 
 ```powershell
-dotnet pack Mzying2001.MonkeySharp.Core/Mzying2001.MonkeySharp.Core.csproj -c Release -o artifacts/packages/core
-dotnet pack Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj -c Release -p:Platform=x64 -o artifacts/packages/x64
-dotnet pack Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj -c Release -p:Platform=x86 -o artifacts/packages/x86
+dotnet pack Mzying2001.MonkeySharp.Core/Mzying2001.MonkeySharp.Core.csproj -c Release -p:Platform=x64 -p:CefSharpVersion=121.3.70 -o artifacts/packages/core
+dotnet pack Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj -c Release -p:Platform=x64 -p:CefSharpVersion=121.3.70 -o artifacts/packages/x64
+dotnet pack Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj -c Release -p:Platform=x86 -p:CefSharpVersion=121.3.70 -o artifacts/packages/x86
 ```
 
 Run the real-Chromium gates from a Windows desktop session:
 
 ```powershell
-./Mzying2001.MonkeySharp.CefSharp.SmokeHost/Run-E2E.ps1 -Platform x64
-./Mzying2001.MonkeySharp.CefSharp.SmokeHost/Run-E2E.ps1 -Platform x86
-powershell -NoProfile -ExecutionPolicy Bypass -File Mzying2001.MonkeySharp.Demo/Run-E2E.ps1
+./Mzying2001.MonkeySharp.CefSharp.SmokeHost/Run-E2E.ps1 -Platform x64 -CefSharpVersion 121.3.70
+./Mzying2001.MonkeySharp.CefSharp.SmokeHost/Run-E2E.ps1 -Platform x86 -CefSharpVersion 121.3.70
+powershell -NoProfile -ExecutionPolicy Bypass -File Mzying2001.MonkeySharp.Demo/Run-E2E.ps1 -CefSharpVersion 121.3.70
 ```
 
-Pass `-CefSharpVersion 151.3.240` to the SmokeHost runner to validate another managed/native CefSharp set. Both gates use isolated profiles and `TrustedPageWorld`; they are integration checks, not security sandboxes.
+Pass the same `-CefSharpVersion` to every restore/build/test/pack/SmokeHost command when validating another supported version. Run the SmokeHost commands for x64 and x86 at `84.4.10`, `121.3.70`, and `151.3.240`; the Demo gate stays on x64/default `121.3.70`. The PowerShell runner passes that version to its restore, clean, build, and run steps. Both gates use isolated profiles and `TrustedPageWorld`; they are integration checks, not security sandboxes.

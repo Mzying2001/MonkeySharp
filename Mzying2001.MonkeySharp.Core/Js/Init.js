@@ -963,7 +963,8 @@
                     nativeFunctionCache.set(property, { value: value, bound: bound });
                     return bound;
                 };
-                return new Proxy(root, {
+                const windowTarget = Object.create(root);
+                return new Proxy(windowTarget, {
                     get: function (target, property, receiver) {
                         if (property === "close") return closeEnabled ? api.windowClose : undefined;
                         if (property === "focus") return focusEnabled ? api.windowFocus : undefined;
@@ -975,7 +976,7 @@
                                     record.urlChangeHandlers.add(listener);
                                     return;
                                 }
-                                return target.addEventListener.call(target, type, listener, options);
+                                return root.addEventListener.call(root, type, listener, options);
                             };
                         }
                         if (property === "removeEventListener") {
@@ -984,12 +985,12 @@
                                     record.urlChangeHandlers.delete(listener);
                                     return;
                                 }
-                                return target.removeEventListener.call(target, type, listener, options);
+                                return root.removeEventListener.call(root, type, listener, options);
                             };
                         }
-                        const value = Reflect.get(target, property, target);
+                        const value = Reflect.get(root, property, root);
                         if ((property === "top" || property === "parent" || property === "self" ||
-                            property === "window" || property === "globalThis") && value === target) {
+                            property === "window" || property === "globalThis") && value === root) {
                             return receiver;
                         }
                         return bindNativeFunction(property, value);
@@ -1000,7 +1001,7 @@
                             record.urlChangeHandler = value;
                             return true;
                         }
-                        return Reflect.set(target, property, value, target);
+                        return Reflect.set(root, property, value, root);
                     }
                 });
             };

@@ -11,6 +11,7 @@
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <CefSharpVersion Condition="'$(CefSharpVersion)' == ''">121.3.70</CefSharpVersion>
     <DefineConstants Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(CefSharpVersion)', '125.0.0'))">$(DefineConstants);CEF_SHARP_BOOLEAN_DOWNLOAD</DefineConstants>
+    <DefineConstants Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(CefSharpVersion)', '100.0.0'))">$(DefineConstants);CEF_SHARP_HAS_DOWNLOAD_CAN_DOWNLOAD</DefineConstants>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>

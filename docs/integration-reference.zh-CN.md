@@ -17,6 +17,8 @@ dotnet build Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csp
 
 适配器 NuGet 包将 `CefSharp.Common` 引用设为私有。使用者需要自行引用匹配的 `CefSharp.WinForms`、`CefSharp.Wpf` 或 `CefSharp.Common` 包，并在 .NET Framework 应用中允许常规绑定重定向。托管包、CEF 原生文件、MonkeySharp 适配器的版本和进程平台必须一致。
 
+CI 针对 x64 和 x86 验证 `84.4.10`、`121.3.70`、`151.3.240`。每个矩阵项都会还原、构建并测试 solution，运行 JavaScript 协议测试，再用真实 Chromium 执行 SmokeHost。WPF Demo smoke 保留为默认 `121.3.70` 的 x64 验证。
+
 ## 兼容性配置
 
 `CefSharpHostOptions.Compatibility` 默认为 `LegacyCompatible`。它接受 `GM_getValue` 等旧式授权，按兼容语义公开 `GM_*` 全局对象，并建立有界的同步存储与资源镜像。旧式回调 API 与 `GM.*` 使用相同的认证桥接操作。
@@ -46,6 +48,14 @@ var parser = new UserScriptMetadataParser(
     });
 var repository = new InMemoryUserScriptRepository(parser);
 ```
+
+## 资源完整性与更新检查
+
+`@require` 和 `@resource` 支持十六进制或标准 Base64 编码的 `md5`、`sha256` 摘要。支持 `#algorithm=value` 和 `#algorithm-value`，多个摘要可用逗号或分号分隔，并选择最后一个当前支持的声明。请求和缓存 URL 会移除 fragment。Core resolver、资源 API 和 Demo HTTP 缓存在资源首次使用前验证原始字节，读取缓存时再次校验。不支持的算法会产生 warning；没有可用的受支持摘要、声明格式错误或摘要不匹配都会严格拒绝加载。
+
+Demo 管理器提供手动“检查并安装更新”。检查源优先使用 `@updateURL`，下载源优先使用 `@downloadURL`；`@downloadURL none` 禁用检查。候选脚本必须具有相同且非空的 `@name`/`@namespace`，下载版本必须高于当前安装且不低于检查源版本。应用更新保留 ScriptKey、启用状态、安装时间和 GM 存储，只替换源码及来源/更新时间。更新检查使用 Demo 独立 HTTP 客户端，不继承浏览器登录 Cookie；没有后台定时任务，也不通过运行时 bridge 暴露更新 API。
+
+`@include` 和 `@exclude` 支持 `/.../` 包裹的正则，以文化无关方式匹配且执行上限为 100 ms；非法正则会产生 metadata error。`@match http*://host/path` 同时覆盖 HTTP 与 HTTPS。既有 glob 语义和排除规则优先级保持不变。
 
 ## 网络 API
 
@@ -144,26 +154,26 @@ CefSharp 只能提供尽力而为的 document-start 钩子。相应执行产生 
 还原、构建、测试和打包必须使用相同的 `CefSharpVersion` 属性：
 
 ```powershell
-dotnet restore MonkeySharp.slnx -p:Platform=x64
-dotnet build MonkeySharp.slnx -c Release -p:Platform=x64 --no-restore
-dotnet test MonkeySharp.slnx -c Release -p:Platform=x64 --no-build
+dotnet restore MonkeySharp.slnx -p:Platform=x64 -p:CefSharpVersion=121.3.70
+dotnet build MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=121.3.70 --no-restore
+dotnet test MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=121.3.70 --no-build
 node --test Mzying2001.MonkeySharp.Core.Tests/JavaScript/*.test.js
 ```
 
 使用 `-p:Platform=x86` 重复 .NET 命令；x86 配置会排除仅支持 x64 的 Demo 项目。Core 及不同平台适配器应输出到不同目录：
 
 ```powershell
-dotnet pack Mzying2001.MonkeySharp.Core/Mzying2001.MonkeySharp.Core.csproj -c Release -o artifacts/packages/core
-dotnet pack Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj -c Release -p:Platform=x64 -o artifacts/packages/x64
-dotnet pack Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj -c Release -p:Platform=x86 -o artifacts/packages/x86
+dotnet pack Mzying2001.MonkeySharp.Core/Mzying2001.MonkeySharp.Core.csproj -c Release -p:Platform=x64 -p:CefSharpVersion=121.3.70 -o artifacts/packages/core
+dotnet pack Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj -c Release -p:Platform=x64 -p:CefSharpVersion=121.3.70 -o artifacts/packages/x64
+dotnet pack Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj -c Release -p:Platform=x86 -p:CefSharpVersion=121.3.70 -o artifacts/packages/x86
 ```
 
 在 Windows 桌面会话中运行真实 Chromium 验证：
 
 ```powershell
-./Mzying2001.MonkeySharp.CefSharp.SmokeHost/Run-E2E.ps1 -Platform x64
-./Mzying2001.MonkeySharp.CefSharp.SmokeHost/Run-E2E.ps1 -Platform x86
-powershell -NoProfile -ExecutionPolicy Bypass -File Mzying2001.MonkeySharp.Demo/Run-E2E.ps1
+./Mzying2001.MonkeySharp.CefSharp.SmokeHost/Run-E2E.ps1 -Platform x64 -CefSharpVersion 121.3.70
+./Mzying2001.MonkeySharp.CefSharp.SmokeHost/Run-E2E.ps1 -Platform x86 -CefSharpVersion 121.3.70
+powershell -NoProfile -ExecutionPolicy Bypass -File Mzying2001.MonkeySharp.Demo/Run-E2E.ps1 -CefSharpVersion 121.3.70
 ```
 
-向 SmokeHost 脚本传入 `-CefSharpVersion 151.3.240` 可验证另一组托管与原生组件。两个验证入口都使用隔离 profile 和 `TrustedPageWorld`；它们是集成测试，不是安全沙箱。
+验证其他受支持版本时，所有 restore/build/test/pack/SmokeHost 命令都传入相同的 `-CefSharpVersion`。SmokeHost 应分别对 x64/x86 和 `84.4.10`、`121.3.70`、`151.3.240` 运行；Demo gate 固定为默认版本 `121.3.70` 的 x64。PowerShell runner 会把同一版本传入 restore、clean、build 和 run。两个验证入口都使用隔离 profile 和 `TrustedPageWorld`；它们是集成测试，不是安全沙箱。

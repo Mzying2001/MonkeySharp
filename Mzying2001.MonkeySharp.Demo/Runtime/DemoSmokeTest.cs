@@ -29,7 +29,9 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                 checks["storageResourcesXhrCookieWebRequest"] = await EvaluateBoolean(primary,
                     "window.__demo.storage && window.__demo.resources && window.__demo.xhr && window.__demo.cookie && window.__demo.webRequest");
                 checks["domAndInfo"] = await EvaluateBoolean(primary, "window.__demo.dom && window.__demo.info");
-                checks["iframe"] = await EvaluateBoolean(primary, "document.querySelector('iframe').contentWindow.__demoFrame === true");
+                await WaitAsync(async () => await EvaluateBoolean(primary,
+                    "document.querySelector('iframe').contentWindow.__demoFrame === true"));
+                checks["iframe"] = true;
                 await WaitAsync(() => Task.FromResult(primary.MenuCommands.Count == 1));
                 primary.MenuCommands[0].InvokeCommand.Execute(null);
                 await WaitAsync(async () => await EvaluateBoolean(primary, "window.__demo.menu === true"));

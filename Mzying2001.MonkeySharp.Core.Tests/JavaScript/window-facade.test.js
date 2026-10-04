@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
+const { TextDecoder } = require("node:util");
 
 const template = fs.readFileSync(
     path.resolve(__dirname, "../../Mzying2001.MonkeySharp.Core/Js/Init.js"), "utf8");
@@ -141,6 +142,32 @@ test("window facade binds native methods while preserving aliases, constructors,
         delete globalThis.__nativeWindowStarted;
         delete globalThis.__nativeWindowComplete;
     }
+});
+
+test("window facade aliases do not violate native non-configurable window properties", async () => {
+    const context = vm.createContext({
+        console,
+        atob: value => Buffer.from(value, "base64").toString("latin1"),
+        TextDecoder
+    });
+    vm.runInContext(
+        "Object.defineProperty(globalThis, 'top', { value: globalThis, writable: false, configurable: false });" +
+        "Object.defineProperty(globalThis, 'parent', { value: globalThis, writable: false, configurable: false });",
+        context);
+    const payload = {
+        protocol: 1, documentId: "window-invariant-document", frameId: "main", runAt: "DocumentEnd",
+        invocations: [{
+            executionId: "window-invariant-execution", scriptKey: "44444444-4444-4444-4444-444444444444",
+            source: "globalThis.__windowInvariantResult = window.top === window && window.parent === window;",
+            declaredGrants: [], grants: [], grantDeclarationState: "Missing", info: {},
+            capability: "window-invariant-capability", deliveryToken: "window-invariant-delivery",
+            compatibility: { profile: "LegacyCompatible", strict: false, legacyGlobals: true }
+        }]
+    };
+    const encoded = Buffer.from(JSON.stringify(payload), "utf8").toString("base64");
+    vm.runInContext(template.replace("__MONKEYSHARP_PAYLOAD_BASE64__", encoded), context);
+    await waitFor(() => context.__windowInvariantResult !== undefined);
+    assert.equal(context.__windowInvariantResult, true);
 });
 
 test("window.close and window.focus are grant-gated bridge methods", async () => {

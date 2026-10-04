@@ -111,13 +111,17 @@ The default parser accepts a bounded preamble before `// ==UserScript==`; `Moder
 Supported fields include:
 
 - Identity: `@name`, localized names, `@namespace`, `@version`, `@description`, `@author`, `@license`, `@copyright`, and icons including `@icon64`/`@icon64URL`.
-- Selection: `@match`, `@include`, `@exclude`, `@exclude-match`, and `@noframes`.
+- Selection: `@match`, `@include`, `@exclude`, `@exclude-match`, and `@noframes`. Slash-delimited `@include`/`@exclude` regular expressions run with a 100 ms limit; invalid expressions are metadata errors. `@match http*://...` covers HTTP and HTTPS.
 - Execution: `@run-at`, `@run-in`, `@inject-into`, `@sandbox`, and `@unwrap`. Unsupported sandbox modes and wrapper removal emit `MSR212_UNSUPPORTED_SANDBOX` and `MSR213_UNSUPPORTED_UNWRAP`; execution remains in the page world and inside the MonkeySharp wrapper.
 - Capabilities and assets: `@grant`, `@connect`, `@require`, and `@resource`.
 - Source links: `@downloadURL`, `@updateURL`, `@homepageURL`, `@website`, `@source`, and `@supportURL`.
 - Disclosure and request metadata: `@antifeature` (including localized forms) and validated static `@webRequest` JSON rules.
 
 Exclusions override positive rules. URL fragments are ignored, hosts are IDN-normalized, explicit ports are checked, and `*.example.com` does not match the bare domain. Grant state distinguishes a missing `@grant`, explicit `@grant none`, and an explicit grant list. Recognized legacy aliases are normalized, while unknown grants remain case-sensitive and are never exposed.
+
+`@require` and `@resource` accept `md5` and `sha256` integrity hashes in hexadecimal or standard Base64, using `#sha256=<digest>` or `#sha256-<digest>` syntax. The URL fragment is removed before requests and cache lookup, and the original bytes are checked before use and again when cached content is read. A resource with only unsupported algorithms, malformed declarations, or a digest mismatch is rejected; unsupported algorithm names also produce a warning.
+
+The Demo's script manager can manually check for and install an update. `@updateURL` takes priority as the check source, while `@downloadURL` takes priority for the source being installed; `@downloadURL none` disables checking. Updates require matching non-empty name and namespace and a higher downloaded version. Checks do not run in the background or inherit browser login cookies, and the runtime bridge exposes no update API.
 
 `GM.info` and `GM_info` expose a frozen snapshot containing script metadata, declared and normalized grants, URL rules, resources, update/source links, handler, sandbox mode, and the raw metadata header. Static `@webRequest` entries are validated and included in this snapshot; they are not installed into the host network interceptor. Use the runtime `GM.webRequest(...)` API for registrations that affect requests.
 
@@ -135,7 +139,7 @@ Canonical `GM.*` APIs and legacy aliases are exposed only when the exact grant a
 | `GM.getResourceText`, `GM.getResourceURL` and aliases | Conditional | Require `IResourceProvider` and a declared `@resource`. |
 | `GM.xmlHttpRequest` / `GM_xmlhttpRequest` | CefSharp default | XHR with redirects, credentials, progress, abort, binary/multipart bodies, and text/JSON/binary/blob/stream responses. Requires `@connect`. |
 | `GM.registerMenuCommand`, `GM.unregisterMenuCommand` and aliases | Conditional | Require `IMenuService`. |
-| `GM.notification`, `GM.setClipboard`, `GM.openInTab`, `GM.download` and aliases | Conditional | Require their corresponding host services. |
+| `GM.notification`, `GM.setClipboard`, `GM.openInTab`, `GM.download` and aliases | Conditional | Require their corresponding host services. Notifications support the legacy four-argument overload and the `highlight`, `silent`, and `timeout` options. |
 | `GM.getTab`, `GM.saveTab`, `GM.getTabs` and aliases | Conditional | Require `ITabStateService`. |
 | `GM.cookie` / `GM_cookie` | CefSharp default | Structured access to the attached browser request context. |
 | `GM.webRequest` / `GM_webRequest` | CefSharp default | Tampermonkey selector/action registrations with removable handles and cancel/redirect result callbacks. |
@@ -208,12 +212,12 @@ Storage keys must be migrated explicitly when retaining v1 data. Custom host ser
 
 ## Build and Test
 
-The repository uses .NET SDK `9.0.315` and defaults to CefSharp `121.3.70`:
+The repository uses .NET SDK `9.0.315` and defaults to CefSharp `121.3.70`. CI covers `84.4.10`, `121.3.70`, and `151.3.240` on both x64 and x86, including .NET and JavaScript tests and a real-Chromium SmokeHost gate for every combination. The WPF Demo smoke gate runs on x64 with the default version.
 
 ```powershell
-dotnet restore MonkeySharp.slnx -p:Platform=x64
-dotnet build MonkeySharp.slnx -c Release -p:Platform=x64 --no-restore
-dotnet test MonkeySharp.slnx -c Release -p:Platform=x64 --no-build
+dotnet restore MonkeySharp.slnx -p:Platform=x64 -p:CefSharpVersion=121.3.70
+dotnet build MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=121.3.70 --no-restore
+dotnet test MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=121.3.70 --no-build
 node --test Mzying2001.MonkeySharp.Core.Tests/JavaScript/*.test.js
 ```
 
