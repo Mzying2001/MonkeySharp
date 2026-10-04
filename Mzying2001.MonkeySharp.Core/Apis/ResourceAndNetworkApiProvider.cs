@@ -1,5 +1,6 @@
 using Mzying2001.MonkeySharp.Core.Bridge;
 using Mzying2001.MonkeySharp.Core.Domain;
+using Mzying2001.MonkeySharp.Core.Security;
 using Mzying2001.MonkeySharp.Core.Runtime;
 using System;
 using System.Collections.Generic;
@@ -97,6 +98,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                     .ConfigureAwait(false);
                 if (content == null)
                     throw new BridgeProtocolException(BridgeErrorCodes.Internal, "The resource provider returned no content.");
+                ResourceIntegrityVerifier.Verify(content.Bytes, declaration.Integrity, declaration.Url);
                 if (content.Bytes.Length > _options.MaxResourceBytes ||
                     (content.Text != null && Encoding.UTF8.GetByteCount(content.Text) > _options.MaxResourceBytes))
                     throw new BridgeProtocolException(BridgeErrorCodes.PayloadTooLarge, "The resource exceeds the configured limit.");
@@ -137,6 +139,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 cancellationToken);
             if (content == null)
                 throw new BridgeProtocolException(BridgeErrorCodes.Internal, "The resource provider returned no content.");
+            ResourceIntegrityVerifier.Verify(content.Bytes, declaration.Integrity, declaration.Url);
             if (content.Bytes.Length > _options.MaxResourceBytes ||
                 (content.Text != null && Encoding.UTF8.GetByteCount(content.Text) > _options.MaxResourceBytes))
                 throw new BridgeProtocolException(BridgeErrorCodes.PayloadTooLarge, "The resource exceeds the configured limit.");

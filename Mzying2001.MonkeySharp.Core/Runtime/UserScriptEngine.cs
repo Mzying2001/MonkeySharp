@@ -1,4 +1,6 @@
 using Mzying2001.MonkeySharp.Core.Domain;
+using Mzying2001.MonkeySharp.Core.Apis;
+using Mzying2001.MonkeySharp.Core.Security;
 using Mzying2001.MonkeySharp.Core.Compatibility;
 using Mzying2001.MonkeySharp.Core.Matching;
 using Mzying2001.MonkeySharp.Core.Repository;
@@ -321,7 +323,9 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                 catch (Exception exception)
                 {
                     diagnostics.Add(new UserScriptDiagnostic(
-                        "MSR400_DEPENDENCY_RESOLUTION_FAILED",
+                        exception is ResourceIntegrityException integrityException
+                            ? integrityException.Code
+                            : "MSR400_DEPENDENCY_RESOLUTION_FAILED",
                         DiagnosticSeverity.Error,
                         "The script dependencies could not be resolved.",
                         exception,
@@ -409,7 +413,12 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
             var resources = metadata.Resources.Select(resource => new Dictionary<string, object>
             {
                 ["name"] = resource.Name,
-                ["url"] = resource.Url
+                ["url"] = resource.Url,
+                ["integrity"] = resource.Integrity.Select(item => new Dictionary<string, object>
+                {
+                    ["algorithm"] = item.Algorithm,
+                    ["digest"] = item.Digest
+                }).ToArray()
             }).ToArray();
             var antifeatures = metadata.Antifeatures
                 .GroupBy(item => item.Type, StringComparer.OrdinalIgnoreCase)

@@ -840,11 +840,14 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
             IDownloadService,
             ITabStateService
         {
-            public Task<string> GetScriptAsync(
+            public Task<ResourceContent> GetScriptAsync(
                 UserScriptInstallation installation,
-                string url,
+                UserScriptDependencyDeclaration dependency,
                 CancellationToken cancellationToken)
-                => Task.FromResult("window.dependencyLoaded = true;");
+                => Task.FromResult(new ResourceContent(
+                    Encoding.UTF8.GetBytes("window.dependencyLoaded = true;"),
+                    "application/javascript",
+                    "window.dependencyLoaded = true;"));
 
             public Task<ResourceContent> GetAsync(
                 UserScriptInstallation installation,

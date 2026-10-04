@@ -1,5 +1,6 @@
 using Mzying2001.MonkeySharp.Core.Domain;
 using Mzying2001.MonkeySharp.Core.Compatibility;
+using Mzying2001.MonkeySharp.Core.Security;
 using Mzying2001.MonkeySharp.Core.Matching;
 using System;
 using System.Collections.Generic;
@@ -139,6 +140,7 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
 
             var runAt = ParseRunAt(First(values, "run-at"), diagnostics);
             var resources = ParseResources(values, diagnostics);
+            var requires = ParseDependencies(values, diagnostics);
             var webRequest = ParseWebRequest(values, diagnostics);
             ValidateConnects(ReadCollection(values, "connect"), diagnostics, values);
             var knownKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -187,7 +189,7 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
                 declaredGrants,
                 grants,
                 ReadCollection(values, "connect"),
-                ReadCollection(values, "require"),
+                requires,
                 resources,
                 antifeatures,
                 webRequest,
@@ -371,9 +373,125 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
                         entry.Line));
                     continue;
                 }
-                result.Add(new ResourceDeclaration(name, entry.Value.Substring(separator).Trim()));
+                var parsed = ParseExternalUrl(entry.Value.Substring(separator).Trim(), diagnostics, entry.Line);
+                if (parsed != null)
+                    result.Add(new ResourceDeclaration(name, parsed.Url, parsed.Integrity));
             }
             return result.AsReadOnly();
+        }
+
+        private static IReadOnlyList<UserScriptDependencyDeclaration> ParseDependencies(
+            IDictionary<string, List<Entry>> values,
+            ICollection<MetadataDiagnostic> diagnostics)
+        {
+            var result = new List<UserScriptDependencyDeclaration>();
+            if (!values.TryGetValue("require", out var requirements))
+                return result.AsReadOnly();
+            foreach (var entry in requirements)
+            {
+                var parsed = ParseExternalUrl(entry.Value, diagnostics, entry.Line);
+                if (parsed != null)
+                    result.Add(new UserScriptDependencyDeclaration(parsed.Url, parsed.Integrity));
+            }
+            return result.AsReadOnly();
+        }
+
+        private static ParsedExternalUrl ParseExternalUrl(
+            string raw,
+            ICollection<MetadataDiagnostic> diagnostics,
+            int line)
+        {
+            var separator = raw == null ? -1 : raw.IndexOf('#');
+            var url = separator < 0 ? raw : raw.Substring(0, separator);
+            if (string.IsNullOrWhiteSpace(url))
+            {
+                diagnostics.Add(new MetadataDiagnostic(
+                    "MSM070_INVALID_SRI",
+                    DiagnosticSeverity.Error,
+                    "An external resource URL is required.",
+                    line));
+                return null;
+            }
+
+            var integrity = new List<ResourceIntegrityDeclaration>();
+            if (separator < 0)
+                return new ParsedExternalUrl(url.Trim(), integrity);
+
+            var fragment = raw.Substring(separator + 1);
+            if (string.IsNullOrWhiteSpace(fragment))
+            {
+                diagnostics.Add(new MetadataDiagnostic(
+                    "MSM070_INVALID_SRI",
+                    DiagnosticSeverity.Error,
+                    "An integrity fragment cannot be empty.",
+                    line));
+                return null;
+            }
+
+            var supportedAlgorithm = false;
+            var usableDigest = false;
+            foreach (var token in fragment.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                var value = token.Trim();
+                var equals = value.IndexOf('=');
+                var dash = value.IndexOf('-');
+                var split = dash >= 0 && (equals < 0 || dash < equals) ? dash : equals;
+                if (split <= 0 || split == value.Length - 1)
+                {
+                    diagnostics.Add(new MetadataDiagnostic(
+                        "MSM070_INVALID_SRI",
+                        DiagnosticSeverity.Error,
+                        "An integrity declaration must use algorithm=value or algorithm-value.",
+                        line));
+                    continue;
+                }
+                var algorithm = value.Substring(0, split).Trim().ToLowerInvariant();
+                var digest = value.Substring(split + 1).Trim();
+                var declaration = new ResourceIntegrityDeclaration(algorithm, digest);
+                integrity.Add(declaration);
+                if (!declaration.IsSupported)
+                {
+                    diagnostics.Add(new MetadataDiagnostic(
+                        "MSM071_UNSUPPORTED_SRI",
+                        DiagnosticSeverity.Warning,
+                        "Integrity algorithm '" + algorithm + "' is not supported.",
+                        line));
+                    continue;
+                }
+
+                supportedAlgorithm = true;
+                if (ResourceIntegrityVerifier.TryDecode(algorithm, digest, out var unused))
+                    usableDigest = true;
+                else
+                    diagnostics.Add(new MetadataDiagnostic(
+                        "MSM070_INVALID_SRI",
+                        DiagnosticSeverity.Error,
+                        "The " + algorithm + " integrity digest is not valid hexadecimal or Base64.",
+                        line));
+            }
+
+            if (!supportedAlgorithm || !usableDigest)
+            {
+                diagnostics.Add(new MetadataDiagnostic(
+                    "MSM072_NO_SUPPORTED_SRI",
+                    DiagnosticSeverity.Error,
+                    "The integrity fragment does not contain a usable MD5 or SHA-256 digest.",
+                    line));
+                return null;
+            }
+            return new ParsedExternalUrl(url.Trim(), integrity);
+        }
+
+        private sealed class ParsedExternalUrl
+        {
+            public ParsedExternalUrl(string url, IReadOnlyList<ResourceIntegrityDeclaration> integrity)
+            {
+                Url = url;
+                Integrity = integrity;
+            }
+
+            public string Url { get; }
+            public IReadOnlyList<ResourceIntegrityDeclaration> Integrity { get; }
         }
 
         private static IReadOnlyList<AntifeatureDeclaration> ParseAntifeatures(

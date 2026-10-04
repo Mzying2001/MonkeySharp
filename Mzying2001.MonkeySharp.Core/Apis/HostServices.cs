@@ -87,18 +87,18 @@ namespace Mzying2001.MonkeySharp.Core.Apis
     }
 
     /// <summary>
-    /// Loads JavaScript dependencies declared with <c>@require</c>.
+    /// Loads the bytes and decoded text for JavaScript dependencies declared with <c>@require</c>.
     /// </summary>
     public interface IUserScriptDependencyProvider
     {
-        /// <summary>Loads one dependency as JavaScript source text.</summary>
+        /// <summary>Loads one dependency while preserving its original bytes for integrity verification.</summary>
         /// <param name="installation">The userscript requesting the dependency.</param>
-        /// <param name="url">The dependency URL from metadata.</param>
+        /// <param name="dependency">The dependency declaration from metadata.</param>
         /// <param name="cancellationToken">A token that cancels dependency loading.</param>
-        /// <returns>The dependency source text.</returns>
-        Task<string> GetScriptAsync(
+        /// <returns>The dependency bytes and optional decoded text.</returns>
+        Task<ResourceContent> GetScriptAsync(
             UserScriptInstallation installation,
-            string url,
+            UserScriptDependencyDeclaration dependency,
             CancellationToken cancellationToken);
     }
 

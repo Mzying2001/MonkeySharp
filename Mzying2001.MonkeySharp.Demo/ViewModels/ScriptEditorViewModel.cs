@@ -30,7 +30,7 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
                 "\n匹配：" + string.Join(", ", metadata.Matches) + "\nInclude：" + string.Join(", ", metadata.Includes) +
                 "\n排除：" + string.Join(", ", metadata.Excludes.Concat(metadata.ExcludeMatches)) +
                 "\n权限：" + string.Join(", ", metadata.DeclaredGrants) + "\nConnect：" + string.Join(", ", metadata.Connects) +
-                "\nRequire：" + string.Join(", ", metadata.Requires) +
+                "\nRequire：" + string.Join(", ", metadata.Requires.Select(item => item.Url)) +
                 "\nResource：" + string.Join(", ", metadata.Resources.Select(item => item.Name + " = " + item.Url)) + "\n" + diagnostics;
         }
     }

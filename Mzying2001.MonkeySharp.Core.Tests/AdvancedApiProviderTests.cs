@@ -4,6 +4,7 @@ using Mzying2001.MonkeySharp.Core.Domain;
 using Mzying2001.MonkeySharp.Core.Repository;
 using Mzying2001.MonkeySharp.Core.Runtime;
 using Mzying2001.MonkeySharp.Core.Parsing;
+using Mzying2001.MonkeySharp.Core.Security;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -50,6 +51,21 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             exception = await Assert.ThrowsAsync<BridgeProtocolException>(() => oversizedText.InvokeAsync(
                 Context(installation, "GM.getResourceText", new { name = "logo" }), CancellationToken.None));
             Assert.Equal(BridgeErrorCodes.PayloadTooLarge, exception.Code);
+        }
+
+        [Fact]
+        public async Task ResourceApiRejectsContentThatFailsDeclaredIntegrity()
+        {
+            var installation = await InstallAsync(
+                "// @grant GM.getResourceText\n" +
+                "// @resource logo https://cdn.example/logo.txt#sha256=2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824");
+            var provider = new ResourceAndNetworkApiProvider(new FakeResourceProvider(new ResourceContent(
+                Encoding.UTF8.GetBytes("tampered"), "text/plain", "tampered")));
+
+            var exception = await Assert.ThrowsAsync<ResourceIntegrityException>(() => provider.InvokeAsync(
+                Context(installation, "GM.getResourceText", new { name = "logo" }), CancellationToken.None));
+
+            Assert.Equal("MSR410_RESOURCE_INTEGRITY_FAILED", exception.Code);
         }
 
         [Fact]
@@ -371,6 +387,23 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Fact]
+        public async Task DependencyResolverRejectsContentThatFailsDeclaredIntegrity()
+        {
+            var installation = await InstallAsync(
+                "// @grant none\n" +
+                "// @require https://cdn.example/lib.js#sha256=2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824");
+            var dependencies = new FakeDependencyProvider(new Dictionary<string, string>
+            {
+                ["https://cdn.example/lib.js"] = "tampered"
+            });
+
+            var exception = await Assert.ThrowsAsync<ResourceIntegrityException>(() =>
+                new ResourceScriptSourceResolver(dependencies, 100).ResolveSourceAsync(installation, CancellationToken.None));
+
+            Assert.Equal("MSR410_RESOURCE_INTEGRITY_FAILED", exception.Code);
+        }
+
+        [Fact]
         public async Task HostInteractionServicesReceiveValidatedRequestsAndMenuCallbacks()
         {
             var installation = await InstallAsync(
@@ -585,8 +618,8 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         {
             private readonly IDictionary<string, string> _sources;
             public FakeDependencyProvider(IDictionary<string, string> sources) { _sources = sources; }
-            public Task<string> GetScriptAsync(UserScriptInstallation installation, string url, CancellationToken cancellationToken)
-                => Task.FromResult(_sources[url]);
+            public Task<ResourceContent> GetScriptAsync(UserScriptInstallation installation, UserScriptDependencyDeclaration dependency, CancellationToken cancellationToken)
+                => Task.FromResult(new ResourceContent(Encoding.UTF8.GetBytes(_sources[dependency.Url]), "application/javascript", _sources[dependency.Url]));
         }
 
         private sealed class FakeHostServices :

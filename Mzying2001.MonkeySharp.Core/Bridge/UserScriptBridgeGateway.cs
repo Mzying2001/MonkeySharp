@@ -1,5 +1,6 @@
 using Mzying2001.MonkeySharp.Core.Apis;
 using Mzying2001.MonkeySharp.Core.Domain;
+using Mzying2001.MonkeySharp.Core.Security;
 using Mzying2001.MonkeySharp.Core.Permissions;
 using Mzying2001.MonkeySharp.Core.Runtime;
 using Mzying2001.MonkeySharp.Core.Storage;
@@ -514,6 +515,11 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                 catch (UnsupportedApiException exception)
                 {
                     return Limit(ProtocolJson.Error(requestId, BridgeErrorCodes.NotSupported, exception.Message));
+                }
+                catch (ResourceIntegrityException exception)
+                {
+                    EmitDiagnostic(exception.Code, "A declared resource failed integrity validation.", exception, execution, requestId);
+                    return Limit(ProtocolJson.Error(requestId, BridgeErrorCodes.Internal, "A declared resource failed integrity validation."));
                 }
                 catch (OperationCanceledException)
                 {

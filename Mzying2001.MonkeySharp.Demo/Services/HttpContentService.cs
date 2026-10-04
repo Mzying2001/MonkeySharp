@@ -1,5 +1,6 @@
 using Mzying2001.MonkeySharp.Core.Apis;
 using Mzying2001.MonkeySharp.Core.Domain;
+using Mzying2001.MonkeySharp.Core.Security;
 using Mzying2001.MonkeySharp.Demo.Persistence;
 using System;
 using System.Collections.Generic;
@@ -21,9 +22,9 @@ namespace Mzying2001.MonkeySharp.Demo.Services
         public HttpContentService(AppDataPaths paths) { _directory = paths.DependenciesDirectory; }
 
         public Task<ResourceContent> GetAsync(UserScriptInstallation installation, ResourceDeclaration resource, CancellationToken cancellationToken)
-            => CachedAsync(installation, resource.Url, cancellationToken);
-        public async Task<string> GetScriptAsync(UserScriptInstallation installation, string url, CancellationToken cancellationToken)
-            => (await CachedAsync(installation, url, cancellationToken).ConfigureAwait(false)).Text;
+            => CachedAsync(installation, resource.Url, resource.Integrity, cancellationToken);
+        public Task<ResourceContent> GetScriptAsync(UserScriptInstallation installation, UserScriptDependencyDeclaration dependency, CancellationToken cancellationToken)
+            => CachedAsync(installation, dependency.Url, dependency.Integrity, cancellationToken);
 
         public async Task<ResourceContent> FetchAsync(string url, CancellationToken cancellationToken)
         {
@@ -53,7 +54,11 @@ namespace Mzying2001.MonkeySharp.Demo.Services
             }
         }
 
-        private async Task<ResourceContent> CachedAsync(UserScriptInstallation installation, string url, CancellationToken cancellationToken)
+        private async Task<ResourceContent> CachedAsync(
+            UserScriptInstallation installation,
+            string url,
+            IReadOnlyList<ResourceIntegrityDeclaration> integrity,
+            CancellationToken cancellationToken)
         {
             RequireHttp(url);
             var cacheKey = installation.ScriptKey + ":" + installation.UpdatedAt.ToString("O") + ":" + url;
@@ -68,14 +73,19 @@ namespace Mzying2001.MonkeySharp.Demo.Services
                         using (var document = JsonDocument.Parse(File.ReadAllText(path)))
                         {
                             var root = document.RootElement;
-                            return new ResourceContent(Convert.FromBase64String(root.GetProperty("bytes").GetString()),
+                            var cached = new ResourceContent(Convert.FromBase64String(root.GetProperty("bytes").GetString()),
                                 root.GetProperty("mime").GetString(), root.GetProperty("text").GetString());
+                            ResourceIntegrityVerifier.Verify(cached.Bytes, integrity, url);
+                            return cached;
                         }
                     }
+                    catch (ResourceIntegrityException)
+                    { File.Delete(path); }
                     catch (Exception exception) when (exception is JsonException || exception is FormatException || exception is KeyNotFoundException)
                     { File.Delete(path); }
                 }
                 var content = await FetchAsync(url, cancellationToken).ConfigureAwait(false);
+                ResourceIntegrityVerifier.Verify(content.Bytes, integrity, url);
                 var temporary = path + ".tmp";
                 try
                 {

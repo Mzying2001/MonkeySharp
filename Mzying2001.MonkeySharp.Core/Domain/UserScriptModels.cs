@@ -114,10 +114,12 @@ namespace Mzying2001.MonkeySharp.Core.Domain
         /// <summary>Initializes a resource declaration.</summary>
         /// <param name="name">The name used to reference the resource.</param>
         /// <param name="url">The resource URL from the metadata block.</param>
-        public ResourceDeclaration(string name, string url)
+        /// <param name="integrity">The optional subresource integrity declarations.</param>
+        internal ResourceDeclaration(string name, string url, IEnumerable<ResourceIntegrityDeclaration> integrity)
         {
             Name = name ?? throw new ArgumentNullException(nameof(name));
             Url = url ?? throw new ArgumentNullException(nameof(url));
+            Integrity = new ReadOnlyCollection<ResourceIntegrityDeclaration>((integrity ?? Enumerable.Empty<ResourceIntegrityDeclaration>()).ToList());
         }
 
         /// <summary>Gets the resource name.</summary>
@@ -125,6 +127,49 @@ namespace Mzying2001.MonkeySharp.Core.Domain
 
         /// <summary>Gets the resource URL.</summary>
         public string Url { get; }
+
+        /// <summary>Gets the optional subresource integrity declarations.</summary>
+        public IReadOnlyList<ResourceIntegrityDeclaration> Integrity { get; }
+    }
+
+    /// <summary>
+    /// Describes one hash declaration attached to an external userscript resource.
+    /// </summary>
+    public sealed class ResourceIntegrityDeclaration
+    {
+        internal ResourceIntegrityDeclaration(string algorithm, string digest)
+        {
+            Algorithm = algorithm ?? throw new ArgumentNullException(nameof(algorithm));
+            Digest = digest ?? throw new ArgumentNullException(nameof(digest));
+        }
+
+        /// <summary>Gets the normalized hash algorithm name.</summary>
+        public string Algorithm { get; }
+
+        /// <summary>Gets the hexadecimal or Base64 digest text.</summary>
+        public string Digest { get; }
+
+        /// <summary>Gets whether the runtime can verify this algorithm.</summary>
+        public bool IsSupported => string.Equals(Algorithm, "md5", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(Algorithm, "sha256", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Describes one JavaScript dependency declared with <c>@require</c>.
+    /// </summary>
+    public sealed class UserScriptDependencyDeclaration
+    {
+        internal UserScriptDependencyDeclaration(string url, IEnumerable<ResourceIntegrityDeclaration> integrity)
+        {
+            Url = url ?? throw new ArgumentNullException(nameof(url));
+            Integrity = new ReadOnlyCollection<ResourceIntegrityDeclaration>((integrity ?? Enumerable.Empty<ResourceIntegrityDeclaration>()).ToList());
+        }
+
+        /// <summary>Gets the dependency URL without its integrity fragment.</summary>
+        public string Url { get; }
+
+        /// <summary>Gets the optional subresource integrity declarations.</summary>
+        public IReadOnlyList<ResourceIntegrityDeclaration> Integrity { get; }
     }
 
     /// <summary>Describes one localized antifeature declaration.</summary>
@@ -200,7 +245,7 @@ namespace Mzying2001.MonkeySharp.Core.Domain
             IEnumerable<string> declaredGrants,
             IEnumerable<string> grants,
             IEnumerable<string> connects,
-            IEnumerable<string> requires,
+            IEnumerable<UserScriptDependencyDeclaration> requires,
             IEnumerable<ResourceDeclaration> resources,
             IEnumerable<AntifeatureDeclaration> antifeatures,
             IEnumerable<UserScriptWebRequestRule> webRequest,
@@ -237,7 +282,7 @@ namespace Mzying2001.MonkeySharp.Core.Domain
             DeclaredGrants = ReadOnlyList(declaredGrants);
             Grants = ReadOnlyList(grants);
             Connects = ReadOnlyList(connects);
-            Requires = ReadOnlyList(requires);
+            Requires = new ReadOnlyCollection<UserScriptDependencyDeclaration>(requires.ToList());
             Resources = new ReadOnlyCollection<ResourceDeclaration>(resources.ToList());
             Antifeatures = new ReadOnlyCollection<AntifeatureDeclaration>(antifeatures.ToList());
             WebRequest = new ReadOnlyCollection<UserScriptWebRequestRule>(webRequest.ToList());
@@ -339,7 +384,7 @@ namespace Mzying2001.MonkeySharp.Core.Domain
         public IReadOnlyList<string> Connects { get; }
 
         /// <summary>Gets dependency URLs in declaration order.</summary>
-        public IReadOnlyList<string> Requires { get; }
+        public IReadOnlyList<UserScriptDependencyDeclaration> Requires { get; }
 
         /// <summary>Gets named external resource declarations.</summary>
         public IReadOnlyList<ResourceDeclaration> Resources { get; }
