@@ -1,6 +1,7 @@
 using Mzying2001.MonkeySharp.Core.Apis;
 using Mzying2001.MonkeySharp.Core.Domain;
 using Mzying2001.MonkeySharp.Core.Security;
+using Mzying2001.MonkeySharp.Core.Updates;
 using Mzying2001.MonkeySharp.Demo.Persistence;
 using System;
 using System.Collections.Generic;
@@ -13,7 +14,7 @@ using System.Threading.Tasks;
 
 namespace Mzying2001.MonkeySharp.Demo.Services
 {
-    public sealed class HttpContentService : IResourceProvider, IUserScriptDependencyProvider, IDisposable
+    public sealed class HttpContentService : IResourceProvider, IUserScriptDependencyProvider, IUserScriptUpdateFetcher, IDisposable
     {
         private readonly HttpClient _client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false })
         { Timeout = Timeout.InfiniteTimeSpan };
@@ -52,6 +53,14 @@ namespace Mzying2001.MonkeySharp.Demo.Services
                         encoding.GetString(bytes).TrimStart('\uFEFF'));
                 }
             }
+        }
+
+        public async Task<string> FetchSourceAsync(
+            UserScriptInstallation installation,
+            string url,
+            CancellationToken cancellationToken)
+        {
+            return (await FetchAsync(url, cancellationToken).ConfigureAwait(false)).Text;
         }
 
         private async Task<ResourceContent> CachedAsync(

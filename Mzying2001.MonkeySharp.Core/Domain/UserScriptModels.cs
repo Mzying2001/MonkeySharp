@@ -469,6 +469,7 @@ namespace Mzying2001.MonkeySharp.Core.Domain
             DateTimeOffset updatedAt)
         {
             ScriptKey = scriptKey;
+            RevisionId = Guid.NewGuid();
             Definition = definition ?? throw new ArgumentNullException(nameof(definition));
             SourceOrigin = sourceOrigin;
             IsEnabled = isEnabled;
@@ -478,6 +479,9 @@ namespace Mzying2001.MonkeySharp.Core.Domain
 
         /// <summary>Gets the stable installation key.</summary>
         public ScriptKey ScriptKey { get; }
+
+        /// <summary>Gets the immutable revision identity for optimistic concurrency.</summary>
+        public Guid RevisionId { get; }
 
         /// <summary>Gets the installed script definition.</summary>
         public UserScriptDefinition Definition { get; }

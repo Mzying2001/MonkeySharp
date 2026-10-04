@@ -12,7 +12,7 @@ namespace Mzying2001.MonkeySharp.Demo.Views
         public ScriptManagerWindow(DemoRuntime runtime)
         {
             InitializeComponent();
-            _model = new ScriptManagerViewModel(runtime.Repository, runtime.Content,
+            _model = new ScriptManagerViewModel(runtime.Repository, runtime.Content, runtime.Updates,
                 message => MessageBox.Show(this, message, "脚本权限与修改确认", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes,
                 runtime.MainWindow.Diagnostics);
             DataContext = _model;
