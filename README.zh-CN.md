@@ -119,7 +119,7 @@ var host = new CefSharpUserScriptHostBuilder(repository)
 
 排除规则优先于正向规则。URL 片段会被忽略，主机名经过 IDN 规范化，显式端口会被检查，且 `*.example.com` 不匹配裸域名。授权状态会区分缺少 `@grant`、显式 `@grant none` 和显式授权列表。已知旧式别名会被规范化，未知授权保持大小写敏感且不会公开。
 
-`@require` 和 `@resource` 支持 `md5`、`sha256` 的十六进制或标准 Base64 完整性摘要，可使用 `#sha256=<摘要>` 或 `#sha256-<摘要>`。请求和缓存键会移除 URL fragment；内容在使用前以及读取缓存时都会按原始字节重新校验。只有不支持的算法、声明格式错误或摘要不匹配时拒绝资源；不支持的算法也会产生 warning。
+`@require` 和 `@resource` 支持 `md5`、`sha256` 的十六进制或标准 Base64 完整性摘要，可使用 `#algorithm=<摘要>` 或 `#algorithm-<摘要>`；逗号或分号分隔的多个声明选择最后一个受支持的摘要。请求和缓存键会移除 URL fragment；内容在使用前以及读取缓存时都会按原始字节重新校验。只有不支持的算法、声明格式错误或摘要不匹配时拒绝资源；不支持的算法也会产生 warning。
 
 Demo 脚本管理器支持手动检查并安装更新。检查源优先使用 `@updateURL`，安装源优先使用 `@downloadURL`；`@downloadURL none` 会禁用更新检查。远程脚本必须有相同且非空的 name/namespace，下载版本必须高于当前版本。不会后台定时检查，也不会继承浏览器登录 Cookie；运行时 bridge 不公开更新 API。
 
