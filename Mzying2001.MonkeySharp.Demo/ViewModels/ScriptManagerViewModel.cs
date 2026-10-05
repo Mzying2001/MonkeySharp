@@ -224,7 +224,7 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
             var installation = item.Installation;
             if (!installation.IsEnabled && !_confirm("启用并允许脚本权限？\n\n" + ScriptEditorViewModel.Describe(installation.Definition.ParseResult)))
             {
-                // WPF toggles the CheckBox before invoking the command. Re-publish the
+                // WPF toggles the control before invoking the command. Re-publish the
                 // unchanged installation so the OneWay binding reads the actual state.
                 item.Update(installation);
                 return;

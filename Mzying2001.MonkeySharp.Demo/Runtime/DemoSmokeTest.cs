@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -74,7 +75,7 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                 manager.UpdateLayout();
                 checks["scriptManagerDetails"] = managerModel.Details.Name == managerModel.SelectedScript.Name &&
                     managerModel.Details.SourceOrigin == managerModel.SelectedScript.Installation.SourceOrigin;
-                checks["scriptManagerInlineToggle"] = VisualDescendants(manager).OfType<CheckBox>().Any();
+                checks["scriptManagerInlineToggle"] = VisualDescendants(manager).OfType<ToggleButton>().Any();
                 checks["scriptManagerCtrlS"] = manager.InputBindings.OfType<KeyBinding>().Any(binding =>
                     binding.Key == Key.S && binding.Modifiers == ModifierKeys.Control &&
                     ReferenceEquals(binding.Command, managerModel.SaveCommand));

@@ -25,6 +25,46 @@
                 </ControlTemplate></Setter.Value>
             </Setter>
         </Style>
+        <Style x:Key="ToggleSwitchStyle" TargetType="{x:Type ToggleButton}">
+            <Setter Property="Width" Value="38" />
+            <Setter Property="Height" Value="20" />
+            <Setter Property="Margin" Value="4,0,0,0" />
+            <Setter Property="Focusable" Value="True" />
+            <Setter Property="ToolTip" Value="{Binding ToggleLabel}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type ToggleButton}">
+                        <Grid Width="38" Height="20" SnapsToDevicePixels="True">
+                            <Border x:Name="Track" Background="#E2E8F0" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="10" />
+                            <Border x:Name="Thumb" Width="16" Height="16" HorizontalAlignment="Left" Margin="2"
+                                    Background="#FFFFFF" BorderBrush="#B8C5D1" BorderThickness="1" CornerRadius="8" />
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Track" Property="Background" Value="#3978B9" />
+                                <Setter TargetName="Track" Property="BorderBrush" Value="#3978B9" />
+                                <Setter TargetName="Thumb" Property="HorizontalAlignment" Value="Right" />
+                                <Setter TargetName="Thumb" Property="BorderBrush" Value="#2F659D" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Track" Property="BorderBrush" Value="#1D5E96" />
+                                <Setter TargetName="Track" Property="BorderThickness" Value="2" />
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Track" Property="BorderBrush" Value="#3978B9" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Track" Property="Background" Value="#EEF2F6" />
+                                <Setter TargetName="Track" Property="BorderBrush" Value="#D5DDE5" />
+                                <Setter TargetName="Thumb" Property="Background" Value="#F8FAFC" />
+                                <Setter TargetName="Thumb" Property="BorderBrush" Value="#D5DDE5" />
+                                <Setter Property="Opacity" Value="0.65" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <Style x:Key="HideWhenTextEmpty" TargetType="TextBlock">
             <Style.Triggers>
                 <Trigger Property="Text" Value="">

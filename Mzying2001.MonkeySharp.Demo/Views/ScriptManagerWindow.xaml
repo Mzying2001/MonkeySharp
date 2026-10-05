@@ -134,11 +134,12 @@
                                     <TextBlock Margin="0,3,0,0" Text="{Binding Description}" Foreground="#475569" FontSize="11"
                                                TextTrimming="CharacterEllipsis" />
                                 </StackPanel>
-                                <CheckBox Grid.Column="2" VerticalAlignment="Center" Content="{Binding ToggleLabel}"
-                                          IsChecked="{Binding Installation.IsEnabled, Mode=OneWay}"
-                                          IsEnabled="{Binding CanToggle}"
-                                          Command="{Binding DataContext.ToggleScriptCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                          CommandParameter="{Binding}" />
+                                <ToggleButton Grid.Column="2" VerticalAlignment="Center" Style="{StaticResource ToggleSwitchStyle}"
+                                              AutomationProperties.Name="{Binding ToggleLabel}"
+                                              IsChecked="{Binding Installation.IsEnabled, Mode=OneWay}"
+                                              IsEnabled="{Binding CanToggle}"
+                                              Command="{Binding DataContext.ToggleScriptCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                              CommandParameter="{Binding}" />
                             </Grid>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
