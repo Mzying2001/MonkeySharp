@@ -3,6 +3,12 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:views="clr-namespace:Mzying2001.MonkeySharp.Demo.Views"
         Title="MonkeySharp · 脚本管理器" Width="1150" Height="780" MinWidth="900" MinHeight="600" Background="#F4F6F9">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanVisibility" />
+        <DataTemplate x:Key="DetailListItem">
+            <TextBlock Text="{Binding}" Margin="0,1,0,1" TextWrapping="Wrap" Foreground="#334155" />
+        </DataTemplate>
+    </Window.Resources>
     <DockPanel Margin="16">
         <TextBlock DockPanel.Dock="Top" Text="用户脚本" FontSize="26" FontWeight="SemiBold" Foreground="#172B40" Margin="0,0,0,10" />
         <Border DockPanel.Dock="Top" Background="#FFF4DB" Padding="12,6" Margin="0,0,0,10">
@@ -12,7 +18,7 @@
             <Button Content="新建" Command="{Binding NewCommand}" /><Button Content="导入文件" Click="ImportFile" />
             <Button Content="删除" Command="{Binding DeleteCommand}" />
             <Button Content="检查并安装更新" Command="{Binding CheckUpdatesCommand}" />
-            <Button Content="验证元数据" Command="{Binding ValidateCommand}" /><Button Content="安装 / 保存" Command="{Binding SaveCommand}" />
+            <Button Content="安装 / 保存" Command="{Binding SaveCommand}" />
         </WrapPanel>
         <DockPanel DockPanel.Dock="Top" Margin="0,8,0,12" IsEnabled="{Binding CanEdit}">
             <Button DockPanel.Dock="Right" Margin="8,0,0,0" Content="从 URL 加载草稿" Command="{Binding InstallUrlCommand}" />
@@ -61,7 +67,54 @@
                              VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" />
                 </TabItem>
                 <TabItem Header="元数据 / 权限 / 诊断">
-                    <TextBox Text="{Binding Preview, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Padding="12" />
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="12">
+                        <StackPanel>
+                            <TextBlock Text="{Binding Details.MetadataStatus}" FontWeight="SemiBold" Foreground="#315A7D" Margin="0,0,0,12" />
+
+                            <TextBlock Text="基本信息" FontSize="15" FontWeight="SemiBold" Foreground="#172B40" />
+                            <Grid Margin="0,6,0,14">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="110" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition />
+                                </Grid.RowDefinitions>
+                                <TextBlock Grid.Row="0" Text="名称" Foreground="#64748B" /><TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Details.Name}" TextWrapping="Wrap" />
+                                <TextBlock Grid.Row="1" Text="版本" Foreground="#64748B" /><TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Details.Version}" />
+                                <TextBlock Grid.Row="2" Text="命名空间" Foreground="#64748B" /><TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Details.Namespace}" TextWrapping="Wrap" />
+                                <TextBlock Grid.Row="3" Text="作者" Foreground="#64748B" /><TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding Details.Author}" TextWrapping="Wrap" />
+                                <TextBlock Grid.Row="4" Text="描述" Foreground="#64748B" /><TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding Details.Description}" TextWrapping="Wrap" />
+                                <TextBlock Grid.Row="5" Text="运行时机" Foreground="#64748B" /><TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding Details.RunAt}" />
+                                <TextBlock Grid.Row="6" Text="来源" Foreground="#64748B" /><TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding Details.SourceOrigin}" TextWrapping="Wrap" />
+                            </Grid>
+
+                            <TextBlock Text="匹配规则" FontSize="15" FontWeight="SemiBold" Foreground="#172B40" />
+                            <Grid Margin="0,6,0,14">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="110" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions><RowDefinition /><RowDefinition /><RowDefinition /></Grid.RowDefinitions>
+                                <TextBlock Grid.Row="0" Text="Match" Foreground="#64748B" /><ItemsControl Grid.Row="0" Grid.Column="1" ItemsSource="{Binding Details.Matches}" ItemTemplate="{StaticResource DetailListItem}" />
+                                <TextBlock Grid.Row="1" Text="Include" Foreground="#64748B" /><ItemsControl Grid.Row="1" Grid.Column="1" ItemsSource="{Binding Details.Includes}" ItemTemplate="{StaticResource DetailListItem}" />
+                                <TextBlock Grid.Row="2" Text="排除" Foreground="#64748B" /><ItemsControl Grid.Row="2" Grid.Column="1" ItemsSource="{Binding Details.Excludes}" ItemTemplate="{StaticResource DetailListItem}" />
+                            </Grid>
+
+                            <TextBlock Text="权限与网络" FontSize="15" FontWeight="SemiBold" Foreground="#172B40" />
+                            <Grid Margin="0,6,0,14">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="110" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions><RowDefinition /><RowDefinition /></Grid.RowDefinitions>
+                                <TextBlock Grid.Row="0" Text="Grant" Foreground="#64748B" /><ItemsControl Grid.Row="0" Grid.Column="1" ItemsSource="{Binding Details.Grants}" ItemTemplate="{StaticResource DetailListItem}" />
+                                <TextBlock Grid.Row="1" Text="Connect" Foreground="#64748B" /><ItemsControl Grid.Row="1" Grid.Column="1" ItemsSource="{Binding Details.Connects}" ItemTemplate="{StaticResource DetailListItem}" />
+                            </Grid>
+
+                            <TextBlock Text="依赖与资源" FontSize="15" FontWeight="SemiBold" Foreground="#172B40" />
+                            <Grid Margin="0,6,0,14">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="110" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions><RowDefinition /><RowDefinition /></Grid.RowDefinitions>
+                                <TextBlock Grid.Row="0" Text="Require" Foreground="#64748B" /><ItemsControl Grid.Row="0" Grid.Column="1" ItemsSource="{Binding Details.Requires}" ItemTemplate="{StaticResource DetailListItem}" />
+                                <TextBlock Grid.Row="1" Text="Resource" Foreground="#64748B" /><ItemsControl Grid.Row="1" Grid.Column="1" ItemsSource="{Binding Details.Resources}" ItemTemplate="{StaticResource DetailListItem}" />
+                            </Grid>
+
+                            <TextBlock Text="诊断" FontSize="15" FontWeight="SemiBold" Foreground="#172B40" />
+                            <ItemsControl Margin="0,6,0,0" ItemsSource="{Binding Details.Diagnostics}" ItemTemplate="{StaticResource DetailListItem}" />
+                        </StackPanel>
+                    </ScrollViewer>
                 </TabItem>
             </TabControl>
         </Grid>

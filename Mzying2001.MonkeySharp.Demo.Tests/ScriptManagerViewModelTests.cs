@@ -1,4 +1,5 @@
 using Mzying2001.MonkeySharp.Core.Repository;
+using Mzying2001.MonkeySharp.Core.Parsing;
 using Mzying2001.MonkeySharp.Demo.ViewModels;
 using System.Threading;
 using System.Threading.Tasks;
@@ -52,6 +53,23 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
             Assert.Equal("M", item.IconFallbackText);
         }
 
+        [Fact]
+        public void ScriptDetailsGroupsMetadataAndDiagnostics()
+        {
+            var details = new ScriptDetailsViewModel();
+            details.Update(new UserScriptMetadataParser().Parse(SourceWithDetails), "https://example.com/script.user.js");
+
+            Assert.Equal("Details", details.Name);
+            Assert.Equal("document-end", details.RunAt);
+            Assert.Contains("https://example.com/*", details.Matches);
+            Assert.Contains("GM_setValue", details.Grants);
+            Assert.Contains("cdn.example.com", details.Connects);
+            Assert.Contains("https://example.com/lib.js", details.Requires);
+            Assert.Contains("badge = https://example.com/badge.png", details.Resources);
+            Assert.Equal("https://example.com/script.user.js", details.SourceOrigin);
+            Assert.Contains("Details", details.ToConfirmationText());
+        }
+
         private const string Source = "// ==UserScript==\n" +
             "// @name Manager sample\n" +
             "// @namespace tests\n" +
@@ -69,6 +87,19 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
             "// @icon64 https://example.com/icon64.png\n" +
             "// @match https://example.com/*\n" +
             "// @grant none\n" +
+            "// ==/UserScript==\n";
+
+        private const string SourceWithDetails = "// ==UserScript==\n" +
+            "// @name Details\n" +
+            "// @namespace tests\n" +
+            "// @version 1.0.0\n" +
+            "// @description Structured metadata\n" +
+            "// @match https://example.com/*\n" +
+            "// @grant GM_setValue\n" +
+            "// @connect cdn.example.com\n" +
+            "// @require https://example.com/lib.js\n" +
+            "// @resource badge https://example.com/badge.png\n" +
+            "// @run-at document-end\n" +
             "// ==/UserScript==\n";
 
     }

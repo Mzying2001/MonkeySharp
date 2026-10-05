@@ -40,9 +40,6 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
         private string _status;
 
         [ObservableProperty]
-        private string _preview;
-
-        [ObservableProperty]
         [NotifyPropertyChangedFor(nameof(CanEdit))]
         private bool _busy;
 
@@ -52,20 +49,20 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
             Func<string, bool> confirm, DiagnosticsViewModel diagnostics)
         {
             _repository = repository; _content = content; _updates = updates; _confirm = confirm; _diagnostics = diagnostics;
+            Editor.PropertyChanged += EditorPropertyChanged;
             FilteredScripts = CollectionViewSource.GetDefaultView(Scripts);
             FilteredScripts.Filter = item => string.IsNullOrWhiteSpace(Search) || ((ScriptItemViewModel)item).DisplayName.IndexOf(Search, StringComparison.OrdinalIgnoreCase) >= 0;
+            Details.Update(Editor.Parse(), _origin);
         }
 
         public ScriptEditorViewModel Editor { get; } = new ScriptEditorViewModel();
+        public ScriptDetailsViewModel Details { get; } = new ScriptDetailsViewModel();
         public ObservableCollection<ScriptItemViewModel> Scripts { get; } = new ObservableCollection<ScriptItemViewModel>();
         public ICollectionView FilteredScripts { get; }
         public bool CanEdit => !Busy;
 
         [RelayCommand]
         private void New() => NewScript();
-
-        [RelayCommand]
-        private void Validate() => Preview = ScriptEditorViewModel.Describe(Editor.Parse());
 
         [RelayCommand]
         private async Task Refresh() => await RunAsync(async () => { if (ConfirmDiscard()) await RefreshAsync(); });
@@ -98,7 +95,7 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
             if (value == null) return;
             _origin = value.Installation.SourceOrigin;
             Editor.Load(value.Installation.Definition.Source);
-            Preview = ScriptEditorViewModel.Describe(value.Installation.Definition.ParseResult) + "\n来源：" + _origin;
+            Details.Update(value.Installation.Definition.ParseResult, _origin);
         }
 
         public bool ConfirmDiscard() => !Editor.IsDirty || _confirm("放弃尚未保存的源码修改？");
@@ -119,18 +116,18 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
         private void NewScript()
         {
             if (!ConfirmDiscard()) return;
-            Editor.Load(ScriptEditorViewModel.Template); SelectedScript = null;
             _origin = "application://editor/new.user.js";
-            Preview = "新脚本。保存前会显示权限确认。";
+            SelectedScript = null; Editor.Load(ScriptEditorViewModel.Template);
+            Details.Update(Editor.Parse(), _origin);
+            Status = "新脚本。保存前会显示权限确认。";
         }
 
         public Task ImportFileAsync(string path) => RunAsync(async () =>
         {
             if (!ConfirmDiscard()) return;
             var bytes = await Task.Run(() => SqliteUserScriptRepositoryPersistence.ReadBounded(path), _cancellation.Token);
-            Editor.Load(new UTF8Encoding(false, true).GetString(bytes).TrimStart('\uFEFF'));
             SelectedScript = null; _origin = new Uri(path).AbsoluteUri;
-            Preview = ScriptEditorViewModel.Describe(Editor.Parse());
+            Editor.Load(new UTF8Encoding(false, true).GetString(bytes).TrimStart('\uFEFF'));
             Status = "已导入草稿；审核权限后点击安装 / 保存。";
         });
 
@@ -138,8 +135,7 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
         {
             if (!ConfirmDiscard()) return;
             var content = await _content.FetchAsync(Url, _cancellation.Token);
-            Editor.Load(content.Text); SelectedScript = null; _origin = Url;
-            Preview = ScriptEditorViewModel.Describe(Editor.Parse());
+            SelectedScript = null; _origin = Url; Editor.Load(content.Text);
             Status = "已下载草稿；尚未安装。请审核源码并点击安装 / 保存。";
         }
 
@@ -181,9 +177,9 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
         {
             if (Encoding.UTF8.GetByteCount(Editor.Source ?? string.Empty) > SqliteUserScriptRepositoryPersistence.MaximumSourceBytes)
                 throw new InvalidOperationException("源码超过 10 MiB 限制。");
-            var parsed = Editor.Parse(); Preview = ScriptEditorViewModel.Describe(parsed);
+            var parsed = Editor.Parse(); Details.Update(parsed, _origin);
             if (!parsed.CanEnable) { Status = "元数据无效；旧脚本未改变。"; return; }
-            if (!_confirm("允许以下脚本在匹配的网站运行并使用所声明的权限？\n\n" + Preview)) return;
+            if (!_confirm("允许以下脚本在匹配的网站运行并使用所声明的权限？\n\n" + Details.ToConfirmationText())) return;
             var installation = SelectedScript == null
                 ? await _repository.InstallAsync(Editor.Source, _origin, true, _cancellation.Token)
                 : await _repository.UpdateAsync(SelectedScript.Installation.ScriptKey, Editor.Source, _origin, _cancellation.Token);
@@ -229,7 +225,16 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
             finally { item.IsBusy = false; }
         }
 
-        public void Dispose() { _cancellation.Cancel(); }
+        private void EditorPropertyChanged(object sender, PropertyChangedEventArgs args)
+        {
+            if (args.PropertyName == nameof(Editor.Source)) Details.Update(Editor.Parse(), _origin);
+        }
+
+        public void Dispose()
+        {
+            Editor.PropertyChanged -= EditorPropertyChanged;
+            _cancellation.Cancel();
+        }
     }
 
     public sealed class ScriptItemViewModel : ObservableObject
