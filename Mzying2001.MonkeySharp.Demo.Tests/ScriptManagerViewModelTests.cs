@@ -144,15 +144,15 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
         }
 
         [Fact]
-        public async Task ToggleScriptCommandLeavesScriptDisabledWhenEnableConfirmationIsRejected()
+        public async Task ToggleScriptCommandChangesStateWithoutConfirmation()
         {
             using (var fixture = await PersistenceTests.Fixture.Create())
             using (var content = new HttpContentService(fixture.Paths))
             {
                 var repository = new InMemoryUserScriptRepository();
-                var installation = await repository.InstallAsync(Source, "application://test", false, CancellationToken.None);
+                var installation = await repository.InstallAsync(Source, "application://test", true, CancellationToken.None);
                 var confirmationCount = 0;
-                using (var manager = CreateManager(repository, content, _ => { confirmationCount++; return false; }, fixture.Paths.LogsDirectory))
+                using (var manager = CreateManager(repository, content, _ => { confirmationCount++; return true; }, fixture.Paths.LogsDirectory))
                 {
                     await manager.RefreshAsync();
                     var item = Assert.Single(manager.Scripts);
@@ -164,10 +164,19 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
 
                     await manager.ToggleScriptCommand.ExecuteAsync(item);
 
-                    Assert.Equal(1, confirmationCount);
+                    Assert.Equal(0, confirmationCount);
                     Assert.False((await repository.GetAsync(installation.ScriptKey, CancellationToken.None)).IsEnabled);
                     Assert.Equal("已停用", item.StatusLabel);
                     Assert.Equal(1, stateNotificationCount);
+
+                    await manager.ToggleScriptCommand.ExecuteAsync(item);
+
+                    Assert.Equal(0, confirmationCount);
+                    Assert.True((await repository.GetAsync(installation.ScriptKey, CancellationToken.None)).IsEnabled);
+                    Assert.Equal("已启用", item.StatusLabel);
+                    Assert.Equal("停用", item.ToggleLabel);
+                    Assert.True(item.CanToggle);
+                    Assert.Equal(2, stateNotificationCount);
                 }
             }
         }
@@ -181,25 +190,22 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
                 var repository = new InMemoryUserScriptRepository();
                 var installation = await repository.InstallAsync(Source, "application://test", false, CancellationToken.None);
                 var stateChangeCount = 0;
-                repository.Changed += (_, args) =>
-                {
-                    if (args.Kind == RepositoryChangeKind.Enabled || args.Kind == RepositoryChangeKind.Disabled)
-                        stateChangeCount++;
-                };
                 ScriptManagerViewModel manager = null;
                 ScriptItemViewModel item = null;
                 var attemptedRepeatedExecution = false;
                 var sawBusyItemOnRepeatedExecution = false;
-                manager = CreateManager(repository, content, _ =>
+                repository.Changed += (_, args) =>
                 {
+                    if (args.Kind != RepositoryChangeKind.Enabled && args.Kind != RepositoryChangeKind.Disabled) return;
+                    stateChangeCount++;
                     if (!attemptedRepeatedExecution)
                     {
                         attemptedRepeatedExecution = true;
                         sawBusyItemOnRepeatedExecution = item.IsBusy;
                         manager.ToggleScriptCommand.ExecuteAsync(item).GetAwaiter().GetResult();
                     }
-                    return true;
-                }, fixture.Paths.LogsDirectory);
+                };
+                manager = CreateManager(repository, content, _ => true, fixture.Paths.LogsDirectory);
                 using (manager)
                 {
                     await manager.RefreshAsync();

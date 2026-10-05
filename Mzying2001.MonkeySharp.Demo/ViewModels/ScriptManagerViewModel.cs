@@ -222,13 +222,6 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
         {
             if (item == null || !item.Installation.Definition.ParseResult.CanEnable) return;
             var installation = item.Installation;
-            if (!installation.IsEnabled && !_confirm("启用并允许脚本权限？\n\n" + ScriptEditorViewModel.Describe(installation.Definition.ParseResult)))
-            {
-                // WPF toggles the control before invoking the command. Re-publish the
-                // unchanged installation so the OneWay binding reads the actual state.
-                item.Update(installation);
-                return;
-            }
             item.Update(await _repository.SetEnabledAsync(installation.ScriptKey, !installation.IsEnabled, _cancellation.Token));
             RefreshFilter();
             Status = (item.Installation.IsEnabled ? "已启用：" : "已停用：") + item.Name;
