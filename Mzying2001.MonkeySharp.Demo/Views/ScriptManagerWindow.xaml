@@ -3,6 +3,9 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:views="clr-namespace:Mzying2001.MonkeySharp.Demo.Views"
         Title="MonkeySharp · 脚本管理器" Width="1150" Height="780" MinWidth="900" MinHeight="600" Background="#F4F6F9">
+    <Window.InputBindings>
+        <KeyBinding Key="S" Modifiers="Control" Command="{Binding SaveCommand}" />
+    </Window.InputBindings>
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanVisibility" />
         <DataTemplate x:Key="DetailListItem">
@@ -24,7 +27,11 @@
             <Button DockPanel.Dock="Right" Margin="8,0,0,0" Content="从 URL 加载草稿" Command="{Binding InstallUrlCommand}" />
             <TextBox Text="{Binding Url, UpdateSourceTrigger=PropertyChanged}" Padding="4" VerticalAlignment="Center" ToolTip="HTTP(S) .user.js 地址" />
         </DockPanel>
-        <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource HideWhenTextEmpty}" Text="{Binding Status}" Margin="0,10,0,0" TextWrapping="Wrap" Foreground="#334155" />
+        <StackPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
+            <TextBlock Text="有未保存的源码修改 · Ctrl+S 保存" Foreground="#9A6700" FontWeight="SemiBold"
+                       Visibility="{Binding Editor.IsDirty, Converter={StaticResource BooleanVisibility}}" />
+            <TextBlock Style="{StaticResource HideWhenTextEmpty}" Text="{Binding Status}" TextWrapping="Wrap" Foreground="#334155" />
+        </StackPanel>
         <Grid IsEnabled="{Binding CanEdit}">
             <Grid.ColumnDefinitions><ColumnDefinition Width="275" /><ColumnDefinition Width="8" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
             <DockPanel Grid.Column="0">
