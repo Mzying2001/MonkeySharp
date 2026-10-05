@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
@@ -71,6 +72,12 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                 var managerModel = (ScriptManagerViewModel)manager.DataContext;
                 managerModel.SelectedScript = managerModel.Scripts.First();
                 manager.UpdateLayout();
+                checks["scriptManagerDetails"] = managerModel.Details.Name == managerModel.SelectedScript.Name &&
+                    managerModel.Details.SourceOrigin == managerModel.SelectedScript.Installation.SourceOrigin;
+                checks["scriptManagerInlineToggle"] = VisualDescendants(manager).OfType<CheckBox>().Any();
+                checks["scriptManagerCtrlS"] = manager.InputBindings.OfType<KeyBinding>().Any(binding =>
+                    binding.Key == Key.S && binding.Modifiers == ModifierKeys.Control &&
+                    ReferenceEquals(binding.Command, managerModel.SaveCommand));
                 Capture(manager, Path.Combine(runtime.Paths.BaseDirectory, "manager.png"));
                 manager.Close();
                 primary.Browser.Load(fixture.BaseUrl + "/page?navigated");
