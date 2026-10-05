@@ -9,6 +9,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 
 namespace Mzying2001.MonkeySharp.Demo
@@ -74,6 +75,16 @@ namespace Mzying2001.MonkeySharp.Demo
         }
         private void AddressKeyDown(object sender, KeyEventArgs args)
         { if (args.Key == Key.Enter) { _runtime.MainWindow.NavigateCommand.Execute(null); args.Handled = true; } }
+        private void BrowserTabsPreviewMouseDown(object sender, MouseButtonEventArgs args)
+        {
+            if (args.ChangedButton != MouseButton.Middle) return;
+            var item = ItemsControl.ContainerFromElement(BrowserTabs, args.OriginalSource as DependencyObject) as ListBoxItem;
+            if (item?.DataContext is BrowserTabViewModel tab)
+            {
+                _runtime.MainWindow.CloseTabCommand.Execute(tab);
+                args.Handled = true;
+            }
+        }
         private void OpenDataDirectory(object sender, RoutedEventArgs args) => OpenDirectory(_runtime.Paths.DataDirectory);
         private void OpenDownloadsDirectory(object sender, RoutedEventArgs args) => OpenDirectory(_runtime.Paths.DownloadsDirectory);
         private void OpenDirectory(string path)

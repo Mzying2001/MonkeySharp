@@ -18,6 +18,7 @@
                 <TextBlock Text="MONKEYSHARP" Foreground="White" FontSize="16" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,20,0" />
                 <Button DockPanel.Dock="Right" Content="＋" ToolTip="新标签 Ctrl+T" Command="{Binding NewTabCommand}" />
                 <ListBox x:Name="BrowserTabs" ItemsSource="{Binding Tabs}" SelectedItem="{Binding SelectedTab, Mode=TwoWay}" Background="Transparent" BorderThickness="0"
+                         PreviewMouseDown="BrowserTabsPreviewMouseDown"
                          ScrollViewer.HorizontalScrollBarVisibility="Auto" ScrollViewer.VerticalScrollBarVisibility="Disabled">
                     <ListBox.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate></ListBox.ItemsPanel>
                     <ListBox.ItemContainerStyle>
