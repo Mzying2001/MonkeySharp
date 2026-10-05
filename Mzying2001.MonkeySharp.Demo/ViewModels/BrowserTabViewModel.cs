@@ -23,6 +23,9 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
         private string _address;
 
         [ObservableProperty]
+        private string _iconUrl;
+
+        [ObservableProperty]
         private bool _isLoading;
 
         [ObservableProperty]

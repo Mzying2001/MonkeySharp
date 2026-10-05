@@ -5,6 +5,7 @@ using Mzying2001.MonkeySharp.CefSharp;
 using Mzying2001.MonkeySharp.Demo.Runtime;
 using Mzying2001.MonkeySharp.Demo.ViewModels;
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -25,6 +26,7 @@ namespace Mzying2001.MonkeySharp.Demo.Views
             var requestHandlers = new CefSharpWebRequestHandlerMultiplexer();
             requestHandlers.Add(new NavigationHandler(OpenTab));
             _browser.RequestHandler = requestHandlers;
+            _browser.DisplayHandler = new FaviconDisplayHandler(FaviconChanged);
             _browser.LifeSpanHandler = new PopupHandler(OpenTab);
             _browser.DownloadHandler = new BrowserDownloadHandler(runtime.Paths.DownloadsDirectory, runtime.MainWindow.Diagnostics.Report);
             _scope = runtime.AttachTab(tab, _browser);
@@ -38,11 +40,26 @@ namespace Mzying2001.MonkeySharp.Demo.Views
         }
 
         private void Post(Action action) { if (!Dispatcher.HasShutdownStarted) Dispatcher.BeginInvoke(new Action(() => { if (!_tab.IsClosed) action(); })); }
-        private void AddressChanged(object sender, DependencyPropertyChangedEventArgs args) => Post(() => _tab.Address = args.NewValue as string);
+        private void AddressChanged(object sender, DependencyPropertyChangedEventArgs args) => Post(() =>
+        {
+            _tab.Address = args.NewValue as string;
+            _tab.IconUrl = null;
+        });
         private void TitleChanged(object sender, DependencyPropertyChangedEventArgs args) => Post(() =>
             _tab.Title = string.IsNullOrWhiteSpace(args.NewValue as string) ? _tab.Address : (string)args.NewValue);
+        private void FaviconChanged(string iconUrl) => Post(() => _tab.IconUrl = iconUrl);
         private void LoadingChanged(object sender, LoadingStateChangedEventArgs args) => Post(() =>
-        { _tab.IsLoading = args.IsLoading; _tab.CanGoBack = args.CanGoBack; _tab.CanGoForward = args.CanGoForward; });
+        {
+            _tab.IsLoading = args.IsLoading; _tab.CanGoBack = args.CanGoBack; _tab.CanGoForward = args.CanGoForward;
+            if (!args.IsLoading)
+            {
+                Dispatcher.BeginInvoke(new Action(async () =>
+                {
+                    await Task.Delay(100);
+                    ReadDeclaredFavicon();
+                }), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+            }
+        });
         private void LoadError(object sender, LoadErrorEventArgs args)
         {
             if (args.ErrorCode == CefErrorCode.Aborted) return;
@@ -64,6 +81,66 @@ namespace Mzying2001.MonkeySharp.Demo.Views
         public void ShowDevTools() { if (_browser.IsBrowserInitialized) _browser.ShowDevTools(); }
         internal bool IsJavaScriptReady => _browser.IsBrowserInitialized && _browser.CanExecuteJavascriptInMainFrame;
         internal Task<JavascriptResponse> EvaluateAsync(string script) => _browser.EvaluateScriptAsync(script, timeout: TimeSpan.FromSeconds(5));
+
+        private static string SelectFaviconUrl(IList<string> urls)
+        {
+            if (urls == null) return null;
+            foreach (var url in urls)
+            {
+                if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
+                    (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) ||
+                    !string.IsNullOrEmpty(uri.UserInfo)) continue;
+                return uri.AbsoluteUri;
+            }
+            return null;
+        }
+
+        private static string DefaultFaviconUrl(string address)
+        {
+            if (!Uri.TryCreate(address, UriKind.Absolute, out var uri) ||
+                (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) ||
+                !string.IsNullOrEmpty(uri.UserInfo)) return null;
+            var builder = new UriBuilder(uri) { Path = "/favicon.ico", Query = string.Empty, Fragment = string.Empty };
+            return builder.Uri.AbsoluteUri;
+        }
+
+        private async void ReadDeclaredFavicon()
+        {
+            var address = _tab.Address;
+            try
+            {
+                for (var attempt = 0; attempt < 5; attempt++)
+                {
+                    if (!_browser.IsBrowserInitialized || !_browser.CanExecuteJavascriptInMainFrame)
+                    {
+                        await Task.Delay(200).ConfigureAwait(false);
+                        continue;
+                    }
+                    var response = await _browser.EvaluateScriptAsync(
+                        "(function(){var icon=document.querySelector('link[rel~=" +
+                        "\"icon\"],link[rel=\"shortcut icon\"]);return icon ? icon.href : null;})()",
+                        timeout: TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+                    if (!response.Success)
+                    {
+                        await Task.Delay(200).ConfigureAwait(false);
+                        continue;
+                    }
+                    var iconUrl = SelectFaviconUrl(new[] { response.Result as string }) ?? DefaultFaviconUrl(address);
+                    Post(() =>
+                    {
+                        if (string.Equals(_tab.Address, address, StringComparison.OrdinalIgnoreCase)) _tab.IconUrl = iconUrl;
+                    });
+                    return;
+                }
+                Post(() =>
+                {
+                    if (string.Equals(_tab.Address, address, StringComparison.OrdinalIgnoreCase))
+                        _tab.IconUrl = DefaultFaviconUrl(address);
+                });
+            }
+            catch (Exception) { }
+        }
+
         public Task DisposeAsync()
         {
             _tab.Browser = null;
@@ -73,6 +150,14 @@ namespace Mzying2001.MonkeySharp.Demo.Views
             _browser.LoadError -= LoadError;
             _browser.ConsoleMessage -= ConsoleMessage;
             return _scope.DisposeAsync();
+        }
+
+        private sealed class FaviconDisplayHandler : DisplayHandler
+        {
+            private readonly Action<string> _changed;
+            public FaviconDisplayHandler(Action<string> changed) { _changed = changed; }
+            protected override void OnFaviconUrlChange(IWebBrowser chromiumWebBrowser, IBrowser browser, IList<string> urls)
+                => _changed(SelectFaviconUrl(urls));
         }
 
         private sealed class NavigationHandler : RequestHandler

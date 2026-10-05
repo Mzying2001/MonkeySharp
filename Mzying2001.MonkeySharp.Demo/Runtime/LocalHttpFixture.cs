@@ -51,14 +51,19 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                     string line;
                     while (!string.IsNullOrEmpty(line = await reader.ReadLineAsync().ConfigureAwait(false))) headers.AppendLine(line);
                     string body;
+                    byte[] responseBytes = null;
                     var status = "200 OK";
                     var extra = string.Empty;
                     var mime = "text/plain; charset=utf-8";
                     switch (path)
                     {
                         case "/page":
-                            body = "<!doctype html><html><head><title>MonkeySharp E2E</title></head><body><h1>Local userscript fixture</h1><iframe src='/frame'></iframe></body></html>";
+                            body = "<!doctype html><html><head><title>MonkeySharp E2E</title><link rel='icon' href='/favicon.ico'></head><body><h1>Local userscript fixture</h1><iframe src='/frame'></iframe></body></html>";
                             mime = "text/html; charset=utf-8"; break;
+                        case "/favicon.ico":
+                            body = string.Empty;
+                            responseBytes = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAAcSURBVDhPYzCMqv1PCR41YNQAEB41YBgYUPsfADNDBx9pB+vtAAAAAElFTkSuQmCC");
+                            mime = "image/png"; break;
                         case "/frame": body = "<!doctype html><html><body>Child frame</body></html>"; mime = "text/html"; break;
                         case "/dependency.js": body = "window.__demoDependency = true;"; mime = "application/javascript"; break;
                         case "/resource": body = "demo-resource"; break;
@@ -70,7 +75,7 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                         default: body = "fixture"; break;
                     }
                     if (path == "/slow") Interlocked.Increment(ref _slowRequests);
-                    var bytes = Encoding.UTF8.GetBytes(body);
+                    var bytes = responseBytes ?? Encoding.UTF8.GetBytes(body);
                     var length = path == "/oversize" ? 12 * 1024 * 1024 : bytes.Length;
                     var responseHeaders = Encoding.ASCII.GetBytes("HTTP/1.1 " + status + "\r\nContent-Type: " + mime + "\r\nContent-Length: " + length + "\r\n" + extra + "Connection: close\r\n\r\n");
                     await stream.WriteAsync(responseHeaders, 0, responseHeaders.Length, _cancellation.Token).ConfigureAwait(false);

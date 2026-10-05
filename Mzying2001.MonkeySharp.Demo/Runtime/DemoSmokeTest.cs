@@ -28,6 +28,7 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                     "/frame\n// @grant none\n// ==/UserScript==\nwindow.__demoFrame = true;", "application://frame-smoke", true, CancellationToken.None);
                 var primary = runtime.MainWindow.NewTab(fixture.BaseUrl + "/page?primary");
                 await WaitAsync(async () => await EvaluateBoolean(primary, "!!(window.__demo && window.__demo.ready)"));
+                await WaitAsync(() => Task.FromResult(string.Equals(primary.IconUrl, fixture.BaseUrl + "/favicon.ico", StringComparison.OrdinalIgnoreCase)));
                 checks["storageResourcesXhrCookieWebRequest"] = await EvaluateBoolean(primary,
                     "window.__demo.storage && window.__demo.resources && window.__demo.xhr && window.__demo.cookie && window.__demo.webRequest");
                 checks["domAndInfo"] = await EvaluateBoolean(primary, "window.__demo.dom && window.__demo.info");
@@ -62,6 +63,8 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                 var mainWindow = Application.Current.MainWindow;
                 var selector = (ListBox)mainWindow.FindName("BrowserTabs");
                 mainWindow.UpdateLayout();
+                await WaitAsync(() => Task.FromResult(TabIconTemplatePresent(selector, primary)));
+                checks["tabFavicon"] = true;
                 ((ListBoxItem)selector.ItemContainerGenerator.ContainerFromItem(primary)).Focus();
                 checks["selectedTabColors"] = TabColorsMatch(selector, primary, true) && TabColorsMatch(selector, secondary, false);
                 ((TextBox)mainWindow.FindName("AddressBar")).Focus();
@@ -122,6 +125,12 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                 (item.IsMouseOver ? Color.FromRgb(0x33, 0x4E, 0x68) : Color.FromRgb(0x24, 0x3B, 0x53));
             return item.IsSelected == selected && (title?.Foreground as SolidColorBrush)?.Color == foreground &&
                 (border?.Background as SolidColorBrush)?.Color == background;
+        }
+
+        private static bool TabIconTemplatePresent(ListBox selector, BrowserTabViewModel tab)
+        {
+            var item = selector.ItemContainerGenerator.ContainerFromItem(tab) as ListBoxItem;
+            return item != null && VisualDescendants(item).OfType<ScriptIcon>().Any();
         }
 
         private static IEnumerable<DependencyObject> VisualDescendants(DependencyObject parent)
