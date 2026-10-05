@@ -14,9 +14,9 @@
         <KeyBinding Key="F12" Command="{Binding DevToolsCommand}" />
     </Window.InputBindings>
     <DockPanel>
-        <Border DockPanel.Dock="Top" Background="#172B40" Padding="16,8">
+        <Border DockPanel.Dock="Top" Background="#172B40" Padding="8">
             <DockPanel>
-                <TextBlock Text="MONKEYSHARP" Foreground="White" FontSize="16" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,20,0" />
+                <TextBlock Text="MONKEYSHARP" Foreground="White" FontSize="16" FontWeight="Bold" VerticalAlignment="Center" Margin="2,0,8,0" />
                 <Button DockPanel.Dock="Right" Content="＋" ToolTip="新标签 Ctrl+T" Command="{Binding NewTabCommand}" />
                 <ListBox x:Name="BrowserTabs" ItemsSource="{Binding Tabs}" SelectedItem="{Binding SelectedTab, Mode=TwoWay}" Background="Transparent" BorderThickness="0"
                          PreviewMouseDown="BrowserTabsPreviewMouseDown"
@@ -86,15 +86,38 @@
         </Border>
         <Border DockPanel.Dock="Top" Background="White" BorderBrush="#D5DDE5" BorderThickness="0,0,0,1">
             <Grid>
-                <DockPanel Margin="10,7">
+                <Grid.Resources>
+                    <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                        <Setter Property="VerticalAlignment" Value="Center" />
+                    </Style>
+                </Grid.Resources>
+                <DockPanel Margin="8,4">
                     <StackPanel DockPanel.Dock="Left" Orientation="Horizontal">
                         <Button Content="&lt;" ToolTip="后退" Command="{Binding BackCommand}" />
                         <Button Content="&gt;" ToolTip="前进" Command="{Binding ForwardCommand}" />
-                        <Button Content="刷新" Command="{Binding ReloadCommand}" />
-                        <Button Content="停止" Command="{Binding StopCommand}" />
+                        <ContentControl Content="{Binding}" Margin="4,0,0,0">
+                            <ContentControl.Resources>
+                                <DataTemplate x:Key="Refresh">
+                                    <Button Content="刷新" Command="{Binding ReloadCommand}" />
+                                </DataTemplate>
+                                <DataTemplate x:Key="Stop">
+                                    <Button Content="停止" Command="{Binding StopCommand}" />
+                                </DataTemplate>
+                            </ContentControl.Resources>
+                            <ContentControl.Style>
+                                <Style TargetType="ContentControl">
+                                    <Setter Property="ContentTemplate" Value="{StaticResource Refresh}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding SelectedTab.IsLoading}" Value="True">
+                                            <Setter Property="ContentTemplate" Value="{StaticResource Stop}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </ContentControl.Style>
+                        </ContentControl>
                     </StackPanel>
                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                        <Button Content="脚本管理器" Margin="0,0,10,0" Command="{Binding ScriptManagerCommand}" />
+                        <Button Content="脚本管理器" Margin="0,0,4,0" Command="{Binding ScriptManagerCommand}" />
                         <Menu Background="Transparent" VerticalAlignment="Center">
                             <MenuItem Header="脚本菜单" ItemsSource="{Binding SelectedTab.MenuCommands}">
                                 <MenuItem.ItemContainerStyle>
@@ -114,13 +137,13 @@
                         </Menu>
                     </StackPanel>
                     <TextBox x:Name="AddressBar" Text="{Binding Address, UpdateSourceTrigger=PropertyChanged}" KeyDown="AddressKeyDown"
-                             Margin="10,2" Padding="8,5" BorderBrush="#CBD5E1" VerticalContentAlignment="Center" />
+                             Margin="8,0" Padding="4" BorderBrush="#CBD5E1" VerticalAlignment="Center" />
                 </DockPanel>
                 <ProgressBar Height="3" IsIndeterminate="True" VerticalAlignment="Bottom"
                              Visibility="{Binding SelectedTab.IsLoading, Converter={StaticResource BooleanVisibility}}" />
             </Grid>
         </Border>
-        <Border DockPanel.Dock="Top" Background="#FFF4DB" Padding="12,6">
+        <Border DockPanel.Dock="Top" Background="#FFF4DB" Padding="10,4">
             <TextBlock x:Name="TrustWarning" Foreground="#704C0A" TextWrapping="Wrap" FontSize="12" />
         </Border>
         <StackPanel DockPanel.Dock="Top">
