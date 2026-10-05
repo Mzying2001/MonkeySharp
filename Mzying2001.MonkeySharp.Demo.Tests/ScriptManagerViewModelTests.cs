@@ -41,11 +41,32 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
             Assert.False(item.CanToggle);
         }
 
+        [Fact]
+        public async Task ScriptItemPrefersThe64PixelIconAndProvidesFallbackText()
+        {
+            var repository = new InMemoryUserScriptRepository();
+            var installation = await repository.InstallAsync(SourceWithIcons, "application://test", true, CancellationToken.None);
+            var item = new ScriptItemViewModel(installation);
+
+            Assert.Equal("https://example.com/icon64.png", item.IconUrl);
+            Assert.Equal("M", item.IconFallbackText);
+        }
+
         private const string Source = "// ==UserScript==\n" +
             "// @name Manager sample\n" +
             "// @namespace tests\n" +
             "// @version 1.2.0\n" +
             "// @description A script used by manager tests.\n" +
+            "// @match https://example.com/*\n" +
+            "// @grant none\n" +
+            "// ==/UserScript==\n";
+
+        private const string SourceWithIcons = "// ==UserScript==\n" +
+            "// @name Manager sample\n" +
+            "// @namespace tests\n" +
+            "// @version 1.2.0\n" +
+            "// @icon https://example.com/icon.png\n" +
+            "// @icon64 https://example.com/icon64.png\n" +
             "// @match https://example.com/*\n" +
             "// @grant none\n" +
             "// ==/UserScript==\n";

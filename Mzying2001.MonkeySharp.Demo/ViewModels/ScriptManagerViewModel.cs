@@ -252,6 +252,8 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
         public string Name => Installation.Definition.Metadata?.Name ?? Installation.ScriptKey.ToString();
         public string Version => string.IsNullOrWhiteSpace(Installation.Definition.Metadata?.Version) ? "无版本" : "v" + Installation.Definition.Metadata.Version;
         public string Description => string.IsNullOrWhiteSpace(Installation.Definition.Metadata?.Description) ? "未提供描述" : Installation.Definition.Metadata.Description;
+        public string IconUrl => Installation.Definition.Metadata?.Icon64Url ?? Installation.Definition.Metadata?.IconUrl;
+        public string IconFallbackText => string.IsNullOrWhiteSpace(Name) ? "?" : Name.Substring(0, 1).ToUpperInvariant();
         public string StatusLabel => !Installation.Definition.ParseResult.CanEnable ? "不可用" : Installation.IsEnabled ? "已启用" : "已停用";
         public string ToggleLabel => Installation.IsEnabled ? "停用" : "启用";
         public string StatusBrush => !Installation.Definition.ParseResult.CanEnable ? "#B42318" : Installation.IsEnabled ? "#2F855A" : "#94A3B8";
