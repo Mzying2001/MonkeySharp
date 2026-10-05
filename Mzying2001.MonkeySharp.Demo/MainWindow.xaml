@@ -51,8 +51,25 @@
                     </ListBox.ItemContainerStyle>
                     <ListBox.ItemTemplate><DataTemplate>
                         <DockPanel Width="174">
-                            <Button DockPanel.Dock="Right" Content="×" Padding="5,0" ToolTip="关闭标签"
-                                    Command="{Binding DataContext.CloseTabCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" />
+                            <Button DockPanel.Dock="Right" Content="×" Padding="0" Width="20" Height="20" MinHeight="0" ToolTip="关闭标签"
+                                    Command="{Binding DataContext.CloseTabCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                                        <Setter Property="BorderThickness" Value="0" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem}, Path=IsSelected}" Value="False">
+                                                <Setter Property="Foreground" Value="White" />
+                                            </DataTrigger>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter Property="Foreground" Value="Black" />
+                                            </Trigger>
+                                            <Trigger Property="IsMouseOver" Value="False">
+                                                <Setter Property="Background" Value="Transparent" />
+                                            </Trigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                            </Button>
                             <TextBlock Text="{Binding Title}" ToolTip="{Binding Address}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"
                                        Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" />
                         </DockPanel>
