@@ -37,6 +37,8 @@ dotnet build Mzying2001.MonkeySharp.Demo/Mzying2001.MonkeySharp.Demo.csproj -c R
 
 可执行文件目录必须可写，因为便携 profile 存储在其中的 `Data/` 目录。Demo 显式启用了 `TrustedPageWorld`：它是面向可信页面和脚本的集成示例，不是加固浏览器或完整的 Tampermonkey 替代品。使用方式、恢复流程、服务边界和验证方法见 [Demo 指南](Mzying2001.MonkeySharp.Demo/README.md)。
 
+Demo 脚本管理器的列表行直接提供启用/停用开关，并显示脚本图标、状态、版本和描述；图标优先使用 `@icon64`，其次使用 `@icon`，加载失败时显示脚本名称首字母占位。管理器支持按名称、描述、命名空间和来源搜索，按状态筛选及按名称排序。源码编辑器中的 `Ctrl+S` 等同于安装/保存并保留权限确认；元数据详情按基本信息、匹配规则、权限、依赖/资源和诊断分组只读展示。
+
 ### 最小宿主集成
 
 安装脚本、构建宿主、在浏览器初始化前附加宿主，然后把浏览器加入界面：
