@@ -220,7 +220,7 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
 
         private async Task ToggleAsync(ScriptItemViewModel item)
         {
-            if (item == null || !item.CanToggle) return;
+            if (item == null || !item.Installation.Definition.ParseResult.CanEnable) return;
             var installation = item.Installation;
             if (!installation.IsEnabled && !_confirm("启用并允许脚本权限？\n\n" + ScriptEditorViewModel.Describe(installation.Definition.ParseResult))) return;
             item.Update(await _repository.SetEnabledAsync(installation.ScriptKey, !installation.IsEnabled, _cancellation.Token));

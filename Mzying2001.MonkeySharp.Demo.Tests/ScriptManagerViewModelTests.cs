@@ -1,3 +1,5 @@
+using System;
+using Mzying2001.MonkeySharp.Core.Domain;
 using Mzying2001.MonkeySharp.Core.Repository;
 using Mzying2001.MonkeySharp.Core.Parsing;
 using Mzying2001.MonkeySharp.Core.Updates;
@@ -109,6 +111,134 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
                 Assert.False(manager.ShowNoScripts);
                 manager.Dispose();
             }
+        }
+
+        [Fact]
+        public async Task ToggleScriptCommandUpdatesRepositoryAndListState()
+        {
+            using (var fixture = await PersistenceTests.Fixture.Create())
+            using (var content = new HttpContentService(fixture.Paths))
+            {
+                var repository = new InMemoryUserScriptRepository();
+                using (var manager = CreateManager(repository, content, _ => true, fixture.Paths.LogsDirectory))
+                {
+                    var installation = await repository.InstallAsync(Source, "application://test", true, CancellationToken.None);
+                    await manager.RefreshAsync();
+                    var item = Assert.Single(manager.Scripts);
+
+                    await manager.ToggleScriptCommand.ExecuteAsync(item);
+
+                    var disabled = await repository.GetAsync(installation.ScriptKey, CancellationToken.None);
+                    Assert.False(disabled.IsEnabled);
+                    Assert.Equal("已停用", item.StatusLabel);
+                    Assert.Equal("启用", item.ToggleLabel);
+
+                    await manager.ToggleScriptCommand.ExecuteAsync(item);
+
+                    var enabled = await repository.GetAsync(installation.ScriptKey, CancellationToken.None);
+                    Assert.True(enabled.IsEnabled);
+                    Assert.Equal("已启用", item.StatusLabel);
+                    Assert.Equal("停用", item.ToggleLabel);
+                }
+            }
+        }
+
+        [Fact]
+        public async Task ToggleScriptCommandLeavesScriptDisabledWhenEnableConfirmationIsRejected()
+        {
+            using (var fixture = await PersistenceTests.Fixture.Create())
+            using (var content = new HttpContentService(fixture.Paths))
+            {
+                var repository = new InMemoryUserScriptRepository();
+                var installation = await repository.InstallAsync(Source, "application://test", false, CancellationToken.None);
+                var confirmationCount = 0;
+                using (var manager = CreateManager(repository, content, _ => { confirmationCount++; return false; }, fixture.Paths.LogsDirectory))
+                {
+                    await manager.RefreshAsync();
+                    var item = Assert.Single(manager.Scripts);
+
+                    await manager.ToggleScriptCommand.ExecuteAsync(item);
+
+                    Assert.Equal(1, confirmationCount);
+                    Assert.False((await repository.GetAsync(installation.ScriptKey, CancellationToken.None)).IsEnabled);
+                    Assert.Equal("已停用", item.StatusLabel);
+                }
+            }
+        }
+
+        [Fact]
+        public async Task ToggleScriptCommandIgnoresRepeatedExecutionWhileItemIsBusy()
+        {
+            using (var fixture = await PersistenceTests.Fixture.Create())
+            using (var content = new HttpContentService(fixture.Paths))
+            {
+                var repository = new InMemoryUserScriptRepository();
+                var installation = await repository.InstallAsync(Source, "application://test", false, CancellationToken.None);
+                var stateChangeCount = 0;
+                repository.Changed += (_, args) =>
+                {
+                    if (args.Kind == RepositoryChangeKind.Enabled || args.Kind == RepositoryChangeKind.Disabled)
+                        stateChangeCount++;
+                };
+                ScriptManagerViewModel manager = null;
+                ScriptItemViewModel item = null;
+                var attemptedRepeatedExecution = false;
+                var sawBusyItemOnRepeatedExecution = false;
+                manager = CreateManager(repository, content, _ =>
+                {
+                    if (!attemptedRepeatedExecution)
+                    {
+                        attemptedRepeatedExecution = true;
+                        sawBusyItemOnRepeatedExecution = item.IsBusy;
+                        manager.ToggleScriptCommand.ExecuteAsync(item).GetAwaiter().GetResult();
+                    }
+                    return true;
+                }, fixture.Paths.LogsDirectory);
+                using (manager)
+                {
+                    await manager.RefreshAsync();
+                    item = Assert.Single(manager.Scripts);
+
+                    await manager.ToggleScriptCommand.ExecuteAsync(item);
+
+                    Assert.True(sawBusyItemOnRepeatedExecution);
+                    Assert.Equal(1, stateChangeCount);
+                    Assert.True((await repository.GetAsync(installation.ScriptKey, CancellationToken.None)).IsEnabled);
+                    Assert.False(item.IsBusy);
+                }
+            }
+        }
+
+        [Fact]
+        public async Task SavingAfterToggleKeepsTheSameInstallationAndEnabledState()
+        {
+            using (var fixture = await PersistenceTests.Fixture.Create())
+            using (var content = new HttpContentService(fixture.Paths))
+            {
+                var repository = new InMemoryUserScriptRepository();
+                var installation = await repository.InstallAsync(Source, "application://test", true, CancellationToken.None);
+                using (var manager = CreateManager(repository, content, _ => true, fixture.Paths.LogsDirectory))
+                {
+                    await manager.RefreshAsync();
+                    manager.SelectedScript = Assert.Single(manager.Scripts);
+
+                    await manager.ToggleScriptCommand.ExecuteAsync(manager.SelectedScript);
+                    await manager.SaveCommand.ExecuteAsync(null);
+
+                    var scripts = await repository.GetSnapshotAsync(CancellationToken.None);
+                    var saved = Assert.Single(scripts);
+                    Assert.Equal(installation.ScriptKey, saved.ScriptKey);
+                    Assert.False(saved.IsEnabled);
+                    Assert.Equal(installation.ScriptKey.ToString(), Assert.Single(manager.Scripts).ScriptKey);
+                }
+            }
+        }
+
+        private static ScriptManagerViewModel CreateManager(IUserScriptRepository repository, HttpContentService content,
+            Func<string, bool> confirm, string logsDirectory)
+        {
+            return new ScriptManagerViewModel(repository, content, new UserScriptUpdateService(repository, content), confirm,
+                new DiagnosticsViewModel(Dispatcher.CurrentDispatcher, logsDirectory));
         }
 
         private const string Source = "// ==UserScript==\n" +
