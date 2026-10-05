@@ -25,7 +25,22 @@
         </WrapPanel>
         <DockPanel DockPanel.Dock="Top" Margin="0,8,0,12" IsEnabled="{Binding CanEdit}">
             <Button DockPanel.Dock="Right" Margin="8,0,0,0" Content="从 URL 加载草稿" Command="{Binding InstallUrlCommand}" />
-            <TextBox Text="{Binding Url, UpdateSourceTrigger=PropertyChanged}" Padding="4" VerticalAlignment="Center" ToolTip="HTTP(S) .user.js 地址" />
+            <Grid VerticalAlignment="Center">
+                <TextBox x:Name="UrlTextBox" Text="{Binding Url, UpdateSourceTrigger=PropertyChanged}" Padding="4" ToolTip="HTTP(S) .user.js 地址" />
+                <TextBlock Text="HTTP(S) .user.js 地址" Margin="8,0,4,0" VerticalAlignment="Center" Foreground="#94A3B8"
+                           IsHitTestVisible="False" TextTrimming="CharacterEllipsis">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Text, ElementName=UrlTextBox}" Value="">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+            </Grid>
         </DockPanel>
         <StackPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
             <TextBlock Text="有未保存的源码修改 · Ctrl+S 保存" Foreground="#9A6700" FontWeight="SemiBold"
@@ -37,42 +52,94 @@
             <DockPanel Grid.Column="0">
                 <StackPanel DockPanel.Dock="Top" Margin="0,0,0,8">
                     <DockPanel>
-                        <Button DockPanel.Dock="Right" Content="{Binding SortLabel}" Command="{Binding ToggleSortCommand}" Padding="6,3"
+                        <Button DockPanel.Dock="Right" Margin="8,0,0,0" Padding="6,3" Content="{Binding SortLabel}" Command="{Binding ToggleSortCommand}"
                                 ToolTip="切换名称排序方向" />
-                        <TextBox Text="{Binding Search, UpdateSourceTrigger=PropertyChanged}" Padding="4" ToolTip="搜索名称、描述、命名空间或来源" />
+                        <Grid>
+                            <TextBox x:Name="SearchTextBox" Text="{Binding Search, UpdateSourceTrigger=PropertyChanged}" Padding="4"
+                                     ToolTip="搜索名称、描述、命名空间或来源" VerticalAlignment="Center" />
+                            <TextBlock Text="搜索名称、描述、命名空间或来源" Margin="8,0,4,0" VerticalAlignment="Center" Foreground="#94A3B8"
+                                       IsHitTestVisible="False" TextTrimming="CharacterEllipsis">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Text, ElementName=SearchTextBox}" Value="">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Grid>
                     </DockPanel>
-                    <DockPanel Margin="0,6,0,0">
-                        <TextBlock DockPanel.Dock="Right" Text="{Binding FilteredCount, StringFormat=匹配 {0} 项}" Foreground="#64748B" VerticalAlignment="Center" />
+                    <StackPanel Margin="0,6,0,0">
                         <ComboBox ItemsSource="{Binding StatusFilters}" SelectedItem="{Binding StatusFilter, UpdateSourceTrigger=PropertyChanged}" Padding="4" />
-                    </DockPanel>
+                        <TextBlock Text="{Binding FilteredCount, StringFormat=匹配 {0} 项}" Foreground="#64748B"
+                                   HorizontalAlignment="Right" Margin="0,2,2,0" />
+                    </StackPanel>
                 </StackPanel>
                 <Grid>
-                <ListBox ItemsSource="{Binding FilteredScripts}" SelectedItem="{Binding SelectedScript}">
+                <ListBox ItemsSource="{Binding FilteredScripts}" SelectedItem="{Binding SelectedScript}"
+                         HorizontalContentAlignment="Stretch" Padding="0"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="Background" Value="White" />
+                            <Setter Property="BorderBrush" Value="#D5DDE5" />
+                            <Setter Property="BorderThickness" Value="1" />
+                            <Setter Property="Padding" Value="8" />
+                            <Setter Property="Margin" Value="3" />
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                            <Setter Property="VerticalContentAlignment" Value="Center" />
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ListBoxItem">
+                                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                                BorderThickness="{TemplateBinding BorderThickness}" Padding="{TemplateBinding Padding}" CornerRadius="4">
+                                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                                        </Border>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                            <Style.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Background" Value="#F8FBFF" />
+                                    <Setter Property="BorderBrush" Value="#A9C8E2" />
+                                </Trigger>
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter Property="Background" Value="#EAF3FB" />
+                                    <Setter Property="BorderBrush" Value="#3978B9" />
+                                </Trigger>
+                                <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                    <Setter Property="BorderBrush" Value="#3978B9" />
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
                     <ListBox.ItemTemplate>
                         <DataTemplate>
-                            <Border Padding="8" Margin="0,0,0,6" Background="White" BorderBrush="#D5DDE5" BorderThickness="1" CornerRadius="4">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="48" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <views:ScriptIcon Grid.Column="0" IconUrl="{Binding IconUrl}" FallbackText="{Binding IconFallbackText}" />
-                                    <StackPanel Grid.Column="1" Margin="8,0,8,0">
-                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="#172B40" TextTrimming="CharacterEllipsis" />
-                                        <TextBlock Margin="0,2,0,0" Foreground="#64748B" FontSize="11">
-                                            <Run Text="{Binding Version, Mode=OneWay}" /><Run Text=" · " /><Run Text="{Binding StatusLabel, Mode=OneWay}" />
-                                        </TextBlock>
-                                        <TextBlock Margin="0,3,0,0" Text="{Binding Description}" Foreground="#475569" FontSize="11"
-                                                   TextTrimming="CharacterEllipsis" />
-                                    </StackPanel>
-                                    <CheckBox Grid.Column="2" VerticalAlignment="Center" Content="{Binding ToggleLabel}"
-                                              IsChecked="{Binding Installation.IsEnabled, Mode=OneWay}"
-                                              IsEnabled="{Binding CanToggle}"
-                                              Command="{Binding DataContext.ToggleScriptCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                              CommandParameter="{Binding}" />
-                                </Grid>
-                            </Border>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="48" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <views:ScriptIcon Grid.Column="0" IconUrl="{Binding IconUrl}" FallbackText="{Binding IconFallbackText}" />
+                                <StackPanel Grid.Column="1" Margin="8,0,8,0">
+                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="#172B40" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Margin="0,2,0,0" Foreground="#64748B" FontSize="11">
+                                        <Run Text="{Binding Version, Mode=OneWay}" /><Run Text=" · " /><Run Text="{Binding StatusLabel, Mode=OneWay}" />
+                                    </TextBlock>
+                                    <TextBlock Margin="0,3,0,0" Text="{Binding Description}" Foreground="#475569" FontSize="11"
+                                               TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                                <CheckBox Grid.Column="2" VerticalAlignment="Center" Content="{Binding ToggleLabel}"
+                                          IsChecked="{Binding Installation.IsEnabled, Mode=OneWay}"
+                                          IsEnabled="{Binding CanToggle}"
+                                          Command="{Binding DataContext.ToggleScriptCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                          CommandParameter="{Binding}" />
+                            </Grid>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>
@@ -86,7 +153,7 @@
                     </StackPanel>
                 </Grid>
             </DockPanel>
-            <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Center" />
+            <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Center" Background="Transparent"/>
             <TabControl Grid.Column="2">
                 <TabItem Header="源码编辑器">
                     <TextBox Text="{Binding Editor.Source, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" AcceptsTab="True"
