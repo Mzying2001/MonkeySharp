@@ -9,7 +9,7 @@
         </Border>
         <WrapPanel DockPanel.Dock="Top" IsEnabled="{Binding CanEdit}">
             <Button Content="新建" Command="{Binding NewCommand}" /><Button Content="导入文件" Click="ImportFile" />
-            <Button Content="启用 / 停用" Command="{Binding ToggleCommand}" /><Button Content="删除" Command="{Binding DeleteCommand}" />
+            <Button Content="删除" Command="{Binding DeleteCommand}" />
             <Button Content="检查并安装更新" Command="{Binding CheckUpdatesCommand}" />
             <Button Content="验证元数据" Command="{Binding ValidateCommand}" /><Button Content="安装 / 保存" Command="{Binding SaveCommand}" />
         </WrapPanel>
@@ -22,7 +22,36 @@
             <Grid.ColumnDefinitions><ColumnDefinition Width="275" /><ColumnDefinition Width="8" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
             <DockPanel Grid.Column="0">
                 <TextBox DockPanel.Dock="Top" Text="{Binding Search, UpdateSourceTrigger=PropertyChanged}" Padding="4" Margin="0,0,0,8" ToolTip="搜索脚本名称" />
-                <ListBox ItemsSource="{Binding FilteredScripts}" SelectedItem="{Binding SelectedScript}" DisplayMemberPath="DisplayName" />
+                <ListBox ItemsSource="{Binding FilteredScripts}" SelectedItem="{Binding SelectedScript}">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Border Padding="8" Margin="0,0,0,6" Background="White" BorderBrush="#D5DDE5" BorderThickness="1" CornerRadius="4">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="8" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border Grid.Column="0" Width="6" Height="34" VerticalAlignment="Top" CornerRadius="3"
+                                            Background="{Binding StatusBrush}" />
+                                    <StackPanel Grid.Column="1" Margin="8,0,8,0">
+                                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="#172B40" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Margin="0,2,0,0" Foreground="#64748B" FontSize="11">
+                                            <Run Text="{Binding Version}" /><Run Text=" · " /><Run Text="{Binding StatusLabel}" />
+                                        </TextBlock>
+                                        <TextBlock Margin="0,3,0,0" Text="{Binding Description}" Foreground="#475569" FontSize="11"
+                                                   TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                    <CheckBox Grid.Column="2" VerticalAlignment="Center" Content="{Binding ToggleLabel}"
+                                              IsChecked="{Binding Installation.IsEnabled, Mode=OneWay}"
+                                              IsEnabled="{Binding CanToggle}"
+                                              Command="{Binding DataContext.ToggleScriptCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                              CommandParameter="{Binding}" />
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
             </DockPanel>
             <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Center" />
             <TabControl Grid.Column="2">

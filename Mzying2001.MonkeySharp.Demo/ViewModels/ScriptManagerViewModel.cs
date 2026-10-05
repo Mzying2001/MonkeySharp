@@ -74,7 +74,7 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
         private Task Save() => RunAsync(SaveAsync);
 
         [RelayCommand]
-        private Task Toggle() => RunAsync(ToggleAsync);
+        private Task ToggleScript(ScriptItemViewModel item) => RunItemAsync(item, () => ToggleAsync(item));
 
         [RelayCommand]
         private Task Delete() => RunAsync(DeleteAsync);
@@ -193,13 +193,13 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
             Status = "已保存并刷新浏览器标签。";
         }
 
-        private async Task ToggleAsync()
+        private async Task ToggleAsync(ScriptItemViewModel item)
         {
-            if (SelectedScript == null || !ConfirmDiscard()) return;
-            var installation = SelectedScript.Installation;
+            if (item == null || !item.CanToggle) return;
+            var installation = item.Installation;
             if (!installation.IsEnabled && !_confirm("启用并允许脚本权限？\n\n" + ScriptEditorViewModel.Describe(installation.Definition.ParseResult))) return;
-            await _repository.SetEnabledAsync(installation.ScriptKey, !installation.IsEnabled, _cancellation.Token);
-            await RefreshAsync(); Status = "已更改脚本启用状态。";
+            item.Update(await _repository.SetEnabledAsync(installation.ScriptKey, !installation.IsEnabled, _cancellation.Token));
+            Status = (item.Installation.IsEnabled ? "已启用：" : "已停用：") + item.Name;
         }
 
         private async Task DeleteAsync()
@@ -219,14 +219,48 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
             finally { Busy = false; }
         }
 
+        private async Task RunItemAsync(ScriptItemViewModel item, Func<Task> action)
+        {
+            if (item == null || item.IsBusy) return;
+            item.IsBusy = true;
+            try { await action(); }
+            catch (OperationCanceledException) { Status = "操作已取消。"; }
+            catch (Exception exception) { Status = exception.Message; _diagnostics.Report("脚本管理器：" + exception.Message); }
+            finally { item.IsBusy = false; }
+        }
+
         public void Dispose() { _cancellation.Cancel(); }
     }
 
-    public sealed class ScriptItemViewModel
+    public sealed class ScriptItemViewModel : ObservableObject
     {
-        public ScriptItemViewModel(UserScriptInstallation installation) { Installation = installation; }
-        public UserScriptInstallation Installation { get; }
-        public string DisplayName => (!Installation.Definition.ParseResult.CanEnable ? "[不可用] " : Installation.IsEnabled ? "[启用] " : "[停用] ") +
-            (Installation.Definition.Metadata?.Name ?? Installation.ScriptKey.ToString()) + "  " + Installation.Definition.Metadata?.Version;
+        private UserScriptInstallation _installation;
+        private bool _isBusy;
+
+        public ScriptItemViewModel(UserScriptInstallation installation) { _installation = installation; }
+        public UserScriptInstallation Installation => _installation;
+        public bool IsBusy
+        {
+            get => _isBusy;
+            set
+            {
+                if (!SetProperty(ref _isBusy, value)) return;
+                OnPropertyChanged(nameof(CanToggle));
+            }
+        }
+        public bool CanToggle => !_isBusy && Installation.Definition.ParseResult.CanEnable;
+        public string Name => Installation.Definition.Metadata?.Name ?? Installation.ScriptKey.ToString();
+        public string Version => string.IsNullOrWhiteSpace(Installation.Definition.Metadata?.Version) ? "无版本" : "v" + Installation.Definition.Metadata.Version;
+        public string Description => string.IsNullOrWhiteSpace(Installation.Definition.Metadata?.Description) ? "未提供描述" : Installation.Definition.Metadata.Description;
+        public string StatusLabel => !Installation.Definition.ParseResult.CanEnable ? "不可用" : Installation.IsEnabled ? "已启用" : "已停用";
+        public string ToggleLabel => Installation.IsEnabled ? "停用" : "启用";
+        public string StatusBrush => !Installation.Definition.ParseResult.CanEnable ? "#B42318" : Installation.IsEnabled ? "#2F855A" : "#94A3B8";
+        public string DisplayName => StatusLabel + " " + Name + "  " + Version;
+
+        public void Update(UserScriptInstallation installation)
+        {
+            _installation = installation ?? throw new ArgumentNullException(nameof(installation));
+            OnPropertyChanged(string.Empty);
+        }
     }
 }
