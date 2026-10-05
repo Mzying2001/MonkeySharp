@@ -61,7 +61,7 @@
                                     <StackPanel Grid.Column="1" Margin="8,0,8,0">
                                         <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="#172B40" TextTrimming="CharacterEllipsis" />
                                         <TextBlock Margin="0,2,0,0" Foreground="#64748B" FontSize="11">
-                                            <Run Text="{Binding Version}" /><Run Text=" · " /><Run Text="{Binding StatusLabel}" />
+                                            <Run Text="{Binding Version, Mode=OneWay}" /><Run Text=" · " /><Run Text="{Binding StatusLabel, Mode=OneWay}" />
                                         </TextBlock>
                                         <TextBlock Margin="0,3,0,0" Text="{Binding Description}" Foreground="#475569" FontSize="11"
                                                    TextTrimming="CharacterEllipsis" />
