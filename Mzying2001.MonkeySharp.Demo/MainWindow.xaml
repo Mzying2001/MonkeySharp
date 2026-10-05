@@ -19,7 +19,8 @@
                 <Button DockPanel.Dock="Right" Content="＋" ToolTip="新标签 Ctrl+T" Command="{Binding NewTabCommand}" />
                 <ListBox x:Name="BrowserTabs" ItemsSource="{Binding Tabs}" SelectedItem="{Binding SelectedTab, Mode=TwoWay}" Background="Transparent" BorderThickness="0"
                          PreviewMouseDown="BrowserTabsPreviewMouseDown"
-                         ScrollViewer.HorizontalScrollBarVisibility="Auto" ScrollViewer.VerticalScrollBarVisibility="Disabled">
+                         PreviewMouseWheel="BrowserTabsPreviewMouseWheel"
+                         ScrollViewer.HorizontalScrollBarVisibility="Hidden" ScrollViewer.VerticalScrollBarVisibility="Disabled">
                     <ListBox.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate></ListBox.ItemsPanel>
                     <ListBox.ItemContainerStyle>
                         <Style TargetType="ListBoxItem">

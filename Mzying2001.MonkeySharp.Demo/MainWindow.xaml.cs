@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 
 namespace Mzying2001.MonkeySharp.Demo
 {
@@ -84,6 +85,30 @@ namespace Mzying2001.MonkeySharp.Demo
                 _runtime.MainWindow.CloseTabCommand.Execute(tab);
                 args.Handled = true;
             }
+        }
+        private void BrowserTabsPreviewMouseWheel(object sender, MouseWheelEventArgs args)
+        {
+            var scrollViewer = FindVisualChild<ScrollViewer>(BrowserTabs);
+            if (scrollViewer == null || scrollViewer.ScrollableWidth <= 0) return;
+
+            var offset = Math.Max(0, Math.Min(scrollViewer.ScrollableWidth,
+                scrollViewer.HorizontalOffset - args.Delta));
+            if (Math.Abs(offset - scrollViewer.HorizontalOffset) < double.Epsilon) return;
+
+            scrollViewer.ScrollToHorizontalOffset(offset);
+            args.Handled = true;
+        }
+        private static T FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+        {
+            if (parent == null) return null;
+            for (var index = 0; index < VisualTreeHelper.GetChildrenCount(parent); index++)
+            {
+                var child = VisualTreeHelper.GetChild(parent, index);
+                if (child is T match) return match;
+                var descendant = FindVisualChild<T>(child);
+                if (descendant != null) return descendant;
+            }
+            return null;
         }
         private void OpenDataDirectory(object sender, RoutedEventArgs args) => OpenDirectory(_runtime.Paths.DataDirectory);
         private void OpenDownloadsDirectory(object sender, RoutedEventArgs args) => OpenDirectory(_runtime.Paths.DownloadsDirectory);
