@@ -6,6 +6,7 @@ using Mzying2001.MonkeySharp.Demo.Persistence;
 using Mzying2001.MonkeySharp.Demo.Services;
 using Mzying2001.MonkeySharp.Core.Updates;
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
@@ -37,6 +38,12 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
         private string _search;
 
         [ObservableProperty]
+        private string _statusFilter = "全部";
+
+        [ObservableProperty]
+        private bool _sortAscending = true;
+
+        [ObservableProperty]
         private string _status;
 
         [ObservableProperty]
@@ -51,7 +58,8 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
             _repository = repository; _content = content; _updates = updates; _confirm = confirm; _diagnostics = diagnostics;
             Editor.PropertyChanged += EditorPropertyChanged;
             FilteredScripts = CollectionViewSource.GetDefaultView(Scripts);
-            FilteredScripts.Filter = item => string.IsNullOrWhiteSpace(Search) || ((ScriptItemViewModel)item).DisplayName.IndexOf(Search, StringComparison.OrdinalIgnoreCase) >= 0;
+            FilteredScripts.Filter = FilterScript;
+            ApplySort();
             Details.Update(Editor.Parse(), _origin);
         }
 
@@ -59,6 +67,13 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
         public ScriptDetailsViewModel Details { get; } = new ScriptDetailsViewModel();
         public ObservableCollection<ScriptItemViewModel> Scripts { get; } = new ObservableCollection<ScriptItemViewModel>();
         public ICollectionView FilteredScripts { get; }
+        public IReadOnlyList<string> StatusFilters { get; } = new[] { "全部", "已启用", "已停用", "不可用" };
+        public int FilteredCount => FilteredScripts.Cast<object>().Count();
+        public bool HasScripts => Scripts.Count > 0;
+        public bool HasFilteredScripts => FilteredCount > 0;
+        public bool ShowNoScripts => !HasScripts;
+        public bool ShowNoResults => HasScripts && !HasFilteredScripts;
+        public string SortLabel => SortAscending ? "名称升序" : "名称降序";
         public bool CanEdit => !Busy;
 
         [RelayCommand]
@@ -82,7 +97,20 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
         [RelayCommand]
         private Task CheckUpdates() => RunAsync(CheckUpdatesAsync);
 
-        partial void OnSearchChanged(string value) => FilteredScripts.Refresh();
+        [RelayCommand]
+        private void ToggleSort()
+        {
+            SortAscending = !SortAscending;
+            ApplySort();
+        }
+
+        partial void OnSearchChanged(string value) => RefreshFilter();
+        partial void OnStatusFilterChanged(string value) => RefreshFilter();
+        partial void OnSortAscendingChanged(bool value)
+        {
+            OnPropertyChanged(nameof(SortLabel));
+            ApplySort();
+        }
 
         partial void OnSelectedScriptChanged(ScriptItemViewModel oldValue, ScriptItemViewModel value)
         {
@@ -109,6 +137,7 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
                 Scripts.Clear();
                 foreach (var installation in scripts) Scripts.Add(new ScriptItemViewModel(installation));
                 SelectedScript = Scripts.FirstOrDefault(item => item.Installation.ScriptKey == key);
+                RefreshFilter();
             }
             finally { _refreshing = false; }
         }
@@ -195,6 +224,7 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
             var installation = item.Installation;
             if (!installation.IsEnabled && !_confirm("启用并允许脚本权限？\n\n" + ScriptEditorViewModel.Describe(installation.Definition.ParseResult))) return;
             item.Update(await _repository.SetEnabledAsync(installation.ScriptKey, !installation.IsEnabled, _cancellation.Token));
+            RefreshFilter();
             Status = (item.Installation.IsEnabled ? "已启用：" : "已停用：") + item.Name;
         }
 
@@ -223,6 +253,37 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
             catch (OperationCanceledException) { Status = "操作已取消。"; }
             catch (Exception exception) { Status = exception.Message; _diagnostics.Report("脚本管理器：" + exception.Message); }
             finally { item.IsBusy = false; }
+        }
+
+        private bool FilterScript(object value)
+        {
+            var item = (ScriptItemViewModel)value;
+            if (StatusFilter == "已启用" && (!item.Installation.IsEnabled || !item.Installation.Definition.ParseResult.CanEnable)) return false;
+            if (StatusFilter == "已停用" && (item.Installation.IsEnabled || !item.Installation.Definition.ParseResult.CanEnable)) return false;
+            if (StatusFilter == "不可用" && item.Installation.Definition.ParseResult.CanEnable) return false;
+            if (string.IsNullOrWhiteSpace(Search)) return true;
+            return item.SearchText.IndexOf(Search.Trim(), StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private void RefreshFilter()
+        {
+            FilteredScripts.Refresh();
+            OnPropertyChanged(nameof(FilteredCount));
+            OnPropertyChanged(nameof(HasScripts));
+            OnPropertyChanged(nameof(HasFilteredScripts));
+            OnPropertyChanged(nameof(ShowNoScripts));
+            OnPropertyChanged(nameof(ShowNoResults));
+        }
+
+        private void ApplySort()
+        {
+            var view = FilteredScripts as ListCollectionView;
+            if (view == null) return;
+            view.SortDescriptions.Clear();
+            view.SortDescriptions.Add(new SortDescription(nameof(ScriptItemViewModel.Name),
+                SortAscending ? ListSortDirection.Ascending : ListSortDirection.Descending));
+            view.SortDescriptions.Add(new SortDescription(nameof(ScriptItemViewModel.ScriptKey), ListSortDirection.Ascending));
+            RefreshFilter();
         }
 
         private void EditorPropertyChanged(object sender, PropertyChangedEventArgs args)
@@ -257,6 +318,8 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
         public string Name => Installation.Definition.Metadata?.Name ?? Installation.ScriptKey.ToString();
         public string Version => string.IsNullOrWhiteSpace(Installation.Definition.Metadata?.Version) ? "无版本" : "v" + Installation.Definition.Metadata.Version;
         public string Description => string.IsNullOrWhiteSpace(Installation.Definition.Metadata?.Description) ? "未提供描述" : Installation.Definition.Metadata.Description;
+        public string ScriptKey => Installation.ScriptKey.ToString();
+        public string SearchText => string.Join("\n", Name, Description, Installation.Definition.Metadata?.Namespace, Installation.SourceOrigin);
         public string IconUrl => Installation.Definition.Metadata?.Icon64Url ?? Installation.Definition.Metadata?.IconUrl;
         public string IconFallbackText => string.IsNullOrWhiteSpace(Name) ? "?" : Name.Substring(0, 1).ToUpperInvariant();
         public string StatusLabel => !Installation.Definition.ParseResult.CanEnable ? "不可用" : Installation.IsEnabled ? "已启用" : "已停用";

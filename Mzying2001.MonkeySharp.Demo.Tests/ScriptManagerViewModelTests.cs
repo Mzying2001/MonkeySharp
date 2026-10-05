@@ -1,8 +1,13 @@
 using Mzying2001.MonkeySharp.Core.Repository;
 using Mzying2001.MonkeySharp.Core.Parsing;
+using Mzying2001.MonkeySharp.Core.Updates;
+using Mzying2001.MonkeySharp.Demo.Persistence;
+using Mzying2001.MonkeySharp.Demo.Services;
 using Mzying2001.MonkeySharp.Demo.ViewModels;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows.Threading;
 using Xunit;
 
 namespace Mzying2001.MonkeySharp.Demo.Tests
@@ -68,6 +73,33 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
             Assert.Contains("badge = https://example.com/badge.png", details.Resources);
             Assert.Equal("https://example.com/script.user.js", details.SourceOrigin);
             Assert.Contains("Details", details.ToConfirmationText());
+        }
+
+        [Fact]
+        public async Task ManagerFiltersSearchesAndSortsTheScriptView()
+        {
+            using (var fixture = await PersistenceTests.Fixture.Create())
+            using (var content = new HttpContentService(fixture.Paths))
+            {
+                var enabled = await fixture.Repository.InstallAsync(Source.Replace("Manager sample", "Zeta"), "application://zeta", true, CancellationToken.None);
+                await fixture.Repository.InstallAsync(Source.Replace("Manager sample", "Alpha"), "application://alpha", false, CancellationToken.None);
+                var manager = new ScriptManagerViewModel(fixture.Repository, content,
+                    new UserScriptUpdateService(fixture.Repository, content), _ => true,
+                    new DiagnosticsViewModel(Dispatcher.CurrentDispatcher, fixture.Paths.LogsDirectory));
+                await manager.RefreshAsync();
+
+                Assert.Equal(2, manager.FilteredCount);
+                Assert.True(manager.HasScripts);
+                Assert.True(manager.HasFilteredScripts);
+                Assert.Equal("Alpha", ((ScriptItemViewModel)manager.FilteredScripts.Cast<object>().First()).Name);
+
+                manager.StatusFilter = "已启用";
+                Assert.Equal(1, manager.FilteredCount);
+                manager.Search = "does-not-exist";
+                Assert.True(manager.ShowNoResults);
+                Assert.False(manager.ShowNoScripts);
+                manager.Dispose();
+            }
         }
 
         private const string Source = "// ==UserScript==\n" +

@@ -35,7 +35,18 @@
         <Grid IsEnabled="{Binding CanEdit}">
             <Grid.ColumnDefinitions><ColumnDefinition Width="275" /><ColumnDefinition Width="8" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
             <DockPanel Grid.Column="0">
-                <TextBox DockPanel.Dock="Top" Text="{Binding Search, UpdateSourceTrigger=PropertyChanged}" Padding="4" Margin="0,0,0,8" ToolTip="搜索脚本名称" />
+                <StackPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                    <DockPanel>
+                        <Button DockPanel.Dock="Right" Content="{Binding SortLabel}" Command="{Binding ToggleSortCommand}" Padding="6,3"
+                                ToolTip="切换名称排序方向" />
+                        <TextBox Text="{Binding Search, UpdateSourceTrigger=PropertyChanged}" Padding="4" ToolTip="搜索名称、描述、命名空间或来源" />
+                    </DockPanel>
+                    <DockPanel Margin="0,6,0,0">
+                        <TextBlock DockPanel.Dock="Right" Text="{Binding FilteredCount, StringFormat=匹配 {0} 项}" Foreground="#64748B" VerticalAlignment="Center" />
+                        <ComboBox ItemsSource="{Binding StatusFilters}" SelectedItem="{Binding StatusFilter, UpdateSourceTrigger=PropertyChanged}" Padding="4" />
+                    </DockPanel>
+                </StackPanel>
+                <Grid>
                 <ListBox ItemsSource="{Binding FilteredScripts}" SelectedItem="{Binding SelectedScript}">
                     <ListBox.ItemTemplate>
                         <DataTemplate>
@@ -65,6 +76,15 @@
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="{Binding ShowNoScripts, Converter={StaticResource BooleanVisibility}}">
+                        <TextBlock Text="还没有脚本" FontSize="16" FontWeight="SemiBold" Foreground="#334155" HorizontalAlignment="Center" />
+                        <TextBlock Text="点击“新建”、导入文件或从 URL 加载草稿。" Margin="0,6,0,0" Foreground="#64748B" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="{Binding ShowNoResults, Converter={StaticResource BooleanVisibility}}">
+                        <TextBlock Text="没有匹配结果" FontSize="16" FontWeight="SemiBold" Foreground="#334155" HorizontalAlignment="Center" />
+                        <TextBlock Text="调整搜索文字或状态筛选。" Margin="0,6,0,0" Foreground="#64748B" />
+                    </StackPanel>
+                </Grid>
             </DockPanel>
             <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Center" />
             <TabControl Grid.Column="2">
