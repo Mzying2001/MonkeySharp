@@ -50,7 +50,8 @@ namespace Mzying2001.MonkeySharp.Demo.Views
             Icon.Visibility = Visibility.Collapsed;
             Fallback.Visibility = Visibility.Visible;
             if (!Uri.TryCreate(IconUrl, UriKind.Absolute, out var uri) ||
-                (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)) return;
+                (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) ||
+                !string.IsNullOrEmpty(uri.UserInfo)) return;
             try
             {
                 Icon.Source = new BitmapImage(uri);

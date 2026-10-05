@@ -320,7 +320,14 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
         public string Description => string.IsNullOrWhiteSpace(Installation.Definition.Metadata?.Description) ? "未提供描述" : Installation.Definition.Metadata.Description;
         public string ScriptKey => Installation.ScriptKey.ToString();
         public string SearchText => string.Join("\n", Name, Description, Installation.Definition.Metadata?.Namespace, Installation.SourceOrigin);
-        public string IconUrl => Installation.Definition.Metadata?.Icon64Url ?? Installation.Definition.Metadata?.IconUrl;
+        public string IconUrl
+        {
+            get
+            {
+                var metadata = Installation.Definition.Metadata;
+                return !string.IsNullOrWhiteSpace(metadata?.Icon64Url) ? metadata.Icon64Url : metadata?.IconUrl;
+            }
+        }
         public string IconFallbackText => string.IsNullOrWhiteSpace(Name) ? "?" : Name.Substring(0, 1).ToUpperInvariant();
         public string StatusLabel => !Installation.Definition.ParseResult.CanEnable ? "不可用" : Installation.IsEnabled ? "已启用" : "已停用";
         public string ToggleLabel => Installation.IsEnabled ? "停用" : "启用";

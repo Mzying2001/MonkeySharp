@@ -59,6 +59,15 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
         }
 
         [Fact]
+        public async Task ScriptItemFallsBackToTheRegularIcon()
+        {
+            var repository = new InMemoryUserScriptRepository();
+            var installation = await repository.InstallAsync(SourceWithIconOnly, "application://test", true, CancellationToken.None);
+
+            Assert.Equal("https://example.com/icon.png", new ScriptItemViewModel(installation).IconUrl);
+        }
+
+        [Fact]
         public void ScriptDetailsGroupsMetadataAndDiagnostics()
         {
             var details = new ScriptDetailsViewModel();
@@ -132,6 +141,15 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
             "// @require https://example.com/lib.js\n" +
             "// @resource badge https://example.com/badge.png\n" +
             "// @run-at document-end\n" +
+            "// ==/UserScript==\n";
+
+        private const string SourceWithIconOnly = "// ==UserScript==\n" +
+            "// @name Icon fallback\n" +
+            "// @namespace tests\n" +
+            "// @version 1.0.0\n" +
+            "// @icon https://example.com/icon.png\n" +
+            "// @match https://example.com/*\n" +
+            "// @grant none\n" +
             "// ==/UserScript==\n";
 
     }
