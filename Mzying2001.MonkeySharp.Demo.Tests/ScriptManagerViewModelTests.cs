@@ -156,12 +156,18 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
                 {
                     await manager.RefreshAsync();
                     var item = Assert.Single(manager.Scripts);
+                    var stateNotificationCount = 0;
+                    item.PropertyChanged += (_, args) =>
+                    {
+                        if (string.IsNullOrEmpty(args.PropertyName)) stateNotificationCount++;
+                    };
 
                     await manager.ToggleScriptCommand.ExecuteAsync(item);
 
                     Assert.Equal(1, confirmationCount);
                     Assert.False((await repository.GetAsync(installation.ScriptKey, CancellationToken.None)).IsEnabled);
                     Assert.Equal("已停用", item.StatusLabel);
+                    Assert.Equal(1, stateNotificationCount);
                 }
             }
         }
