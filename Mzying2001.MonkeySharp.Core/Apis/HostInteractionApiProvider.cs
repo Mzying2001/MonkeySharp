@@ -33,12 +33,12 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             new Dictionary<string, IMenuRegistration>(StringComparer.Ordinal);
         private readonly HashSet<string> _pendingMenus = new HashSet<string>(StringComparer.Ordinal);
         private readonly HashSet<string> _endedPendingMenus = new HashSet<string>(StringComparer.Ordinal);
-        private readonly Dictionary<string, INotificationHandle> _notificationHandles =
-            new Dictionary<string, INotificationHandle>(StringComparer.Ordinal);
-        private readonly Dictionary<string, ITabHandle> _tabHandles =
-            new Dictionary<string, ITabHandle>(StringComparer.Ordinal);
-        private readonly Dictionary<string, IDownloadOperation> _downloadOperations =
-            new Dictionary<string, IDownloadOperation>(StringComparer.Ordinal);
+        private readonly Dictionary<string, NotificationRegistration> _notificationHandles =
+            new Dictionary<string, NotificationRegistration>(StringComparer.Ordinal);
+        private readonly Dictionary<string, TabRegistration> _tabHandles =
+            new Dictionary<string, TabRegistration>(StringComparer.Ordinal);
+        private readonly Dictionary<string, DownloadRegistration> _downloadOperations =
+            new Dictionary<string, DownloadRegistration>(StringComparer.Ordinal);
         private bool _disposed;
 
         /// <summary>Initializes a provider from the host interaction services that are available.</summary>
@@ -184,9 +184,9 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             if (_disposed)
                 return;
             IMenuRegistration[] registrations;
-            INotificationHandle[] notifications;
-            ITabHandle[] tabs;
-            IDownloadOperation[] downloads;
+            NotificationRegistration[] notifications;
+            TabRegistration[] tabs;
+            DownloadRegistration[] downloads;
             lock (_sync)
             {
                 if (_disposed)
@@ -205,12 +205,9 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             }
             foreach (var registration in registrations)
                 registration.Dispose();
-            foreach (var handle in notifications)
-                handle.Dispose();
-            foreach (var handle in tabs)
-                handle.Dispose();
-            foreach (var operation in downloads)
-                operation.Dispose();
+            foreach (var handle in notifications) handle.Dispose();
+            foreach (var handle in tabs) handle.Dispose();
+            foreach (var operation in downloads) operation.Dispose();
         }
 
         /// <inheritdoc />
@@ -220,9 +217,9 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 throw new ArgumentException("The execution ID is required.", nameof(executionId));
             var prefix = executionId + ":";
             IMenuRegistration[] registrations;
-            INotificationHandle[] notifications;
-            ITabHandle[] tabs;
-            IDownloadOperation[] downloads;
+            NotificationRegistration[] notifications;
+            TabRegistration[] tabs;
+            DownloadRegistration[] downloads;
             lock (_sync)
             {
                 if (_disposed)
@@ -253,12 +250,9 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             }
             foreach (var registration in registrations)
                 registration.Dispose();
-            foreach (var handle in notifications)
-                handle.Dispose();
-            foreach (var handle in tabs)
-                handle.Dispose();
-            foreach (var operation in downloads)
-                operation.Dispose();
+            foreach (var handle in notifications) handle.Dispose();
+            foreach (var handle in tabs) handle.Dispose();
+            foreach (var operation in downloads) operation.Dispose();
         }
 
         private ApiResult ShowNotification(ApiInvocationContext context, CancellationToken cancellationToken)
@@ -280,12 +274,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 throw new InvalidOperationException("The notification service returned no handle.");
             var notificationId = Guid.NewGuid().ToString("D");
             var key = context.ExecutionId + ":" + notificationId;
-            handle.Clicked += (_, __) => Notification?.Invoke(this, new ApiNotificationEventArgs(
-                context.Installation.ScriptKey, context.ExecutionId, "notification-click",
-                JsonSerializer.Serialize(new { notificationId })));
-            handle.Closed += (_, __) => Notification?.Invoke(this, new ApiNotificationEventArgs(
-                context.Installation.ScriptKey, context.ExecutionId, "notification-done",
-                JsonSerializer.Serialize(new { notificationId })));
+            var registration = new NotificationRegistration(this, key, handle, context.Installation.ScriptKey, context.ExecutionId, notificationId);
             lock (_sync)
             {
                 if (_disposed)
@@ -293,77 +282,51 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                     handle.Dispose();
                     throw new ObjectDisposedException(nameof(HostInteractionApiProvider));
                 }
-                _notificationHandles[key] = handle;
+                _notificationHandles[key] = registration;
             }
+            registration.Subscribe();
             return ApiResult.FromValue(new { id = notificationId });
         }
 
         private async Task<ApiResult> CloseTabAsync(
             ApiInvocationContext context, string tabId, CancellationToken cancellationToken)
         {
-            ITabHandle handle;
+            TabRegistration registration;
             lock (_sync)
-                _tabHandles.TryGetValue(context.ExecutionId + ":" + tabId, out handle);
-            if (handle == null)
+                _tabHandles.TryGetValue(context.ExecutionId + ":" + tabId, out registration);
+            if (registration == null)
                 return ApiResult.FromValue(false);
-            await handle.CloseAsync(cancellationToken).ConfigureAwait(false);
+            await registration.CloseAsync(cancellationToken).ConfigureAwait(false);
             return ApiResult.FromValue(true);
         }
 
         private void TrackTab(ApiInvocationContext context, ITabHandle tab)
         {
-            var notified = 0;
-            EventHandler closed = null;
-            closed = (_, __) =>
-            {
-                if (Interlocked.Exchange(ref notified, 1) != 0)
-                    return;
-                Notification?.Invoke(this, new ApiNotificationEventArgs(
-                    context.Installation.ScriptKey, context.ExecutionId, "tab-closed",
-                    JsonSerializer.Serialize(new { tabId = tab.TabId })));
-            };
-            tab.OnClose += closed;
-            lock (_sync)
-                _tabHandles[context.ExecutionId + ":" + tab.TabId] = tab;
-            if (tab.Closed)
-                closed(tab, EventArgs.Empty);
+            var key = context.ExecutionId + ":" + tab.TabId;
+            var registration = new TabRegistration(this, key, tab, context.Installation.ScriptKey, context.ExecutionId);
+            lock (_sync) _tabHandles[key] = registration;
+            registration.Subscribe();
+            if (tab.Closed) registration.Terminalize();
         }
 
         private ApiResult AbortDownload(ApiInvocationContext context)
         {
             var downloadId = ProviderParameters.RequiredString(context.Parameters, "downloadId");
-            IDownloadOperation operation;
+            DownloadRegistration registration;
             lock (_sync)
-                _downloadOperations.TryGetValue(context.ExecutionId + ":" + downloadId, out operation);
-            if (operation == null)
+                _downloadOperations.TryGetValue(context.ExecutionId + ":" + downloadId, out registration);
+            if (registration == null)
                 return ApiResult.FromValue(false);
-            operation.Abort();
+            registration.Abort();
             return ApiResult.FromValue(true);
         }
 
         private void TrackDownload(ApiInvocationContext context, string clientId, IDownloadOperation operation)
         {
             var key = context.ExecutionId + ":" + operation.DownloadId;
-            operation.Progress += (_, progress) => Notification?.Invoke(this, new ApiNotificationEventArgs(
-                context.Installation.ScriptKey, context.ExecutionId, "download-progress",
-                JsonSerializer.Serialize(new { downloadId = operation.DownloadId, clientId, loaded = progress.Loaded, total = progress.Total })));
-            operation.Completed += (_, __) => Notification?.Invoke(this, new ApiNotificationEventArgs(
-                context.Installation.ScriptKey, context.ExecutionId, "download-complete",
-                JsonSerializer.Serialize(new { downloadId = operation.DownloadId, clientId })));
-            operation.Failed += (_, failure) => Notification?.Invoke(this, new ApiNotificationEventArgs(
-                context.Installation.ScriptKey, context.ExecutionId, "download-error",
-                JsonSerializer.Serialize(new { downloadId = operation.DownloadId, clientId,
-                    error = "not_succeeded", details = failure.Error?.Message })));
-            operation.Aborted += (_, __) => Notification?.Invoke(this, new ApiNotificationEventArgs(
-                context.Installation.ScriptKey, context.ExecutionId, "download-aborted",
-                JsonSerializer.Serialize(new { downloadId = operation.DownloadId, clientId,
-                    error = "not_succeeded", details = "The download was aborted." })));
-            operation.TimedOut += (_, __) => Notification?.Invoke(this, new ApiNotificationEventArgs(
-                context.Installation.ScriptKey, context.ExecutionId, "download-timeout",
-                JsonSerializer.Serialize(new { downloadId = operation.DownloadId, clientId,
-                    error = "timeout", details = "The download timed out." })));
-            lock (_sync)
-                _downloadOperations[key] = operation;
+            var registration = new DownloadRegistration(this, key, operation, context.Installation.ScriptKey, context.ExecutionId, clientId);
+            lock (_sync) _downloadOperations[key] = registration;
+            registration.Subscribe();
         }
 
         private static IDictionary<string, string> ReadHeaders(JsonElement parameters)
@@ -380,6 +343,107 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 headers[header.Name] = header.Value.GetString();
             }
             return headers;
+        }
+
+        private abstract class Registration : IDisposable
+        {
+            protected readonly HostInteractionApiProvider Owner;
+            protected readonly string Key;
+            private int _terminal;
+            protected Registration(HostInteractionApiProvider owner, string key) { Owner = owner; Key = key; }
+            protected bool TryTerminal()
+            {
+                if (Interlocked.Exchange(ref _terminal, 1) != 0) return false;
+                lock (Owner._sync)
+                {
+                    Owner._notificationHandles.Remove(Key);
+                    Owner._tabHandles.Remove(Key);
+                    Owner._downloadOperations.Remove(Key);
+                }
+                return true;
+            }
+            protected bool IsTerminal => Volatile.Read(ref _terminal) != 0;
+            public abstract void Dispose();
+        }
+
+        private sealed class NotificationRegistration : Registration
+        {
+            private readonly INotificationHandle _handle;
+            private readonly ScriptKey _scriptKey;
+            private readonly string _executionId;
+            private readonly string _notificationId;
+            private readonly EventHandler _clicked;
+            private readonly EventHandler _closed;
+            public NotificationRegistration(HostInteractionApiProvider owner, string key, INotificationHandle handle,
+                ScriptKey scriptKey, string executionId, string notificationId) : base(owner, key)
+            {
+                _handle = handle; _scriptKey = scriptKey; _executionId = executionId; _notificationId = notificationId;
+                _clicked = (_, __) => { if (!IsTerminal) owner.Notification?.Invoke(owner, new ApiNotificationEventArgs(scriptKey, executionId, "notification-click", JsonSerializer.Serialize(new { notificationId }))); };
+                _closed = (_, __) => { if (TryTerminal()) owner.Notification?.Invoke(owner, new ApiNotificationEventArgs(scriptKey, executionId, "notification-done", JsonSerializer.Serialize(new { notificationId }))); };
+            }
+            public void Subscribe() { _handle.Clicked += _clicked; _handle.Closed += _closed; }
+            public override void Dispose() { _handle.Clicked -= _clicked; _handle.Closed -= _closed; _handle.Dispose(); }
+        }
+
+        private sealed class TabRegistration : Registration
+        {
+            private readonly ITabHandle _handle;
+            private readonly ScriptKey _scriptKey;
+            private readonly string _executionId;
+            private readonly EventHandler _closed;
+            public TabRegistration(HostInteractionApiProvider owner, string key, ITabHandle handle, ScriptKey scriptKey, string executionId) : base(owner, key)
+            {
+                _handle = handle; _scriptKey = scriptKey; _executionId = executionId;
+                _closed = (_, __) => Terminalize();
+            }
+            public void Subscribe() { _handle.OnClose += _closed; }
+            public async Task CloseAsync(CancellationToken cancellationToken)
+            {
+                await _handle.CloseAsync(cancellationToken).ConfigureAwait(false);
+                Terminalize();
+            }
+            public void Terminalize()
+            {
+                if (!TryTerminal()) return;
+                Owner.Notification?.Invoke(Owner, new ApiNotificationEventArgs(_scriptKey, _executionId, "tab-closed", JsonSerializer.Serialize(new { tabId = _handle.TabId })));
+                Dispose();
+            }
+            public override void Dispose() { _handle.OnClose -= _closed; _handle.Dispose(); }
+        }
+
+        private sealed class DownloadRegistration : Registration
+        {
+            private readonly IDownloadOperation _operation;
+            private readonly ScriptKey _scriptKey;
+            private readonly string _executionId;
+            private readonly string _clientId;
+            private readonly EventHandler<UserScriptDownloadProgress> _progress;
+            private readonly EventHandler _completed;
+            private readonly EventHandler<UserScriptDownloadFailure> _failed;
+            private readonly EventHandler _aborted;
+            private readonly EventHandler _timedOut;
+            public DownloadRegistration(HostInteractionApiProvider owner, string key, IDownloadOperation operation,
+                ScriptKey scriptKey, string executionId, string clientId) : base(owner, key)
+            {
+                _operation = operation; _scriptKey = scriptKey; _executionId = executionId; _clientId = clientId;
+                _progress = (_, progress) => { if (!IsTerminal) owner.Notification?.Invoke(owner, new ApiNotificationEventArgs(scriptKey, executionId, "download-progress", JsonSerializer.Serialize(new { downloadId = operation.DownloadId, clientId, loaded = progress.Loaded, total = progress.Total }))); };
+                _completed = (_, __) => Terminal("download-complete", new { downloadId = operation.DownloadId, clientId });
+                _failed = (_, failure) => Terminal("download-error", new { downloadId = operation.DownloadId, clientId, error = "not_succeeded", details = failure.Error?.Message });
+                _aborted = (_, __) => Terminal("download-aborted", new { downloadId = operation.DownloadId, clientId, error = "not_succeeded", details = "The download was aborted." });
+                _timedOut = (_, __) => Terminal("download-timeout", new { downloadId = operation.DownloadId, clientId, error = "timeout", details = "The download timed out." });
+            }
+            public void Subscribe() { _operation.Progress += _progress; _operation.Completed += _completed; _operation.Failed += _failed; _operation.Aborted += _aborted; _operation.TimedOut += _timedOut; }
+            public void Abort() { _operation.Abort(); }
+            private void Terminal(string eventName, object data)
+            {
+                if (!TryTerminal()) return;
+                Owner.Notification?.Invoke(Owner, new ApiNotificationEventArgs(_scriptKey, _executionId, eventName, JsonSerializer.Serialize(data)));
+                Dispose();
+            }
+            public override void Dispose()
+            {
+                _operation.Progress -= _progress; _operation.Completed -= _completed; _operation.Failed -= _failed; _operation.Aborted -= _aborted; _operation.TimedOut -= _timedOut; _operation.Dispose();
+            }
         }
 
         private static string ReadConflictAction(JsonElement parameters)

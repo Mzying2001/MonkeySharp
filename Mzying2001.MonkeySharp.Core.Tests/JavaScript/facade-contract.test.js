@@ -37,6 +37,9 @@ test("modern info, log, style, and element facades use granted capabilities", as
         createElement: tagName => ({
             tagName,
             attributes: {},
+            style: { cssText: "" },
+            value: "",
+            checked: false,
             setAttribute(name, value) { this.attributes[name] = value; },
             appendChild() {}
         })
@@ -54,14 +57,15 @@ test("modern info, log, style, and element facades use granted capabilities", as
             scriptKey: "77777777-7777-7777-7777-777777777777",
             source: [
                 "globalThis.__contractPromise = (async function () {",
-                "  globalThis.__infoFrozen = Object.isFrozen(GM.info) && Object.isFrozen(GM.info.script);",
+                "  globalThis.__infoFrozen = Object.isFrozen(GM.info) && Object.isFrozen(GM.info.script) && Object.isFrozen(GM.info.compatibility) && Object.isFrozen(GM.info.compatibility.fields);",
+                "  globalThis.__infoCompatibility = [GM.info.compatibility.contractVersion, GM.info.compatibility.handler, GM.info.compatibility.executionWorld];",
                 "  await GM.log({ event: 'log' });",
                 "  globalThis.__style = await GM.addStyle('body { color: red; }');",
-                "  globalThis.__element = await GM.addElement('div', { id: 'marker', textContent: 'ok' });",
+                "  globalThis.__element = await GM.addElement('input', { id: 'marker', value: 'ok', checked: true, style: 'color: red', onclick: function () {}, 'data-test': 'yes', textContent: 'body' });",
                 "})();"
             ].join("\n"),
             grants: ["GM.info", "GM.log", "GM.addStyle", "GM.addElement"],
-            info: { name: "contract" },
+            info: { name: "contract", compatibility: { contractVersion: 1, handler: "MonkeySharp", executionWorld: "page", isolatedWorld: false, fields: {} } },
             capability: "facade-modern-capability",
             deliveryToken: "facade-modern-delivery",
             compatibility: { profile: "ModernStrict", strict: true, legacyGlobals: false }
@@ -86,10 +90,16 @@ test("modern info, log, style, and element facades use granted capabilities", as
     await waitFor(() => globalThis.__contractPromise);
     await globalThis.__contractPromise;
     assert.equal(globalThis.__infoFrozen, true);
+    assert.deepEqual(globalThis.__infoCompatibility, [1, "MonkeySharp", "page"]);
     assert.deepEqual(globalThis.__logged, { event: "log" });
     assert.equal(globalThis.__style.tagName, "style");
     assert.equal(globalThis.__element.attributes.id, "marker");
-    assert.equal(globalThis.__element.textContent, "ok");
+    assert.equal(globalThis.__element.value, "ok");
+    assert.equal(globalThis.__element.checked, true);
+    assert.equal(globalThis.__element.style.cssText, "color: red");
+    assert.equal(typeof globalThis.__element.onclick, "function");
+    assert.equal(globalThis.__element.attributes["data-test"], "yes");
+    assert.equal(globalThis.__element.textContent, "body");
     assert.equal(appended.length, 2);
 });
 
@@ -145,6 +155,42 @@ test("legacy facade shadows ungranted globals and keeps new APIs absent without 
     });
 });
 
+test("modern and legacy addElement share DOM property semantics", async () => {
+    const created = [];
+    globalThis.document = {
+        body: { appendChild: value => created.push(value) },
+        documentElement: { appendChild: value => created.push(value) },
+        createElement: tagName => ({
+            tagName, attributes: {}, style: { cssText: "" }, value: "", checked: false,
+            setAttribute(name, value) { this.attributes[name] = value; }, appendChild() {}
+        })
+    };
+    globalThis.__legacyElementPromise = null;
+    install({
+        protocol: 1, documentId: "facade-element-legacy", frameId: "main", runAt: "DocumentEnd",
+        invocations: [{
+            executionId: "facade-element-legacy-execution",
+            scriptKey: "99999999-9999-9999-9999-999999999999",
+            source: "globalThis.__legacyElementPromise = Promise.resolve(GM_addElement('button', { value: 'legacy', style: 'display:none', onclick: function () {}, 'aria-label': 'run' }));",
+            declaredGrants: ["GM_addElement"], grants: ["GM.addElement"], info: {},
+            capability: "facade-element-capability", deliveryToken: "facade-element-delivery",
+            compatibility: { profile: "LegacyCompatible", strict: false, legacyGlobals: true }
+        }]
+    }, {
+        dispatch: async requestJson => {
+            const request = JSON.parse(requestJson);
+            if (request.type === "hello") return JSON.stringify({ type: "hello-result", protocol: 1, ok: true, limits: {}, apis: ["GM.addElement"] });
+            return JSON.stringify({ type: "response", protocol: 1, requestId: request.requestId, ok: true, result: { $monkeySharpType: "undefined" } });
+        }
+    });
+    await waitFor(() => globalThis.__legacyElementPromise);
+    const element = await globalThis.__legacyElementPromise;
+    assert.equal(element.value, "legacy");
+    assert.equal(element.style.cssText, "display:none");
+    assert.equal(typeof element.onclick, "function");
+    assert.equal(element.attributes["aria-label"], "run");
+});
+
 test("missing grants expose no GM object while explicit none keeps GM.info", async () => {
     globalThis.__grantState = null;
     install({
@@ -163,7 +209,7 @@ test("missing grants expose no GM object while explicit none keeps GM.info", asy
         }, {
             executionId: "grant-state-none",
             scriptKey: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
-            source: "globalThis.__grantStateExplicit = [typeof GM, GM.info.name, typeof GM_log];",
+            source: "globalThis.__grantStateExplicit = [typeof GM, GM.info.name, typeof GM_log, GM.info === GM_info];",
             declaredGrants: ["none"], grants: ["none"], grantDeclarationState: "ExplicitNone",
             info: { name: "explicit" }, capability: "grant-state-none-capability",
             deliveryToken: "grant-state-none-delivery",
@@ -173,5 +219,5 @@ test("missing grants expose no GM object while explicit none keeps GM.info", asy
 
     await waitFor(() => globalThis.__grantState && globalThis.__grantStateExplicit);
     assert.deepEqual(globalThis.__grantState, ["undefined", "undefined"]);
-    assert.deepEqual(globalThis.__grantStateExplicit, ["object", "explicit", "undefined"]);
+    assert.deepEqual(globalThis.__grantStateExplicit, ["object", "explicit", "undefined", true]);
 });

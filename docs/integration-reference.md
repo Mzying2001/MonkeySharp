@@ -73,13 +73,13 @@ Supported controls include `headers`, `cookie`, `user`, `password`, `anonymous`,
 
 Compatibility headers such as `User-Agent`, `Referer`, `Origin`, and `Cookie` may be set. MonkeySharp rejects `Host`, `Content-Length`, connection and transfer-control headers, and all `Sec-*` and `Proxy-*` headers. `anonymous:true` disables stored cookies and credentials. `fetch:true` ignores timeout and progress and reports only readyState 4.
 
-`responseType` accepts `text`, `json`, `arraybuffer`, `blob`, and `stream`. Non-stream responses are assembled from 64 KiB host reads. The response exposes readyState 1 through 4, status, final URL, raw repeated response headers, response data, applicable response text, and the original JavaScript context. HTTP 4xx and 5xx responses call `onload`; network, permission, serialization, and bridge failures call `onerror`.
+`binary: true` accepts only a string request body and maps each UTF-16 code unit to its low eight bits. Other string bodies use UTF-8. `responseType` accepts `text`, `json`, `arraybuffer`, `blob`, `document`, `xml`, and `stream`. `responseXML: true` parses the response with the page's `DOMParser`; a document response also appears as `response`. If `DOMParser` is unavailable, `responseXML` is `null` and the response is not treated as parsed XML. Non-stream responses are assembled from 64 KiB host reads. The response exposes readyState 1 through 4, status, final URL, raw repeated response headers, response data, applicable response text, response XML, and the original JavaScript context. HTTP 4xx and 5xx responses call `onload`; network, permission, serialization, and bridge failures call `onerror` with `{ error, details, code }`, using categories such as `not_supported`, `not_permitted`, `timeout`, and `not_succeeded`.
 
 Callbacks are `onloadstart`, `onreadystatechange`, `onprogress`, `onuploadprogress`, `onload`, `onerror`, `ontimeout`, `onabort`, and `onloadend`. `GM.xmlHttpRequest` returns a Promise with `.abort()`; `GM_xmlhttpRequest` immediately returns an abort handle and reports through callbacks. `AbortSignal` and stream cancellation propagate to the host.
 
 Request and response sizes are unlimited by default. Each direction stays in memory through 256 KiB and then spills to a temporary file, which is removed on every terminal path. Body transfer and the long-running `execute` operation are independent of the bridge's general message and request limits.
 
-`proxy`, `cookiePartition`, `binary`, synchronous requests, `responseXML`, XML/document response types, and `Blob`/`File` URLs return `MSP006_NOT_SUPPORTED`. Partitioned-cookie keys are browser-extension manager state that the public CefSharp request-context API does not expose. The same code is used by modern and legacy XHR input validation.
+`proxy`, `cookiePartition`, synchronous requests, and `Blob`/`File` URLs return `MSP006_NOT_SUPPORTED`. Partitioned-cookie keys are browser-extension manager state that the public CefSharp request-context API does not expose. The same code is used by modern and legacy XHR input validation.
 
 ### Cookies
 
@@ -129,9 +129,9 @@ Provider requirements:
 
 ## Lifecycle and Diagnostics
 
-The adapter creates an identity per frame document and executes each `(document, frame, script, run-at)` once. Navigation, context release, detach, and disposal invalidate capabilities and cancel pending work.
+The adapter creates an identity per frame document and executes each `(document, frame, script, run-at)` once. `@run-at context-menu` scripts are listed by the native CefSharp context menu for the matching frame and execute a fresh invocation only after the user selects an entry. Navigation, context release, detach, and disposal invalidate capabilities and cancel pending work.
 
-Grant state is significant: a missing `@grant` declaration exposes no `GM` facade, while explicit `@grant none` exposes only `GM.info`/`GM_info`. `GM.info` is a deep-frozen snapshot of normalized metadata, grants, URL rules, resources, update state, handler, sandbox mode, and raw metadata text.
+Grant state is significant: a missing `@grant` declaration exposes no `GM` facade, while explicit `@grant none` exposes only `GM.info`/`GM_info`. Both names reference the same deep-frozen snapshot of normalized metadata, grants, URL rules, resources, update state, handler, sandbox mode, and raw metadata text. Its versioned `compatibility` block has `contractVersion: 1` and identifies fixed, metadata-derived, mixed, and extension-owned fields, including the page-world execution boundary.
 
 CefSharp exposes only best-effort document-start hooks. Selected document-start executions emit `MSR100_DOCUMENT_START_BEST_EFFORT`. Set `RequireGuaranteedDocumentStart = true` to skip them with `MSR101_DOCUMENT_START_UNAVAILABLE`.
 

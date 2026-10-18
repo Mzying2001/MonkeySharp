@@ -123,7 +123,7 @@ Exclusions override positive rules. URL fragments are ignored, hosts are IDN-nor
 
 The Demo's script manager can manually check for and install an update. `@updateURL` takes priority as the check source, while `@downloadURL` takes priority for the source being installed; `@downloadURL none` disables checking. Updates require matching non-empty name and namespace and a higher downloaded version. Checks do not run in the background or inherit browser login cookies, and the runtime bridge exposes no update API.
 
-`GM.info` and `GM_info` expose a frozen snapshot containing script metadata, declared and normalized grants, URL rules, resources, update/source links, handler, sandbox mode, and the raw metadata header. Static `@webRequest` entries are validated and included in this snapshot; they are not installed into the host network interceptor. Use the runtime `GM.webRequest(...)` API for registrations that affect requests.
+`GM.info` and `GM_info` expose the same deep-frozen snapshot containing script metadata, declared and normalized grants, URL rules, resources, update/source links, handler, sandbox mode, and the raw metadata header. The `compatibility` block is versioned (`contractVersion: 1`) and records MonkeySharp's page-world execution and field provenance. Static `@webRequest` entries are validated and included in this snapshot; they are not installed into the host network interceptor. Use the runtime `GM.webRequest(...)` API for registrations that affect requests.
 
 ## GM API Support
 
@@ -139,7 +139,7 @@ MonkeySharp publishes four compatibility states for each capability: **Core impl
 | `GM.addValueChangeListener`, `GM.removeValueChangeListener` and aliases | Core | Notifications for active executions of the same installation. |
 | `GM.addStyle`, `GM.addElement` and aliases | Bootstrap | Page-local implementations. |
 | `GM.getResourceText`, `GM.getResourceURL` and aliases | Conditional | Require `IResourceProvider` and a declared `@resource`. |
-| `GM.xmlHttpRequest` / `GM_xmlhttpRequest` | CefSharp default | XHR with redirects, credentials, progress, abort, binary/multipart bodies, and text/JSON/arraybuffer/blob/stream responses. Requires `@connect`; synchronous requests, `binary`, `responseXML`, `proxy`, and `cookiePartition` semantics are unsupported or differ and return `MSP006_NOT_SUPPORTED` where applicable. |
+| `GM.xmlHttpRequest` / `GM_xmlhttpRequest` | CefSharp default | XHR with redirects, credentials, progress, abort, binary/multipart bodies, and text/JSON/arraybuffer/blob/document/xml/stream responses. `responseXML: true` uses the page DOMParser. Requires `@connect`; synchronous requests, `proxy`, and `cookiePartition` semantics return `MSP006_NOT_SUPPORTED`. |
 | `GM.registerMenuCommand`, `GM.unregisterMenuCommand` and aliases | Conditional | Require `IMenuService`. |
 | `GM.notification`, `GM.setClipboard`, `GM.openInTab`, `GM.download` and aliases | Conditional | Require their corresponding host services. Notifications support the legacy four-argument overload and the `highlight`, `silent`, and `timeout` options. |
 | `GM.getTab`, `GM.saveTab`, `GM.getTabs` and aliases | Conditional | Require `ITabStateService`. |
@@ -182,7 +182,7 @@ The application owns the repository, browser, and supplied services. The host ow
 
 ## Lifecycle and Diagnostics
 
-Each `(document, frame, script, run-at)` combination executes once. Navigation, context release, detach, and disposal invalidate capabilities and cancel pending work. `@noframes` suppresses child-frame execution.
+Each `(document, frame, script, run-at)` combination executes once. `@run-at context-menu` scripts are added to the native CefSharp context menu for matching frames and create a fresh execution only after the user selects an entry. Navigation, context release, detach, and disposal invalidate capabilities and cancel pending work. `@noframes` suppresses child-frame execution.
 
 The adapter reports same-document URL changes from `history.pushState`, `history.replaceState`, `popstate`, and `hashchange` as lifecycle events. Scripts granted `window.onurlchange` receive those events through the `window.onurlchange` property or `addEventListener("urlchange", ...)`; the current URL is reflected in subsequent matching and `GM.info` snapshots.
 

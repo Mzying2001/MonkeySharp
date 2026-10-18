@@ -22,7 +22,7 @@ dotnet build Mzying2001.MonkeySharp.Demo/Mzying2001.MonkeySharp.Demo.csproj -c R
 - Metadata details are read-only and grouped into identity, matching rules, permissions, dependencies/resources, and diagnostics; edit the source to change metadata. The row prefers `@icon64` and then `@icon`; WPF loads valid HTTP(S) URLs directly and uses a first-letter placeholder when an icon is missing or cannot be loaded.
 - Update checks prefer `@updateURL`, then `@downloadURL`; `@downloadURL none` disables checks. The downloaded script must have the same non-empty name and namespace and a newer version. Checks use the independent HTTP client without browser login cookies; there is no background update task.
 - Repository mutations refresh **all open tabs**, including frames, so old execution state is revoked and matching scripts run again. This intentionally favors correctness over avoiding reloads in the Demo.
-- The current tab's registered commands appear under **脚本菜单**. Access keys can be invoked with Alt+key. **工具** opens data/download folders, diagnostics, download cancellation controls, or DevTools.
+- The current tab's registered commands appear under **脚本菜单**. `@run-at context-menu` entries are added to the native page context menu only for matching frames; selecting one creates a fresh script execution. Access keys can be invoked with Alt+key. **工具** opens data/download folders, diagnostics, download cancellation controls, or DevTools.
 
 ## Portable data and recovery
 

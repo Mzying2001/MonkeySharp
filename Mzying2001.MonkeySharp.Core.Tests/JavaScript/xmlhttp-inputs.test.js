@@ -86,36 +86,85 @@ test("XHR serializes Tampermonkey request inputs and exposes abort", async () =>
 
     assert.deepEqual(globalThis.__unsupported, [
         "MSP006_NOT_SUPPORTED", "MSP006_NOT_SUPPORTED", "MSP006_NOT_SUPPORTED",
-        "MSP006_NOT_SUPPORTED", "MSP006_NOT_SUPPORTED", "MSP006_NOT_SUPPORTED",
         "MSP006_NOT_SUPPORTED", "MSP006_NOT_SUPPORTED"
     ]);
 });
 
-test("legacy XHR reports unsupported input through onerror", async () => {
-    globalThis.__legacyXhrError = null;
+test("XHR accepts binary request bodies and parses responseXML", async () => {
+    globalThis.DOMParser = class {
+        parseFromString(value) { return { documentElement: { nodeName: "root", textContent: value } }; }
+    };
+    const requests = [];
+    const xml = "<root>ok</root>";
     globalThis.__MonkeySharpBridge = {
         dispatch: async requestJson => {
             const request = JSON.parse(requestJson);
+            requests.push(request);
             if (request.type === "hello") return JSON.stringify({
                 type: "hello-result", protocol: 1, ok: true, limits: {}, apis: ["GM.xmlHttpRequest"]
             });
+            if (request.params.operation === "create") return JSON.stringify({
+                type: "response", protocol: 1, requestId: request.requestId, ok: true,
+                result: { sessionId: "xml-session" }
+            });
+            if (request.params.operation === "execute") return JSON.stringify({
+                type: "response", protocol: 1, requestId: request.requestId, ok: true,
+                result: { status: 200, statusText: "OK", finalUrl: "https://api.example.com/xml",
+                    responseHeaders: "Content-Type: application/xml", mimeType: "application/xml",
+                    charset: "utf-8", bodyLength: Buffer.byteLength(xml), streaming: false }
+            });
+            if (request.params.operation === "readBody") return JSON.stringify({
+                type: "response", protocol: 1, requestId: request.requestId, ok: true,
+                result: { chunk: Buffer.from(xml).toString("base64"), done: true }
+            });
             return JSON.stringify({ type: "response", protocol: 1, requestId: request.requestId, ok: true,
-                result: { $monkeySharpType: "undefined" } });
+                result: true });
         }
     };
     const payload = {
         protocol: 1, documentId: "legacy-input-document", frameId: "main", runAt: "DocumentEnd",
         invocations: [{
             executionId: "legacy-input-execution", scriptKey: "12121212-1212-1212-1212-121212121212",
-            source: "globalThis.__legacyHandle = GM_xmlhttpRequest({ url: 'https://api.example.com/', responseXML: true, onerror: error => globalThis.__legacyXhrError = error });",
-            declaredGrants: ["GM_xmlhttpRequest"], grants: ["GM.xmlHttpRequest"], info: {},
-            capability: "legacy-input-capability", deliveryToken: "legacy-input-delivery",
-            compatibility: { profile: "LegacyCompatible", strict: false, legacyGlobals: true }
+            source: "globalThis.__xmlPromise = (async () => { try { return await GM.xmlHttpRequest({ url: 'https://api.example.com/xml', data: '\\u0100A', binary: true, responseXML: true }); } catch (error) { globalThis.__xmlErr = error.message; } })();",
+            declaredGrants: ["GM.xmlHttpRequest"], grants: ["GM.xmlHttpRequest"], info: {},
+            capability: "xml-capability", deliveryToken: "xml-delivery"
         }]
     };
     vm.runInThisContext(template.replace(
         "__MONKEYSHARP_PAYLOAD_BASE64__", Buffer.from(JSON.stringify(payload)).toString("base64")));
-    while (!globalThis.__legacyXhrError) await new Promise(resolve => setTimeout(resolve, 5));
-    assert.equal(globalThis.__legacyXhrError.code, "MSP006_NOT_SUPPORTED");
-    assert.equal(typeof globalThis.__legacyHandle.abort, "function");
+    while (!globalThis.__xmlPromise && !globalThis.__xmlErr) await new Promise(resolve => setTimeout(resolve, 5));
+    assert.equal(globalThis.__xmlErr, undefined);
+    await globalThis.__xmlPromise;
+    const xmlResult = await globalThis.__xmlPromise;
+    const append = requests.find(value => value.params && value.params.operation === "appendBody");
+    assert.deepEqual([...Buffer.from(append.params.chunk, "base64")], [0, 65]);
+    assert.equal(xmlResult.responseXML.documentElement.nodeName, "root");
+    assert.equal(xmlResult.response, xmlResult.responseXML);
+    delete globalThis.DOMParser;
+});
+
+test("legacy XHR delivers immediate validation errors once", async () => {
+    globalThis.__legacyXhrErrorCount = 0;
+    globalThis.__legacyXhrError = null;
+    const payload = {
+        protocol: 1, documentId: "legacy-xhr-error-document", frameId: "main", runAt: "DocumentEnd",
+        invocations: [{
+            executionId: "legacy-xhr-error-execution", scriptKey: "13131313-1313-1313-1313-131313131313",
+            source: "globalThis.__legacyXhrPromise = new Promise(resolve => GM_xmlhttpRequest({ url: 'https://api.example.com/', binary: true, data: {}, onerror: error => { globalThis.__legacyXhrErrorCount++; globalThis.__legacyXhrError = error; resolve(); } }));",
+            declaredGrants: ["GM_xmlhttpRequest"], grants: ["GM.xmlHttpRequest"], info: {},
+            capability: "legacy-xhr-error-capability", deliveryToken: "legacy-xhr-error-delivery",
+            compatibility: { profile: "LegacyCompatible", strict: false, legacyGlobals: true }
+        }]
+    };
+    globalThis.__MonkeySharpBridge = { dispatch: async requestJson => {
+        const request = JSON.parse(requestJson);
+        if (request.type === "hello") return JSON.stringify({ type: "hello-result", protocol: 1, ok: true, limits: {}, apis: ["GM.xmlHttpRequest"] });
+        return JSON.stringify({ type: "response", protocol: 1, requestId: request.requestId, ok: true, result: { sessionId: "unused" } });
+    }};
+    vm.runInThisContext(template.replace("__MONKEYSHARP_PAYLOAD_BASE64__", Buffer.from(JSON.stringify(payload)).toString("base64")));
+    while (!globalThis.__legacyXhrPromise) await new Promise(resolve => setTimeout(resolve, 5));
+    await globalThis.__legacyXhrPromise;
+    assert.equal(globalThis.__legacyXhrErrorCount, 1);
+    assert.equal(globalThis.__legacyXhrError.error, "not_succeeded");
+    assert.equal(globalThis.__legacyXhrError.code, "MSP007_INVALID_PARAMS");
 });

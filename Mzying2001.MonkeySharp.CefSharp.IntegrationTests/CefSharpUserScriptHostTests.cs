@@ -70,6 +70,23 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
         }
 
         [Fact]
+        public async Task AttachAndDetachWrapAndRestoreAnExistingContextMenuHandler()
+        {
+            using (var host = await CreateHostAsync(Script("none", "document-start")))
+            {
+                var browser = new BrowserFixture();
+                var existing = Mock.Of<IContextMenuHandler>();
+                browser.Browser.Object.MenuHandler = existing;
+
+                host.Attach(browser.Browser.Object);
+                Assert.NotSame(existing, browser.Browser.Object.MenuHandler);
+
+                await host.DetachAsync(CancellationToken.None);
+                Assert.Same(existing, browser.Browser.Object.MenuHandler);
+            }
+        }
+
+        [Fact]
         public void MultiplexerContinuesAfterAHandlerFails()
         {
             var failing = new Mock<IRenderProcessMessageHandler>();
@@ -735,6 +752,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
                 Browser.SetupGet(item => item.RequestContext).Returns(requestContext);
                 Browser.SetupProperty(item => item.RenderProcessMessageHandler);
                 Browser.SetupProperty(item => item.RequestHandler);
+                Browser.SetupProperty(item => item.MenuHandler);
 
                 CefBrowser = new Mock<IBrowser>();
                 Frame = new Mock<IFrame>();

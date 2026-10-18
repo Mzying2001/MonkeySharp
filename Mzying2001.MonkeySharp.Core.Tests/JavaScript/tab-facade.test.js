@@ -77,3 +77,27 @@ test("openInTab handles are local, default inactive, and close before id is queu
     assert.equal(globalThis.__legacy.closed, false);
     assert.equal(typeof globalThis.__modernClose.then, "function");
 });
+
+test("legacy tab callbacks receive structured bridge errors", async () => {
+    globalThis.__tabError = null;
+    const payload = {
+        protocol: 1, documentId: "tab-error-document", frameId: "main", runAt: "DocumentEnd",
+        invocations: [{
+            executionId: "tab-error-execution", scriptKey: "56565656-5656-5656-5656-565656565656",
+            source: "GM_getTab((tab, error) => globalThis.__tabError = [tab, error]);",
+            grants: ["GM.getTab"], info: {}, compatibility: { legacyGlobals: true },
+            capability: "tab-error-capability", deliveryToken: "tab-error-delivery"
+        }]
+    };
+    globalThis.__MonkeySharpBridge = { dispatch: async requestJson => {
+        const request = JSON.parse(requestJson);
+        if (request.type === "hello") return JSON.stringify({ type: "hello-result", protocol: 1, ok: true, limits: {}, apis: ["GM.getTab"] });
+        return JSON.stringify({ type: "response", protocol: 1, requestId: request.requestId, ok: false,
+            error: { code: "MSP005_PERMISSION_DENIED", message: "denied" } });
+    }};
+    vm.runInThisContext(template.replace("__MONKEYSHARP_PAYLOAD_BASE64__", Buffer.from(JSON.stringify(payload)).toString("base64")));
+    while (!globalThis.__tabError) await new Promise(resolve => setTimeout(resolve, 5));
+    assert.equal(globalThis.__tabError[0], null);
+    assert.equal(globalThis.__tabError[1].error, "not_permitted");
+    assert.equal(globalThis.__tabError[1].code, "MSP005_PERMISSION_DENIED");
+});
