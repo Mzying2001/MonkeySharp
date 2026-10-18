@@ -337,6 +337,29 @@
                 throw new TypeError("details.data has an unsupported type.");
             };
 
+            const applyElementAttributes = function (element, attributes) {
+                if (!attributes || typeof attributes !== "object") return;
+                Object.keys(attributes).forEach(name => {
+                    const value = attributes[name];
+                    if (name === "textContent" || name === "innerHTML") {
+                        element[name] = value == null ? "" : String(value);
+                    } else if (name === "style") {
+                        if (element.style && typeof element.style.cssText !== "undefined") {
+                            element.style.cssText = String(value == null ? "" : value);
+                        } else {
+                            element[name] = value;
+                        }
+                    } else if (name.slice(0, 2).toLowerCase() === "on" && typeof value === "function") {
+                        element[name] = value;
+                    } else if (name in element && name.indexOf("-") < 0 && name.indexOf(":") < 0) {
+                        try { element[name] = value; }
+                        catch (_) { element.setAttribute(name, String(value)); }
+                    } else {
+                        element.setAttribute(name, String(value));
+                    }
+                });
+            };
+
             const decodeHttpChunk = function (encoded) {
                 const binary = atob(encoded || "");
                 const bytes = new Uint8Array(binary.length);
@@ -470,12 +493,7 @@
                         if (!parent || typeof parent.appendChild !== "function") throw new TypeError("parent must be a DOM node.");
                         if (typeof tagName !== "string" || tagName.length === 0) throw new TypeError("tagName must be a string.");
                         const element = document.createElement(tagName);
-                        if (attributes && typeof attributes === "object") {
-                            Object.keys(attributes).forEach(name => {
-                                if (name === "textContent") element.textContent = String(attributes[name]);
-                                else element.setAttribute(name, String(attributes[name]));
-                            });
-                        }
+                        applyElementAttributes(element, attributes);
                         parent.appendChild(element);
                         return element;
                     };

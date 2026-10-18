@@ -37,6 +37,9 @@ test("modern info, log, style, and element facades use granted capabilities", as
         createElement: tagName => ({
             tagName,
             attributes: {},
+            style: { cssText: "" },
+            value: "",
+            checked: false,
             setAttribute(name, value) { this.attributes[name] = value; },
             appendChild() {}
         })
@@ -57,7 +60,7 @@ test("modern info, log, style, and element facades use granted capabilities", as
                 "  globalThis.__infoFrozen = Object.isFrozen(GM.info) && Object.isFrozen(GM.info.script);",
                 "  await GM.log({ event: 'log' });",
                 "  globalThis.__style = await GM.addStyle('body { color: red; }');",
-                "  globalThis.__element = await GM.addElement('div', { id: 'marker', textContent: 'ok' });",
+                "  globalThis.__element = await GM.addElement('input', { id: 'marker', value: 'ok', checked: true, style: 'color: red', onclick: function () {}, 'data-test': 'yes', textContent: 'body' });",
                 "})();"
             ].join("\n"),
             grants: ["GM.info", "GM.log", "GM.addStyle", "GM.addElement"],
@@ -89,7 +92,12 @@ test("modern info, log, style, and element facades use granted capabilities", as
     assert.deepEqual(globalThis.__logged, { event: "log" });
     assert.equal(globalThis.__style.tagName, "style");
     assert.equal(globalThis.__element.attributes.id, "marker");
-    assert.equal(globalThis.__element.textContent, "ok");
+    assert.equal(globalThis.__element.value, "ok");
+    assert.equal(globalThis.__element.checked, true);
+    assert.equal(globalThis.__element.style.cssText, "color: red");
+    assert.equal(typeof globalThis.__element.onclick, "function");
+    assert.equal(globalThis.__element.attributes["data-test"], "yes");
+    assert.equal(globalThis.__element.textContent, "body");
     assert.equal(appended.length, 2);
 });
 
@@ -143,6 +151,42 @@ test("legacy facade shadows ungranted globals and keeps new APIs absent without 
         cookie: "object",
         webRequest: "undefined"
     });
+});
+
+test("modern and legacy addElement share DOM property semantics", async () => {
+    const created = [];
+    globalThis.document = {
+        body: { appendChild: value => created.push(value) },
+        documentElement: { appendChild: value => created.push(value) },
+        createElement: tagName => ({
+            tagName, attributes: {}, style: { cssText: "" }, value: "", checked: false,
+            setAttribute(name, value) { this.attributes[name] = value; }, appendChild() {}
+        })
+    };
+    globalThis.__legacyElementPromise = null;
+    install({
+        protocol: 1, documentId: "facade-element-legacy", frameId: "main", runAt: "DocumentEnd",
+        invocations: [{
+            executionId: "facade-element-legacy-execution",
+            scriptKey: "99999999-9999-9999-9999-999999999999",
+            source: "globalThis.__legacyElementPromise = Promise.resolve(GM_addElement('button', { value: 'legacy', style: 'display:none', onclick: function () {}, 'aria-label': 'run' }));",
+            declaredGrants: ["GM_addElement"], grants: ["GM.addElement"], info: {},
+            capability: "facade-element-capability", deliveryToken: "facade-element-delivery",
+            compatibility: { profile: "LegacyCompatible", strict: false, legacyGlobals: true }
+        }]
+    }, {
+        dispatch: async requestJson => {
+            const request = JSON.parse(requestJson);
+            if (request.type === "hello") return JSON.stringify({ type: "hello-result", protocol: 1, ok: true, limits: {}, apis: ["GM.addElement"] });
+            return JSON.stringify({ type: "response", protocol: 1, requestId: request.requestId, ok: true, result: { $monkeySharpType: "undefined" } });
+        }
+    });
+    await waitFor(() => globalThis.__legacyElementPromise);
+    const element = await globalThis.__legacyElementPromise;
+    assert.equal(element.value, "legacy");
+    assert.equal(element.style.cssText, "display:none");
+    assert.equal(typeof element.onclick, "function");
+    assert.equal(element.attributes["aria-label"], "run");
 });
 
 test("missing grants expose no GM object while explicit none keeps GM.info", async () => {
