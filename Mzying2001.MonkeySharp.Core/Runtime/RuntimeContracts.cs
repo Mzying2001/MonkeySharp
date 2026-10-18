@@ -9,6 +9,21 @@ using System.Threading.Tasks;
 
 namespace Mzying2001.MonkeySharp.Core.Runtime
 {
+    /// <summary>Describes a userscript exposed in the browser context menu.</summary>
+    public sealed class ContextMenuEntry
+    {
+        internal ContextMenuEntry(ScriptKey scriptKey, string title)
+        {
+            ScriptKey = scriptKey;
+            Title = title ?? throw new ArgumentNullException(nameof(title));
+        }
+
+        /// <summary>Gets the installed script key.</summary>
+        public ScriptKey ScriptKey { get; }
+
+        /// <summary>Gets the menu label.</summary>
+        public string Title { get; }
+    }
     /// <summary>
     /// Describes how reliably a host can execute code at document start.
     /// </summary>

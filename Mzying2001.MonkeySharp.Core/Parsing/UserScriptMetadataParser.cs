@@ -335,6 +335,7 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
                 case "document-body": return UserScriptRunAt.DocumentBody;
                 case "document-end": return UserScriptRunAt.DocumentEnd;
                 case "document-idle": return UserScriptRunAt.DocumentIdle;
+                case "context-menu": return UserScriptRunAt.ContextMenu;
                 default:
                     diagnostics.Add(new MetadataDiagnostic(
                         "MSM040_INVALID_RUN_AT",

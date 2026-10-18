@@ -173,6 +173,7 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
                 case UserScriptRunAt.DocumentBody: return "document-body";
                 case UserScriptRunAt.DocumentEnd: return "document-end";
                 case UserScriptRunAt.DocumentIdle: return "document-idle";
+                case UserScriptRunAt.ContextMenu: return "context-menu";
                 default: return runAt.ToString();
             }
         }
