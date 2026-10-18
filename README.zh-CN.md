@@ -131,6 +131,8 @@ Demo 脚本管理器支持手动检查并安装更新。检查源优先使用 `@
 
 只有脚本声明了精确授权且宿主存在所需提供程序时，才会公开规范 `GM.*` API 和旧式别名。
 
+MonkeySharp 为能力提供四种兼容性状态：**Core 已实现**、**需要宿主 service**、**有意降级/不支持**、**与 Tampermonkey 存在行为差异**。这是基于 CefSharp、带认证页面世界桥接的 userscript runtime，并不等同于完整 Tampermonkey 替代品。脚本在页面世界的 MonkeySharp wrapper 中执行；`@sandbox`、`@unwrap`、`@run-in` 和非 page 的 `@inject-into` 不会创建隔离世界，因此 `unsafeWindow` 不能作为扩展式安全边界。
+
 | API | 可用性 | 说明 |
 | --- | --- | --- |
 | `GM.info` / `GM_info` | Core | 不可变的安装信息。 |
@@ -139,7 +141,7 @@ Demo 脚本管理器支持手动检查并安装更新。检查源优先使用 `@
 | `GM.addValueChangeListener`、`GM.removeValueChangeListener` 及别名 | Core | 通知同一安装实例的活动执行。 |
 | `GM.addStyle`、`GM.addElement` 及别名 | 引导代码 | 页面本地实现。 |
 | `GM.getResourceText`、`GM.getResourceURL` 及别名 | 条件支持 | 需要 `IResourceProvider` 和已声明的 `@resource`。 |
-| `GM.xmlHttpRequest` / `GM_xmlhttpRequest` | CefSharp 默认提供 | 支持重定向、凭据、进度、中止、二进制/多段请求体及多种响应类型；需要 `@connect`。 |
+| `GM.xmlHttpRequest` / `GM_xmlhttpRequest` | CefSharp 默认提供 | 支持重定向、凭据、进度、中止、二进制/多段请求体及 text/JSON/arraybuffer/blob/stream 响应；需要 `@connect`。同步请求、`binary`、`responseXML`、`proxy` 和 `cookiePartition` 的语义不支持或不同，适用时返回 `MSP006_NOT_SUPPORTED`。 |
 | `GM.registerMenuCommand`、`GM.unregisterMenuCommand` 及别名 | 条件支持 | 需要 `IMenuService`。 |
 | `GM.notification`、`GM.setClipboard`、`GM.openInTab`、`GM.download` 及别名 | 条件支持 | 需要对应宿主服务；通知支持四参数旧式重载以及 `highlight`、`silent`、`timeout` 选项。 |
 | `GM.getTab`、`GM.saveTab`、`GM.getTabs` 及别名 | 条件支持 | 需要 `ITabStateService`。 |
@@ -150,7 +152,7 @@ Demo 脚本管理器支持手动检查并安装更新。检查源优先使用 `@
 | `window.onurlchange` | Core | 需要精确授权；监听 `pushState`、`replaceState`、`popstate` 和 `hashchange` URL 变化。 |
 | `unsafeWindow` | 仅可信页面世界 | 仅在精确授权时公开。 |
 
-现代存储和资源读取返回 Promise；旧式别名使用有界的同步引导快照。旧式回调 API 会立即返回句柄或 ID，并将回调故障报告为诊断。
+现代存储和资源读取返回 Promise；旧式别名使用有界的同步引导快照。旧式回调 API 会立即返回句柄或 ID，并将回调故障报告为诊断。缺少 `@grant` 时不会公开 `GM` 门面，显式 `@grant none` 时只公开 `GM.info`/`GM_info`。静态 `@webRequest` 只通过 `GM.info` 报告，不会自动安装；需要活动规则时请调用 `GM.webRequest(...)`。
 
 缺少提供程序时，已声明 API 通常不会公开，直接桥接调用返回 `MSP006_NOT_SUPPORTED`；未声明的方法返回 `MSP004_GRANT_DENIED`。`window.close` 和 `window.focus` 需要通过 `UseWindowService` 注册服务；即使已授权，未注册时对应属性仍不可用。XHR、Cookie 和 webRequest 的详细行为见[网络 API 参考](docs/integration-reference.zh-CN.md#网络-api)。
 

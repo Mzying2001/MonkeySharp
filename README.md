@@ -129,6 +129,8 @@ The Demo's script manager can manually check for and install an update. `@update
 
 Canonical `GM.*` APIs and legacy aliases are exposed only when the exact grant and required host provider are present.
 
+MonkeySharp publishes four compatibility states for each capability: **Core implemented**, **host service required**, **intentional degradation or unsupported**, and **behavior differs from Tampermonkey**. This is a CefSharp userscript runtime with an authenticated page-world bridge, not a complete Tampermonkey replacement. Scripts execute in the page world inside the MonkeySharp wrapper; `@sandbox`, `@unwrap`, `@run-in`, and non-page `@inject-into` declarations do not create an isolated world. `unsafeWindow` therefore does not provide an extension-style security boundary.
+
 | API | Availability | Notes |
 | --- | --- | --- |
 | `GM.info` / `GM_info` | Core | Frozen installation information. |
@@ -137,7 +139,7 @@ Canonical `GM.*` APIs and legacy aliases are exposed only when the exact grant a
 | `GM.addValueChangeListener`, `GM.removeValueChangeListener` and aliases | Core | Notifications for active executions of the same installation. |
 | `GM.addStyle`, `GM.addElement` and aliases | Bootstrap | Page-local implementations. |
 | `GM.getResourceText`, `GM.getResourceURL` and aliases | Conditional | Require `IResourceProvider` and a declared `@resource`. |
-| `GM.xmlHttpRequest` / `GM_xmlhttpRequest` | CefSharp default | XHR with redirects, credentials, progress, abort, binary/multipart bodies, and text/JSON/binary/blob/stream responses. Requires `@connect`. |
+| `GM.xmlHttpRequest` / `GM_xmlhttpRequest` | CefSharp default | XHR with redirects, credentials, progress, abort, binary/multipart bodies, and text/JSON/arraybuffer/blob/stream responses. Requires `@connect`; synchronous requests, `binary`, `responseXML`, `proxy`, and `cookiePartition` semantics are unsupported or differ and return `MSP006_NOT_SUPPORTED` where applicable. |
 | `GM.registerMenuCommand`, `GM.unregisterMenuCommand` and aliases | Conditional | Require `IMenuService`. |
 | `GM.notification`, `GM.setClipboard`, `GM.openInTab`, `GM.download` and aliases | Conditional | Require their corresponding host services. Notifications support the legacy four-argument overload and the `highlight`, `silent`, and `timeout` options. |
 | `GM.getTab`, `GM.saveTab`, `GM.getTabs` and aliases | Conditional | Require `ITabStateService`. |
@@ -148,7 +150,7 @@ Canonical `GM.*` APIs and legacy aliases are exposed only when the exact grant a
 | `window.onurlchange` | Core | Requires the exact grant; observes `pushState`, `replaceState`, `popstate`, and `hashchange` URL changes. |
 | `unsafeWindow` | Trusted page world only | Exposed only for its exact grant. |
 
-Modern storage and resource reads return Promises; their legacy aliases use bounded synchronous bootstrap snapshots. Legacy callback APIs return their handle or ID immediately and report callback failures as diagnostics.
+Modern storage and resource reads return Promises; their legacy aliases use bounded synchronous bootstrap snapshots. Legacy callback APIs return their handle or ID immediately and report callback failures as diagnostics. Missing `@grant` exposes no `GM` facade, while explicit `@grant none` exposes only `GM.info`/`GM_info`. Static `@webRequest` metadata is reported through `GM.info` and is not automatically installed; use `GM.webRequest(...)` for active rules.
 
 If a declared API has no provider, it is normally absent and direct bridge calls return `MSP006_NOT_SUPPORTED`. Undeclared methods return `MSP004_GRANT_DENIED`. `UseWindowService` is required for `window.close` and `window.focus`; without it those properties remain unavailable even when granted. Detailed XHR, Cookie, and webRequest behavior is documented in the [network API reference](docs/integration-reference.md#network-apis).
 

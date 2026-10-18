@@ -60,7 +60,7 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
             FilteredScripts = CollectionViewSource.GetDefaultView(Scripts);
             FilteredScripts.Filter = FilterScript;
             ApplySort();
-            Details.Update(Editor.Parse(), _origin);
+            Details.Update(Editor.Parse(), _origin, Editor.Source);
         }
 
         public ScriptEditorViewModel Editor { get; } = new ScriptEditorViewModel();
@@ -123,7 +123,7 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
             if (value == null) return;
             _origin = value.Installation.SourceOrigin;
             Editor.Load(value.Installation.Definition.Source);
-            Details.Update(value.Installation.Definition.ParseResult, _origin);
+            Details.Update(value.Installation.Definition.ParseResult, _origin, value.Installation.Definition.Source);
         }
 
         public bool ConfirmDiscard() => !Editor.IsDirty || _confirm("放弃尚未保存的源码修改？");
@@ -147,7 +147,7 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
             if (!ConfirmDiscard()) return;
             _origin = "application://editor/new.user.js";
             SelectedScript = null; Editor.Load(ScriptEditorViewModel.Template);
-            Details.Update(Editor.Parse(), _origin);
+            Details.Update(Editor.Parse(), _origin, Editor.Source);
             Status = "新脚本。保存前会显示权限确认。";
         }
 
@@ -206,7 +206,7 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
         {
             if (Encoding.UTF8.GetByteCount(Editor.Source ?? string.Empty) > SqliteUserScriptRepositoryPersistence.MaximumSourceBytes)
                 throw new InvalidOperationException("源码超过 10 MiB 限制。");
-            var parsed = Editor.Parse(); Details.Update(parsed, _origin);
+            var parsed = Editor.Parse(); Details.Update(parsed, _origin, Editor.Source);
             if (!parsed.CanEnable) { Status = "元数据无效；旧脚本未改变。"; return; }
             if (!_confirm("允许以下脚本在匹配的网站运行并使用所声明的权限？\n\n" + Details.ToConfirmationText())) return;
             var installation = SelectedScript == null
@@ -287,7 +287,7 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
 
         private void EditorPropertyChanged(object sender, PropertyChangedEventArgs args)
         {
-            if (args.PropertyName == nameof(Editor.Source)) Details.Update(Editor.Parse(), _origin);
+            if (args.PropertyName == nameof(Editor.Source)) Details.Update(Editor.Parse(), _origin, Editor.Source);
         }
 
         public void Dispose()

@@ -63,6 +63,8 @@ The CefSharp host supplies default `GM.xmlHttpRequest`, `GM.cookie`, and `GM.web
 
 ### HTTP Requests
 
+Compatibility status is reported as Core implemented, host service required, intentional degradation or unsupported, or behavior different from Tampermonkey. The runtime executes in the CefSharp page world inside the MonkeySharp wrapper. `@sandbox`, `@unwrap`, `@run-in`, and non-page `@inject-into` are preserved and diagnosed, but they do not create an isolated world.
+
 Declare `@grant GM.xmlHttpRequest` or `@grant GM_xmlhttpRequest` and an `@connect` entry for every destination. Methods are case-insensitive valid HTTP tokens except `CONNECT`, `TRACE`, and `TRACK`.
 
 Request bodies support strings, `ArrayBuffer`, typed arrays, `DataView`, `Blob`/`File`, `FormData`, `URLSearchParams`, plain objects, and arrays. Objects and arrays use JSON; `URLSearchParams` uses form encoding; `FormData` retains its generated boundary, filename, and media type. Bodies cross the bridge in 64 KiB chunks.
@@ -77,7 +79,7 @@ Callbacks are `onloadstart`, `onreadystatechange`, `onprogress`, `onuploadprogre
 
 Request and response sizes are unlimited by default. Each direction stays in memory through 256 KiB and then spills to a temporary file, which is removed on every terminal path. Body transfer and the long-running `execute` operation are independent of the bridge's general message and request limits.
 
-`proxy`, `cookiePartition`, and `Blob`/`File` URLs return `MSP006_NOT_SUPPORTED`. Partitioned-cookie keys are browser-extension manager state that the public CefSharp request-context API does not expose.
+`proxy`, `cookiePartition`, `binary`, synchronous requests, `responseXML`, XML/document response types, and `Blob`/`File` URLs return `MSP006_NOT_SUPPORTED`. Partitioned-cookie keys are browser-extension manager state that the public CefSharp request-context API does not expose. The same code is used by modern and legacy XHR input validation.
 
 ### Cookies
 

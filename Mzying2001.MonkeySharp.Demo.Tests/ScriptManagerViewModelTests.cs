@@ -83,7 +83,32 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
             Assert.Contains("https://example.com/lib.js", details.Requires);
             Assert.Contains("badge = https://example.com/badge.png", details.Resources);
             Assert.Equal("https://example.com/script.user.js", details.SourceOrigin);
+            Assert.Contains(details.CompatibilityStatuses, item => item.Category == "Core 已实现");
+            Assert.Contains(details.CompatibilityStatuses, item => item.Category == "需要宿主 service");
+            Assert.Contains(details.CompatibilityStatuses, item => item.Category == "与 Tampermonkey 有差异");
             Assert.Contains("Details", details.ToConfirmationText());
+        }
+
+        [Fact]
+        public void ScriptDetailsReportsSandboxAndUnsupportedXhrDifferences()
+        {
+            var source = "// ==UserScript==\n" +
+                "// @name Compatibility warnings\n" +
+                "// @match https://example.com/*\n" +
+                "// @grant GM_xmlhttpRequest\n" +
+                "// @sandbox DOM\n" +
+                "// @unwrap\n" +
+                "// @webRequest {\"selector\":\"https://example.com/*\",\"action\":\"cancel\"}\n" +
+                "// ==/UserScript==\n" +
+                "GM_xmlhttpRequest({ url: 'https://example.com/', proxy: {} });";
+            var details = new ScriptDetailsViewModel();
+            details.Update(new UserScriptMetadataParser().Parse(source), "fixture://compatibility.user.js", source);
+
+            Assert.Contains(details.CompatibilityStatuses, item => item.Category == "有意降级/不支持");
+            Assert.Contains(details.CompatibilityStatuses, item => item.Category == "与 Tampermonkey 有差异" &&
+                item.Message.Contains("静态 @webRequest"));
+            Assert.Contains("@sandbox", details.ToConfirmationText());
+            Assert.Contains("proxy", details.ToConfirmationText());
         }
 
         [Fact]

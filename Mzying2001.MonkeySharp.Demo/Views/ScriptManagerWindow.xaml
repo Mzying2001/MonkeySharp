@@ -11,6 +11,11 @@
         <DataTemplate x:Key="DetailListItem">
             <TextBlock Text="{Binding}" Margin="0,1,0,1" TextWrapping="Wrap" Foreground="#334155" />
         </DataTemplate>
+        <DataTemplate x:Key="CompatibilityStatusItem">
+            <Border Margin="0,2,0,2" Padding="8,5" Background="#F8FAFC" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="3">
+                <TextBlock Text="{Binding Display}" TextWrapping="Wrap" Foreground="{Binding Brush}" />
+            </Border>
+        </DataTemplate>
     </Window.Resources>
     <DockPanel Margin="16">
         <TextBlock DockPanel.Dock="Top" Text="用户脚本" FontSize="26" FontWeight="SemiBold" Foreground="#172B40" Margin="0,0,0,10" />
@@ -208,6 +213,11 @@
 
                             <TextBlock Text="诊断" FontSize="15" FontWeight="SemiBold" Foreground="#172B40" />
                             <ItemsControl Margin="0,6,0,0" ItemsSource="{Binding Details.Diagnostics}" ItemTemplate="{StaticResource DetailListItem}" />
+
+                            <TextBlock Text="兼容性状态" FontSize="15" FontWeight="SemiBold" Foreground="#172B40" Margin="0,14,0,0" />
+                            <TextBlock Text="这些状态用于说明当前 MonkeySharp 契约与宿主边界，不会替代元数据错误诊断。"
+                                       Margin="0,4,0,4" Foreground="#64748B" TextWrapping="Wrap" />
+                            <ItemsControl ItemsSource="{Binding Details.CompatibilityStatuses}" ItemTemplate="{StaticResource CompatibilityStatusItem}" />
                         </StackPanel>
                     </ScrollViewer>
                 </TabItem>

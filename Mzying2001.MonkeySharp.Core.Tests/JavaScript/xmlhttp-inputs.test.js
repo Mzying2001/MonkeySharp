@@ -44,7 +44,12 @@ test("XHR serializes Tampermonkey request inputs and exposes abort", async () =>
                 "  await GM.xmlHttpRequest({ url: 'https://api.example.com/form', data: form });",
                 "  for (const details of [{ url: new Blob(['url']) },",
                 "    { url: 'https://api.example.com/', proxy: {} },",
-                "    { url: 'https://api.example.com/', cookiePartition: {} }]) {",
+                "    { url: 'https://api.example.com/', cookiePartition: {} },",
+                "    { url: 'https://api.example.com/', binary: true },",
+                "    { url: 'https://api.example.com/', synchronous: true },",
+                "    { url: 'https://api.example.com/', async: false },",
+                "    { url: 'https://api.example.com/', responseXML: true },",
+                "    { url: 'https://api.example.com/', responseType: 'document' }]) {",
                 "    try { GM.xmlHttpRequest(details); } catch (error) {",
                 "      (globalThis.__unsupported || (globalThis.__unsupported = [])).push(error.code);",
                 "    }",
@@ -80,6 +85,37 @@ test("XHR serializes Tampermonkey request inputs and exposes abort", async () =>
     assert.match(multipart, /filename="data.txt"/);
 
     assert.deepEqual(globalThis.__unsupported, [
-        "MSP006_NOT_SUPPORTED", "MSP006_NOT_SUPPORTED", "MSP006_NOT_SUPPORTED"
+        "MSP006_NOT_SUPPORTED", "MSP006_NOT_SUPPORTED", "MSP006_NOT_SUPPORTED",
+        "MSP006_NOT_SUPPORTED", "MSP006_NOT_SUPPORTED", "MSP006_NOT_SUPPORTED",
+        "MSP006_NOT_SUPPORTED", "MSP006_NOT_SUPPORTED"
     ]);
+});
+
+test("legacy XHR reports unsupported input through onerror", async () => {
+    globalThis.__legacyXhrError = null;
+    globalThis.__MonkeySharpBridge = {
+        dispatch: async requestJson => {
+            const request = JSON.parse(requestJson);
+            if (request.type === "hello") return JSON.stringify({
+                type: "hello-result", protocol: 1, ok: true, limits: {}, apis: ["GM.xmlHttpRequest"]
+            });
+            return JSON.stringify({ type: "response", protocol: 1, requestId: request.requestId, ok: true,
+                result: { $monkeySharpType: "undefined" } });
+        }
+    };
+    const payload = {
+        protocol: 1, documentId: "legacy-input-document", frameId: "main", runAt: "DocumentEnd",
+        invocations: [{
+            executionId: "legacy-input-execution", scriptKey: "12121212-1212-1212-1212-121212121212",
+            source: "globalThis.__legacyHandle = GM_xmlhttpRequest({ url: 'https://api.example.com/', responseXML: true, onerror: error => globalThis.__legacyXhrError = error });",
+            declaredGrants: ["GM_xmlhttpRequest"], grants: ["GM.xmlHttpRequest"], info: {},
+            capability: "legacy-input-capability", deliveryToken: "legacy-input-delivery",
+            compatibility: { profile: "LegacyCompatible", strict: false, legacyGlobals: true }
+        }]
+    };
+    vm.runInThisContext(template.replace(
+        "__MONKEYSHARP_PAYLOAD_BASE64__", Buffer.from(JSON.stringify(payload)).toString("base64")));
+    while (!globalThis.__legacyXhrError) await new Promise(resolve => setTimeout(resolve, 5));
+    assert.equal(globalThis.__legacyXhrError.code, "MSP006_NOT_SUPPORTED");
+    assert.equal(typeof globalThis.__legacyHandle.abort, "function");
 });

@@ -488,6 +488,15 @@
                         if (typeof details.cookiePartition !== "undefined") {
                             throw notSupported("cookiePartition is not supported by CefSharp.");
                         }
+                        if (typeof details.binary !== "undefined") {
+                            throw notSupported("binary request semantics are not supported by MonkeySharp.");
+                        }
+                        if (details.synchronous === true || details.async === false) {
+                            throw notSupported("synchronous XHR is not supported by MonkeySharp.");
+                        }
+                        if (details.responseXML === true || details.responseType === "document" || details.responseType === "xml") {
+                            throw notSupported("responseXML is not supported by MonkeySharp.");
+                        }
                         const xhrId = Number.isInteger(details.__monkeySharpXhrId)
                             ? details.__monkeySharpXhrId : nextListenerId++;
                         const callbacks = {
@@ -1127,10 +1136,21 @@
                             throw new TypeError(name + " must be a function.");
                         }
                     });
-                    const request = api.xmlHttpRequest(Object.assign({}, details, {
-                        __monkeySharpXhrId: xhrId,
-                        __monkeySharpLegacy: true
-                    }));
+                    let request;
+                    try {
+                        request = api.xmlHttpRequest(Object.assign({}, details, {
+                            __monkeySharpXhrId: xhrId,
+                            __monkeySharpLegacy: true
+                        }));
+                    } catch (error) {
+                        if (typeof callbacks.onerror === "function") {
+                            try { callbacks.onerror(error); }
+                            catch (callbackError) { console.error("[MonkeySharp] legacy XHR error callback failed", callbackError); }
+                        } else {
+                            console.error("[MonkeySharp] legacy XHR failed", error);
+                        }
+                        return { abort: function () { return Promise.resolve(false); } };
+                    }
                     const handle = { abort: function () { request.abort(); } };
                     request
                         .catch(error => {
