@@ -851,6 +851,7 @@
                         const state = {
                             id: null,
                             closed: false,
+                            terminal: false,
                             closeRequested: false,
                             closePromise: null,
                             closeResolve: null,
@@ -880,7 +881,7 @@
                             }
                         });
                         handle.close = function () {
-                            if (state.closed || state.closeRequested) return state.closePromise || Promise.resolve(false);
+                            if (state.terminal || state.closed || state.closeRequested) return state.closePromise || Promise.resolve(false);
                             state.closeRequested = true;
                             state.closePromise = new Promise((resolve, reject) => {
                                 state.closeResolve = resolve;
@@ -910,7 +911,7 @@
                         if (typeof details === "string") details = { url: details };
                         if (!details || typeof details !== "object") throw new TypeError("details must be an object.");
                         const clientId = uuid();
-                        state = state || { clientId: clientId, id: null, abortRequested: false, callbacks: {} };
+                        state = state || { clientId: clientId, id: null, abortRequested: false, terminal: false, callbacks: {} };
                         state.clientId = clientId;
                         record.downloadHandlers.set(clientId, state);
                         const request = {
@@ -926,7 +927,7 @@
                         const handle = {
                             id: null,
                             abort: function () {
-                                if (state.aborted) return Promise.resolve(false);
+                                if (state.terminal || state.aborted) return Promise.resolve(false);
                                 state.aborted = true;
                                 state.abortRequested = true;
                                 if (!state.id) return Promise.resolve(false);
@@ -1491,6 +1492,7 @@
                         record.tabHandlers.forEach(state => {
                             if (state.id === data.tabId && !state.closed) {
                                 state.closed = true;
+                                state.terminal = true;
                                 if (typeof state.onclose === "function") {
                                     try { state.onclose(); } catch (error) { console.error("[MonkeySharp] tab onclose failed", error); }
                                 }
@@ -1507,13 +1509,16 @@
                         if (notification.event === "download-progress") {
                             if (state.callbacks.onprogress) state.callbacks.onprogress({ loaded: data.loaded, total: data.total });
                         } else if (notification.event === "download-complete") {
+                            state.terminal = true;
                             if (state.callbacks.onload) state.callbacks.onload({ id: data.downloadId });
                             record.downloadHandlers.delete(data.clientId || data.downloadId);
                         } else if (notification.event === "download-timeout") {
+                            state.terminal = true;
                             if (state.callbacks.ontimeout) state.callbacks.ontimeout({ error: data.error || "timeout", details: data.details || null });
                             else if (state.callbacks.onerror) state.callbacks.onerror({ error: data.error || "timeout", details: data.details || null });
                             record.downloadHandlers.delete(data.clientId || data.downloadId);
                         } else {
+                            state.terminal = true;
                             if (state.callbacks.onerror) state.callbacks.onerror({ error: data.error || "not_succeeded", details: data.details || null });
                             record.downloadHandlers.delete(data.clientId || data.downloadId);
                         }

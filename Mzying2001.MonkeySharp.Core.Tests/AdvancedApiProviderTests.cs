@@ -544,6 +544,29 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Fact]
+        public async Task HostHandlesRemoveTerminalOperationsAndRejectRepeatAbortOrClose()
+        {
+            var installation = await InstallAsync(
+                "// @grant GM.openInTab\n// @grant GM.download");
+            var services = new FakeHostServices();
+            using (var provider = new HostInteractionApiProvider(tabs: services, downloads: services))
+            {
+                await provider.InvokeAsync(Context(installation, "GM.openInTab", new { url = "https://example.com" }), CancellationToken.None);
+                var closed = await provider.InvokeAsync(Context(installation, "GM.openInTab", new { close = true, tabId = "tab" }), CancellationToken.None);
+                var repeatedClose = await provider.InvokeAsync(Context(installation, "GM.openInTab", new { close = true, tabId = "tab" }), CancellationToken.None);
+                Assert.True(Json(closed.Json).GetBoolean());
+                Assert.False(Json(repeatedClose.Json).GetBoolean());
+
+                var download = await provider.InvokeAsync(Context(installation, "GM.download", new { url = "https://example.com/file" }), CancellationToken.None);
+                var aborted = await provider.InvokeAsync(Context(installation, "GM.download", new { operation = "abort", downloadId = "download" }), CancellationToken.None);
+                var repeatedAbort = await provider.InvokeAsync(Context(installation, "GM.download", new { operation = "abort", downloadId = "download" }), CancellationToken.None);
+                Assert.Equal("download", Json(download.Json).GetProperty("id").GetString());
+                Assert.True(Json(aborted.Json).GetBoolean());
+                Assert.False(Json(repeatedAbort.Json).GetBoolean());
+            }
+        }
+
+        [Fact]
         public async Task TabStateUsesCanonicalJsonObjects()
         {
             var installation = await InstallAsync(
