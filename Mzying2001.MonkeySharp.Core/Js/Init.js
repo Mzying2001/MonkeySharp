@@ -255,6 +255,23 @@
                 return error;
             };
 
+            const xhrError = function (error, fallback) {
+                const code = error && error.code;
+                const mapped = {
+                    MSP003_SESSION_EXPIRED: "not_succeeded",
+                    MSP004_GRANT_DENIED: "not_permitted",
+                    MSP005_PERMISSION_DENIED: "not_permitted",
+                    MSP006_NOT_SUPPORTED: "not_supported",
+                    MSP009_TIMEOUT: "timeout",
+                    MSP010_CANCELED: "not_succeeded"
+                };
+                return {
+                    error: mapped[code] || fallback || "not_succeeded",
+                    details: error && error.message ? error.message : String(error || "The HTTP request failed."),
+                    code: code || null
+                };
+            };
+
             const objectTag = value => Object.prototype.toString.call(value);
 
             const normalizeHttpUrl = function (value) {
@@ -273,9 +290,16 @@
                 if (!exists) headers[name] = value;
             };
 
-            const serializeHttpBody = async function (value) {
+            const serializeHttpBody = async function (value, binary) {
                 if (typeof value === "undefined" || value === null) return { bytes: null, contentType: null };
-                if (typeof value === "string") return { bytes: new TextEncoder().encode(value), contentType: null };
+                if (typeof value === "string") {
+                    if (binary) {
+                        const bytes = new Uint8Array(value.length);
+                        for (let index = 0; index < value.length; index += 1) bytes[index] = value.charCodeAt(index) & 0xff;
+                        return { bytes: bytes, contentType: null };
+                    }
+                    return { bytes: new TextEncoder().encode(value), contentType: null };
+                }
                 const tag = objectTag(value);
                 if (tag === "[object ArrayBuffer]") {
                     return { bytes: new Uint8Array(value.slice(0)), contentType: null };
@@ -488,14 +512,15 @@
                         if (typeof details.cookiePartition !== "undefined") {
                             throw notSupported("cookiePartition is not supported by CefSharp.");
                         }
-                        if (typeof details.binary !== "undefined") {
-                            throw notSupported("binary request semantics are not supported by MonkeySharp.");
+                        const binaryRequest = details.binary === true;
+                        if (typeof details.binary !== "undefined" && typeof details.binary !== "boolean") {
+                            throw new TypeError("binary must be a boolean.");
                         }
                         if (details.synchronous === true || details.async === false) {
                             throw notSupported("synchronous XHR is not supported by MonkeySharp.");
                         }
-                        if (details.responseXML === true || details.responseType === "document" || details.responseType === "xml") {
-                            throw notSupported("responseXML is not supported by MonkeySharp.");
+                        if (details.responseXML !== undefined && typeof details.responseXML !== "boolean") {
+                            throw new TypeError("responseXML must be a boolean.");
                         }
                         const xhrId = Number.isInteger(details.__monkeySharpXhrId)
                             ? details.__monkeySharpXhrId : nextListenerId++;
@@ -559,10 +584,12 @@
                         }
                         const responseType = typeof details.responseType === "undefined" || details.responseType === ""
                             ? "text" : details.responseType;
-                        if (!["text", "json", "arraybuffer", "blob", "stream"].includes(responseType)) {
+                        const effectiveResponseType = details.responseXML === true ? "document" : responseType;
+                        if (!["text", "json", "arraybuffer", "blob", "stream", "document", "xml"].includes(effectiveResponseType)) {
                             throw new TypeError("responseType is not supported.");
                         }
-                        parameters.responseType = responseType;
+                        parameters.responseType = effectiveResponseType;
+                        parameters.binary = binaryRequest;
                         if (details.signal && (typeof details.signal.addEventListener !== "function" ||
                             typeof details.signal.removeEventListener !== "function")) {
                             throw new TypeError("signal must be an AbortSignal.");
@@ -581,6 +608,7 @@
                             finalUrl: requestUrl,
                             readyState: 0,
                             response: null,
+                            responseXML: null,
                             responseHeaders: "",
                             responseText: "",
                             status: 0,
@@ -589,8 +617,8 @@
                         const handler = {
                             callbacks: callbacks,
                             state: state,
-                            responseType: responseType,
-                            deferState4: responseType !== "stream",
+                            responseType: effectiveResponseType,
+                            deferState4: effectiveResponseType !== "stream",
                             pendingState4: false,
                             streamController: null,
                             streamChunks: [],
@@ -621,7 +649,7 @@
                             if (controller) controller.abort();
                         };
                         let responseStream = null;
-                        if (responseType === "stream") {
+                        if (effectiveResponseType === "stream") {
                             if (typeof ReadableStream !== "function") throw notSupported("ReadableStream is unavailable.");
                             responseStream = new ReadableStream({
                                 start: function (streamController) {
@@ -636,7 +664,11 @@
                         }
                         const operation = (async function () {
                             try {
-                                const body = await serializeHttpBody(details.data);
+                                if (binaryRequest && typeof details.data !== "undefined" && details.data !== null &&
+                                    typeof details.data !== "string") {
+                                    throw new TypeError("binary requests require a string body.");
+                                }
+                                const body = await serializeHttpBody(details.data, binaryRequest);
                                 setDefaultHeader(parameters.headers, "Content-Type", body.contentType);
                                 const created = await call(record, "GM.xmlHttpRequest", parameters, signal);
                                 sessionId = created.sessionId;
@@ -658,7 +690,7 @@
                                 state.statusText = response.statusText;
                                 state.finalUrl = response.finalUrl || state.finalUrl;
                                 state.responseHeaders = response.responseHeaders || "";
-                                if (responseType === "stream") return state;
+                                if (effectiveResponseType === "stream") return state;
                                 const chunks = [];
                                 let length = 0;
                                 while (length < response.bodyLength) {
@@ -676,18 +708,32 @@
                                 let responseText;
                                 try { responseText = new TextDecoder(response.charset || "utf-8").decode(responseBytes); }
                                 catch (_) { responseText = new TextDecoder().decode(responseBytes); }
-                                if (responseType === "json") {
+                                if (effectiveResponseType === "json") {
                                     state.responseText = responseText;
                                     try { state.response = responseText.length === 0 ? null : JSON.parse(responseText); }
                                     catch (_) { state.response = null; }
-                                } else if (responseType === "arraybuffer") {
+                                } else if (effectiveResponseType === "arraybuffer") {
                                     state.responseText = undefined;
                                     state.response = responseBytes.buffer;
-                                } else if (responseType === "blob") {
+                                } else if (effectiveResponseType === "blob") {
                                     state.responseText = undefined;
                                     state.response = new Blob([responseBytes], {
                                         type: response.mimeType || "application/octet-stream"
                                     });
+                                } else if (effectiveResponseType === "document" || effectiveResponseType === "xml") {
+                                    state.responseText = responseText;
+                                    if (typeof DOMParser === "function") {
+                                        try {
+                                            state.responseXML = new DOMParser().parseFromString(responseText, "text/xml");
+                                            state.response = effectiveResponseType === "document" ? state.responseXML : responseText;
+                                        } catch (_) {
+                                            state.responseXML = null;
+                                            state.response = effectiveResponseType === "document" ? null : responseText;
+                                        }
+                                    } else {
+                                        state.responseXML = null;
+                                        state.response = effectiveResponseType === "document" ? null : responseText;
+                                    }
                                 } else {
                                     state.responseText = responseText;
                                     state.response = responseText;
@@ -698,16 +744,19 @@
                                 handler.terminal = true;
                                 return state;
                             } catch (error) {
-                                if (error && (error.name === "AbortError" || error.code === "MSP010_CANCELED")) {
-                                    invokeHttpCallback(handler, "onabort", error);
-                                } else if (error && error.code === "MSP009_TIMEOUT") {
-                                    invokeHttpCallback(handler, "ontimeout", error);
-                                } else invokeHttpCallback(handler, "onerror", error);
-                                invokeHttpCallback(handler, "onloadend", error);
+                                const callbackError = xhrError(error);
+                                callbackError.name = error && error.name === "AbortError" ||
+                                    error && error.code === "MSP010_CANCELED" ? "AbortError" : "Error";
+                                if (callbackError.name === "AbortError") {
+                                    invokeHttpCallback(handler, "onabort", callbackError);
+                                } else if (callbackError.code === "MSP009_TIMEOUT") {
+                                    invokeHttpCallback(handler, "ontimeout", callbackError);
+                                } else invokeHttpCallback(handler, "onerror", callbackError);
+                                invokeHttpCallback(handler, "onloadend", callbackError);
                                 handler.terminal = true;
                                 throw error;
                             } finally {
-                                if (responseType !== "stream" || handler.terminal) release();
+                                if (effectiveResponseType !== "stream" || handler.terminal) release();
                             }
                         })();
                         operation.abort = abortRequest;
@@ -1491,8 +1540,8 @@
                             handler.cleanup();
                         } else if (notification.event === "xhr-error") {
                             if (handler.terminal) return true;
-                            const error = new Error(data.message || "The HTTP request failed.");
-                            error.code = data.code;
+                            const error = xhrError({ code: data.code, message: data.message });
+                            error.name = data.code === "MSP010_CANCELED" ? "AbortError" : "Error";
                             if (data.code === "MSP010_CANCELED") error.name = "AbortError";
                             if (handler.streamController) {
                                 try { handler.streamController.error(error); } catch (_) { }

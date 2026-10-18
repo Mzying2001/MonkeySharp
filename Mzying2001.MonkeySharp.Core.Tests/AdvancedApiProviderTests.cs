@@ -174,6 +174,28 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Fact]
+        public async Task HttpApiAcceptsDocumentResponseType()
+        {
+            var installation = await InstallAsync(
+                "// @grant GM.xmlHttpRequest\n// @connect api.example.com");
+            var service = new FakeHttpService(new UserScriptHttpResponse(
+                200, "OK", new Uri("https://api.example.com/xml"),
+                new Dictionary<string, string>(), string.Empty, "application/xml", "utf-8"),
+                Encoding.UTF8.GetBytes("<root/>"));
+            using (var provider = new ResourceAndNetworkApiProvider(http: service))
+            {
+                var created = await provider.InvokeAsync(Context(installation, "GM.xmlHttpRequest", new
+                {
+                    operation = "create", xhrId = 19, url = "https://api.example.com/xml",
+                    responseType = "document"
+                }), CancellationToken.None);
+                var sessionId = Json(created.Json).GetProperty("sessionId").GetString();
+                await provider.InvokeAsync(Context(installation, "GM.xmlHttpRequest", new { operation = "execute", sessionId }), CancellationToken.None);
+                Assert.Equal(UserScriptHttpResponseType.Document, service.Request.Options.ResponseType);
+            }
+        }
+
+        [Fact]
         public async Task HttpApiAcceptsExtensionMethodsSpecialHeadersAndRequestOptions()
         {
             var installation = await InstallAsync("// @grant GM.xmlHttpRequest\n// @connect api.example.com");
