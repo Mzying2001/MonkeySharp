@@ -33,7 +33,7 @@
 
             const downloadError = function (error, fallback) {
                 if (error && typeof error === "object" && typeof error.error === "string") {
-                    return { error: error.error, details: error.details || null };
+                    return { error: error.error, details: error.details || null, code: error.code || null };
                 }
                 const code = error && error.code;
                 const mapped = {
@@ -46,8 +46,15 @@
                 };
                 return {
                     error: mapped[code] || fallback || "not_succeeded",
-                    details: error && error.message ? error.message : String(error || "The download failed.")
+                    details: error && error.message ? error.message : String(error || "The download failed."),
+                    code: code || null
                 };
+            };
+
+            const legacyError = function (error, fallback) {
+                const value = xhrError(error, fallback);
+                if (!value.code && error instanceof TypeError) value.code = "MSP007_INVALID_PARAMS";
+                return value;
             };
 
             const serializableValue = function (value) {
@@ -762,7 +769,7 @@
                                 handler.terminal = true;
                                 return state;
                             } catch (error) {
-                                const callbackError = xhrError(error);
+                                const callbackError = legacyError(error);
                                 callbackError.name = error && error.name === "AbortError" ||
                                     error && error.code === "MSP010_CANCELED" ? "AbortError" : "Error";
                                 if (callbackError.name === "AbortError") {
@@ -1182,10 +1189,7 @@
                     if (!parent || typeof parent.appendChild !== "function") throw new TypeError("parent must be a DOM node.");
                     if (typeof tagName !== "string" || tagName.length === 0) throw new TypeError("tagName must be a string.");
                     const element = document.createElement(tagName);
-                    if (attributes && typeof attributes === "object") Object.keys(attributes).forEach(name => {
-                        if (name === "textContent") element.textContent = String(attributes[name]);
-                        else element.setAttribute(name, String(attributes[name]));
-                    });
+                    applyElementAttributes(element, attributes);
                     parent.appendChild(element);
                     return element;
                 };
@@ -1211,7 +1215,7 @@
                         }));
                     } catch (error) {
                         if (typeof callbacks.onerror === "function") {
-                            try { callbacks.onerror(error); }
+                            try { callbacks.onerror(legacyError(error)); }
                             catch (callbackError) { console.error("[MonkeySharp] legacy XHR error callback failed", callbackError); }
                         } else {
                             console.error("[MonkeySharp] legacy XHR failed", error);
@@ -1255,11 +1259,11 @@
                 };
                 if (api.getTab) facade.GM_getTab = function (callback) {
                     if (typeof callback !== "function") throw new TypeError("callback must be a function.");
-                    api.getTab().then(callback).catch(error => console.error("[MonkeySharp] legacy getTab failed", error));
+                    api.getTab().then(value => callback(value, null)).catch(error => callback(null, legacyError(error)));
                 };
                 if (api.getTabs) facade.GM_getTabs = function (callback) {
                     if (typeof callback !== "function") throw new TypeError("callback must be a function.");
-                    api.getTabs().then(callback).catch(error => console.error("[MonkeySharp] legacy getTabs failed", error));
+                    api.getTabs().then(value => callback(value, null)).catch(error => callback(null, legacyError(error)));
                 };
                 if (api.setClipboard) facade.GM_setClipboard = function (text, type) {
                     api.setClipboard(text, type).catch(error => console.error("[MonkeySharp] legacy clipboard failed", error));

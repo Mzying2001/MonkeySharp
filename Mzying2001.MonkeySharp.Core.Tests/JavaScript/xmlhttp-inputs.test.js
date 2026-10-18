@@ -142,3 +142,29 @@ test("XHR accepts binary request bodies and parses responseXML", async () => {
     assert.equal(xmlResult.response, xmlResult.responseXML);
     delete globalThis.DOMParser;
 });
+
+test("legacy XHR delivers immediate validation errors once", async () => {
+    globalThis.__legacyXhrErrorCount = 0;
+    globalThis.__legacyXhrError = null;
+    const payload = {
+        protocol: 1, documentId: "legacy-xhr-error-document", frameId: "main", runAt: "DocumentEnd",
+        invocations: [{
+            executionId: "legacy-xhr-error-execution", scriptKey: "13131313-1313-1313-1313-131313131313",
+            source: "globalThis.__legacyXhrPromise = new Promise(resolve => GM_xmlhttpRequest({ url: 'https://api.example.com/', binary: true, data: {}, onerror: error => { globalThis.__legacyXhrErrorCount++; globalThis.__legacyXhrError = error; resolve(); } }));",
+            declaredGrants: ["GM_xmlhttpRequest"], grants: ["GM.xmlHttpRequest"], info: {},
+            capability: "legacy-xhr-error-capability", deliveryToken: "legacy-xhr-error-delivery",
+            compatibility: { profile: "LegacyCompatible", strict: false, legacyGlobals: true }
+        }]
+    };
+    globalThis.__MonkeySharpBridge = { dispatch: async requestJson => {
+        const request = JSON.parse(requestJson);
+        if (request.type === "hello") return JSON.stringify({ type: "hello-result", protocol: 1, ok: true, limits: {}, apis: ["GM.xmlHttpRequest"] });
+        return JSON.stringify({ type: "response", protocol: 1, requestId: request.requestId, ok: true, result: { sessionId: "unused" } });
+    }};
+    vm.runInThisContext(template.replace("__MONKEYSHARP_PAYLOAD_BASE64__", Buffer.from(JSON.stringify(payload)).toString("base64")));
+    while (!globalThis.__legacyXhrPromise) await new Promise(resolve => setTimeout(resolve, 5));
+    await globalThis.__legacyXhrPromise;
+    assert.equal(globalThis.__legacyXhrErrorCount, 1);
+    assert.equal(globalThis.__legacyXhrError.error, "not_succeeded");
+    assert.equal(globalThis.__legacyXhrError.code, "MSP007_INVALID_PARAMS");
+});
