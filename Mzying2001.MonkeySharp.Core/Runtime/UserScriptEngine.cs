@@ -598,6 +598,25 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                 ["scriptMetaStr"] = header,
                 ["scriptUpdateURL"] = metadata.UpdateUrl,
                 ["scriptWillUpdate"] = false,
+                ["compatibility"] = new Dictionary<string, object>
+                {
+                    ["contractVersion"] = 1,
+                    ["handler"] = "MonkeySharp",
+                    ["executionWorld"] = "page",
+                    ["isolatedWorld"] = false,
+                    ["fields"] = new Dictionary<string, object>
+                    {
+                        ["scriptHandler"] = "fixed",
+                        ["sandboxMode"] = "fixed",
+                        ["downloadMode"] = "fixed",
+                        ["isIncognito"] = "fixed",
+                        ["scriptWillUpdate"] = "fixed",
+                        ["scriptUpdateURL"] = "metadata",
+                        ["script"] = "mixed",
+                        ["scriptKey"] = "extension",
+                        ["grantDeclarationState"] = "extension"
+                    }
+                },
                 ["script"] = script
             };
         }

@@ -57,14 +57,15 @@ test("modern info, log, style, and element facades use granted capabilities", as
             scriptKey: "77777777-7777-7777-7777-777777777777",
             source: [
                 "globalThis.__contractPromise = (async function () {",
-                "  globalThis.__infoFrozen = Object.isFrozen(GM.info) && Object.isFrozen(GM.info.script);",
+                "  globalThis.__infoFrozen = Object.isFrozen(GM.info) && Object.isFrozen(GM.info.script) && Object.isFrozen(GM.info.compatibility) && Object.isFrozen(GM.info.compatibility.fields);",
+                "  globalThis.__infoCompatibility = [GM.info.compatibility.contractVersion, GM.info.compatibility.handler, GM.info.compatibility.executionWorld];",
                 "  await GM.log({ event: 'log' });",
                 "  globalThis.__style = await GM.addStyle('body { color: red; }');",
                 "  globalThis.__element = await GM.addElement('input', { id: 'marker', value: 'ok', checked: true, style: 'color: red', onclick: function () {}, 'data-test': 'yes', textContent: 'body' });",
                 "})();"
             ].join("\n"),
             grants: ["GM.info", "GM.log", "GM.addStyle", "GM.addElement"],
-            info: { name: "contract" },
+            info: { name: "contract", compatibility: { contractVersion: 1, handler: "MonkeySharp", executionWorld: "page", isolatedWorld: false, fields: {} } },
             capability: "facade-modern-capability",
             deliveryToken: "facade-modern-delivery",
             compatibility: { profile: "ModernStrict", strict: true, legacyGlobals: false }
@@ -89,6 +90,7 @@ test("modern info, log, style, and element facades use granted capabilities", as
     await waitFor(() => globalThis.__contractPromise);
     await globalThis.__contractPromise;
     assert.equal(globalThis.__infoFrozen, true);
+    assert.deepEqual(globalThis.__infoCompatibility, [1, "MonkeySharp", "page"]);
     assert.deepEqual(globalThis.__logged, { event: "log" });
     assert.equal(globalThis.__style.tagName, "style");
     assert.equal(globalThis.__element.attributes.id, "marker");
@@ -207,7 +209,7 @@ test("missing grants expose no GM object while explicit none keeps GM.info", asy
         }, {
             executionId: "grant-state-none",
             scriptKey: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
-            source: "globalThis.__grantStateExplicit = [typeof GM, GM.info.name, typeof GM_log];",
+            source: "globalThis.__grantStateExplicit = [typeof GM, GM.info.name, typeof GM_log, GM.info === GM_info];",
             declaredGrants: ["none"], grants: ["none"], grantDeclarationState: "ExplicitNone",
             info: { name: "explicit" }, capability: "grant-state-none-capability",
             deliveryToken: "grant-state-none-delivery",
@@ -217,5 +219,5 @@ test("missing grants expose no GM object while explicit none keeps GM.info", asy
 
     await waitFor(() => globalThis.__grantState && globalThis.__grantStateExplicit);
     assert.deepEqual(globalThis.__grantState, ["undefined", "undefined"]);
-    assert.deepEqual(globalThis.__grantStateExplicit, ["object", "explicit", "undefined"]);
+    assert.deepEqual(globalThis.__grantStateExplicit, ["object", "explicit", "undefined", true]);
 });

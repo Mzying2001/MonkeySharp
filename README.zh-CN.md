@@ -125,7 +125,7 @@ var host = new CefSharpUserScriptHostBuilder(repository)
 
 Demo 脚本管理器支持手动检查并安装更新。检查源优先使用 `@updateURL`，安装源优先使用 `@downloadURL`；`@downloadURL none` 会禁用更新检查。远程脚本必须有相同且非空的 name/namespace，下载版本必须高于当前版本。不会后台定时检查，也不会继承浏览器登录 Cookie；运行时 bridge 不公开更新 API。
 
-`GM.info` 和 `GM_info` 暴露不可变快照，包含脚本元数据、声明及规范化授权、URL 规则、资源、更新/来源地址、handler、sandbox 模式和原始元数据头。静态 `@webRequest` 条目会被校验并写入该快照，但不会安装到宿主网络拦截器；需要影响请求时请使用运行时 `GM.webRequest(...)` API。
+`GM.info` 和 `GM_info` 共用同一个深度冻结快照，包含脚本元数据、声明及规范化授权、URL 规则、资源、更新/来源地址、handler、sandbox 模式和原始元数据头。`compatibility` 块使用 `contractVersion: 1` 描述 MonkeySharp 的 page world 执行环境及字段来源。静态 `@webRequest` 条目会被校验并写入该快照，但不会安装到宿主网络拦截器；需要影响请求时请使用运行时 `GM.webRequest(...)` API。
 
 ## GM API 支持
 
@@ -141,7 +141,7 @@ MonkeySharp 为能力提供四种兼容性状态：**Core 已实现**、**需要
 | `GM.addValueChangeListener`、`GM.removeValueChangeListener` 及别名 | Core | 通知同一安装实例的活动执行。 |
 | `GM.addStyle`、`GM.addElement` 及别名 | 引导代码 | 页面本地实现。 |
 | `GM.getResourceText`、`GM.getResourceURL` 及别名 | 条件支持 | 需要 `IResourceProvider` 和已声明的 `@resource`。 |
-| `GM.xmlHttpRequest` / `GM_xmlhttpRequest` | CefSharp 默认提供 | 支持重定向、凭据、进度、中止、二进制/多段请求体及 text/JSON/arraybuffer/blob/stream 响应；需要 `@connect`。同步请求、`binary`、`responseXML`、`proxy` 和 `cookiePartition` 的语义不支持或不同，适用时返回 `MSP006_NOT_SUPPORTED`。 |
+| `GM.xmlHttpRequest` / `GM_xmlhttpRequest` | CefSharp 默认提供 | 支持重定向、凭据、进度、中止、binary 字符串请求体及 text/JSON/arraybuffer/blob/document/xml/stream 响应；`responseXML: true` 使用页面 DOMParser，需要 `@connect`。同步请求、`proxy` 和 `cookiePartition` 的语义不支持，适用时返回 `MSP006_NOT_SUPPORTED`。 |
 | `GM.registerMenuCommand`、`GM.unregisterMenuCommand` 及别名 | 条件支持 | 需要 `IMenuService`。 |
 | `GM.notification`、`GM.setClipboard`、`GM.openInTab`、`GM.download` 及别名 | 条件支持 | 需要对应宿主服务；通知支持四参数旧式重载以及 `highlight`、`silent`、`timeout` 选项。 |
 | `GM.getTab`、`GM.saveTab`、`GM.getTabs` 及别名 | 条件支持 | 需要 `ITabStateService`。 |
@@ -184,7 +184,7 @@ var host = new CefSharpUserScriptHostBuilder(repository)
 
 ## 生命周期与诊断
 
-每个 `(document, frame, script, run-at)` 组合只执行一次。导航、上下文释放、分离和宿主释放都会使能力失效并取消待处理工作；`@noframes` 阻止子框架执行。
+每个 `(document, frame, script, run-at)` 组合只执行一次。`@run-at context-menu` 脚本会按匹配的 frame 加入 CefSharp 原生上下文菜单，只有用户选择菜单项后才创建一次新的执行。导航、上下文释放、分离和宿主释放都会使能力失效并取消待处理工作；`@noframes` 阻止子框架执行。
 
 适配器会把 `history.pushState`、`history.replaceState`、`popstate` 和 `hashchange` 产生的同文档 URL 变化报告为生命周期事件。获得 `window.onurlchange` 授权的脚本可通过 `window.onurlchange` 属性或 `addEventListener("urlchange", ...)` 接收事件；后续匹配和 `GM.info` 快照会使用当前 URL。
 

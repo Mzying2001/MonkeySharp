@@ -73,13 +73,13 @@ CefSharp 宿主默认提供 `GM.xmlHttpRequest`、`GM.cookie` 和 `GM.webRequest
 
 可以设置 `User-Agent`、`Referer`、`Origin` 和 `Cookie` 等兼容性请求头。MonkeySharp 拒绝 `Host`、`Content-Length`、连接/传输控制头及所有 `Sec-*`、`Proxy-*` 头。`anonymous:true` 禁用已存储的 Cookie 和凭据；`fetch:true` 忽略超时和进度，只报告 readyState 4。
 
-`responseType` 接受 `text`、`json`、`arraybuffer`、`blob` 和 `stream`。非流式响应通过 64 KiB 宿主读取拼装。响应包含 readyState 1 至 4、状态、最终 URL、保留重复字段的原始响应头、响应数据、适用的文本及原始 JavaScript context。HTTP 4xx/5xx 调用 `onload`；网络、权限、序列化和桥接故障调用 `onerror`。
+`binary: true` 只接受字符串请求体，并将每个 UTF-16 code unit 转换为其低八位；普通字符串仍使用 UTF-8。`responseType` 接受 `text`、`json`、`arraybuffer`、`blob`、`document`、`xml` 和 `stream`。`responseXML: true` 使用页面的 `DOMParser` 解析；document 类型也会把解析结果放入 `response`。没有 DOMParser 时 `responseXML` 为 `null`，不会伪造 XML。非流式响应通过 64 KiB 宿主读取拼装。响应包含 readyState 1 至 4、状态、最终 URL、保留重复字段的原始响应头、响应数据、适用的文本、responseXML 及原始 JavaScript context。HTTP 4xx/5xx 调用 `onload`；网络、权限、序列化和桥接故障调用 `onerror`，错误对象为 `{ error, details, code }`，分类包括 `not_supported`、`not_permitted`、`timeout` 和 `not_succeeded`。
 
 回调包括 `onloadstart`、`onreadystatechange`、`onprogress`、`onuploadprogress`、`onload`、`onerror`、`ontimeout`、`onabort` 和 `onloadend`。`GM.xmlHttpRequest` 返回带 `.abort()` 的 Promise；`GM_xmlhttpRequest` 立即返回中止句柄并通过回调报告结果。`AbortSignal` 和流取消都会传递到宿主。
 
 请求和响应默认不限大小。单方向数据在 256 KiB 以内保留在内存，超过后转存临时文件，并在所有终止路径中删除。请求体传输和长时间运行的 `execute` 不受桥接通用消息大小及普通请求超时限制。
 
-`proxy`、`cookiePartition`、`binary`、同步请求、`responseXML`、XML/document 响应类型以及作为 URL 的 `Blob`/`File` 返回 `MSP006_NOT_SUPPORTED`。Cookie 分区键属于浏览器扩展管理器状态，CefSharp 公开请求上下文 API 不提供该状态。现代和 legacy XHR 输入校验使用同一错误码。
+`proxy`、`cookiePartition`、同步请求以及作为 URL 的 `Blob`/`File` 返回 `MSP006_NOT_SUPPORTED`。Cookie 分区键属于浏览器扩展管理器状态，CefSharp 公开请求上下文 API 不提供该状态。现代和 legacy XHR 输入校验使用同一错误码。
 
 ### Cookie
 
@@ -129,9 +129,9 @@ Builder 只能使用一次。应用程序拥有仓库、浏览器以及通过 `U
 
 ## 生命周期与诊断
 
-适配器为每个框架文档建立身份，并对每个 `(document, frame, script, run-at)` 组合执行一次。导航、上下文释放、分离和宿主释放都会使能力失效并取消待处理工作。
+适配器为每个框架文档建立身份，并对每个 `(document, frame, script, run-at)` 组合执行一次。`@run-at context-menu` 脚本会按当前 frame 匹配规则出现在 CefSharp 原生上下文菜单中，只有用户选择菜单项后才创建一次新的执行。导航、上下文释放、分离和宿主释放都会使能力失效并取消待处理工作。
 
-授权状态具有语义差异：缺少 `@grant` 时不会公开 `GM` 门面；显式 `@grant none` 时只公开 `GM.info`/`GM_info`。`GM.info` 是包含规范化元数据、授权、URL 规则、资源、更新状态、handler、sandbox 模式和原始元数据文本的深度冻结快照。
+授权状态具有语义差异：缺少 `@grant` 时不会公开 `GM` 门面；显式 `@grant none` 时只公开 `GM.info`/`GM_info`。两个名称引用同一个深度冻结快照，包含规范化元数据、授权、URL 规则、资源、更新状态、handler、sandbox 模式和原始元数据文本。版本化的 `compatibility` 块使用 `contractVersion: 1` 标出固定值、元数据来源、混合来源和扩展字段，并明确 page world 执行边界。
 
 CefSharp 只能提供尽力而为的 document-start 钩子。相应执行产生 `MSR100_DOCUMENT_START_BEST_EFFORT`；设置 `RequireGuaranteedDocumentStart = true` 后会跳过并产生 `MSR101_DOCUMENT_START_UNAVAILABLE`。
 
