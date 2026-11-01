@@ -91,7 +91,7 @@ namespace Mzying2001.MonkeySharp.Core.Matching
         private readonly string _scheme;
         private readonly string _host;
         private readonly bool _anyHost;
-        private readonly bool _subdomainsOnly;
+        private readonly bool _includeSubdomains;
         private readonly int? _port;
         private readonly GlobPattern _path;
 
@@ -100,7 +100,7 @@ namespace Mzying2001.MonkeySharp.Core.Matching
             string scheme,
             string host,
             bool anyHost,
-            bool subdomainsOnly,
+            bool includeSubdomains,
             int? port,
             GlobPattern path)
         {
@@ -109,7 +109,7 @@ namespace Mzying2001.MonkeySharp.Core.Matching
             _scheme = scheme;
             _host = host;
             _anyHost = anyHost;
-            _subdomainsOnly = subdomainsOnly;
+            _includeSubdomains = includeSubdomains;
             _port = port;
             _path = path;
         }
@@ -121,7 +121,7 @@ namespace Mzying2001.MonkeySharp.Core.Matching
             _scheme = null;
             _host = null;
             _anyHost = false;
-            _subdomainsOnly = false;
+            _includeSubdomains = false;
             _port = null;
             _path = null;
         }
@@ -155,19 +155,10 @@ namespace Mzying2001.MonkeySharp.Core.Matching
             if (scheme != "file")
             {
                 var host = NormalizeHost(uri.IdnHost);
-                if (!_anyHost)
-                {
-                    if (_subdomainsOnly)
-                    {
-                        var suffix = "." + _host;
-                        if (host.Length <= suffix.Length || !host.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
-                            return false;
-                    }
-                    else if (!string.Equals(_host, host, StringComparison.OrdinalIgnoreCase))
-                    {
-                        return false;
-                    }
-                }
+                if (!_anyHost &&
+                    !string.Equals(_host, host, StringComparison.OrdinalIgnoreCase) &&
+                    (!_includeSubdomains || !host.EndsWith("." + _host, StringComparison.OrdinalIgnoreCase)))
+                    return false;
                 if (_port.HasValue && uri.Port != _port.Value)
                     return false;
             }
@@ -278,13 +269,13 @@ namespace Mzying2001.MonkeySharp.Core.Matching
             }
 
             var anyHost = hostPart == "*";
-            var subdomainsOnly = hostPart.StartsWith("*.", StringComparison.Ordinal);
-            if (!anyHost && hostPart.Contains("*") && !subdomainsOnly)
+            var includeSubdomains = hostPart.StartsWith("*.", StringComparison.Ordinal);
+            if (!anyHost && hostPart.Contains("*") && !includeSubdomains)
             {
                 error = "A host wildcard is only valid as * or *.domain.";
                 return false;
             }
-            if (subdomainsOnly)
+            if (includeSubdomains)
                 hostPart = hostPart.Substring(2);
             if (!anyHost && hostPart.Contains("*"))
             {
@@ -308,7 +299,7 @@ namespace Mzying2001.MonkeySharp.Core.Matching
                 return false;
             }
 
-            result = new MatchPattern(false, scheme, hostPart, anyHost, subdomainsOnly, port, GlobPattern.CompileMatchPath(path));
+            result = new MatchPattern(false, scheme, hostPart, anyHost, includeSubdomains, port, GlobPattern.CompileMatchPath(path));
             return true;
         }
     }

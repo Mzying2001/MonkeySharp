@@ -119,7 +119,7 @@
 
 ### 匹配与生命周期
 
-`@match https://example.com/*` 匹配该主机；`@match https://*.example.com/*` 只匹配子域名，**不包含**裸域名 `example.com`，需要时应同时声明。`*://` 和 `http*://` 匹配 HTTP/HTTPS；显式端口会被检查。主机名会进行 IDN 规范化，URL 片段被忽略，查询字符串参与匹配。这一子域名通配符行为与常规 WebExtension/Tampermonkey 的匹配约定不同，参见[官方 match 说明](https://www.tampermonkey.net/documentation.php?q=include)。
+`@match https://example.com/*` 匹配该主机；`@match https://*.example.com/*` 匹配裸域名 `example.com` 及其所有层级的子域名，与 [Tampermonkey 的 match 约定](https://www.tampermonkey.net/documentation.php?q=include)一致。`@exclude-match` 使用相同的主机通配符规则。`*://` 和 `http*://` 匹配 HTTP/HTTPS；显式端口会被检查。主机名会进行 IDN 规范化，URL 片段被忽略，查询字符串参与匹配。
 
 MonkeySharp 还接受 `file:///*`、`about:blank` 和 `<all_urls>`（HTTP、HTTPS、file，不包含 about:blank），实际取决于应用提供的页面。Tampermonkey 的公开 match 语法不支持 `<all_urls>`。include/exclude 通配符针对规范化后的整个 URL 区分大小写匹配，支持 `*` 和 `?`，没有实现 Tampermonkey 基于主机的 include 特殊处理；选择主机时优先使用 @match。元数据正则使用 .NET 语法及 `/expression/` 分隔形式，不接受 `/i` 等 JavaScript 字面量标志。
 
@@ -394,7 +394,7 @@ attributes 是可选对象：textContent/innerHTML 设置内容，字符串 styl
 
 允许 User-Agent、Referer、Origin 和 Cookie 头。禁止 Host、Content-Length、连接/传输控制头，以及 Sec-*/Proxy-* 头。跨源重定向会移除显式 Cookie 和 Authorization。Cookie 合并及浏览器认证细节仍由宿主服务决定，不应假定与每个 Tampermonkey 浏览器版本完全一致。
 
-@connect self 同时检查协议、主机和端口。裸域名允许自身及子域名，*.example.com 只允许子域名；IP 和 localhost 必须精确匹配。URL 声明还限制协议/端口，但其中路径不构成白名单限制。没有白名单时，同源 XHR 也被拒绝。原始目标和所有重定向目标都必须通过白名单及宿主权限策略。
+@connect self 同时检查协议、主机和端口。`example.com` 和 `*.example.com` 均允许裸域名自身及其所有层级的子域名；IP 和 localhost 必须精确匹配。URL 声明还限制协议/端口，但其中路径不构成白名单限制。没有白名单时，同源 XHR 也被拒绝。原始目标和所有重定向目标都必须通过白名单及宿主权限策略。
 
 ### 响应与回调
 
@@ -732,7 +732,7 @@ window.addEventListener("urlchange", onRoute);
 | 执行边界 | 将脚本和页面视为可信的页面世界代码，不具有扩展沙箱或保证的 CSP 绕过。 |
 | 授权及模式 | GM.info 和 GM_info 无需授权，默认可用；其他 API 需要声明授权；ModernStrict 使用规范名称。 |
 | 时机 / SPA | 不依赖保证的 document-start 或历史导航后的自动重跑。 |
-| 子域名匹配 | 使用 *.domain 的 match 模式时，另外声明裸域名。 |
+| 子域名匹配 | `*.domain` 的 match 模式包含裸域名及其所有层级的子域名。 |
 | 存储 | 使用支持的存储值，await 现代写入以观察失败，并考虑镜像限额及提交后通知的时序。 |
 | 资源 | 使用精确 GM.getResourceURL，按 data URL 处理，并确认宿主资源提供器可用。 |
 | XHR | 检查代理/分区/Blob URL 等不支持项，适配进度/XML 行为，显式检查 HTTP 状态。 |

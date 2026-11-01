@@ -271,31 +271,39 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             Assert.Equal(BridgeErrorCodes.NotSupported, unsupported.Code);
         }
 
-        [Fact]
-        public async Task HttpRedirectsRecheckConnectAndHostPermissionPolicy()
+        [Theory]
+        [InlineData("https://example.com/start", "https://api.example.com/next", "https://api.example.com/final")]
+        [InlineData("https://api.example.com/start", "https://example.com/next", "https://api.example.com/final")]
+        [InlineData("https://api.example.com/start", "https://api.example.com/next", "https://example.com/final")]
+        public async Task HttpRedirectsRecheckConnectAndHostPermissionPolicy(string initialUrl, string redirectUrl, string finalUrl)
         {
             var installation = await InstallAsync("// @grant GM.xmlHttpRequest\n// @connect *.example.com");
             var response = new UserScriptHttpResponse(
-                200, "OK", new Uri("https://api.example.com/"),
-                new Dictionary<string, string>(), string.Empty, null, null);
+                200, "OK", new Uri(finalUrl),
+                new Dictionary<string, string>(), string.Empty, null, null, new[] { new Uri(redirectUrl) });
             var service = new FakeHttpService(response, null);
             var provider = new ResourceAndNetworkApiProvider(http: service);
             var authorized = new List<string>();
             var created = await provider.InvokeAsync(Context(
                 installation,
                 "GM.xmlHttpRequest",
-                new { operation = "create", xhrId = 16, url = "https://api.example.com/" },
+                new { operation = "create", xhrId = 16, url = initialUrl },
                 (target, _) =>
                 {
                     authorized.Add(target);
                     return Task.FromResult(!target.Contains("denied"));
                 }), CancellationToken.None);
             var sessionId = Json(created.Json).GetProperty("sessionId").GetString();
-            await provider.InvokeAsync(Context(installation, "GM.xmlHttpRequest", new
+            var result = await provider.InvokeAsync(Context(installation, "GM.xmlHttpRequest", new
             {
                 operation = "execute", sessionId
             }), CancellationToken.None);
 
+            Assert.Equal(finalUrl, Json(result.Json).GetProperty("finalUrl").GetString());
+            Assert.True(await service.Request.RedirectAllowed(
+                new Uri("https://example.com/next"), CancellationToken.None));
+            Assert.False(await service.Request.RedirectAllowed(
+                new Uri("https://example.com/denied"), CancellationToken.None));
             Assert.True(await service.Request.RedirectAllowed(
                 new Uri("https://allowed.example.com/next"), CancellationToken.None));
             Assert.False(await service.Request.RedirectAllowed(
@@ -304,6 +312,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 new Uri("https://outside.test/next"), CancellationToken.None));
             Assert.Equal(new[]
             {
+                "https://example.com/next", "https://example.com/denied",
                 "https://allowed.example.com/next", "https://denied.example.com/next"
             }, authorized);
         }
@@ -313,12 +322,18 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         [InlineData("example.com", "https://api.example.com/path", true)]
         [InlineData("example.com", "https://badexample.com/path", false)]
         [InlineData("*.example.com", "https://api.example.com/path", true)]
-        [InlineData("*.example.com", "https://example.com/path", false)]
+        [InlineData("*.example.com", "https://example.com/path", true)]
+        [InlineData("*.example.com", "https://a.b.example.com/path", true)]
+        [InlineData("*.EXAMPLE.COM", "https://EXAMPLE.com/path", true)]
+        [InlineData("*.example.com", "https://badexample.com/path", false)]
+        [InlineData("*.example.com", "https://example.com.evil.test/path", false)]
         [InlineData("localhost", "http://localhost:8080/path", true)]
         [InlineData("localhost", "http://api.localhost/path", false)]
         [InlineData("127.0.0.1", "http://127.0.0.1:8080/path", true)]
         [InlineData("127.0.0.1", "http://127.0.0.2:8080/path", false)]
         [InlineData("例子.测试", "https://api.xn--fsqu00a.xn--0zwm56d/path", true)]
+        [InlineData("*.例子.测试", "https://xn--fsqu00a.xn--0zwm56d/path", true)]
+        [InlineData("*.例子.测试", "https://api.xn--fsqu00a.xn--0zwm56d/path", true)]
         [InlineData("https://example.com:8443", "https://api.example.com:8443/path", true)]
         [InlineData("https://example.com:8443", "https://api.example.com/path", false)]
         public void ConnectHostRulesNormalizeDomainsAndPorts(string declaration, string target, bool expected)

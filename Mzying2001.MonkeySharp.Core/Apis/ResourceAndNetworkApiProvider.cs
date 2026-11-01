@@ -809,8 +809,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                         continue;
                     value = NormalizeConnectHost(declaredUri);
                 }
-                var subdomains = value.StartsWith("*.", StringComparison.Ordinal);
-                if (subdomains)
+                if (value.StartsWith("*.", StringComparison.Ordinal))
                     value = value.Substring(2);
                 try
                 {
@@ -821,11 +820,8 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                     continue;
                 }
                 var exactOnly = IsIpAddress(value) || string.Equals(value, "localhost", StringComparison.Ordinal);
-                var matches = exactOnly
-                    ? targetHost == value
-                    : subdomains
-                        ? targetHost.Length > value.Length + 1 && targetHost.EndsWith("." + value, StringComparison.Ordinal)
-                        : targetHost == value || targetHost.EndsWith("." + value, StringComparison.Ordinal);
+                var matches = targetHost == value ||
+                    (!exactOnly && targetHost.EndsWith("." + value, StringComparison.Ordinal));
                 if (matches)
                     return true;
             }

@@ -115,7 +115,7 @@ The header begins with `// ==UserScript==` and ends with `// ==/UserScript==`. P
 
 ### Matching and lifecycle
 
-`@match https://example.com/*` covers that host; `@match https://*.example.com/*` covers subdomains **without** the bare `example.com`. List both when needed. `*://` and `http*://` cover HTTP/HTTPS; explicit ports are checked. URL hosts are IDN-normalized, fragments are ignored, and query strings participate in matching. This subdomain wildcard behavior differs from the conventional WebExtension/Tampermonkey match contract; see the [official match description](https://www.tampermonkey.net/documentation.php?q=include).
+`@match https://example.com/*` covers that host; `@match https://*.example.com/*` covers the bare `example.com` and all its subdomains, following the [Tampermonkey match contract](https://www.tampermonkey.net/documentation.php?q=include). The same host wildcard rule applies to `@exclude-match`. `*://` and `http*://` cover HTTP/HTTPS; explicit ports are checked. URL hosts are IDN-normalized, fragments are ignored, and query strings participate in matching.
 
 MonkeySharp also accepts `file:///*`, `about:blank`, and `<all_urls>` (HTTP, HTTPS, and file, not about:blank), subject to pages the application actually exposes. Tampermonkey's documented match syntax does not support `<all_urls>`. Include/exclude globs match the whole normalized URL case-sensitively, with `*` and `?`; they do not implement Tampermonkey's host-aware include heuristics. Prefer `@match` when selecting a host. Metadata regexes use .NET syntax and `/expression/` delimiters, without JavaScript literal flags such as `/i`.
 
@@ -378,7 +378,7 @@ Objects/arrays are sent as JSON, URLSearchParams as form encoding, and FormData 
 
 `User-Agent`, `Referer`, `Origin`, and `Cookie` headers are allowed. `Host`, `Content-Length`, connection/transfer-control headers, and `Sec-*`/`Proxy-*` names are rejected. Cross-origin redirects strip explicit cookies and authorization. Cookie merging and browser-authentication behavior remain host-service details; do not assume exact Tampermonkey browser-version behavior.
 
-`@connect self` checks scheme, host, and port. A bare domain allows itself and its subdomains; `*.example.com` allows only subdomains. IPs and localhost are exact. URL declarations additionally constrain scheme/port; their path is not an allowlist restriction. An omitted allowlist denies even same-origin XHR. Original and redirected URLs must all pass the allowlist and host permission policy.
+`@connect self` checks scheme, host, and port. Both `example.com` and `*.example.com` allow the domain itself and all its subdomains. IPs and localhost are exact. URL declarations additionally constrain scheme/port; their path is not an allowlist restriction. An omitted allowlist denies even same-origin XHR. Original and redirected URLs must all pass the allowlist and host permission policy.
 
 #### Response and callbacks
 
@@ -702,7 +702,7 @@ window.addEventListener("urlchange", onRoute);
 | Runtime boundary | Treat source and page as trusted page-world code; no extension sandbox or guaranteed CSP bypass. |
 | Grants and profiles | `GM.info` and `GM_info` are always available without grants. Declare other used APIs; choose canonical modern names for ModernStrict. |
 | Timing / SPA | Do not require guaranteed document-start or automatic reruns on history changes. |
-| Match subdomains | Add the bare domain separately when using `*.domain` match patterns. |
+| Match subdomains | `*.domain` match patterns include the bare domain and all its subdomains. |
 | Stored values | Use supported storage values; await modern writes for failures; account for bounded mirrors and post-commit notifications. |
 | Resources | Use exact `GM.getResourceURL`; expect a data URL and host-provided resource availability. |
 | XHR | Check unsupported proxy/partition/Blob-URL controls; adapt progress/XML behavior; inspect HTTP status explicitly. |

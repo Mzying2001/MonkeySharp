@@ -14,8 +14,11 @@ namespace Mzying2001.MonkeySharp.Core.Tests
 {
     public sealed class WebRequestApiProviderTests
     {
-        [Fact]
-        public async Task TampermonkeyRulesCancelAndReturnThreeListenerArguments()
+        [Theory]
+        [InlineData("https://example.com/script.js")]
+        [InlineData("https://api.example.com/script.js")]
+        [InlineData("https://a.b.example.com/script.js")]
+        public async Task TampermonkeyRulesCancelAndReturnThreeListenerArguments(string url)
         {
             var installation = await InstallAsync();
             using (var service = new InMemoryWebRequestService())
@@ -27,10 +30,10 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 {
                     operation = "register",
                     listenerId = 7,
-                    rules = new[] { new { selector = "https://example.com/*", action = "cancel" } }
+                    rules = new[] { new { selector = "https://*.example.com/*", action = "cancel" } }
                 }), CancellationToken.None);
                 var decision = service.Evaluate(new WebRequestEvent(WebRequestPhase.OnBeforeRequest, 3,
-                    "https://example.com/script.js"));
+                    url));
 
                 Assert.Equal(WebRequestActionKind.Block, decision.Kind);
                 Assert.NotNull(observed);
@@ -64,7 +67,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                     operation = "register",
                     rules = new[] { new
                     {
-                        selector = new { match = "https://example.com/*", exclude = "https://example.com/ignore" },
+                        selector = new { match = "https://*.example.com/*", exclude = "https://*.example.com/ignore" },
                         action = new { from = "/old", to = "/new" }
                     } }
                 }), CancellationToken.None);

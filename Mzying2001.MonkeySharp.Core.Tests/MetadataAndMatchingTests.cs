@@ -154,13 +154,29 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             Assert.False(MatchPatternCompiler.Compile("<all_urls>").IsMatch(new Uri("about:blank")));
         }
 
-        [Fact]
-        public void MatchPatternRequiresAnActualSubdomain()
+        [Theory]
+        [InlineData("*://*.example.com/*", "https://example.com/page", true)]
+        [InlineData("*://*.example.com/*", "http://example.com/page", true)]
+        [InlineData("*://*.example.com/*", "https://www.example.com/page", true)]
+        [InlineData("*://*.example.com/*", "https://a.b.example.com/page", true)]
+        [InlineData("*://*.EXAMPLE.COM/*", "https://EXAMPLE.com/page", true)]
+        [InlineData("*://*.example.com/*", "https://badexample.com/page", false)]
+        [InlineData("*://*.example.com/*", "https://example.com.evil.test/page", false)]
+        [InlineData("*://*.example.com/*", "https://other.test/page", false)]
+        [InlineData("https://example.com/*", "https://www.example.com/page", false)]
+        [InlineData("https://*.example.com/*", "http://example.com/page", false)]
+        [InlineData("https://*.example.com:8443/path*", "https://example.com:8443/path?q=1#fragment", true)]
+        [InlineData("https://*.example.com:8443/path*", "https://www.example.com:8443/path", true)]
+        [InlineData("https://*.example.com:8443/path*", "https://example.com/path", false)]
+        [InlineData("https://*.example.com:8443/path*", "https://www.example.com/path", false)]
+        [InlineData("https://*.example.com:8443/path*", "https://example.com:8443/other", false)]
+        [InlineData("https://*.\u4f8b\u5b50.\u6d4b\u8bd5/*", "https://xn--fsqu00a.xn--0zwm56d/page", true)]
+        [InlineData("https://*.\u4f8b\u5b50.\u6d4b\u8bd5/*", "https://www.xn--fsqu00a.xn--0zwm56d/page", true)]
+        public void MatchPatternHostRulesHonorWildcardsAndConstraints(string rule, string url, bool expected)
         {
-            var pattern = MatchPatternCompiler.Compile("*://*.example.com/*");
+            var pattern = MatchPatternCompiler.Compile(rule);
 
-            Assert.True(pattern.IsMatch(new Uri("https://www.example.com/page")));
-            Assert.False(pattern.IsMatch(new Uri("https://example.com/page")));
+            Assert.Equal(expected, pattern.IsMatch(new Uri(url)));
         }
 
         [Fact]
@@ -198,6 +214,24 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 "// @exclude https://example.com/private/*")).Metadata;
 
             Assert.False(new UserScriptMatcher().IsMatch(metadata, new Uri("https://example.com/private/a")));
+        }
+
+        [Theory]
+        [InlineData("match", "example.com")]
+        [InlineData("include", "example.com")]
+        [InlineData("match", "www.example.com")]
+        [InlineData("include", "www.example.com")]
+        public void WildcardExcludeMatchWinsOverPositiveRule(string directive, string host)
+        {
+            var result = _parser.Parse(Script(
+                "// @name wildcard exclusion\n" +
+                "// @" + directive + " https://" + host + "/*\n" +
+                "// @exclude-match https://*.example.com/private/*"));
+            var matcher = new UserScriptMatcher();
+
+            Assert.True(result.CanEnable);
+            Assert.True(matcher.IsMatch(result.Metadata, new Uri("https://" + host + "/public/a")));
+            Assert.False(matcher.IsMatch(result.Metadata, new Uri("https://" + host + "/private/a")));
         }
 
         [Fact]
