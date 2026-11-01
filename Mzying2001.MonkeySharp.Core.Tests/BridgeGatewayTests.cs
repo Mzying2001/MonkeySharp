@@ -33,6 +33,28 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             }
         }
 
+        [Theory]
+        [InlineData(null)]
+        [InlineData("none")]
+        [InlineData("GM.info")]
+        [InlineData("GM_info")]
+        [InlineData("GM.getValue")]
+        public async Task HelloAlwaysIncludesInfoWithoutGrantingOtherCapabilities(string grant)
+        {
+            var grants = grant == null ? Array.Empty<string>() : new[] { grant };
+            using (var fixture = await BridgeFixture.CreateAsync(grants))
+            {
+                var response = await fixture.HelloAsync();
+                var apis = response.GetProperty("apis").EnumerateArray().Select(item => item.GetString()).ToList();
+                Assert.Contains("GM.info", apis);
+                Assert.Equal(grant == "GM.getValue", apis.Contains("GM.getValue"));
+                Assert.DoesNotContain("GM.setValue", apis);
+                Assert.DoesNotContain("GM.addStyle", apis);
+                AssertError(await fixture.RequestAsync("GM.setValue", new { key = "denied", value = true }),
+                    BridgeErrorCodes.GrantDenied);
+            }
+        }
+
         [Fact]
         public async Task LegacyFixtureMetadataAndCookieGrantReachTheBridgeProvider()
         {

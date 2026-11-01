@@ -2,7 +2,7 @@
 
 **English** | [中文](integration-reference.zh-CN.md)
 
-This reference collects the compatibility, network API, host service, migration, and verification details that are useful while implementing or maintaining a MonkeySharp host. Start with the repository [README](../README.md) for installation and minimal integration.
+This reference collects the compatibility, network API, host service, migration, and verification details that are useful while implementing or maintaining a MonkeySharp host. Start with the repository [README](../README.md) for installation and minimal integration. The [userscript guide](usage-guide.md) covers script-facing parameters, return values, and examples; this reference focuses on host implementation and verification.
 
 ## CefSharp Version Compatibility
 
@@ -17,41 +17,49 @@ dotnet build Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csp
 
 The adapter's `CefSharp.Common` reference is private to its NuGet package. Consumers must reference the matching `CefSharp.WinForms`, `CefSharp.Wpf`, or `CefSharp.Common` package and allow the normal .NET Framework binding redirects. Keep the managed packages, native CEF binaries, and MonkeySharp adapter on the same version and process platform.
 
-CI verifies `84.4.10`, `121.3.70`, and `151.3.240` for both x64 and x86. Every matrix entry restores, builds, and tests the solution, runs the JavaScript protocol tests, and executes the SmokeHost against real Chromium. The WPF Demo smoke remains an x64 check on the default `121.3.70` version.
+CI runs only on pull requests targeting `dev` or `main` and verifies `84.4.10`, `121.3.70`, and `151.3.240` for both x64 and x86. Every matrix entry restores, builds, and tests the solution, runs the JavaScript protocol tests, and executes the SmokeHost against real Chromium. The WPF Demo smoke remains an x64 check on the default `121.3.70` version.
 
 ## Compatibility Profiles
 
-`CefSharpHostOptions.Compatibility` defaults to `LegacyCompatible`. It accepts legacy grants such as `GM_getValue`, exposes `GM_*` globals with their compatibility semantics, and creates bounded synchronous storage and resource mirrors. Legacy callback facades use the same authenticated bridge operations as their `GM.*` counterparts.
+`CefSharpHostOptions.Compatibility` defaults to `LegacyCompatible`. The default metadata parser accepts legacy grants such as `GM_getValue`; the execution profile controls wrapper semantics, legacy globals, and synchronous mirrors. Legacy callback facades use the same authenticated bridge operations as their `GM.*` counterparts.
 
-Use `ModernStrict` for strict wrapper semantics and Promise-only API names:
+| Profile | Wrapper and API exposure |
+| --- | --- |
+| `LegacyCompatible` (default) | Non-strict wrapper; top-level `this` is the window facade. Exposes modern APIs and enabled `GM_*` aliases, with bounded synchronous storage and resource snapshots. |
+| `ModernStrict` | Strict wrapper; top-level `this` is `undefined`. Exposes modern API names and the always-available `GM_info` property; other legacy globals are disabled. Individual return contracts still apply: `GM.addValueChangeListener` returns a numeric ID, while `GM.openInTab` and `GM.webRequest` return handles immediately. |
+
+Execution compatibility is selected by the host. Metadata compatibility is selected when the repository parser is created, so use the same profile for both. This example configures a host for trusted pages and scripts:
 
 ```csharp
+using Mzying2001.MonkeySharp.CefSharp;
+using Mzying2001.MonkeySharp.Core.Compatibility;
+using Mzying2001.MonkeySharp.Core.Parsing;
+using Mzying2001.MonkeySharp.Core.Repository;
+
+var profile = UserScriptCompatibilityProfile.ModernStrict;
+var parser = new UserScriptMetadataParser(
+    new UserScriptMetadataParserOptions
+    {
+        Profile = profile,
+        AllowHeaderPreamble = false
+    });
+var repository = new InMemoryUserScriptRepository(parser);
 var host = new CefSharpUserScriptHostBuilder(repository)
     .Configure(new CefSharpHostOptions
     {
-        Compatibility = new UserScriptCompatibilityOptions
-        {
-            Profile = UserScriptCompatibilityProfile.ModernStrict
-        }
+        TrustedPageWorld = true, // Only for pages and scripts the application trusts.
+        Compatibility = new UserScriptCompatibilityOptions { Profile = profile }
     })
     .Build();
 ```
 
-Execution compatibility is selected by the host. Metadata compatibility is selected when the repository parser is created, so use the same profile for both:
+`TrustedPageWorld` is independent of the compatibility profile and defaults to `false`. Without this opt-in, scripts with explicit grants other than `none` or info (`GM.info` / `GM_info`) are suppressed with `MSR201_BRIDGE_INTEGRITY_REQUIRED`, including in `ModernStrict`. Info-only scripts skip bridge binding and the hello handshake. Trusted-mode executions that require the bridge emit `MSR200_UNVERIFIED_BRIDGE`; strict wrapper semantics do not create an isolated JavaScript world. See the [README security model](../README.md#security-model).
 
-```csharp
-var parser = new UserScriptMetadataParser(
-    new UserScriptMetadataParserOptions
-    {
-        Profile = UserScriptCompatibilityProfile.ModernStrict,
-        AllowHeaderPreamble = false
-    });
-var repository = new InMemoryUserScriptRepository(parser);
-```
+Hosts can independently disable legacy globals other than `GM_info`, storage mirrors, or resource snapshots through `ExposeLegacyGlobals`, `EnableSynchronousStorageMirror`, and `EnableSynchronousResourceSnapshot`. A failed, incomplete, or oversized snapshot leaves the corresponding synchronous aliases unavailable; modern methods can still use the bridge. Snapshot limits and degradation diagnostics are listed under [Lifecycle and Diagnostics](#lifecycle-and-diagnostics).
 
 ## Resource Integrity and Update Checks
 
-`@require` and `@resource` may carry `md5` or `sha256` hashes in hexadecimal or standard Base64. Both `#algorithm=value` and `#algorithm-value` forms are accepted, with comma/semicolon-separated hashes; the last supported declaration is selected. The fragment is stripped from the requested and cached URL. The Core resolver, resource API, and Demo HTTP cache verify original bytes before use, and cached bytes are verified again when read. An unsupported algorithm produces a warning; no usable supported hash, malformed declarations, and digest mismatches fail closed and prevent the resource from loading.
+`@require` and `@resource` may carry `md5` or `sha256` hashes in hexadecimal or standard Base64. Both `#algorithm=value` and `#algorithm-value` forms are accepted, with comma/semicolon-separated hashes; the last supported declaration is selected. The fragment is stripped from the requested and cached URL. When integrity is declared, the Core resolver, resource API, and Demo HTTP cache verify original bytes before use, and cached bytes are verified again when read. An unsupported algorithm produces a warning; malformed declarations, no usable supported hash among the declarations, and digest mismatches fail closed and prevent the resource from loading. Resources without integrity declarations load without hash verification.
 
 The Demo manager offers a manual check-and-install action. `@updateURL` is preferred as the check source and `@downloadURL` as the download source; `@downloadURL none` disables checks. A candidate must have the same non-empty `@name` and `@namespace`, and the downloaded version must be newer than the installed one and no older than the checked version. Applying it preserves the installation key, enabled state, installation time, and GM storage while replacing source and update metadata. Checks use the Demo's separate HTTP client without browser login cookies; there is no background schedule or runtime bridge update API.
 
@@ -62,6 +70,8 @@ For URL rules, slash-delimited regular expressions are supported in `@include` a
 The CefSharp host supplies default `GM.xmlHttpRequest`, `GM.cookie`, and `GM.webRequest` services. Set `EnableDefaultNetworkServices = false` to require explicit providers, or use `UseHttpRequestService`, `UseCookieService`, and `UseWebRequestService` to replace individual defaults.
 
 ### HTTP Requests
+
+For full parameter tables, callback contracts, and script examples, see the [HTTP request guide](usage-guide.md#http-requests).
 
 Compatibility status is reported as Core implemented, host service required, intentional degradation or unsupported, or behavior different from Tampermonkey. The runtime executes in the CefSharp page world inside the MonkeySharp wrapper. `@sandbox`, `@unwrap`, `@run-in`, and non-page `@inject-into` are preserved and diagnosed, but they do not create an isolated world.
 
@@ -77,7 +87,9 @@ Compatibility headers such as `User-Agent`, `Referer`, `Origin`, and `Cookie` ma
 
 Callbacks are `onloadstart`, `onreadystatechange`, `onprogress`, `onuploadprogress`, `onload`, `onerror`, `ontimeout`, `onabort`, and `onloadend`. `GM.xmlHttpRequest` returns a Promise with `.abort()`; `GM_xmlhttpRequest` immediately returns an abort handle and reports through callbacks. `AbortSignal` and stream cancellation propagate to the host.
 
-Request and response sizes are unlimited by default. Each direction stays in memory through 256 KiB and then spills to a temporary file, which is removed on every terminal path. Body transfer and the long-running `execute` operation are independent of the bridge's general message and request limits.
+Total request and response body sizes are unlimited by default. Each direction stays in memory through 256 KiB and then spills to a temporary file, which is removed on every terminal path. Chunking allows total bodies to exceed a single bridge message's size limit, but each serialized chunk message still has to fit `BridgeOptions.MaxRequestBytes` or `MaxResponseBytes`, including JSON and Base64 overhead.
+
+Only the long-running `execute` operation is exempt from `BridgeOptions.RequestTimeout`; other session operations use the ordinary timeout. All session requests, including `execute`, count toward `MaxPendingRequestsPerDocument`. The HTTP request's own `timeout` remains separate, except in `fetch` mode.
 
 `proxy`, `cookiePartition`, synchronous requests, and `Blob`/`File` URLs return `MSP006_NOT_SUPPORTED`. Partitioned-cookie keys are browser-extension manager state that the public CefSharp request-context API does not expose. The same code is used by modern and legacy XHR input validation.
 
@@ -89,10 +101,10 @@ Declare `@grant GM.cookie` or `@grant GM_cookie`. The default provider uses the 
 const cookies = await GM.cookie.list({ url: location.href });
 await GM.cookie.set({ url: location.href, name: "session", value: "ready", path: "/" });
 await GM.cookie.delete({ url: location.href, name: "session" });
-const listenerId = GM.cookie.addListener({}, change => console.log(change.cause));
+const listenerId = GM.cookie.addListener({}, (cookie, cause, removed) => console.log(cookie.name, cause, removed));
 ```
 
-`GM_cookie.list` calls back as `(cookies, error)`, while `set` and `delete` call back as `(error)`. Successful operations pass `null`/`undefined` for the error value. `addListener/removeListener` use numeric IDs. Listener registrations are released with the execution, document, frame, or host.
+`GM_cookie.list` calls back as `(cookies, error)`, while `set` and `delete` call back as `(error)`. Successful operations pass `null`/`undefined` for the error value. `addListener/removeListener` use numeric IDs; listener callbacks receive `(cookie, cause, removed)`. Listener registrations are released with the execution, document, frame, or host.
 
 ### Web Requests
 
@@ -111,47 +123,139 @@ const registration = GM.webRequest([
 registration.remove();
 ```
 
-`GM_webRequest(rules, listener)` is the legacy alias of the same registration function. Listener calls use `(info, message, details)` and report only `cancel` or `redirect` results. The adapter rejects an occupied non-multiplexer request handler rather than replacing it.
+`GM_webRequest(rules, listener)` is the legacy alias of the same registration function. Listener calls use `(info, message, details)` and report only `cancel` or `redirect` results.
+
+Whenever a web request service is available, including the default service, `Attach` requires an uninitialized browser with an empty `RequestHandler` slot or a `CefSharpWebRequestHandlerMultiplexer`. Compose an existing application handler before attaching:
+
+```csharp
+var requestHandlers = new CefSharpWebRequestHandlerMultiplexer();
+requestHandlers.Add(applicationRequestHandler);
+browser.RequestHandler = requestHandlers;
+host.Attach(browser);
+```
+
+The adapter rejects an occupied non-multiplexer slot. Setting `EnableDefaultNetworkServices = false` omits all three default network services; supplying `UseWebRequestService` still requires the handler composition above. Existing render handlers separately require a `RenderProcessMessageHandlerMultiplexer`, as shown in the [README](../README.md#existing-browser-handlers).
 
 ## Host Service Contracts
 
 The builder is single-use. The application owns the repository, browser, and every object supplied through `UseValueStore`, `UsePermissionPolicy`, or a `Use...Service`/`Use...Provider` method. The host owns its engine, gateway, internally created providers, default network services, and default value store. Objects passed to `AddApiProvider` transfer to the gateway and are disposed when applicable.
 
+The following example assumes the repository and service instances have already been created. Register only the services the application supplies. `TrustedPageWorld` is appropriate only for trusted pages and scripts:
+
+```csharp
+var host = new CefSharpUserScriptHostBuilder(repository)
+    .UseValueStore(persistentStore)
+    .UsePermissionPolicy(permissionPolicy)
+    .UseDependencyProvider(cachedDependencyProvider)
+    .UseResourceProvider(resourceProvider)
+    .UseMenuService(menuService)
+    .UseNotificationService(notificationService)
+    .UseClipboardService(clipboardService)
+    .UseTabService(tabService)
+    .UseDownloadService(downloadService)
+    .UseTabStateService(tabStateService)
+    .UseWindowService(windowService)
+    .UseHttpRequestService(httpRequestService) // optional default override
+    .UseCookieService(cookieService)           // optional default override
+    .UseWebRequestService(webRequestService)   // optional default override
+    .LogTo(entry => applicationLog.Write(entry.JsonValue))
+    .Configure(new CefSharpHostOptions { TrustedPageWorld = true })
+    .Build();
+```
+
+For durable installations, replace the in-memory repository in the example above with a `PersistentUserScriptRepository` backed by an application-owned `IUserScriptRepositoryPersistence`. Initialize it before using it or attaching a host:
+
+```csharp
+using System.Threading;
+
+var repository = new PersistentUserScriptRepository(persistence, parser);
+await repository.InitializeAsync(CancellationToken.None);
+```
+
+The persistence implementation must preserve `ScriptKey`, installation order, and timestamps, and commit mutations atomically. Cancellation after a successful commit must complete successfully; repository change notifications follow commit. Stable keys retain the association with GM storage. See the [Demo guide](../Mzying2001.MonkeySharp.Demo/README.md#portable-data-and-recovery) for a concrete persistence and recovery implementation.
+
 Provider requirements:
 
 - `IUserScriptValueStore` operations for one `ScriptKey` must be linearizable. Cancellation before commit makes no change; cancellation after commit completes successfully and emits one notification.
-- `IUserScriptDependencyProvider` owns trusted download, caching, HTTPS policy, and optional integrity validation for `@require`. `ResourceScriptSourceResolver` preserves declaration order and enforces the byte limit.
+- A value store should also implement `IUserScriptValueSnapshotProvider` for atomic compatibility snapshots. Without it, the gateway reads keys and values separately and reports `MSC411_COMPATIBILITY_SNAPSHOT_DEGRADED`.
+- `IUserScriptDependencyProvider` owns trusted download, caching, HTTPS policy, and optional integrity validation for `@require`. `ResourceScriptSourceResolver` preserves declaration order, verifies declared integrity, and limits the combined original dependency bytes to `BridgeOptions.MaxResourceBytes`.
 - In `LegacyCompatible`, a missing dependency provider skips an invocation that declares `@require` with `MSR401_DEPENDENCY_PROVIDER_UNAVAILABLE`. A provider failure emits `MSR400_DEPENDENCY_RESOLUTION_FAILED`. In `ModernStrict`, a missing provider leaves the installed main source unchanged.
 - `IResourceProvider` returns previously authorized content for a declared resource. Resource data is limited by `BridgeOptions.MaxResourceBytes`.
-- `IHttpRequestService` receives a repeatable `IUserScriptHttpBody` and observer before work begins. It reports metadata before body data, honors `MaxResponseBytes`, calls `RedirectAllowed` before following redirects, and records followed URLs for Core to recheck against `@connect`.
+- `IHttpRequestService` receives a repeatable `IUserScriptHttpBody` and observer before work begins. It reports metadata before body data, honors the optional `UserScriptHttpRequest.MaxResponseBytes` body limit (`null` means unlimited), calls `RedirectAllowed` before following redirects, and records followed URLs for Core to recheck against `@connect`. This body limit is separate from the bridge message limit `BridgeOptions.MaxResponseBytes`.
 - `IUserScriptPermissionPolicy` receives the installation, frame, method, target summary, and current capabilities for every host-backed request.
 - `IUserScriptWindowService` backs the exact `window.close` and `window.focus` grants. `CloseAsync` may refuse to close the last tab; omit `UseWindowService` to leave both properties unavailable. `window.onurlchange` is core-only and reports same-document `pushState`, `replaceState`, `popstate`, and `hashchange` changes.
+
+Interaction services have distinct lifecycle contracts:
+
+| Service entry point | Returned handle | Lifecycle members |
+| --- | --- | --- |
+| `INotificationService.ShowAsync` | `INotificationHandle` immediately | `Completion`, `Clicked`, `Closed`, and `Dispose`; there is no separate `Abort` member. |
+| `ITabService.OpenAsync` | `Task<ITabHandle>` | `TabId`, `Closed`, `OnClose`, `CloseAsync`, and `Dispose`; there is no `Completion` task. |
+| `IDownloadService.DownloadAsync` | `Task<IDownloadOperation>` | `DownloadId`, `Completion`, `Progress`, `Completed`, `Failed`, `Aborted`, `TimedOut`, `Abort`, and `Dispose`. |
+
+The runtime uses handle events to deliver script callbacks; completing a `Completion` task alone does not send a terminal callback. Providers should emit one terminal event and support idempotent cleanup when the execution ends. Releasing a tab handle should release its observations; closing the user tab is a separate `CloseAsync` action.
+
+The JavaScript download contract differs from the host operation contract: `GM.download` returns a `Promise<DownloadHandle>` that resolves when the download starts, and currently ignores callback fields in `details`. Use `GM_download` in `LegacyCompatible` for script-facing progress and terminal callbacks. See the [download guide](usage-guide.md#downloads) for return values and limitations.
 
 ## Lifecycle and Diagnostics
 
 The adapter creates an identity per frame document and executes each `(document, frame, script, run-at)` once. `@run-at context-menu` scripts are listed by the native CefSharp context menu for the matching frame and execute a fresh invocation only after the user selects an entry. Navigation, context release, detach, and disposal invalidate capabilities and cancel pending work.
 
-Grant state is significant: a missing `@grant` declaration exposes no `GM` facade, while explicit `@grant none` exposes only `GM.info`/`GM_info`. Both names reference the same deep-frozen snapshot of normalized metadata, grants, URL rules, resources, update state, handler, sandbox mode, and raw metadata text. Its versioned `compatibility` block has `contractVersion: 1` and identifies fixed, metadata-derived, mixed, and extension-owned fields, including the page-world execution boundary.
+`GM.info` and `GM_info` are always available without a grant, in both compatibility profiles and regardless of `ExposeLegacyGlobals`. Missing `@grant` and explicit `@grant none` expose only info; explicit grant lists include info alongside their individually granted capabilities. Explicit `GM.info` and `GM_info` declarations remain accepted by the grant catalog (legacy alias parsing still follows its configured option). The original declaration state and grant lists are preserved; no implicit info grant is added to metadata. Both names reference the same deep-frozen snapshot of metadata, grants, URL rules, resources, update state, handler, sandbox mode, and raw metadata text. Its versioned `compatibility` block has `contractVersion: 1` and identifies fixed, metadata-derived, mixed, and extension-owned fields, including the page-world execution boundary.
 
 CefSharp exposes only best-effort document-start hooks. Selected document-start executions emit `MSR100_DOCUMENT_START_BEST_EFFORT`. Set `RequireGuaranteedDocumentStart = true` to skip them with `MSR101_DOCUMENT_START_UNAVAILABLE`.
 
 `@sandbox` values other than `raw` emit `MSR212_UNSUPPORTED_SANDBOX`, and `@unwrap` emits `MSR213_UNSUPPORTED_UNWRAP`. Both declarations are preserved in metadata and `GM.info`, but execution remains in the page world and inside the MonkeySharp wrapper.
 
-Protocol errors use stable codes `MSP001` through `MSP010` and `MSP999`. Diagnostics never include capability tokens or stored values. Default bridge limits are 1 MiB per request, 1 MiB per response, 10 MiB per resource, 30 seconds per ordinary request, and 64 pending requests per document; configure them through `CefSharpHostOptions.Bridge`.
+Protocol errors use stable codes `MSP001` through `MSP010` and `MSP999`. Diagnostics never include capability tokens or stored values. Configure limits by assigning a new `BridgeOptions(...)` to `CefSharpHostOptions.Bridge`:
+
+| Option | Default | Scope |
+| --- | --- | --- |
+| `MaxRequestBytes` | 1 MiB | Each UTF-8 bridge request, including HTTP body chunk messages. |
+| `MaxResponseBytes` | 1 MiB | Each UTF-8 bridge response, including the combined hello response and body reads. |
+| `MaxResourceBytes` | 10 MiB | Each resource; also the combined dependency bytes when using the builder's `ResourceScriptSourceResolver`. |
+| `RequestTimeout` | 30 seconds | Ordinary bridge requests; HTTP `execute` is exempt. |
+| `MaxPendingRequestsPerDocument` | 64 | Concurrent bridge requests for a document, including HTTP `execute`. |
+| `MaxCompatibilityBootstrapBytes` | 1 MiB | Each serialized storage or resource snapshot; the combined hello response must also fit `MaxResponseBytes`. |
+| `CompatibilityBootstrapTimeout` | 5 seconds | Preparation of each storage or resource snapshot. |
+| `MaxReplayEntriesPerExecution` | 4096 | Recent request IDs retained to reject replays for an execution. |
+
+Compatibility snapshot diagnostics distinguish preparation failure, degraded consistency, and size limits:
+
+| Diagnostic | Meaning |
+| --- | --- |
+| `MSC410_COMPATIBILITY_BOOTSTRAP_FAILED` | Snapshot preparation failed or timed out; the corresponding synchronous aliases are unavailable. |
+| `MSC411_COMPATIBILITY_SNAPSHOT_DEGRADED` | The value store lacks atomic snapshot support; the gateway falls back to separate reads. |
+| `MSC412_COMPATIBILITY_BOOTSTRAP_LIMIT` | A snapshot exceeds its byte budget and is marked incomplete; the corresponding synchronous aliases are unavailable. |
 
 ## Migration Notes
 
+Use this mapping when migrating a v1 integration:
+
+| v1 | 3.0 |
+| --- | --- |
+| `JScript` / random `ScriptId` | Repository-owned `UserScriptInstallation` / stable `ScriptKey` |
+| `JScriptMeta` dictionary | Immutable `UserScriptMetadata` plus parser diagnostics |
+| `IList<JScript>` on `InjectorBase` | `IUserScriptRepository` snapshots and change events |
+| `IDataStore` / `MemDataStore` | `IUserScriptValueStore` / `InMemoryUserScriptValueStore` |
+| `Injector.AttachBrowser` | Build a host, then call `Attach` before browser initialization |
+| Synchronous Messenger/WCF | Versioned JSON over asynchronous string binding |
+| `GM_*` globals | Default `LegacyCompatible` aliases over the current bridge |
+| `IScriptVerifier` character scanner | Metadata diagnostics plus Chromium syntax/runtime reporting |
+
 Version 3 host service contracts are source-breaking. `IHttpRequestService.SendAsync` receives an `IUserScriptHttpObserver` before starting and returns `IHttpRequestOperation`; request bodies are repeatable streams, response data is incremental, and redirect authorization is asynchronous. Existing adapters should wrap old tasks in operation objects and forward response start, data, progress, completion, and abort.
 
-Notification, tab, and download services similarly return lifecycle handles or operations with completion and cancellation members. `ITabStateService` accepts JSON objects only. `UseCookieService` and `UseWebRequestService` are optional and do not affect hosts that omit those providers.
+Notification, tab, and download services return the distinct lifecycle handles listed under [Host Service Contracts](#host-service-contracts). `ITabStateService` accepts JSON objects only. `UseCookieService` and `UseWebRequestService` override default services; omitting these calls keeps the defaults enabled. Set `EnableDefaultNetworkServices = false` to omit the built-in network services, and supply explicit services for the capabilities the host needs. An active web request service requires the request-handler composition described above.
 
-The former one-shot `GM_xmlhttpRequest` payload/result is now a `create`, `appendBody`, `execute`, `readBody`, `abort`, and `release` lifecycle session. The former `ForceUseStrict`/`with(window)` execution is replaced by a strict `Function` scope with explicit `GM`, `unsafeWindow`, and `window` parameters.
+The former one-shot `GM_xmlhttpRequest` payload/result is now a `create`, `appendBody`, `execute`, `readBody`, `abort`, and `release` lifecycle session. The former `ForceUseStrict`/`with(window)` execution is replaced by a `Function` scope with explicit `GM`, `GM_info`, `unsafeWindow`, and `window` parameters. `LegacyCompatible` uses a non-strict wrapper with the window facade as top-level `this`; `ModernStrict` uses a strict wrapper with top-level `this` set to `undefined`.
 
 Compatibility is built into the default profile; there is no separate transport or WCF package. Migrate storage keys explicitly if v1 data must be retained. Applications choosing `ModernStrict` should update metadata grants to canonical `GM.*` names.
 
 Browser-extension-only cookie partitioning, manager UI state, download shelf presentation, notification persistence, and request interception APIs that require waiting on JavaScript remain host-specific and outside the compatibility promise. A host should expose only the documented provider contract and return `MSP006_NOT_SUPPORTED` when a capability is absent.
 
 ## Build, Package, and Verify
+
+CI's verified toolchain is Windows Server 2022, .NET SDK `9.0.315`, and Node.js `24`. These are tested versions, not a statement of minimum requirements. Use an SDK that supports `MonkeySharp.slnx`; Core tests target `net8.0`, while CefSharp tests and applications target `net462`. Real-Chromium gates require a Windows desktop session.
 
 Use the same `CefSharpVersion` property for restore, build, test, and package commands:
 
@@ -180,7 +284,7 @@ Run the real-Chromium gates from a Windows desktop session:
 powershell -NoProfile -ExecutionPolicy Bypass -File Mzying2001.MonkeySharp.Demo/Run-E2E.ps1 -CefSharpVersion 121.3.70
 ```
 
-Pass the same `-CefSharpVersion` to every restore/build/test/pack/SmokeHost command when validating another supported version. Run the SmokeHost commands for x64 and x86 at `84.4.10`, `121.3.70`, and `151.3.240`; the Demo gate stays on x64/default `121.3.70`. When switching versions in an existing checkout, first run `dotnet clean MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=<target-version>` (use the target platform) to avoid mixing incremental outputs from different CefSharp versions. The SmokeHost runner already restores, cleans and builds with the selected version, then verifies the running assembly version and process platform. Both gates use isolated profiles and `TrustedPageWorld`; they are integration checks, not security sandboxes.
+Use the same version value throughout validation: `-p:CefSharpVersion=<version>` for `dotnet restore/build/test/pack`, and `-CefSharpVersion <version>` for the PowerShell runners. Run the SmokeHost commands for x64 and x86 at `84.4.10`, `121.3.70`, and `151.3.240`; the Demo gate stays on x64/default `121.3.70`. When switching versions in an existing checkout, first run `dotnet clean MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=<target-version>` (use the target platform) to avoid mixing incremental outputs from different CefSharp versions. The SmokeHost runner already restores, cleans and builds with the selected version, then verifies the running assembly version and process platform. Both gates use isolated profiles and `TrustedPageWorld`; they are integration checks, not security sandboxes.
 
 ### Chromium Compatibility Script Package
 

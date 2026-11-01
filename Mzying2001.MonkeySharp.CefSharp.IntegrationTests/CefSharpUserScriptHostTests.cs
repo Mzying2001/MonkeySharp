@@ -142,6 +142,27 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
             }
         }
 
+        [Theory]
+        [InlineData("GM.info")]
+        [InlineData("GM_info")]
+        public async Task DefaultModeInjectsInfoOnlyScriptsWithoutTrustedPageWorld(string grant)
+        {
+            using (var host = await CreateHostAsync(Script(grant, "document-start")))
+            {
+                var browser = new BrowserFixture();
+                var diagnostics = new ConcurrentQueue<UserScriptDiagnostic>();
+                host.Diagnostic += (_, item) => diagnostics.Enqueue(item);
+                host.Attach(browser.Browser.Object);
+
+                browser.CreateContext();
+                await browser.WaitForScriptCountAsync(1);
+
+                Assert.Contains("runtime.install(payload)", Assert.Single(browser.Scripts));
+                Assert.DoesNotContain(diagnostics, item => item.Code == "MSR201_BRIDGE_INTEGRITY_REQUIRED");
+                Assert.DoesNotContain(diagnostics, item => item.Code == "MSR200_UNVERIFIED_BRIDGE");
+            }
+        }
+
         [Fact]
         public async Task DefaultModeSuppressesHostApisAndTrustedModeReportsRisk()
         {

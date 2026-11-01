@@ -245,7 +245,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
         /// <summary>Gets whether the wrapper uses strict JavaScript semantics.</summary>
         public bool Strict { get; }
 
-        /// <summary>Gets whether legacy global API names are available.</summary>
+        /// <summary>Gets whether legacy global API names other than GM_info are available.</summary>
         public bool LegacyGlobals { get; }
 
         /// <summary>Gets whether synchronous storage mirror bootstrap is enabled.</summary>
