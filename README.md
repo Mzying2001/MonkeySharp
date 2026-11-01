@@ -6,6 +6,8 @@ MonkeySharp 3 is a userscript runtime for applications that embed CefSharp. Brow
 
 Version 3 has source-breaking host service contracts. Its default `LegacyCompatible` profile supports the common v1 userscript surface over an asynchronous bridge. The old `Injector`, `JScript`, `IDataStore`, and WCF bridge remain removed.
 
+For script authors, the [userscript guide](docs/usage-guide.md) covers writing and installing scripts, API parameters and return values, and differences from Tampermonkey.
+
 ## Packages
 
 | Package | Target frameworks | Purpose |

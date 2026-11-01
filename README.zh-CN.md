@@ -6,6 +6,8 @@ MonkeySharp 3 是面向 CefSharp 嵌入式应用的用户脚本运行时。Core 
 
 版本 3 的宿主服务契约不兼容旧源码。默认 `LegacyCompatible` 配置通过异步桥接支持常用的 v1 用户脚本接口；旧版 `Injector`、`JScript`、`IDataStore` 和 WCF 桥接仍已移除。
 
+脚本作者请参阅[用户脚本使用指南](docs/usage-guide.zh-CN.md)，了解脚本编写与安装、API 参数和返回值，以及与 Tampermonkey 的差异。
+
 ## 软件包
 
 | 软件包 | 目标框架 | 用途 |
