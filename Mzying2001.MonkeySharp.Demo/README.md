@@ -28,7 +28,6 @@ dotnet build Mzying2001.MonkeySharp.Demo/Mzying2001.MonkeySharp.Demo.csproj -c R
 
 The current Demo uses SQLite schema format **2**. Earlier development databases are rejected with a startup error; no migration or automatic deletion is performed. Close all Demo processes, back up the complete `Data/` directory, then manually move the old `Data/monkeysharp.db` and its `-wal`/`-shm` companions out of the profile before restarting. The new database starts empty: script source files are not automatically reimported. Custom storage providers must adopt the [typed value contract](../docs/integration-reference.md#host-service-contracts).
 
-
 ```text
 <executable directory>/Data/
   .profile.lock

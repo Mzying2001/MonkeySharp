@@ -224,7 +224,7 @@ MonkeySharp 在**页面世界**中，通过函数包装执行可信脚本。CefS
 
 script 包含 name、namespace、version、description、author、copyright、name_i18n、description_i18n、icon、icon64、homepage、supportURL、downloadURL、updateURL、fileURL（安装来源）、header、grant、connects、matches、includes、excludes（含 exclude-match）、resources、antifeatures、webRequest、run-at 和 unwrap。lastModified 是安装更新时间的 Unix **毫秒数**；position 固定为 0，blockers 是空数组。resources 项为 `{name, url, integrity: [{algorithm, digest}]}`；antifeatures 先按类型、再按语言分组（无语言时为 default）。未声明 webRequest 时为 null。options 包含 sandbox、noframes、unwrap 和 run_at。
 
-**与 Tampermonkey 的差异：**这是 MonkeySharp 自身的快照，包含来源标记及占位值，不保证提供全部 [Tampermonkey GM_info 字段](https://www.tampermonkey.net/documentation.php?q=GM_info)、实时浏览器设置或扩展更新状态。
+**与 Tampermonkey 的差异：** 这是 MonkeySharp 自身的快照，包含来源标记及占位值，不保证提供全部 [Tampermonkey GM_info 字段](https://www.tampermonkey.net/documentation.php?q=GM_info)、实时浏览器设置或扩展更新状态。
 
 ### GM.log(value) / GM_log(value)
 
@@ -279,7 +279,7 @@ value 使用 JSON.stringify/JSON.parse 克隆：顶层 undefined、函数、symb
 })().catch(console.error);
 ```
 
-**与 Tampermonkey 的关系：**值转换、默认值和存储 API 返回类型遵循[官方参考](https://www.tampermonkey.net/documentation.php?q=GM_values)及已核查的 5.5.1 门面。MonkeySharp 保留宿主提交确认，在成功提交后通知；Tampermonkey 则立即更新本地状态并通知。启动快照限额及对不支持存储类型的明确拒绝仍是 MonkeySharp 的约束。
+**与 Tampermonkey 的关系：** 值转换、默认值和存储 API 返回类型遵循[官方参考](https://www.tampermonkey.net/documentation.php?q=GM_values)及已核查的 5.5.1 门面。MonkeySharp 保留宿主提交确认，在成功提交后通知；Tampermonkey 则立即更新本地状态并通知。启动快照限额及对不支持存储类型的明确拒绝仍是 MonkeySharp 的约束。
 
 ```javascript
 // @grant GM.getValue
@@ -301,6 +301,8 @@ value 使用 JSON.stringify/JSON.parse 克隆：顶层 undefined、函数、symb
 })().catch(console.error);
 ```
 
+<a id="dom-helpers"></a>
+
 ## DOM 辅助方法
 
 ### GM.addStyle(css) / GM_addStyle(css)
@@ -313,7 +315,7 @@ value 使用 JSON.stringify/JSON.parse 克隆：顶层 undefined、函数、symb
 
 attributes 是可选对象：textContent/innerHTML 设置内容，字符串 style 设置 style.cssText，已有 DOM 属性（包括函数事件处理器）直接赋值，其他字段转换成字符串后使用 setAttribute。现代返回 `Promise<Element>`，旧版立即返回 Element。非法输入和 DOM 失败会拒绝/抛出，而非返回 null。
 
-**与 Tampermonkey 的差异：**这些是普通页面 DOM 操作，不提供扩展级 CSP 绕过。省略 addElement 父节点时优先使用 body，不应假定与 [Tampermonkey 辅助方法的插入位置及错误行为](https://www.tampermonkey.net/documentation.php?q=GM_addElement)相同。
+**与 Tampermonkey 的差异：** 这些是普通页面 DOM 操作，不提供扩展级 CSP 绕过。省略 addElement 父节点时优先使用 body，不应假定与 [Tampermonkey 辅助方法的插入位置及错误行为](https://www.tampermonkey.net/documentation.php?q=GM_addElement)相同。
 
 ```javascript
 // @grant GM.addStyle
@@ -339,7 +341,7 @@ attributes 是可选对象：textContent/innerHTML 设置内容，字符串 styl
 
 前提和名称规则相同，但需要自己的授权。现代返回 `Promise<string>`，内容为 **data URL**：`data:<media-type>;base64,<bytes>`；旧版从快照立即返回该 URL。它不是原始下载地址，也不是需要 revoke 的对象 URL。不支持 isBlobUrl 参数或其他大小写别名。两种资源 API 均应用完整性检查和大小限制。
 
-**与 Tampermonkey 的差异：**Tampermonkey 的现代名称是 GM.getResourceUrl，而 MonkeySharp 只暴露 GM.getResourceURL；两者的旧版名称都是 GM_getResourceURL。必须使用 MonkeySharp 的精确拼写并按 data URL 处理，不应假定其他管理器的扩展 URL、对象 URL 或附加选项，参见[官方资源参考](https://www.tampermonkey.net/documentation.php?q=GM_getResource)。
+**与 Tampermonkey 的差异：** Tampermonkey 的现代名称是 GM.getResourceUrl，而 MonkeySharp 只暴露 GM.getResourceURL；两者的旧版名称都是 GM_getResourceURL。必须使用 MonkeySharp 的精确拼写并按 data URL 处理，不应假定其他管理器的扩展 URL、对象 URL 或附加选项，参见[官方资源参考](https://www.tampermonkey.net/documentation.php?q=GM_getResource)。
 
 请将下面片段中的 badge URL 替换为真实可访问的图片资源；示例域名不保证该路径存在 favicon。
 
@@ -422,7 +424,7 @@ attributes 是可选对象：textContent/innerHTML 设置内容，字符串 styl
 
 XHR 主体分块传输；默认宿主不设置整体请求/响应字节上限，前 256 KiB 保存在内存，之后暂存到临时文件。这独立于普通桥接消息限制。JavaScript 侧仍会在内存中组装非流式响应，大响应优先使用 stream。
 
-**与 Tampermonkey 的差异：**传输由 CefSharp/宿主实现；不支持代理和分区 Cookie 控制；DOMParser 的 XML/document 类型及 upload/signal 控制遵循 MonkeySharp 行为。redirect 模式不会自动启用 fetch；进度回调不保证逐步解码的 responseText。两者当前文档都不支持同步请求，不应将这一共同限制写成 MonkeySharp 特有差异。参见[官方 XHR 参考](https://www.tampermonkey.net/documentation.php?q=GM_xmlhttpRequest)。
+**与 Tampermonkey 的差异：** 传输由 CefSharp/宿主实现；不支持代理和分区 Cookie 控制；DOMParser 的 XML/document 类型及 upload/signal 控制遵循 MonkeySharp 行为。redirect 模式不会自动启用 fetch；进度回调不保证逐步解码的 responseText。两者当前文档都不支持同步请求，不应将这一共同限制写成 MonkeySharp 特有差异。参见[官方 XHR 参考](https://www.tampermonkey.net/documentation.php?q=GM_xmlhttpRequest)。
 
 ```javascript
 // @grant GM.xmlHttpRequest
@@ -453,7 +455,7 @@ XHR 主体分块传输；默认宿主不设置整体请求/响应字节上限，
 
 需要自己的授权及同一菜单服务。commandId 是正整数。现代返回 `Promise<boolean>`，表示宿主是否移除；旧版 GM_unregisterMenuCommand 返回本地移除布尔值，并异步请求宿主移除。未知 ID 返回 false。
 
-**与 Tampermonkey 的差异：**不支持[官方菜单 API](https://www.tampermonkey.net/documentation.php?q=GM_registerMenuCommand)中的 options 对象（id、title、autoClose、clickedFrame 等）、按 ID 更新、跨框架合并，也不会向回调传 MouseEvent/KeyboardEvent。
+**与 Tampermonkey 的差异：** 不支持[官方菜单 API](https://www.tampermonkey.net/documentation.php?q=GM_registerMenuCommand)中的 options 对象（id、title、autoClose、clickedFrame 等）、按 ID 更新、跨框架合并，也不会向回调传 MouseEvent/KeyboardEvent。
 
 ```javascript
 // @grant GM.registerMenuCommand
@@ -482,7 +484,7 @@ XHR 主体分块传输；默认宿主不设置整体请求/响应字节上限，
 
 Demo 在正数 timeout 到期或用户关闭/点击后关闭通知。它没有为 highlight 或 silent 提供单独实现，传入这些字段不保证系统高亮或声音策略。
 
-**与 Tampermonkey 的差异：**不提供 tag 替换、url 跳转或 Tampermonkey 的通知句柄/Promise 完成约定。Demo 使用 WPF 窗口，而非扩展或系统通知界面，参见[官方通知 API](https://www.tampermonkey.net/documentation.php?q=GM_notification)。
+**与 Tampermonkey 的差异：** 不提供 tag 替换、url 跳转或 Tampermonkey 的通知句柄/Promise 完成约定。Demo 使用 WPF 窗口，而非扩展或系统通知界面，参见[官方通知 API](https://www.tampermonkey.net/documentation.php?q=GM_notification)。
 
 ```javascript
 // @grant GM.notification
@@ -499,7 +501,7 @@ Demo 在正数 timeout 到期或用户关闭/点击后关闭通知。它没有�
 
 需要对应授权及剪贴板服务。text 必须是字符串，type 是可选 MIME 字符串，默认 text/plain；HTML 使用 text/html。现代返回宿主写入后的 `Promise<undefined>`，旧版返回 undefined，失败记录日志。Demo 在 UI 线程写入 Unicode 文本或 CF_HTML，并在剪贴板被占用时短暂重试。
 
-**与 Tampermonkey 的差异：**不支持 info 对象或完成回调重载；使用 MIME 字符串，不依赖官方 API 的 `"text"` 或 `"html"` 短名称。其他字符串仅透传，Core 不规范化，参见[官方剪贴板 API](https://www.tampermonkey.net/documentation.php?q=GM_setClipboard)。
+**与 Tampermonkey 的差异：** 不支持 info 对象或完成回调重载；使用 MIME 字符串，不依赖官方 API 的 `"text"` 或 `"html"` 短名称。其他字符串仅透传，Core 不规范化，参见[官方剪贴板 API](https://www.tampermonkey.net/documentation.php?q=GM_setClipboard)。
 
 ```javascript
 // @grant GM.setClipboard
@@ -580,7 +582,7 @@ Demo 在正数 timeout 到期或用户关闭/点击后关闭通知。它没有�
 
 现代返回普通 **`Promise<DownloadHandle>`，在启动后兑现**，不是完成时兑现。await 后得到 {id, abort()}；Promise 自身没有 .abort()。旧版立即返回本地句柄，id 异步可用。句柄 abort() 返回 `Promise<boolean>`，表示是否已向宿主请求/接受中止，而非下载完成结果。旧版句柄没有 ID 时可能返回 false，实际结果应通过终态回调观察。
 
-**当前现代门面的限制：**GM.download 不会注册 details 中的回调字段，它们会被忽略。现代方法只暴露启动成功/失败和中止句柄，没有供脚本使用的完成/进度通知。需要这些回调时，在 LegacyCompatible 中使用 GM_download；目前 ModernStrict 没有可观察下载完成的下载门面。
+**当前现代门面的限制：** GM.download 不会注册 details 中的回调字段，它们会被忽略。现代方法只暴露启动成功/失败和中止句柄，没有供脚本使用的完成/进度通知。需要这些回调时，在 LegacyCompatible 中使用 GM_download；目前 ModernStrict 没有可观察下载完成的下载门面。
 
 错误类别包括 not_enabled（会话失效）、not_permitted（授权）、not_whitelisted（宿主权限）、not_supported、not_succeeded 和 timeout。名称与 Tampermonkey 相似，但 not_whitelisted 不一定代表文件扩展名白名单。现代宿主/启动失败会以普通 {error, details, code} 对象拒绝，而不是带 .message 的 Error；本地校验仍可能拒绝 TypeError。旧版的启动及后续失败通过回调报告。完成/中止/失败均为终态；导航或宿主释放会取消执行实例拥有的下载。
 
@@ -642,7 +644,7 @@ const download = GM_download({
 
 旧版 CRUD 返回 undefined：GM_cookie.list(details?, callback?) 成功回调 (cookies, null)，失败回调 (null, errorString)；set(details, callback?) 和 delete(details, callback?) 成功时无参数调用，失败传 errorString。未提供错误回调时记录日志。旧版 addListener 返回同样的数字 ID；旧版 removeListener 返回 undefined，失败记录日志。
 
-**默认服务限制 / 与 Tampermonkey 的差异：**未实现 Cookie partitionKey，未知字段不保证分区选择。当前 CefSharp 写入不会将 sameSite/firstPartyDomain 应用到浏览器 Cookie，即使 Core 接受并保留字符串，set 的返回值也可能回显它们。监听器只报告经该服务完成的显式修改（cause: "explicit"），不是页面/HTTP Cookie 变更及过期事件的完整订阅。相较[官方 Cookie API](https://www.tampermonkey.net/documentation.php?q=GM_cookie)，addListener/removeListener 是 MonkeySharp 扩展，采用上述三参数回调。替换的宿主服务可以实现更多行为。
+**默认服务限制 / 与 Tampermonkey 的差异：** 未实现 Cookie partitionKey，未知字段不保证分区选择。当前 CefSharp 写入不会将 sameSite/firstPartyDomain 应用到浏览器 Cookie，即使 Core 接受并保留字符串，set 的返回值也可能回显它们。监听器只报告经该服务完成的显式修改（cause: "explicit"），不是页面/HTTP Cookie 变更及过期事件的完整订阅。相较[官方 Cookie API](https://www.tampermonkey.net/documentation.php?q=GM_cookie)，addListener/removeListener 是 MonkeySharp 扩展，采用上述三参数回调。替换的宿主服务可以实现更多行为。
 
 ```javascript
 // @grant GM.cookie
@@ -713,7 +715,7 @@ URL 变化时会观察 pushState、replaceState、popstate 和 hashchange。使�
 
 脚本中的 window 是将普通原生函数绑定到页面窗口的门面，不是隔离沙箱。现代门面在对应 window.close/window.focus 能力启用时还暴露 GM.windowClose()/GM.windowFocus() 辅助名称；同样不接收参数，返回 `Promise<boolean>`。它们**不是单独的授权名称**。
 
-**与 Tampermonkey 的差异：**这里的 unsafeWindow 不跨越扩展隔离世界；close/focus 是异步宿主决定。不应从[官方 window API](https://www.tampermonkey.net/documentation.php?q=window)推断存在原生 Event 或扩展隔离。
+**与 Tampermonkey 的差异：** 这里的 unsafeWindow 不跨越扩展隔离世界；close/focus 是异步宿主决定。不应从[官方 window API](https://www.tampermonkey.net/documentation.php?q=window)推断存在原生 Event 或扩展隔离。
 
 ```javascript
 // @grant window.onurlchange
