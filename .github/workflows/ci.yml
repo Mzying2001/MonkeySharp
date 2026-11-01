@@ -75,6 +75,19 @@ jobs:
           -Platform ${{ matrix.platform }}
           -CefSharpVersion ${{ matrix.cefSharpVersion }}
 
+      - name: Validate smoke result parser
+        if: always()
+        shell: pwsh
+        run: ./Mzying2001.MonkeySharp.CefSharp.SmokeHost/Test-SmokeResults.ps1
+
+      - name: Upload Chromium compatibility evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chromium-${{ matrix.cefSharpVersion }}-${{ matrix.platform }}
+          path: artifacts/smoke/${{ matrix.cefSharpVersion }}-${{ matrix.platform }}/
+          if-no-files-found: error
+
       - name: Run default WPF Demo Chromium smoke
         if: matrix.platform == 'x64' && matrix.cefSharpVersion == '121.3.70'
         shell: pwsh

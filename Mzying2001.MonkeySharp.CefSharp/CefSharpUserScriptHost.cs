@@ -534,6 +534,23 @@ namespace Mzying2001.MonkeySharp.CefSharp
             await session.OperationGate.WaitAsync(session.Cancellation.Token).ConfigureAwait(false);
             try
             {
+                // Older CefSharp releases can report the previous navigation's URL
+                // in OnContextCreated. Resolve the renderer's current location before
+                // matching even document-start scripts against this new document.
+                IWebBrowser browser;
+                lock (_sync) browser = _browser;
+                var refreshedFrame = browser == null ? null : GetFrameByIdentifier(browser.GetBrowser(), session.Frame.FrameId);
+                try
+                {
+                    var response = await (refreshedFrame ?? session.CefFrame).EvaluateScriptAsync(
+                        "location.href", timeout: TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+                    session.Cancellation.Token.ThrowIfCancellationRequested();
+                    if (response == null || !response.Success || !(response.Result is string location) ||
+                        !Uri.TryCreate(location, UriKind.Absolute, out var currentUrl))
+                        throw new InvalidOperationException("The current CefSharp document URL could not be resolved: " + response?.Message);
+                    session.UpdateUrl(currentUrl);
+                }
+                finally { refreshedFrame?.Dispose(); }
                 await ProcessLifecycleAsync(
                     DocumentLifecycleKind.ContextCreated,
                     session,
@@ -549,6 +566,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 if (startPlan.Invocations.Count != 0)
                     script.AppendLine().Append(BridgeScriptBuilder.BuildInjection(startPlan));
                 await ExecuteAsync(session.Frame, script.ToString(), session.Cancellation.Token).ConfigureAwait(false);
+                session.Initialized = true;
             }
             finally
             {
@@ -578,6 +596,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             await session.OperationGate.WaitAsync(session.Cancellation.Token).ConfigureAwait(false);
             try
             {
+                if (!session.Initialized) return;
                 while (session.CompletedRank < requestedRank)
                 {
                     session.CompletedRank++;
@@ -886,7 +905,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             FrameSession session;
             lock (_sync)
                 _sessions.TryGetValue(GetFrameIdentifier(cefFrame), out session);
-            if (session == null)
+            if (session == null || !session.Initialized)
                 return new ContextMenuEntry[0];
             return _engine.GetContextMenuEntriesAsync(session.Frame, CancellationToken.None)
                 .GetAwaiter().GetResult();
@@ -1098,6 +1117,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             public CancellationTokenSource Cancellation { get; } = new CancellationTokenSource();
             public SemaphoreSlim OperationGate { get; } = new SemaphoreSlim(1, 1);
             public int CompletedRank { get; set; }
+            public bool Initialized { get; set; }
 
             public void UpdateUrl(Uri url)
             {

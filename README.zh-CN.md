@@ -218,6 +218,8 @@ host.Diagnostic += (_, diagnostic) =>
 
 仓库使用 .NET SDK `9.0.315`，默认 CefSharp 版本为 `121.3.70`。CI 在 x64/x86 上覆盖 `84.4.10`、`121.3.70` 和 `151.3.240`，每个组合都会运行 .NET/JavaScript 测试及真实 Chromium SmokeHost 门禁。WPF Demo smoke 使用默认版本并仅运行 x64。
 
+每个 SmokeHost 组合还运行内嵌兼容性 userscript，覆盖同源/异源 frame、SPA URL 事件、真实 HTTP 文件下载、Chromium cookie，以及请求取消、重定向和规则移除。CI 在失败时也上传每个组合的日志和 JSON 结果；详见[兼容性门禁说明](docs/integration-reference.zh-CN.md#chromium-兼容性脚本包)。
+
 ```powershell
 dotnet restore MonkeySharp.slnx -p:Platform=x64 -p:CefSharpVersion=121.3.70
 dotnet build MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=121.3.70 --no-restore

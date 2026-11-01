@@ -216,6 +216,8 @@ Storage keys must be migrated explicitly when retaining v1 data. Custom host ser
 
 The repository uses .NET SDK `9.0.315` and defaults to CefSharp `121.3.70`. CI covers `84.4.10`, `121.3.70`, and `151.3.240` on both x64 and x86, including .NET and JavaScript tests and a real-Chromium SmokeHost gate for every combination. The WPF Demo smoke gate runs on x64 with the default version.
 
+Every SmokeHost combination also runs the embedded compatibility userscripts for same/cross-origin frames, SPA URL events, real HTTP file downloads, Chromium cookies, and request cancellation/redirect/removal. CI uploads per-combination logs and JSON results even on failure; see [compatibility gate details](docs/integration-reference.md#chromium-compatibility-script-package).
+
 ```powershell
 dotnet restore MonkeySharp.slnx -p:Platform=x64 -p:CefSharpVersion=121.3.70
 dotnet build MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=121.3.70 --no-restore

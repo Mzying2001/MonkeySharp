@@ -176,6 +176,61 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
             }
         }
 
+        [Theory]
+        [InlineData("https://old.example.test/previous", "https://example.com/current", true)]
+        [InlineData("https://example.com/previous", "https://other.example.test/current", false)]
+        public async Task ContextCreationUsesRendererLocationWhenCallbackUrlIsStale(string callbackUrl, string rendererUrl, bool injected)
+        {
+            using (var host = await CreateHostAsync(Script("none", "document-start")))
+            {
+                var browser = new BrowserFixture(url: callbackUrl);
+                browser.SetRendererLocation(Task.FromResult(new JavascriptResponse { Success = true, Result = rendererUrl }));
+                var lifecycle = new ConcurrentQueue<DocumentLifecycleEventArgs>();
+                host.DocumentLifecycle += (_, item) => lifecycle.Enqueue(item);
+                host.Attach(browser.Browser.Object);
+                browser.CreateContext();
+                await browser.WaitForScriptCountAsync(1);
+
+                Assert.All(lifecycle, item => Assert.Equal(rendererUrl, item.Frame.Url.AbsoluteUri));
+                Assert.Equal(injected, Assert.Single(browser.Scripts).Contains("runtime.install(payload)"));
+            }
+        }
+
+        [Fact]
+        public async Task FailedRendererLocationResolutionSkipsInjection()
+        {
+            using (var host = await CreateHostAsync(Script("none", "document-end")))
+            {
+                var browser = new BrowserFixture();
+                browser.SetRendererLocation(Task.FromResult(new JavascriptResponse { Success = false, Message = "context unavailable" }));
+                var diagnostic = new TaskCompletionSource<UserScriptDiagnostic>();
+                host.Diagnostic += (_, item) => { if (item.Code == "MSC101_CONTEXT_INITIALIZATION_FAILED") diagnostic.TrySetResult(item); };
+                host.Attach(browser.Browser.Object);
+                browser.CreateContext();
+                Assert.Same(diagnostic.Task, await Task.WhenAny(diagnostic.Task, Task.Delay(5000)));
+                browser.RaiseFrameLoadEnd();
+                await host.DetachAsync(CancellationToken.None);
+                Assert.Empty(browser.Scripts);
+            }
+        }
+
+        [Fact]
+        public async Task ContextReleasedDuringLocationResolutionDoesNotInjectIntoTheNextDocument()
+        {
+            using (var host = await CreateHostAsync(Script("none", "document-start")))
+            {
+                var browser = new BrowserFixture();
+                var location = new TaskCompletionSource<JavascriptResponse>();
+                browser.SetRendererLocation(location.Task);
+                host.Attach(browser.Browser.Object);
+                browser.CreateContext();
+                browser.ReleaseContext();
+                location.SetResult(new JavascriptResponse { Success = true, Result = "https://example.com/next" });
+                await host.DetachAsync(CancellationToken.None);
+                Assert.Empty(browser.Scripts);
+            }
+        }
+
         [Fact]
         public async Task LoadFallbackRunsBodyEndAndIdleOnceInOrder()
         {
@@ -765,6 +820,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
                 Frame.SetupGet(item => item.IsMain).Returns(true);
                 Frame.SetupGet(item => item.IsValid).Returns(true);
                 Frame.SetupGet(item => item.IsDisposed).Returns(false);
+                SetRendererLocation(Task.FromResult(new JavascriptResponse { Success = true, Result = url }));
                 Frame.Setup(item => item.ExecuteJavaScriptAsync(
                         It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>()))
                     .Callback<string, string, int>((script, _, __) => Scripts.Enqueue(script));
@@ -776,6 +832,16 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
             public Mock<IFrame> Frame { get; }
             public ConcurrentQueue<string> Scripts { get; } = new ConcurrentQueue<string>();
             private object BoundBridge { get; set; }
+
+            public void SetRendererLocation(Task<JavascriptResponse> response)
+            {
+                Frame.Setup(item => item.EvaluateScriptAsync(
+                    "location.href", It.IsAny<string>(), It.IsAny<int>(), It.IsAny<TimeSpan?>()
+#if !CEF_SHARP_LEGACY_EVALUATION
+                    , false
+#endif
+                    )).Returns(response);
+            }
 
             public Task<string> DispatchFromPageAsync(string requestJson)
             {

@@ -402,3 +402,4 @@ FodyWeavers.xsd
 
 # Chromium smoke cache created in the repository root by CefSharp.
 /GPUCache/
+/Mzying2001.MonkeySharp.CefSharp.SmokeHost/GPUCache/
