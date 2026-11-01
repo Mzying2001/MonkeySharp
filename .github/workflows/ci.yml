@@ -39,7 +39,8 @@ jobs:
 
       - name: Pack Core
         if: matrix.platform == 'x64' && matrix.cefSharpVersion == '121.3.70'
-        run: dotnet pack Mzying2001.MonkeySharp.Core/Mzying2001.MonkeySharp.Core.csproj -c Release -p:Platform=${{ matrix.platform }} -p:CefSharpVersion=${{ matrix.cefSharpVersion }} --no-build -o artifacts/packages/core --nologo
+        # The solution builds Core as AnyCPU, independently of the matrix platform.
+        run: dotnet pack Mzying2001.MonkeySharp.Core/Mzying2001.MonkeySharp.Core.csproj -c Release -p:Platform=AnyCPU -p:CefSharpVersion=${{ matrix.cefSharpVersion }} --no-build -o artifacts/packages/core --nologo
 
       - name: Pack CefSharp adapter
         if: matrix.platform == 'x64' && matrix.cefSharpVersion == '121.3.70'
