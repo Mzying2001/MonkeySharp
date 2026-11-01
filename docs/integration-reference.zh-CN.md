@@ -26,7 +26,7 @@ CI 针对 x64 和 x86 验证 `84.4.10`、`121.3.70`、`151.3.240`。每个矩阵
 | Profile | 包装器与 API 暴露行为 |
 | --- | --- |
 | `LegacyCompatible`（默认） | 非严格包装器；顶层 `this` 为 window facade。公开现代 API 和已启用的 `GM_*` 别名，并提供有界的同步存储与资源快照。 |
-| `ModernStrict` | 严格包装器；顶层 `this` 为 `undefined`。仅公开现代 API 名称，不提供旧式全局对象。各 API 仍遵循自身返回契约：`GM.addValueChangeListener` 返回数字 ID，`GM.openInTab` 和 `GM.webRequest` 立即返回句柄。 |
+| `ModernStrict` | 严格包装器；顶层 `this` 为 `undefined`。公开现代 API 名称和默认可用的 `GM_info` 属性，其他旧式全局绑定被禁用。各 API 仍遵循自身返回契约：`GM.addValueChangeListener` 返回数字 ID，`GM.openInTab` 和 `GM.webRequest` 立即返回句柄。 |
 
 宿主选择执行期配置，仓库解析器选择元数据配置，因此两处应使用同一个 profile。下面的示例为可信页面和脚本配置宿主：
 
@@ -53,9 +53,9 @@ var host = new CefSharpUserScriptHostBuilder(repository)
     .Build();
 ```
 
-`TrustedPageWorld` 独立于兼容性 profile，默认为 `false`。未显式启用时，声明了 `none` 以外显式授权的脚本会被抑制，并产生 `MSR201_BRIDGE_INTEGRITY_REQUIRED`，`ModernStrict` 也不例外。可信模式下，需要桥接的执行会产生 `MSR200_UNVERIFIED_BRIDGE`；严格包装器语义不会创建隔离 JavaScript 世界。详见 [README 安全模型](../README.zh-CN.md#安全模型)。
+`TrustedPageWorld` 独立于兼容性 profile，默认为 `false`。未显式启用时，声明了 `none` 或 info（`GM.info` / `GM_info`）以外显式授权的脚本会被抑制，并产生 `MSR201_BRIDGE_INTEGRITY_REQUIRED`，`ModernStrict` 也不例外。仅使用 info 的脚本会跳过桥接绑定和 hello 握手。可信模式下，需要桥接的执行会产生 `MSR200_UNVERIFIED_BRIDGE`；严格包装器语义不会创建隔离 JavaScript 世界。详见 [README 安全模型](../README.zh-CN.md#安全模型)。
 
-宿主可通过 `ExposeLegacyGlobals`、`EnableSynchronousStorageMirror` 和 `EnableSynchronousResourceSnapshot` 分别禁用旧式全局对象、存储镜像或资源快照。快照准备失败、不完整或超限时，对应的同步别名不可用，现代方法仍可使用桥接。快照限制及降级诊断见[生命周期与诊断](#生命周期与诊断)。
+宿主可通过 `ExposeLegacyGlobals`、`EnableSynchronousStorageMirror` 和 `EnableSynchronousResourceSnapshot` 分别禁用 `GM_info` 以外的旧式全局绑定、存储镜像或资源快照。快照准备失败、不完整或超限时，对应的同步别名不可用，现代方法仍可使用桥接。快照限制及降级诊断见[生命周期与诊断](#生命周期与诊断)。
 
 ## 资源完整性与更新检查
 
@@ -178,7 +178,7 @@ JavaScript 下载契约与宿主操作契约不同：`GM.download` 返回的 `Pr
 
 适配器为每个框架文档建立身份，并对每个 `(document, frame, script, run-at)` 组合执行一次。`@run-at context-menu` 脚本会按当前 frame 匹配规则出现在 CefSharp 原生上下文菜单中，只有用户选择菜单项后才创建一次新的执行。导航、上下文释放、分离和宿主释放都会使能力失效并取消待处理工作。
 
-授权状态具有语义差异：缺少 `@grant` 时不会公开 `GM` 门面；显式 `@grant none` 时只公开 `GM.info`，以及在启用旧式全局对象时公开 `GM_info`。`ModernStrict` 中 `GM_info` 不可用。两个名称同时可用时，引用同一个深度冻结快照，包含规范化元数据、授权、URL 规则、资源、更新状态、handler、sandbox 模式和原始元数据文本。版本化的 `compatibility` 块使用 `contractVersion: 1` 标出固定值、元数据来源、混合来源和扩展字段，并明确 page world 执行边界。
+`GM.info` 和 `GM_info` 无需授权，两个兼容模式下都默认可用，且不受 `ExposeLegacyGlobals` 限制。缺少 `@grant` 和显式 `@grant none` 时只提供 info；显式授权列表会在逐项授权的能力之外默认提供 info。授权目录仍支持显式声明 `GM.info` 和 `GM_info`，旧版别名解析仍遵守配置。原始声明状态和授权列表保持不变，不会向元数据添加隐式 info 授权。两个名称引用同一个深度冻结快照，包含元数据、授权、URL 规则、资源、更新状态、handler、sandbox 模式和原始元数据文本。版本化的 `compatibility` 块使用 `contractVersion: 1` 标出固定值、元数据来源、混合来源和扩展字段，并明确 page world 执行边界。
 
 CefSharp 只能提供尽力而为的 document-start 钩子。相应执行产生 `MSR100_DOCUMENT_START_BEST_EFFORT`；设置 `RequireGuaranteedDocumentStart = true` 后会跳过并产生 `MSR101_DOCUMENT_START_UNAVAILABLE`。
 
@@ -211,7 +211,7 @@ CefSharp 只能提供尽力而为的 document-start 钩子。相应执行产生 
 
 通知、标签页和下载服务分别返回[宿主服务契约](#宿主服务契约)中列出的生命周期句柄。`ITabStateService` 只接受 JSON 对象。`UseCookieService` 和 `UseWebRequestService` 用于替换默认服务；省略调用时仍启用默认实现。设置 `EnableDefaultNetworkServices = false` 可禁用内置网络服务，再显式注入宿主所需能力的服务。存在活动的 web request 服务时，须按前文说明组合请求处理器。
 
-旧版一次性传输的 `GM_xmlhttpRequest` 请求和结果现在改为 `create`、`appendBody`、`execute`、`readBody`、`abort`、`release` 生命周期会话。旧版 `ForceUseStrict`/`with(window)` 执行方式改为带有显式 `GM`、`unsafeWindow` 和 `window` 参数的 `Function` 作用域。`LegacyCompatible` 使用非严格包装器，顶层 `this` 为 window facade；`ModernStrict` 使用严格包装器，顶层 `this` 为 `undefined`。
+旧版一次性传输的 `GM_xmlhttpRequest` 请求和结果现在改为 `create`、`appendBody`、`execute`、`readBody`、`abort`、`release` 生命周期会话。旧版 `ForceUseStrict`/`with(window)` 执行方式改为带有显式 `GM`、`GM_info`、`unsafeWindow` 和 `window` 参数的 `Function` 作用域。`LegacyCompatible` 使用非严格包装器，顶层 `this` 为 window facade；`ModernStrict` 使用严格包装器，顶层 `this` 为 `undefined`。
 
 默认配置已经内置兼容层，不存在单独的传输或 WCF 包。需要保留 v1 数据时必须显式迁移存储键。选择 `ModernStrict` 的应用应把元数据授权更新为规范 `GM.*` 名称。
 

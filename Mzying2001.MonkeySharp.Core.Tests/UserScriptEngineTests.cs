@@ -265,8 +265,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                     "// @description details\n// @author author\n// @match https://example.com/*\n" +
                     "// @grant GM.info\n// @connect api.example.com\n// @resource icon https://example.com/icon.png\n// @run-at document-end"),
                 "origin", true, CancellationToken.None);
-            using (var engine = new UserScriptEngine(repository,
-                options: new UserScriptEngineOptions { RequireVerifiedBridge = false }))
+            using (var engine = new UserScriptEngine(repository))
             {
                 var plan = await engine.ProcessLifecycleAsync(
                     new DocumentLifecycleEventArgs(DocumentLifecycleKind.DomContentLoaded, Frame("info", true)),
@@ -312,6 +311,56 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 Assert.Single(plan.Invocations);
                 Assert.Contains(diagnostics, item => item.Code == "MSR212_UNSUPPORTED_SANDBOX");
                 Assert.Contains(diagnostics, item => item.Code == "MSR213_UNSUPPORTED_UNWRAP");
+            }
+        }
+
+        [Theory]
+        [InlineData("", false)]
+        [InlineData("// @grant none\n", false)]
+        [InlineData("// @grant GM.info\n", false)]
+        [InlineData("// @grant GM_info\n", false)]
+        [InlineData("// @grant GM.info\n// @grant GM_info\n", false)]
+        [InlineData("// @grant GM.getValue\n", true)]
+        [InlineData("// @grant GM.info\n// @grant GM.getValue\n", true)]
+        [InlineData("// @grant GM_info\n// @grant GM.getValue\n", true)]
+        public async Task DefaultBridgePolicyAllowsInfoButStillSuppressesPrivilegedGrants(
+            string grantLines, bool requiresBridge)
+        {
+            var repository = new InMemoryUserScriptRepository();
+            var installation = await repository.InstallAsync(
+                MetadataAndMatchingTests.Script(
+                    "// @name info policy\n// @match https://example.com/*\n" + grantLines +
+                    "// @run-at document-end"), "test", true, CancellationToken.None);
+            foreach (var profile in new[]
+            {
+                UserScriptCompatibilityProfile.LegacyCompatible,
+                UserScriptCompatibilityProfile.ModernStrict
+            })
+            {
+                using (var engine = new UserScriptEngine(repository, options: new UserScriptEngineOptions
+                {
+                    Compatibility = new UserScriptCompatibilityOptions { Profile = profile }
+                }))
+                {
+                    var diagnostics = new List<UserScriptDiagnostic>();
+                    engine.Diagnostic += (_, item) => diagnostics.Add(item);
+                    var plan = await engine.ProcessLifecycleAsync(
+                        new DocumentLifecycleEventArgs(DocumentLifecycleKind.DomContentLoaded, Frame("info-policy", true)),
+                        CancellationToken.None);
+                    if (requiresBridge)
+                    {
+                        Assert.Empty(plan.Invocations);
+                        Assert.Contains(diagnostics, item => item.Code == "MSR201_BRIDGE_INTEGRITY_REQUIRED");
+                    }
+                    else
+                    {
+                        var invocation = Assert.Single(plan.Invocations);
+                        Assert.Equal(installation.Definition.Metadata.DeclaredGrants, invocation.DeclaredGrants);
+                        Assert.Equal(installation.Definition.Metadata.Grants, invocation.Grants);
+                        Assert.Equal(installation.Definition.Metadata.GrantDeclarationState, invocation.GrantDeclarationState);
+                        Assert.DoesNotContain(diagnostics, item => item.Code == "MSR201_BRIDGE_INTEGRITY_REQUIRED");
+                    }
+                }
             }
         }
 

@@ -8,7 +8,7 @@ namespace Mzying2001.MonkeySharp.Core.Compatibility
         /// <summary>Provides legacy globals and non-strict wrapper semantics.</summary>
         LegacyCompatible,
 
-        /// <summary>Provides only the modern Promise facade and strict wrapper semantics.</summary>
+        /// <summary>Provides the modern facade, the always-available GM_info property, and strict wrapper semantics.</summary>
         ModernStrict
     }
 
@@ -22,7 +22,7 @@ namespace Mzying2001.MonkeySharp.Core.Compatibility
         /// <summary>Gets or sets whether legacy grant names are accepted by metadata parsing.</summary>
         public bool AcceptLegacyGrantAliases { get; set; } = true;
 
-        /// <summary>Gets or sets whether legacy globals may be exposed in the legacy profile.</summary>
+        /// <summary>Gets or sets whether legacy globals other than GM_info may be exposed in the legacy profile.</summary>
         public bool ExposeLegacyGlobals { get; set; } = true;
 
         /// <summary>Gets or sets whether the execution bootstrap may provide a synchronous storage mirror.</summary>
@@ -34,7 +34,7 @@ namespace Mzying2001.MonkeySharp.Core.Compatibility
         /// <summary>Gets whether the selected profile requires a strict JavaScript wrapper.</summary>
         public bool Strict => Profile == UserScriptCompatibilityProfile.ModernStrict;
 
-        /// <summary>Gets whether legacy globals are active for the selected profile.</summary>
+        /// <summary>Gets whether legacy globals other than GM_info are active for the selected profile.</summary>
         public bool LegacyGlobalsEnabled =>
             Profile == UserScriptCompatibilityProfile.LegacyCompatible && ExposeLegacyGlobals;
     }

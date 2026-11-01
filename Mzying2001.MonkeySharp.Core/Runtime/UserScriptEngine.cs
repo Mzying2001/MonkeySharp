@@ -668,7 +668,8 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
         private static bool RequiresBridge(UserScriptMetadata metadata)
         {
             return metadata.GrantDeclarationState == GrantDeclarationState.ExplicitList &&
-                metadata.Grants.Any(item => !string.Equals(item, "none", StringComparison.Ordinal));
+                metadata.Grants.Any(item => !string.Equals(item, "none", StringComparison.Ordinal) &&
+                    !string.Equals(item, "GM.info", StringComparison.Ordinal));
         }
 
         private static UserScriptRunAt ToRunAt(DocumentLifecycleKind kind)

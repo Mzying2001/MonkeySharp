@@ -91,7 +91,7 @@ host.Attach(browser);
 
 CefSharp's public APIs execute bootstrap code in the page's main world, so MonkeySharp reports this bridge as `Unverified`.
 
-- The default policy runs scripts with no explicit API grants. A script with no `@grant` receives no `GM` facade; an explicit `@grant none` script receives only `GM.info`/`GM_info`. Scripts with any other explicit grants are suppressed unless the application opts into `TrustedPageWorld`.
+- The default policy runs scripts with no explicit API grants, `@grant none`, or only info grants. `GM.info` and `GM_info` are always available in both compatibility profiles, even when legacy globals are disabled. Scripts with explicit grants other than `none` or info are suppressed unless the application opts into `TrustedPageWorld`.
 - `TrustedPageWorld` enables explicitly granted APIs only when the application trusts both the page and installed scripts.
 - Per-execution capabilities prevent unrelated callers from impersonating an installation, but they are not an extension-style isolation boundary. Hostile page code can intercept a capability and invoke APIs granted to that script.
 - Installed userscripts are trusted code. Applications need their own review, signature, or trust policy for unknown sources.
@@ -129,13 +129,13 @@ The Demo's script manager can manually check for and install an update. `@update
 
 ## GM API Support
 
-Canonical `GM.*` APIs and legacy aliases are exposed only when the exact grant and required host provider are present.
+`GM.info` and `GM_info` need no grant or bridge. Other canonical `GM.*` APIs and legacy aliases are exposed only when the exact grant and required host provider are present.
 
 MonkeySharp publishes four compatibility states for each capability: **Core implemented**, **host service required**, **intentional degradation or unsupported**, and **behavior differs from Tampermonkey**. This is a CefSharp userscript runtime with an authenticated page-world bridge, not a complete Tampermonkey replacement. Scripts execute in the page world inside the MonkeySharp wrapper; `@sandbox`, `@unwrap`, `@run-in`, and non-page `@inject-into` declarations do not create an isolated world. `unsafeWindow` therefore does not provide an extension-style security boundary.
 
 | API | Availability | Notes |
 | --- | --- | --- |
-| `GM.info` / `GM_info` | Core | Frozen installation information. |
+| `GM.info` / `GM_info` | Core | Same frozen installation information; always available without a grant or bridge. |
 | `GM.log` / `GM_log` | Core | Delivered to the builder's logging callback. |
 | `GM.getValue`, `GM.setValue`, `GM.deleteValue`, `GM.listValues` and aliases | Core | JSON storage isolated by stable `ScriptKey`. |
 | `GM.addValueChangeListener`, `GM.removeValueChangeListener` and aliases | Core | Notifications for active executions of the same installation. |
@@ -152,7 +152,7 @@ MonkeySharp publishes four compatibility states for each capability: **Core impl
 | `window.onurlchange` | Core | Requires the exact grant; observes `pushState`, `replaceState`, `popstate`, and `hashchange` URL changes. |
 | `unsafeWindow` | Trusted page world only | Exposed only for its exact grant. |
 
-Modern storage and resource reads return Promises; their legacy aliases use bounded synchronous bootstrap snapshots. Legacy callback APIs return their handle or ID immediately and report callback failures as diagnostics. Missing `@grant` exposes no `GM` facade, while explicit `@grant none` exposes only `GM.info`/`GM_info`. Static `@webRequest` metadata is reported through `GM.info` and is not automatically installed; use `GM.webRequest(...)` for active rules.
+Modern storage and resource reads return Promises; their legacy aliases use bounded synchronous bootstrap snapshots. Legacy callback APIs return their handle or ID immediately and report callback failures as diagnostics. Both missing `@grant` and explicit `@grant none` expose only `GM.info`/`GM_info`; explicit grant lists also include info automatically. Static `@webRequest` metadata is reported through `GM.info` and is not automatically installed; use `GM.webRequest(...)` for active rules.
 
 If a declared API has no provider, it is normally absent and direct bridge calls return `MSP006_NOT_SUPPORTED`. Undeclared methods return `MSP004_GRANT_DENIED`. `UseWindowService` is required for `window.close` and `window.focus`; without it those properties remain unavailable even when granted. Detailed XHR, Cookie, and webRequest behavior is documented in the [network API reference](docs/integration-reference.md#network-apis).
 

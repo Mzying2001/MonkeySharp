@@ -252,7 +252,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             }
 
             var grants = execution.Installation.Definition.Metadata.Grants;
-            var supported = SupportedApis().Where(grants.Contains);
+            var supported = SupportedApis().Where(api => api == "GM.info" || grants.Contains(api));
             var compatibility = new Dictionary<string, object>
             {
                 ["profile"] = execution.Invocation.Compatibility.Profile.ToString(),

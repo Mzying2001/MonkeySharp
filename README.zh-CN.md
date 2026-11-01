@@ -93,7 +93,7 @@ host.Attach(browser);
 
 CefSharp 公开 API 会在页面主世界执行引导代码，因此 MonkeySharp 将该桥接报告为 `Unverified`。
 
-- 默认策略执行没有显式 API 授权的脚本。缺少 `@grant` 的脚本不会获得 `GM` 门面；显式声明 `@grant none` 的脚本只获得 `GM.info`/`GM_info`。其他显式授权的脚本必须在应用选择 `TrustedPageWorld` 后才会执行。
+- 默认策略执行没有显式 API 授权、声明 `@grant none` 或仅声明 info 授权的脚本。`GM.info` 和 `GM_info` 在两个兼容模式下始终可用，关闭旧版全局绑定时也不例外。带有 `none` 或 info 以外显式授权的脚本，必须在应用选择 `TrustedPageWorld` 后才会执行。
 - 只有应用程序同时信任页面和已安装脚本时，才应通过 `TrustedPageWorld` 启用显式授权的 API。
 - 每次执行的能力令牌能防止无关调用者冒充安装实例，但不是浏览器扩展式隔离边界。恶意页面代码可以截获令牌并调用已授予脚本的 API。
 - 已安装用户脚本属于可信代码；未知来源需要应用层审核、签名或信任策略。
@@ -131,13 +131,13 @@ Demo 脚本管理器支持手动检查并安装更新。检查源优先使用 `@
 
 ## GM API 支持
 
-只有脚本声明了精确授权且宿主存在所需提供程序时，才会公开规范 `GM.*` API 和旧式别名。
+`GM.info` 和 `GM_info` 无需授权或桥接。其他规范 `GM.*` API 和旧式别名，只有在脚本声明了精确授权且宿主存在所需提供程序时才会公开。
 
 MonkeySharp 为能力提供四种兼容性状态：**Core 已实现**、**需要宿主 service**、**有意降级/不支持**、**与 Tampermonkey 存在行为差异**。这是基于 CefSharp、带认证页面世界桥接的 userscript runtime，并不等同于完整 Tampermonkey 替代品。脚本在页面世界的 MonkeySharp wrapper 中执行；`@sandbox`、`@unwrap`、`@run-in` 和非 page 的 `@inject-into` 不会创建隔离世界，因此 `unsafeWindow` 不能作为扩展式安全边界。
 
 | API | 可用性 | 说明 |
 | --- | --- | --- |
-| `GM.info` / `GM_info` | Core | 不可变的安装信息。 |
+| `GM.info` / `GM_info` | Core | 共用不可变的安装信息，无需授权或桥接，默认可用。 |
 | `GM.log` / `GM_log` | Core | 传递给 builder 的日志回调。 |
 | `GM.getValue`、`GM.setValue`、`GM.deleteValue`、`GM.listValues` 及别名 | Core | 按稳定 `ScriptKey` 隔离的 JSON 存储。 |
 | `GM.addValueChangeListener`、`GM.removeValueChangeListener` 及别名 | Core | 通知同一安装实例的活动执行。 |
@@ -154,7 +154,7 @@ MonkeySharp 为能力提供四种兼容性状态：**Core 已实现**、**需要
 | `window.onurlchange` | Core | 需要精确授权；监听 `pushState`、`replaceState`、`popstate` 和 `hashchange` URL 变化。 |
 | `unsafeWindow` | 仅可信页面世界 | 仅在精确授权时公开。 |
 
-现代存储和资源读取返回 Promise；旧式别名使用有界的同步引导快照。旧式回调 API 会立即返回句柄或 ID，并将回调故障报告为诊断。缺少 `@grant` 时不会公开 `GM` 门面，显式 `@grant none` 时只公开 `GM.info`/`GM_info`。静态 `@webRequest` 只通过 `GM.info` 报告，不会自动安装；需要活动规则时请调用 `GM.webRequest(...)`。
+现代存储和资源读取返回 Promise；旧式别名使用有界的同步引导快照。旧式回调 API 会立即返回句柄或 ID，并将回调故障报告为诊断。缺少 `@grant` 和显式 `@grant none` 时都只公开 `GM.info`/`GM_info`；显式授权列表也会默认提供 info。静态 `@webRequest` 只通过 `GM.info` 报告，不会自动安装；需要活动规则时请调用 `GM.webRequest(...)`。
 
 缺少提供程序时，已声明 API 通常不会公开，直接桥接调用返回 `MSP006_NOT_SUPPORTED`；未声明的方法返回 `MSP004_GRANT_DENIED`。`window.close` 和 `window.focus` 需要通过 `UseWindowService` 注册服务；即使已授权，未注册时对应属性仍不可用。XHR、Cookie 和 webRequest 的详细行为见[网络 API 参考](docs/integration-reference.zh-CN.md#网络-api)。
 

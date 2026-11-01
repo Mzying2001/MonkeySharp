@@ -26,7 +26,7 @@ CI verifies `84.4.10`, `121.3.70`, and `151.3.240` for both x64 and x86. Every m
 | Profile | Wrapper and API exposure |
 | --- | --- |
 | `LegacyCompatible` (default) | Non-strict wrapper; top-level `this` is the window facade. Exposes modern APIs and enabled `GM_*` aliases, with bounded synchronous storage and resource snapshots. |
-| `ModernStrict` | Strict wrapper; top-level `this` is `undefined`. Exposes modern API names without legacy globals. Individual return contracts still apply: `GM.addValueChangeListener` returns a numeric ID, while `GM.openInTab` and `GM.webRequest` return handles immediately. |
+| `ModernStrict` | Strict wrapper; top-level `this` is `undefined`. Exposes modern API names and the always-available `GM_info` property; other legacy globals are disabled. Individual return contracts still apply: `GM.addValueChangeListener` returns a numeric ID, while `GM.openInTab` and `GM.webRequest` return handles immediately. |
 
 Execution compatibility is selected by the host. Metadata compatibility is selected when the repository parser is created, so use the same profile for both. This example configures a host for trusted pages and scripts:
 
@@ -53,9 +53,9 @@ var host = new CefSharpUserScriptHostBuilder(repository)
     .Build();
 ```
 
-`TrustedPageWorld` is independent of the compatibility profile and defaults to `false`. Without this opt-in, scripts with explicit grants other than `none` are suppressed with `MSR201_BRIDGE_INTEGRITY_REQUIRED`, including in `ModernStrict`. Trusted-mode executions that require the bridge emit `MSR200_UNVERIFIED_BRIDGE`; strict wrapper semantics do not create an isolated JavaScript world. See the [README security model](../README.md#security-model).
+`TrustedPageWorld` is independent of the compatibility profile and defaults to `false`. Without this opt-in, scripts with explicit grants other than `none` or info (`GM.info` / `GM_info`) are suppressed with `MSR201_BRIDGE_INTEGRITY_REQUIRED`, including in `ModernStrict`. Info-only scripts skip bridge binding and the hello handshake. Trusted-mode executions that require the bridge emit `MSR200_UNVERIFIED_BRIDGE`; strict wrapper semantics do not create an isolated JavaScript world. See the [README security model](../README.md#security-model).
 
-Hosts can independently disable legacy globals, storage mirrors, or resource snapshots through `ExposeLegacyGlobals`, `EnableSynchronousStorageMirror`, and `EnableSynchronousResourceSnapshot`. A failed, incomplete, or oversized snapshot leaves the corresponding synchronous aliases unavailable; modern methods can still use the bridge. Snapshot limits and degradation diagnostics are listed under [Lifecycle and Diagnostics](#lifecycle-and-diagnostics).
+Hosts can independently disable legacy globals other than `GM_info`, storage mirrors, or resource snapshots through `ExposeLegacyGlobals`, `EnableSynchronousStorageMirror`, and `EnableSynchronousResourceSnapshot`. A failed, incomplete, or oversized snapshot leaves the corresponding synchronous aliases unavailable; modern methods can still use the bridge. Snapshot limits and degradation diagnostics are listed under [Lifecycle and Diagnostics](#lifecycle-and-diagnostics).
 
 ## Resource Integrity and Update Checks
 
@@ -178,7 +178,7 @@ The JavaScript download contract differs from the host operation contract: `GM.d
 
 The adapter creates an identity per frame document and executes each `(document, frame, script, run-at)` once. `@run-at context-menu` scripts are listed by the native CefSharp context menu for the matching frame and execute a fresh invocation only after the user selects an entry. Navigation, context release, detach, and disposal invalidate capabilities and cancel pending work.
 
-Grant state is significant: a missing `@grant` declaration exposes no `GM` facade, while explicit `@grant none` exposes only `GM.info` and, when legacy globals are enabled, `GM_info`. In `ModernStrict`, `GM_info` is unavailable. When both names are exposed, they reference the same deep-frozen snapshot of normalized metadata, grants, URL rules, resources, update state, handler, sandbox mode, and raw metadata text. Its versioned `compatibility` block has `contractVersion: 1` and identifies fixed, metadata-derived, mixed, and extension-owned fields, including the page-world execution boundary.
+`GM.info` and `GM_info` are always available without a grant, in both compatibility profiles and regardless of `ExposeLegacyGlobals`. Missing `@grant` and explicit `@grant none` expose only info; explicit grant lists include info alongside their individually granted capabilities. Explicit `GM.info` and `GM_info` declarations remain accepted by the grant catalog (legacy alias parsing still follows its configured option). The original declaration state and grant lists are preserved; no implicit info grant is added to metadata. Both names reference the same deep-frozen snapshot of metadata, grants, URL rules, resources, update state, handler, sandbox mode, and raw metadata text. Its versioned `compatibility` block has `contractVersion: 1` and identifies fixed, metadata-derived, mixed, and extension-owned fields, including the page-world execution boundary.
 
 CefSharp exposes only best-effort document-start hooks. Selected document-start executions emit `MSR100_DOCUMENT_START_BEST_EFFORT`. Set `RequireGuaranteedDocumentStart = true` to skip them with `MSR101_DOCUMENT_START_UNAVAILABLE`.
 
@@ -211,7 +211,7 @@ Version 3 host service contracts are source-breaking. `IHttpRequestService.SendA
 
 Notification, tab, and download services return the distinct lifecycle handles listed under [Host Service Contracts](#host-service-contracts). `ITabStateService` accepts JSON objects only. `UseCookieService` and `UseWebRequestService` override default services; omitting these calls keeps the defaults enabled. Set `EnableDefaultNetworkServices = false` to omit the built-in network services, and supply explicit services for the capabilities the host needs. An active web request service requires the request-handler composition described above.
 
-The former one-shot `GM_xmlhttpRequest` payload/result is now a `create`, `appendBody`, `execute`, `readBody`, `abort`, and `release` lifecycle session. The former `ForceUseStrict`/`with(window)` execution is replaced by a `Function` scope with explicit `GM`, `unsafeWindow`, and `window` parameters. `LegacyCompatible` uses a non-strict wrapper with the window facade as top-level `this`; `ModernStrict` uses a strict wrapper with top-level `this` set to `undefined`.
+The former one-shot `GM_xmlhttpRequest` payload/result is now a `create`, `appendBody`, `execute`, `readBody`, `abort`, and `release` lifecycle session. The former `ForceUseStrict`/`with(window)` execution is replaced by a `Function` scope with explicit `GM`, `GM_info`, `unsafeWindow`, and `window` parameters. `LegacyCompatible` uses a non-strict wrapper with the window facade as top-level `this`; `ModernStrict` uses a strict wrapper with top-level `this` set to `undefined`.
 
 Compatibility is built into the default profile; there is no separate transport or WCF package. Migrate storage keys explicitly if v1 data must be retained. Applications choosing `ModernStrict` should update metadata grants to canonical `GM.*` names.
 

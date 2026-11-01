@@ -404,13 +404,9 @@
 
             const createApi = function (record, invocation, availableApis) {
                 const grants = new Set(invocation.grants);
-                const enabled = name =>
-                    (grants.has(name) || (name === "GM.info" && invocation.grantDeclarationState === "ExplicitNone")) &&
-                    availableApis.has(name);
+                const enabled = name => grants.has(name) && availableApis.has(name);
                 const api = {};
-                if (enabled("GM.info")) {
-                    Object.defineProperty(api, "info", { value: deepFreeze(invocation.info), enumerable: true });
-                }
+                Object.defineProperty(api, "info", { value: deepFreeze(invocation.info), enumerable: true });
                 if (enabled("GM.log")) api.log = async value => call(record, "GM.log", { value: serializableValue(value) });
                 if (enabled("GM.getValue")) {
                     api.getValue = async function (key, defaultValue) {
@@ -1091,7 +1087,7 @@
             };
 
             const legacyNames = [
-                "GM_info", "GM_log", "GM_getValue", "GM_setValue", "GM_deleteValue", "GM_listValues",
+                "GM_log", "GM_getValue", "GM_setValue", "GM_deleteValue", "GM_listValues",
                 "GM_addValueChangeListener", "GM_removeValueChangeListener", "GM_addStyle", "GM_addElement",
                 "GM_getResourceText", "GM_getResourceURL", "GM_xmlhttpRequest", "GM_registerMenuCommand",
                 "GM_unregisterMenuCommand", "GM_notification", "GM_setClipboard", "GM_openInTab",
@@ -1102,7 +1098,6 @@
             const createLegacyFacade = function (record, invocation, api) {
                 const facade = {};
                 if (!invocation.compatibility || !invocation.compatibility.legacyGlobals || !api) return facade;
-                if (api.info) facade.GM_info = api.info;
                 if (api.log) {
                     facade.GM_log = function (value) {
                         if (root.console && typeof root.console.log === "function") root.console.log(value);
@@ -1363,7 +1358,11 @@
                 return facade;
             };
 
-            const runInvocation = async function (plan, invocation, dispatch) {
+            const runInvocation = async function (plan, invocation, getDispatch) {
+                const grantState = invocation.grantDeclarationState || "ExplicitList";
+                const requiresBridge = grantState === "ExplicitList" &&
+                    invocation.grants.some(name => name !== "none" && name !== "GM.info");
+                const dispatch = requiresBridge ? await getDispatch() : null;
                 const proof = createProof(plan, invocation);
                 const record = {
                     proof: proof,
@@ -1388,11 +1387,7 @@
                 };
                 executions.set(invocation.executionId, record);
                 let availableApis = new Set();
-                const grantState = invocation.grantDeclarationState ||
-                    (invocation.grants.length === 1 && invocation.grants[0] === "none" ? "ExplicitNone" : "ExplicitList");
-                const noGrant = grantState === "Missing";
-                const explicitNone = grantState === "ExplicitNone";
-                if (!noGrant && !explicitNone) {
+                if (requiresBridge) {
                     if (!dispatch) throw new Error("MonkeySharp bridge is unavailable.");
                     const hello = await send(dispatch, Object.assign({ type: "hello" }, proof));
                     if (hello.type !== "hello-result" || !hello.ok) {
@@ -1409,15 +1404,14 @@
                         record.resourceMirror = Object.assign({}, hello.compatibility.resources.values);
                     }
                 }
-                if (explicitNone) availableApis = new Set(["GM.info"]);
-                const gm = noGrant ? undefined : createApi(record, invocation, availableApis);
-                record.windowFacade = createWindowFacade(record, invocation, gm || {});
+                const gm = createApi(record, invocation, availableApis);
+                record.windowFacade = createWindowFacade(record, invocation, gm);
                 const compatibility = invocation.compatibility || { strict: true, legacyGlobals: false };
                 const legacy = createLegacyFacade(record, Object.assign({}, invocation, { compatibility: compatibility }), gm);
                 const unsafeWindow = invocation.grants.includes("unsafeWindow") ? root : undefined;
                 try {
-                    const names = ["GM", "unsafeWindow", "window"].concat(legacyNames);
-                    const values = [gm, unsafeWindow, record.windowFacade].concat(legacyNames.map(name => legacy[name]));
+                    const names = ["GM", "GM_info", "unsafeWindow", "window"].concat(legacyNames);
+                    const values = [gm, gm.info, unsafeWindow, record.windowFacade].concat(legacyNames.map(name => legacy[name]));
                     const prefix = compatibility.strict ? "\"use strict\";\n" : "";
                     const execute = new Function(...names, prefix + invocation.source);
                     await execute.call(compatibility.strict ? undefined : record.windowFacade, ...values);
@@ -1436,9 +1430,10 @@
                 if (!plan || plan.protocol !== 1 || !Array.isArray(plan.invocations)) {
                     throw new Error("MonkeySharp received an invalid injection plan.");
                 }
-                const dispatch = await resolveDispatch();
+                let dispatchPromise;
+                const getDispatch = () => dispatchPromise || (dispatchPromise = resolveDispatch());
                 for (const invocation of plan.invocations) {
-                    await runInvocation(plan, invocation, dispatch).catch(error => console.error("[MonkeySharp]", error));
+                    await runInvocation(plan, invocation, getDispatch).catch(error => console.error("[MonkeySharp]", error));
                 }
             };
 

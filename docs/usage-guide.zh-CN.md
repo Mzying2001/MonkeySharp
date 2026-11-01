@@ -107,7 +107,7 @@
 | `@exclude`、`@exclude-match` | 分别使用通配符/正则和 match 模式进行排除。任何排除规则都优先于正向规则。非法 match 模式和正则是元数据错误。 |
 | `@run-at value` | `document-start`、`document-body`、`document-end`、`document-idle`（默认）或 `context-menu`，见后文执行说明。 |
 | `@noframes` | 只要存在就禁止子框架执行，无需值；否则每个匹配的框架都可能执行。 |
-| `@grant name` | 为每项能力分别声明。规范名称及已知旧版别名区分大小写。`none` 不能与其他授权混用；未知授权产生警告且不会暴露。 |
+| `@grant name` | 除默认可用的 info 属性外，为每项能力分别声明。规范名称及已知旧版别名区分大小写。`none` 不能与其他授权混用；未知授权产生警告且不会暴露。 |
 | `@connect target` | XHR 目标白名单：主机名、IP、`localhost`、`*.example.com`、`self`、`*` 或绝对 HTTP(S) URL，详见 [HTTP 请求](#http-requests)。 |
 | `@require url` | 通过宿主依赖提供器获取，在主源码前按声明顺序执行的依赖。它不是 API 授权。 |
 | `@resource name url` | 命名资源，通过资源 API 和宿主资源提供器读取。名称区分大小写。 |
@@ -149,18 +149,18 @@ MonkeySharp 在**页面世界**中，通过函数包装执行可信脚本。CefS
 
 | 授权声明 | 可见内容 |
 | --- | --- |
-| 没有 `@grant` | 不提供 GM 对象或旧版 GM 绑定，仍可进行普通页面操作。 |
-| 只有 `@grant none` | 提供 GM.info；启用旧版全局绑定时还提供 GM_info。 |
-| 显式授权列表 | 仅提供逐项授权且有可用实现的能力；此时连 GM.info 也需要单独授权。 |
+| 没有 `@grant` | 提供 GM.info 和 GM_info，仍可进行普通页面操作。 |
+| 只有 `@grant none` | 提供 GM.info 和 GM_info。 |
+| 显式授权列表 | 默认提供 GM.info 和 GM_info，其他能力需要逐项授权且有可用实现。 |
 
 旧版别名通常会授权对应的规范能力，两个调用形式都可能可用。例如 `@grant GM_getValue` 会规范化为 GM.getValue，但不会授予 GM.setValue。宿主可以单独禁用授权别名解析。
 
 | 兼容模式 | 行为 |
 | --- | --- |
 | `LegacyCompatible`（默认） | 非严格包装，顶层 this 是 window 门面；提供现代 API 及启用的 GM_* 别名。旧版存储/资源别名依赖完整的启动快照。 |
-| `ModernStrict` | 严格包装，顶层 this 为 undefined；不提供旧版全局绑定。现代 API 仍各自遵循实际返回约定，包括同步返回 ID/句柄的方法。 |
+| `ModernStrict` | 严格包装，顶层 this 为 undefined；旧版全局绑定中仅保留 GM_info。现代 API 仍各自遵循实际返回约定，包括同步返回 ID/句柄的方法。 |
 
-宿主可以独立禁用旧版全局绑定或快照。启动快照默认限制为 1 MiB，准备超时为 5 秒；失败、不完整或超限会使同步存储/资源别名不可用，现代方法仍可走桥接。存储不支持原子快照时会产生降级诊断。需要观察完成和失败时优先使用现代 API，同时注意默认模式中的现代读取也可能来自本地镜像。
+宿主可以独立禁用 GM_info 以外的旧版全局绑定或快照。启动快照默认限制为 1 MiB，准备超时为 5 秒；失败、不完整或超限会使同步存储/资源别名不可用，现代方法仍可走桥接。存储不支持原子快照时会产生降级诊断。需要观察完成和失败时优先使用现代 API，同时注意默认模式中的现代读取也可能来自本地镜像。
 
 菜单、通知、剪贴板、标签页、下载、标签页状态和窗口控制 API 在缺少对应宿主服务时不会出现。CefSharp 默认提供 XHR、Cookie 和 webRequest 服务，除非被禁用或替换。可用 `typeof GM !== "undefined" && typeof GM.download === "function"` 检查；声明授权不会安装缺失的服务。参阅[宿主服务契约](integration-reference.zh-CN.md#宿主服务契约)。
 
@@ -206,7 +206,7 @@ MonkeySharp 在**页面世界**中，通过函数包装执行可信脚本。CefS
 
 ### GM.info / GM_info
 
-只读、递归冻结的安装信息快照。两者都暴露时，`GM_info === GM.info`。需要 GM.info 授权或显式 @grant none；GM_info 还需要启用旧版全局绑定。没有参数，不返回 Promise。未填写的可选元数据通常为 null。
+只读、递归冻结的安装信息快照，`GM_info === GM.info`。两种名称都默认可用，无需授权，包括 ModernStrict 模式和关闭旧版全局绑定时。无授权、@grant none 或仅声明 info 授权的脚本无需桥接绑定和握手。仍支持显式声明 info 授权，元数据保留原始声明。没有参数，不返回 Promise。未填写的可选元数据通常为 null。
 
 | 字段 | 含义 |
 | --- | --- |
@@ -228,7 +228,6 @@ script 包含 name、namespace、version、description、author、copyright、na
 value 必须遵循下一节的 JSON 序列化规则。现代方法在投递给宿主日志回调后返回 `Promise<undefined>`；未配置日志接收器时可能没有可见输出。GM_log 返回 undefined，同时输出到页面控制台，并将异步宿主失败记录到控制台。只接收一个值，不提供 console.log 的多参数格式化功能。
 
 ```javascript
-// @grant GM.info
 // @grant GM.log
 (async function () {
     await GM.log({ script: GM.info.name, version: GM.info.version });
@@ -709,7 +708,7 @@ window.addEventListener("urlchange", onRoute);
 | 方面 | 迁移时的处理 |
 | --- | --- |
 | 执行边界 | 将脚本和页面视为可信的页面世界代码，不具有扩展沙箱或保证的 CSP 绕过。 |
-| 授权及模式 | 每项 API 都要声明；显式列表使用 info 时也要授权；ModernStrict 使用规范名称。无 grant 和 grant none 不同。 |
+| 授权及模式 | GM.info 和 GM_info 无需授权，默认可用；其他 API 需要声明授权；ModernStrict 使用规范名称。 |
 | 时机 / SPA | 不依赖保证的 document-start 或历史导航后的自动重跑。 |
 | 子域名匹配 | 使用 *.domain 的 match 模式时，另外声明裸域名。 |
 | 存储 | 使用 JSON 数据，await 现代写入以观察失败，并考虑镜像限额及本地监听限制。 |

@@ -103,7 +103,7 @@ The header begins with `// ==UserScript==` and ends with `// ==/UserScript==`. P
 | `@exclude`, `@exclude-match` | Negative glob/regex rules and negative match patterns respectively. Any exclusion overrides positive matches. Invalid match patterns and malformed regexes are errors. |
 | `@run-at value` | `document-start`, `document-body`, `document-end`, `document-idle` (default), or `context-menu`. See execution rules below. |
 | `@noframes` | Presence suppresses child-frame execution; no value is needed. Otherwise every matching frame may execute. |
-| `@grant name` | Repeat for each exact capability. Canonical and recognized legacy spellings are case-sensitive. `none` cannot be combined with another grant. Unknown grants warn and are not exposed. |
+| `@grant name` | Repeat for each exact capability other than the always-available info properties. Canonical and recognized legacy spellings are case-sensitive. `none` cannot be combined with another grant. Unknown grants warn and are not exposed. |
 | `@connect target` | XHR destination allowlist: host, IP, `localhost`, `*.example.com`, `self`, `*`, or absolute HTTP(S) URL. See [HTTP requests](#http-requests). |
 | `@require url` | Dependency source executed before the main source in declaration order, through a host dependency provider. Not an API grant. |
 | `@resource name url` | Named resource, read through the resource APIs and a host resource provider. Resource names are case-sensitive. |
@@ -143,18 +143,18 @@ MonkeySharp executes trusted source in the **page world**, inside a function wra
 
 | Declaration | Exposed surface |
 | --- | --- |
-| No `@grant` | No `GM` object or legacy GM bindings. Ordinary page operations remain possible. |
-| Only `@grant none` | `GM.info`, plus `GM_info` when legacy globals are enabled. |
-| Explicit grant list | Only individually granted capabilities with an available implementation. Even `GM.info` needs its own grant in this case. |
+| No `@grant` | `GM.info` and `GM_info`; ordinary page operations remain possible. |
+| Only `@grant none` | `GM.info` and `GM_info`. |
+| Explicit grant list | `GM.info` and `GM_info`, plus individually granted capabilities with an available implementation. |
 
 Declaring a legacy alias normally authorizes its canonical capability and both facades may be available. For example, `@grant GM_getValue` normalizes to `GM.getValue`. This does not grant `GM.setValue`. Hosts can disable alias parsing separately.
 
 | Profile | Behavior |
 | --- | --- |
 | `LegacyCompatible` (default) | Non-strict wrapper; top-level `this` is the window facade; modern APIs and enabled `GM_*` aliases. Storage/resource aliases depend on complete bootstrap snapshots. |
-| `ModernStrict` | Strict wrapper; top-level `this` is `undefined`; no legacy globals. Modern APIs retain their individual return contracts, including synchronous IDs/handles. |
+| `ModernStrict` | Strict wrapper; top-level `this` is `undefined`; only `GM_info` remains available among legacy globals. Modern APIs retain their individual return contracts, including synchronous IDs/handles. |
 
-The host can independently disable legacy globals or snapshots. Bootstrap snapshots default to a 1 MiB budget and a five-second preparation timeout; failed, incomplete, or oversized snapshots leave synchronous storage/resource aliases unavailable. Modern methods can still use the bridge. A store without atomic snapshot support emits a degradation diagnostic. Prefer modern APIs when you need observable completion/failure, while recognizing that reads in the default profile can also use the local mirror.
+The host can independently disable legacy globals other than `GM_info`, or snapshots. Bootstrap snapshots default to a 1 MiB budget and a five-second preparation timeout; failed, incomplete, or oversized snapshots leave synchronous storage/resource aliases unavailable. Modern methods can still use the bridge. A store without atomic snapshot support emits a degradation diagnostic. Prefer modern APIs when you need observable completion/failure, while recognizing that reads in the default profile can also use the local mirror.
 
 APIs needing menus, notifications, clipboard, tabs, downloads, tab state, or window control are absent without their corresponding host service. CefSharp supplies XHR, Cookie, and webRequest services by default unless disabled/replaced. Check capabilities with `typeof GM !== "undefined" && typeof GM.download === "function"`; adding a grant cannot install a missing service. See the [host service contracts](integration-reference.md#host-service-contracts).
 
@@ -196,7 +196,7 @@ Each row requires the capability in its first column unless stated otherwise. `P
 
 ### GM.info / GM_info
 
-Read-only, recursively frozen installation snapshot. `GM_info === GM.info` when both are exposed. Requires `GM.info` or explicit `@grant none`; `GM_info` also requires legacy globals. There are no parameters and no Promise. Missing optional metadata is generally `null`.
+Read-only, recursively frozen installation snapshot. `GM_info === GM.info`. Both names are always available without a grant, including in `ModernStrict` and when legacy globals are disabled. Scripts with no grants, `@grant none`, or only info grants need no bridge binding or handshake. Explicit info grants remain supported; metadata retains the original declarations. There are no parameters and no Promise. Missing optional metadata is generally `null`.
 
 | Fields | Meaning |
 | --- | --- |
@@ -218,7 +218,6 @@ Read-only, recursively frozen installation snapshot. `GM_info === GM.info` when 
 `value` must be JSON-serializable under the rules in the next section. Modern calls return `Promise<undefined>` after delivery to the host logging callback. If no sink is configured, delivery has no visible output. `GM_log` returns `undefined`, additionally writes to the page console, and reports asynchronous host failures to the console. Only one value is accepted; this is not console.log's variadic formatting API.
 
 ```javascript
-// @grant GM.info
 // @grant GM.log
 (async function () {
     await GM.log({ script: GM.info.name, version: GM.info.version });
@@ -677,7 +676,7 @@ window.addEventListener("urlchange", onRoute);
 | Area | Porting action |
 | --- | --- |
 | Runtime boundary | Treat source and page as trusted page-world code; no extension sandbox or guaranteed CSP bypass. |
-| Grants and profiles | Declare every used API, including info for explicit grant lists; choose canonical modern names for ModernStrict. No-grant and grant-none differ. |
+| Grants and profiles | `GM.info` and `GM_info` are always available without grants. Declare other used APIs; choose canonical modern names for ModernStrict. |
 | Timing / SPA | Do not require guaranteed document-start or automatic reruns on history changes. |
 | Match subdomains | Add the bare domain separately when using `*.domain` match patterns. |
 | Stored values | Use JSON data; await modern writes for failures; account for bounded mirrors and local-listener limitations. |
