@@ -17,6 +17,10 @@ MonkeySharp 3 is a userscript runtime for applications that embed CefSharp. It s
 
 Use an explicit `x64` or `x86` platform for CefSharp builds. The Demo and its tests support only `x64` and are excluded from `x86` solution builds. Keep `CefSharpVersion` consistent across projects.
 
+## Development Guidelines
+
+Update related documentation and tests alongside code changes so they reflect the current implementation and requirements.
+
 ## Git Commit Conventions
 
 - Use Conventional Commits: `<type>(<scope>): <summary>`, with concise English summaries.
