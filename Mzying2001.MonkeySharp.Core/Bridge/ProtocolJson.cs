@@ -86,7 +86,8 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             string newJson,
             string mutationId = null,
             string originExecutionId = null,
-            long? sequence = null)
+            long? sequence = null,
+            string mutationMethod = null)
         {
             using (var stream = new MemoryStream())
             {
@@ -99,9 +100,13 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                     WriteOptionalValue(writer, oldJson);
                     writer.WritePropertyName("newValue");
                     WriteOptionalValue(writer, newJson);
+                    writer.WriteBoolean("oldValueExists", oldJson != null);
+                    writer.WriteBoolean("newValueExists", newJson != null);
                     writer.WriteBoolean("remote", true);
                     if (mutationId != null)
                         writer.WriteString("mutationId", mutationId);
+                    if (mutationMethod != null)
+                        writer.WriteString("mutationMethod", mutationMethod);
                     if (originExecutionId != null)
                         writer.WriteString("originExecutionId", originExecutionId);
                     if (sequence.HasValue)

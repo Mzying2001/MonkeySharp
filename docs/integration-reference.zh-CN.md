@@ -178,6 +178,7 @@ await repository.InitializeAsync(CancellationToken.None);
 
 - 同一 `ScriptKey` 的 `IUserScriptValueStore` 操作必须线性一致。提交前取消不产生更改；提交后取消仍成功完成并发出一次通知。
 - 值存储还应实现 `IUserScriptValueSnapshotProvider`，以提供原子的兼容性快照。否则网关会分别读取键和值，并产生 `MSC411_COMPATIBILITY_SNAPSHOT_DEGRADED`。
+- 批量 GM API 不需要额外的存储接口。写入/删除逐键提交，失败时保留之前的提交，并发出常规逐键事件。全量 `GM.getValues()` 优先使用快照能力，否则分别读取键和值。
 - `IUserScriptDependencyProvider` 负责 `@require` 的可信下载、缓存、HTTPS 策略及可选完整性验证；`ResourceScriptSourceResolver` 保持声明顺序、验证已声明的完整性，并将依赖原始字节总量限制为 `BridgeOptions.MaxResourceBytes`。
 - `LegacyCompatible` 中，缺少依赖提供程序会以 `MSR401_DEPENDENCY_PROVIDER_UNAVAILABLE` 跳过声明了 `@require` 的调用；提供程序失败产生 `MSR400_DEPENDENCY_RESOLUTION_FAILED`。`ModernStrict` 中，缺少提供程序时直接使用已安装的主源码。
 - `IResourceProvider` 返回事先授权的已声明资源，内容受 `BridgeOptions.MaxResourceBytes` 限制。
@@ -294,7 +295,7 @@ SmokeHost 从 `Fixtures` 目录内嵌七个原创 `.user.js`，通过正常仓�
 
 | 结果 ID | 必须提供的验证证据 |
 | --- | --- |
-| `frames` | 主 frame、同源子 frame、不同端口的异源子 frame 实际调用 GM 存储；每文档执行一次、`@noframes`、子 frame 导航及上下文释放。 |
+| `frames` | 主 frame、同源子 frame、不同端口的异源子 frame 实际调用单键和批量 GM 存储，覆盖全部六个现代/旧式批量入口；每文档执行一次、`@noframes`、子 frame 导航及上下文释放。 |
 | `spaUrl` | `pushState`、`replaceState`、hash 导航与历史回退；两种 URL 回调、新旧 URL、宿主生命周期、grant 边界和不重复注入。 |
 | `download` | 现代 Promise/handle、legacy 回调；真实 HTTP 下载及文件字节校验、产生进度后取消、超时、HTTP 失败、唯一终态及临时文件清理。 |
 | `cookie` | 现代/legacy set、list、delete，监听与取消监听、共享 Chromium request context，以及匿名 XHR 不携带 cookie。 |

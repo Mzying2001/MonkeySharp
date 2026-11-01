@@ -376,6 +376,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
         private static bool HasStorageCapability(IReadOnlyList<string> grants)
         {
             return grants.Contains("GM.getValue") || grants.Contains("GM.setValue") ||
+                grants.Contains("GM.getValues") || grants.Contains("GM.setValues") || grants.Contains("GM.deleteValues") ||
                 grants.Contains("GM.deleteValue") || grants.Contains("GM.listValues") ||
                 grants.Contains("GM.addValueChangeListener") || grants.Contains("GM.removeValueChangeListener");
         }
@@ -481,9 +482,9 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                         result = RemoveValueListener(execution, parameters);
                     else if (_providers.TryGetValue(method, out var provider))
                     {
-                        var mutation = IsValueMutation(method)
-                            ? BeginMutation(execution, parameters)
-                            : null;
+                        var mutations = IsValueMutation(method)
+                            ? BeginMutations(execution, method, parameters, requestId)
+                            : Array.Empty<MutationOrigin>();
                         try
                         {
                             result = await provider.InvokeAsync(new ApiInvocationContext(
@@ -498,7 +499,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                         }
                         finally
                         {
-                            if (mutation != null)
+                            foreach (var mutation in mutations)
                                 RemovePendingMutation(mutation);
                         }
                     }
@@ -736,7 +737,8 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                 args.NewValue.Exists ? args.NewValue.JsonValue : null,
                 mutationId,
                 originExecutionId,
-                args.Sequence);
+                args.Sequence,
+                mutation?.Method);
             foreach (var execution in executions)
             {
                 Notification?.Invoke(this, new BridgeNotificationEventArgs(
@@ -760,25 +762,31 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
 
         private static bool IsValueMutation(string method)
         {
-            return method == "GM.setValue" || method == "GM.deleteValue";
+            return method == "GM.setValue" || method == "GM.deleteValue" ||
+                method == "GM.setValues" || method == "GM.deleteValues";
         }
 
-        private MutationOrigin BeginMutation(UserScriptEngine.ExecutionRecord execution, JsonElement parameters)
+        private IReadOnlyList<MutationOrigin> BeginMutations(
+            UserScriptEngine.ExecutionRecord execution, string method, JsonElement parameters, string requestId)
         {
-            var key = ReadRequiredString(parameters, "key");
-            var mutation = new MutationOrigin(
-                Guid.NewGuid().ToString("D"), execution.Invocation.ExecutionId, execution.Installation.ScriptKey.ToString(), key);
+            var mutations = BasicApiProvider.ReadMutationKeys(method, parameters)
+                .Select(key => new MutationOrigin(
+                    requestId, execution.Invocation.ExecutionId, execution.Installation.ScriptKey.ToString(), key, method))
+                .ToList();
             lock (_stateLock)
             {
-                var bucketKey = mutation.ScriptKey + ":" + mutation.Key;
-                if (!_mutationOrigins.TryGetValue(bucketKey, out var queue))
+                foreach (var mutation in mutations)
                 {
-                    queue = new Queue<MutationOrigin>();
-                    _mutationOrigins.Add(bucketKey, queue);
+                    var bucketKey = mutation.ScriptKey + ":" + mutation.Key;
+                    if (!_mutationOrigins.TryGetValue(bucketKey, out var queue))
+                    {
+                        queue = new Queue<MutationOrigin>();
+                        _mutationOrigins.Add(bucketKey, queue);
+                    }
+                    queue.Enqueue(mutation);
                 }
-                queue.Enqueue(mutation);
             }
-            return mutation;
+            return mutations;
         }
 
         private MutationOrigin TakeMutation(string scriptKey, string key)
@@ -821,10 +829,14 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                     ["key"] = root.GetProperty("key").GetString(),
                     ["oldValue"] = root.GetProperty("oldValue").Clone(),
                     ["newValue"] = root.GetProperty("newValue").Clone(),
+                    ["oldValueExists"] = root.GetProperty("oldValueExists").GetBoolean(),
+                    ["newValueExists"] = root.GetProperty("newValueExists").GetBoolean(),
                     ["remote"] = true
                 };
                 if (root.TryGetProperty("mutationId", out var mutationId))
                     values["mutationId"] = mutationId.GetString();
+                if (root.TryGetProperty("mutationMethod", out var mutationMethod))
+                    values["mutationMethod"] = mutationMethod.GetString();
                 if (root.TryGetProperty("originExecutionId", out var origin))
                     values["originExecutionId"] = origin.GetString();
                 if (root.TryGetProperty("sequence", out var sequence))
@@ -1053,15 +1065,17 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
 
         private sealed class MutationOrigin
         {
-            public MutationOrigin(string mutationId, string originExecutionId, string scriptKey, string key)
+            public MutationOrigin(string mutationId, string originExecutionId, string scriptKey, string key, string method)
             {
                 MutationId = mutationId;
                 OriginExecutionId = originExecutionId;
                 ScriptKey = scriptKey;
                 Key = key;
+                Method = method;
             }
 
             public string MutationId { get; }
+            public string Method { get; }
             public string OriginExecutionId { get; }
             public string ScriptKey { get; }
             public string Key { get; }

@@ -45,15 +45,19 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             Assert.Equal(GrantDeclarationState.ExplicitNone, explicitNone.Metadata.GrantDeclarationState);
         }
 
-        [Fact]
-        public void LegacyGrantAliasesNormalizeWhilePreservingDeclarations()
+        [Theory]
+        [InlineData("GM_getValue", "GM.getValue")]
+        [InlineData("GM_getValues", "GM.getValues")]
+        [InlineData("GM_setValues", "GM.setValues")]
+        [InlineData("GM_deleteValues", "GM.deleteValues")]
+        public void LegacyGrantAliasesNormalizeWhilePreservingDeclarations(string alias, string canonical)
         {
             var result = new UserScriptMetadataParser().Parse(
-                Script("// @name legacy\n// @match https://example.com/*\n// @grant GM_getValue"));
+                Script("// @name legacy\n// @match https://example.com/*\n// @grant " + alias));
 
             Assert.True(result.CanEnable);
-            Assert.Equal(new[] { "GM_getValue" }, result.Metadata.DeclaredGrants);
-            Assert.Equal(new[] { "GM.getValue" }, result.Metadata.Grants);
+            Assert.Equal(new[] { alias }, result.Metadata.DeclaredGrants);
+            Assert.Equal(new[] { canonical }, result.Metadata.Grants);
         }
 
         [Fact]

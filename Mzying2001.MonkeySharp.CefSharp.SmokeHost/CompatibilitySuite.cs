@@ -176,6 +176,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                 var frame = FindFrame(path);
                 var result = await WaitResultAsync("globalThis.__compatFrame || null", frame);
                 Check(path + ":execution", result.GetProperty("runs").GetInt32() == 1 && result.GetProperty("value").GetString() == frame.Url.AbsoluteUri);
+                Check(path + ":bulkStorage", result.GetProperty("bulkStorage").GetBoolean());
                 Check(path + ":noframes", result.GetProperty("noFrames").GetInt32() == (frame.IsMainFrame ? 1 : 0));
             }
             var old = FindFrame("/compat/frames/same");
@@ -184,6 +185,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             var next = FindFrame("/compat/frames/same-next");
             var nextResult = await WaitResultAsync("globalThis.__compatFrame || null", next);
             Check("childNavigation", next.DocumentId != old.DocumentId && nextResult.GetProperty("runs").GetInt32() == 1 && nextResult.GetProperty("value").GetString() == next.Url.AbsoluteUri);
+            Check("childNavigation:bulkStorage", nextResult.GetProperty("bulkStorage").GetBoolean());
             Check("crossOrigin", FindFrame("/compat/frames/cross").Url.Port != _fixture.Port);
         }
 

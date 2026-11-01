@@ -169,6 +169,9 @@ Each row requires the capability in its first column unless stated otherwise. `P
 | `GM.getValue` | `GM_getValue` | `Promise<JSON value or undefined>` | Value store |
 | `GM.setValue` | `GM_setValue` | `Promise<undefined>` | Value store |
 | `GM.deleteValue` | `GM_deleteValue` | `Promise<boolean>` | Value store |
+| `GM.getValues` | `GM_getValues` | `Promise<object>` | Value store |
+| `GM.setValues` | `GM_setValues` | `Promise<undefined>` | Value store |
+| `GM.deleteValues` | `GM_deleteValues` | `Promise<undefined>` | Value store |
 | `GM.listValues` | `GM_listValues` | `Promise<string[]>` | Value store |
 | `GM.addValueChangeListener` | `GM_addValueChangeListener` | Number immediately | Core |
 | `GM.removeValueChangeListener` | `GM_removeValueChangeListener` | `Promise<boolean>` | Core |
@@ -235,13 +238,30 @@ Keys are non-empty strings. Values/defaults are cloned through JSON serializatio
 | `GM.getValue(key, defaultValue?)` | Return the stored value if `key` exists; otherwise return the provided JSON default, or `undefined` when no default is supplied. Passing `undefined` is equivalent to omitting the default. | `Promise<value>` |
 | `GM.setValue(key, value)` | Replace the stored value; serializes before committing. | `Promise<undefined>` |
 | `GM.deleteValue(key)` | Delete if present. | `Promise<boolean>` indicating whether it existed; with a mirror, this is the local pre-mutation existence state. |
+| `GM.getValues(keysOrDefaults?)` | Read a string array of keys (missing keys are omitted), or an object of defaults. Omitted, `null`, or `undefined` reads all values; `[]` and `{}` return `{}`. An `undefined` default means no default. | `Promise<object>` |
+| `GM.setValues(values)` | Set the object's own enumerable string keys; validate and JSON-clone every value before changing storage. | `Promise<undefined>` |
+| `GM.deleteValues(keys)` | Delete an array of keys, ignoring duplicates and absent keys. | `Promise<undefined>` |
 | `GM.listValues()` | List keys; mirrored results are sorted. | `Promise<string[]>` |
 | `GM.addValueChangeListener(key, callback)` | Register `callback(key, oldValue, newValue, remote)`; missing/deleted values are `undefined`. | Positive number immediately; registration failure is logged and removes the local handler. |
 | `GM.removeValueChangeListener(listenerId)` | Positive integer; remove this execution's listener. | `Promise<boolean>` indicating removal. |
 
-Grant each method separately. Listeners cover active executions of the same installation, not unrelated scripts. Remote changes pass `remote: true`. With a storage mirror, successful local writes notify with `false` after commit; failed writes do not publish a successful change. In the current facade, same-execution host echoes are suppressed: without a mirror (including `ModernStrict`), do not rely on notifications for your own writes; update your own UI after awaiting the write. Listeners end with the execution.
+Grant each method separately; a bulk grant does not grant its single-key counterpart, or vice versa. Listeners cover active executions of the same installation, not unrelated scripts. Remote changes pass `remote: true`. With a storage mirror, successful local writes notify with `false` after commit. Bulk writes notify once per committed key, including without a mirror and for keys committed before a later failure; deleting an absent key does not notify. For single-key writes, same-execution host echoes are suppressed: without a mirror (including `ModernStrict`), do not rely on notifications for your own single-key writes; update your own UI after awaiting the write. Listeners end with the execution.
 
-Legacy signatures use the same parameters: `GM_getValue` returns a value immediately, `GM_listValues` returns a sorted array, `GM_setValue`/`GM_deleteValue` return `undefined`, `GM_addValueChangeListener` returns a numeric ID, and `GM_removeValueChangeListener` returns a local removal boolean. The synchronous reads/writes and legacy removal method require a complete storage mirror. Writes change it immediately and queue serialized asynchronous commits. Failed commits roll back/reconcile and emit `MSC413_COMPATIBILITY_MUTATION_FAILED`; a successful synchronous return does not mean durable persistence. Modern writes in the default mirrored profile use this queue too, but their Promises expose completion/failure.
+Legacy signatures use the same parameters: `GM_getValue` returns a value immediately, `GM_getValues` returns an object immediately, `GM_listValues` returns a sorted array, `GM_setValue`/`GM_deleteValue`/`GM_setValues`/`GM_deleteValues` return `undefined`, `GM_addValueChangeListener` returns a numeric ID, and `GM_removeValueChangeListener` returns a local removal boolean. The synchronous reads/writes and legacy removal method require a complete storage mirror. Writes change it immediately and queue serialized asynchronous commits. Failed commits roll back/reconcile and emit `MSC413_COMPATIBILITY_MUTATION_FAILED`; a successful synchronous return does not mean durable persistence. Modern writes in the default mirrored profile use this queue too, but their Promises expose completion/failure.
+
+Each bulk write/delete uses one bridge request and commits keys sequentially through the existing value store. It is not an atomic transaction: a storage failure stops the batch and preserves previously committed keys. Validation failures change no keys. The mirror is reconciled after a failed commit, with later queued mutations reapplied. Empty batches are valid. Bulk values follow the same JSON rules as single-key values; stored `undefined` is not supported.
+
+```javascript
+// @grant GM.getValues
+// @grant GM.setValues
+// @grant GM.deleteValues
+(async function () {
+    await GM.setValues({ theme: 'dark', enabled: true });
+    const settings = await GM.getValues({ theme: 'light', enabled: false });
+    console.log(settings);
+    await GM.deleteValues(['theme', 'enabled']);
+})().catch(console.error);
+```
 
 **Tampermonkey differences:** JSON cloning does not preserve stored `undefined`; modern `GM.addValueChangeListener` returns an immediate number rather than the Promise described in [Tampermonkey's values reference](https://www.tampermonkey.net/documentation.php?q=GM_values). Mirror limits and local-listener behavior above are MonkeySharp-specific.
 
@@ -688,7 +708,7 @@ window.addEventListener("urlchange", onRoute);
 | Downloads | Await the start handle, then call its abort; completion callbacks require legacy GM_download; Demo downloads lack browser credentials. |
 | Cookies | No partitionKey semantics; default SameSite/first-party writes and change feeds are limited. |
 | webRequest | Rewrite action objects and callbacks; explicitly register runtime rules and retain the removal handle. |
-| Other manager APIs | `GM.getValues`, `GM.setValues`, `GM.deleteValues`, their `GM_*` forms, `GM.audio`/`GM_audio`, and extension-specific content/deployment APIs are not built in. Unknown grants do not add them. |
+| Other manager APIs | `GM.audio`/`GM_audio` and extension-specific content/deployment APIs are not built in. Unknown grants do not add them. |
 
 This is a list of supported contracts and known differences, not a promise that every Tampermonkey script can run unchanged. Prefer testing each feature against the actual embedding application.
 

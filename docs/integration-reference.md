@@ -178,6 +178,7 @@ Provider requirements:
 
 - `IUserScriptValueStore` operations for one `ScriptKey` must be linearizable. Cancellation before commit makes no change; cancellation after commit completes successfully and emits one notification.
 - A value store should also implement `IUserScriptValueSnapshotProvider` for atomic compatibility snapshots. Without it, the gateway reads keys and values separately and reports `MSC411_COMPATIBILITY_SNAPSHOT_DEGRADED`.
+- Bulk GM APIs require no additional storage interface. Writes/deletes commit keys sequentially, preserve earlier commits on failure, and emit the usual per-key events. Full `GM.getValues()` reads use snapshot support when available, otherwise separate key/value reads.
 - `IUserScriptDependencyProvider` owns trusted download, caching, HTTPS policy, and optional integrity validation for `@require`. `ResourceScriptSourceResolver` preserves declaration order, verifies declared integrity, and limits the combined original dependency bytes to `BridgeOptions.MaxResourceBytes`.
 - In `LegacyCompatible`, a missing dependency provider skips an invocation that declares `@require` with `MSR401_DEPENDENCY_PROVIDER_UNAVAILABLE`. A provider failure emits `MSR400_DEPENDENCY_RESOLUTION_FAILED`. In `ModernStrict`, a missing provider leaves the installed main source unchanged.
 - `IResourceProvider` returns previously authorized content for a declared resource. Resource data is limited by `BridgeOptions.MaxResourceBytes`.
@@ -294,7 +295,7 @@ The adapter resolves the current renderer's `location.href` before matching scri
 
 | Result ID | Required evidence |
 | --- | --- |
-| `frames` | GM storage calls in the main frame, a same-origin child and a child on another port; once-per-document execution, `@noframes`, child navigation and context release. |
+| `frames` | Single-key and bulk GM storage calls, including all six modern/legacy bulk entry points, in the main frame, a same-origin child and a child on another port; once-per-document execution, `@noframes`, child navigation and context release. |
 | `spaUrl` | `pushState`, `replaceState`, hash navigation and history back; both URL callback forms, old/new URLs, host lifecycle events, grant gating and no reinjection. |
 | `download` | Modern Promise/handle and legacy callbacks; actual HTTP downloads with exact file bytes, cancellation after progress, timeout, HTTP failure, one terminal callback and partial-file cleanup. |
 | `cookie` | Modern and legacy set/list/delete, listener removal, request-context cookie sharing and anonymous XHR without cookies. |

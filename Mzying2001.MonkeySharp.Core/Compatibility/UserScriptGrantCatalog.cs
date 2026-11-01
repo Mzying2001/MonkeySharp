@@ -16,6 +16,9 @@ namespace Mzying2001.MonkeySharp.Core.Compatibility
                 ["GM_getValue"] = "GM.getValue",
                 ["GM_setValue"] = "GM.setValue",
                 ["GM_deleteValue"] = "GM.deleteValue",
+                ["GM_getValues"] = "GM.getValues",
+                ["GM_setValues"] = "GM.setValues",
+                ["GM_deleteValues"] = "GM.deleteValues",
                 ["GM_listValues"] = "GM.listValues",
                 ["GM_addValueChangeListener"] = "GM.addValueChangeListener",
                 ["GM_removeValueChangeListener"] = "GM.removeValueChangeListener",
@@ -44,7 +47,8 @@ namespace Mzying2001.MonkeySharp.Core.Compatibility
             new ReadOnlyCollection<string>(new[]
             {
                 "none", "unsafeWindow", "GM.info", "GM.log", "GM.getValue", "GM.setValue",
-                "GM.deleteValue", "GM.listValues", "GM.addValueChangeListener",
+                "GM.deleteValue", "GM.getValues", "GM.setValues", "GM.deleteValues",
+                "GM.listValues", "GM.addValueChangeListener",
                 "GM.removeValueChangeListener", "GM.addStyle", "GM.addElement", "GM.getResourceText",
                 "GM.getResourceURL", "GM.xmlHttpRequest", "GM.registerMenuCommand",
                 "GM.unregisterMenuCommand", "GM.notification", "GM.setClipboard", "GM.openInTab",

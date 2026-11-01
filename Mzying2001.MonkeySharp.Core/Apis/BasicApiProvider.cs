@@ -18,7 +18,8 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         private static readonly IReadOnlyCollection<string> SupportedMethods =
             new ReadOnlyCollection<string>(new[]
             {
-                "GM.log", "GM.getValue", "GM.setValue", "GM.deleteValue", "GM.listValues"
+                "GM.log", "GM.getValue", "GM.setValue", "GM.deleteValue", "GM.listValues",
+                "GM.getValues", "GM.setValues", "GM.deleteValues"
             });
 
         private readonly IUserScriptValueStore _store;
@@ -80,9 +81,90 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                     EnsureObject(context.Parameters);
                     return ApiResult.FromValue(await _store.ListKeysAsync(scriptKey, cancellationToken).ConfigureAwait(false));
 
+                case "GM.getValues":
+                    return await GetValuesAsync(scriptKey, context.Parameters, cancellationToken).ConfigureAwait(false);
+
+                case "GM.setValues":
+                    var values = ReadValues(context.Parameters, "values");
+                    foreach (var item in values)
+                        await _store.SetAsync(scriptKey, item.Key, item.Value.GetRawText(), cancellationToken).ConfigureAwait(false);
+                    return ApiResult.Undefined;
+
+                case "GM.deleteValues":
+                    var keys = ReadKeys(context.Parameters);
+                    foreach (var key in keys)
+                        await _store.DeleteAsync(scriptKey, key, cancellationToken).ConfigureAwait(false);
+                    return ApiResult.Undefined;
+
                 default:
                     throw new UnsupportedApiException("The API '" + context.Method + "' is not supported.");
             }
+        }
+
+        private async Task<ApiResult> GetValuesAsync(
+            string scriptKey, JsonElement parameters, CancellationToken cancellationToken)
+        {
+            EnsureObject(parameters);
+            var defaults = parameters.TryGetProperty("defaults", out _)
+                ? ReadValues(parameters, "defaults")
+                : new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+            var all = !parameters.TryGetProperty("keys", out var requested) || requested.ValueKind == JsonValueKind.Null;
+            IReadOnlyList<string> keys = all ? null : ReadKeys(parameters);
+            if (all && _store is IUserScriptValueSnapshotProvider snapshots)
+            {
+                var snapshot = await snapshots.GetSnapshotAsync(scriptKey, cancellationToken).ConfigureAwait(false);
+                return ApiResult.FromValue(snapshot.ToDictionary(
+                    item => item.Key, item => JsonSerializer.Deserialize<JsonElement>(item.Value), StringComparer.Ordinal));
+            }
+            if (all)
+                keys = await _store.ListKeysAsync(scriptKey, cancellationToken).ConfigureAwait(false);
+            var result = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+            foreach (var key in keys)
+            {
+                var stored = await _store.GetAsync(scriptKey, key, cancellationToken).ConfigureAwait(false);
+                if (stored.Exists)
+                    result[key] = JsonSerializer.Deserialize<JsonElement>(stored.JsonValue);
+                else if (defaults.TryGetValue(key, out var fallback))
+                    result[key] = fallback;
+            }
+            return ApiResult.FromValue(result);
+        }
+
+        internal static IReadOnlyList<string> ReadMutationKeys(string method, JsonElement parameters)
+        {
+            if (method == "GM.setValues") return ReadValues(parameters, "values").Keys.ToList();
+            if (method == "GM.deleteValues") return ReadKeys(parameters);
+            return new[] { ReadKey(parameters) };
+        }
+
+        private static Dictionary<string, JsonElement> ReadValues(JsonElement parameters, string name)
+        {
+            EnsureObject(parameters);
+            if (!parameters.TryGetProperty(name, out var values) || values.ValueKind != JsonValueKind.Object)
+                throw InvalidParams("The " + name + " parameter must be an object.");
+            var result = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+            foreach (var item in values.EnumerateObject())
+            {
+                if (item.Name.Length == 0) throw InvalidParams("Storage keys cannot be empty.");
+                result[item.Name] = item.Value;
+            }
+            return result;
+        }
+
+        private static IReadOnlyList<string> ReadKeys(JsonElement parameters)
+        {
+            EnsureObject(parameters);
+            if (!parameters.TryGetProperty("keys", out var keys) || keys.ValueKind != JsonValueKind.Array)
+                throw InvalidParams("The keys parameter must be an array of non-empty strings.");
+            var result = new List<string>();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var key in keys.EnumerateArray())
+            {
+                if (key.ValueKind != JsonValueKind.String || string.IsNullOrEmpty(key.GetString()))
+                    throw InvalidParams("Storage keys must be non-empty strings.");
+                if (seen.Add(key.GetString())) result.Add(key.GetString());
+            }
+            return result;
         }
 
         private static string ReadKey(JsonElement parameters)

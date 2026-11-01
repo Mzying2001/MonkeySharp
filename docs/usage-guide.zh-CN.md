@@ -177,6 +177,9 @@ MonkeySharp 在**页面世界**中，通过函数包装执行可信脚本。CefS
 | `GM.getValue` | `GM_getValue` | `Promise<JSON 值或 undefined>` | 值存储 |
 | `GM.setValue` | `GM_setValue` | `Promise<undefined>` | 值存储 |
 | `GM.deleteValue` | `GM_deleteValue` | `Promise<boolean>` | 值存储 |
+| `GM.getValues` | `GM_getValues` | `Promise<object>` | 值存储 |
+| `GM.setValues` | `GM_setValues` | `Promise<undefined>` | 值存储 |
+| `GM.deleteValues` | `GM_deleteValues` | `Promise<undefined>` | 值存储 |
 | `GM.listValues` | `GM_listValues` | `Promise<string[]>` | 值存储 |
 | `GM.addValueChangeListener` | `GM_addValueChangeListener` | 立即返回数字 | Core |
 | `GM.removeValueChangeListener` | `GM_removeValueChangeListener` | `Promise<boolean>` | Core |
@@ -247,13 +250,30 @@ value 必须遵循下一节的 JSON 序列化规则。现代方法在投递给�
 | `GM.getValue(key, defaultValue?)` | 存在时返回已存储值；不存在时返回提供的 JSON 默认值，未提供默认值则返回 undefined。传 undefined 等同于省略默认值。 | `Promise<value>` |
 | `GM.setValue(key, value)` | 替换存储值，提交前序列化。 | `Promise<undefined>` |
 | `GM.deleteValue(key)` | 存在时删除。 | `Promise<boolean>`，表示是否存在；使用镜像时是修改前的本地存在状态。 |
+| `GM.getValues(keysOrDefaults?)` | 接受字符串键名数组（省略不存在的键）或默认值对象。省略参数、传 null 或 undefined 时读取全部值；空数组和空对象返回空对象。undefined 默认值等同于未提供默认值。 | `Promise<object>` |
+| `GM.setValues(values)` | 写入对象自身可枚举的字符串键；修改存储前校验并 JSON 克隆全部值。 | `Promise<undefined>` |
+| `GM.deleteValues(keys)` | 删除数组中的多个键，忽略重复键和不存在的键。 | `Promise<undefined>` |
 | `GM.listValues()` | 返回键列表；镜像结果排序。 | `Promise<string[]>` |
 | `GM.addValueChangeListener(key, callback)` | 注册 callback(key, oldValue, newValue, remote)；缺失/已删除的值为 undefined。 | 立即返回正整数；注册失败会记录日志并移除本地处理器。 |
 | `GM.removeValueChangeListener(listenerId)` | 正整数，移除当前执行实例的监听器。 | `Promise<boolean>`，表示是否移除。 |
 
-每个方法都需要单独授权。监听面向同一安装实例的活动执行，不涉及其他脚本。其他执行实例的修改传 remote: true。启用存储镜像时，本地写入提交成功后以 false 通知；失败写入不会发布成功变更。当前门面会抑制同一执行实例的宿主回声：没有镜像时（包括 ModernStrict），不要依赖监听器通知自己的写入，应在 await 写入后主动更新自己的界面。监听器随执行实例释放。
+每个方法都需要单独授权，批量授权与对应的单键授权互不包含。监听面向同一安装实例的活动执行，不涉及其他脚本。其他执行实例的修改传 remote: true。启用存储镜像时，本地写入提交成功后以 false 通知。批量写入按已提交键逐项通知一次，包括没有镜像时，以及后续键失败前已提交的键；删除不存在的键不通知。单键写入仍会抑制同一执行实例的宿主回声：没有镜像时（包括 ModernStrict），不要依赖监听器通知自己的单键写入，应在 await 写入后主动更新自己的界面。监听器随执行实例释放。
 
-旧版签名使用同样的参数：GM_getValue 立即返回值，GM_listValues 返回排序后的数组，GM_setValue/GM_deleteValue 返回 undefined，GM_addValueChangeListener 返回数字 ID，GM_removeValueChangeListener 返回本地移除布尔值。同步读写及旧版移除方法需要完整存储镜像。写入立即修改镜像，再串行异步提交；提交失败会回滚/重新同步，并产生 MSC413_COMPATIBILITY_MUTATION_FAILED。同步调用成功返回不代表已持久化。默认镜像模式中的现代写入也使用此队列，但可以通过 Promise 观察完成或失败。
+旧版签名使用同样的参数：GM_getValue 立即返回值，GM_getValues 立即返回对象，GM_listValues 返回排序后的数组，GM_setValue/GM_deleteValue/GM_setValues/GM_deleteValues 返回 undefined，GM_addValueChangeListener 返回数字 ID，GM_removeValueChangeListener 返回本地移除布尔值。同步读写及旧版移除方法需要完整存储镜像。写入立即修改镜像，再串行异步提交；提交失败会回滚/重新同步，并产生 MSC413_COMPATIBILITY_MUTATION_FAILED。同步调用成功返回不代表已持久化。默认镜像模式中的现代写入也使用此队列，但可以通过 Promise 观察完成或失败。
+
+每次批量写入/删除只发送一次桥接请求，再通过现有值存储逐键提交，不保证整批原子性：存储中途失败会停止后续操作，并保留已经提交的键。参数校验失败不会修改任何键。提交失败后会重新同步镜像，并重放后续排队操作。空批次合法。批量值遵循与单键值相同的 JSON 规则，不支持持久化 undefined。
+
+```javascript
+// @grant GM.getValues
+// @grant GM.setValues
+// @grant GM.deleteValues
+(async function () {
+    await GM.setValues({ theme: 'dark', enabled: true });
+    const settings = await GM.getValues({ theme: 'light', enabled: false });
+    console.log(settings);
+    await GM.deleteValues(['theme', 'enabled']);
+})().catch(console.error);
+```
 
 **与 Tampermonkey 的差异：**JSON 克隆不能保留存储的 undefined；现代 GM.addValueChangeListener 立即返回数字，而 [Tampermonkey 值存储参考](https://www.tampermonkey.net/documentation.php?q=GM_values)描述为 Promise。上述镜像限制和本地监听行为是 MonkeySharp 自身的约定。
 
@@ -720,7 +740,7 @@ window.addEventListener("urlchange", onRoute);
 | 下载 | await 启动句柄，再调用其 abort；完成回调需要旧版 GM_download，Demo 不继承浏览器凭据。 |
 | Cookie | 没有 partitionKey 语义，默认 SameSite/第一方写入及变更订阅有限。 |
 | webRequest | 改写动作对象及回调，显式注册运行时规则并保留移除句柄。 |
-| 其他管理器 API | 不内置 GM.getValues、GM.setValues、GM.deleteValues、其 GM_* 形式、GM.audio/GM_audio 和扩展专属内容/部署 API；未知授权不会增加它们。 |
+| 其他管理器 API | 不内置 GM.audio/GM_audio 和扩展专属内容/部署 API；未知授权不会增加它们。 |
 
 这张表描述支持的约定及已知差异，不保证任意 Tampermonkey 脚本都能原样运行。应在实际宿主应用中验证所用功能。
 
