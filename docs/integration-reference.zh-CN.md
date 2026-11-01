@@ -26,7 +26,7 @@ CI 仅在目标分支为 `dev` 或 `main` 的 PR 上触发，针对 x64 和 x86 
 | Profile | 包装器与 API 暴露行为 |
 | --- | --- |
 | `LegacyCompatible`（默认） | 非严格包装器；顶层 `this` 为 window facade。公开现代 API 和已启用的 `GM_*` 别名，并提供有界的同步存储与资源快照。 |
-| `ModernStrict` | 严格包装器；顶层 `this` 为 `undefined`。公开现代 API 名称和默认可用的 `GM_info` 属性，其他旧式全局绑定被禁用。各 API 仍遵循自身返回契约：`GM.addValueChangeListener` 返回数字 ID，`GM.openInTab` 和 `GM.webRequest` 立即返回句柄。 |
+| `ModernStrict` | 严格包装器；顶层 `this` 为 `undefined`。公开现代 API 名称和默认可用的 `GM_info` 属性，其他旧式全局绑定被禁用。各 API 仍遵循自身返回契约：`GM.openInTab` 和 `GM.webRequest` 立即返回句柄。 |
 
 宿主选择执行期配置，仓库解析器选择元数据配置，因此两处应使用同一个 profile。下面的示例为可信页面和脚本配置宿主：
 
@@ -172,12 +172,16 @@ var repository = new PersistentUserScriptRepository(persistence, parser);
 await repository.InitializeAsync(CancellationToken.None);
 ```
 
+Demo 使用数据库格式 2，拒绝旧开发数据库，不进行迁移或删除；请备份后手动重建。自定义值存储需采用下方的新类型契约。
+
 持久化实现必须保留 `ScriptKey`、安装顺序及时间戳，并原子提交变更。提交成功后即使收到取消也应成功完成；仓库变更通知在提交后发出。稳定的键用于维持脚本与 GM 存储的关联。具体的持久化及恢复实现见 [Demo 指南](../Mzying2001.MonkeySharp.Demo/README.md#portable-data-and-recovery)。
 
 提供程序要求：
 
-- 同一 `ScriptKey` 的 `IUserScriptValueStore` 操作必须线性一致。提交前取消不产生更改；提交后取消仍成功完成并发出一次通知。
-- 值存储还应实现 `IUserScriptValueSnapshotProvider`，以提供原子的兼容性快照。否则网关会分别读取键和值，并产生 `MSC411_COMPATIBILITY_SNAPSHOT_DEGRADED`。
+- `IUserScriptValueStore.SetAsync` 接收不可变的 `UserScriptValue`，由 `StoredValue.Value` 返回；仅以 `StoredValue.Exists` 区分键是否存在。使用 `UserScriptValue.FromJson(json)`、`UserScriptValue.Undefined` 或 `UserScriptValue.FromEncoded(encoded)` 构造值。这替代原先的原始 JSON 契约，不保留旧重载。
+- 持久化 `EncodedValue`，不得丢失类型信息。编码为：undefined 使用 `u`，布尔使用 `btrue`/`bfalse`，数字使用 `n` 加数字或 `NaN`/`Infinity`/`-Infinity`，字符串使用 `s` 加原文，对象/数组/null 使用 `o` 加规范 JSON。`FromEncoded` 校验并规范化编码，用户对象的属性名不会作为协议标记。
+- 同一 `ScriptKey` 的操作必须线性一致。值键允许空字符串，脚本分区 ID 必须非空。提交前取消不产生更改，提交后取消仍成功完成。每个实际提交变更仅发出一次 `ValueChanged`，包括创建或删除已存储的 undefined；相同编码值的重复写入及删除不存在的键不通知。`ListKeysAsync` 保留插入顺序，覆盖不移动，删除再创建移到末尾。
+- 值存储还应实现 `IUserScriptValueSnapshotProvider`，返回按插入顺序排列的不可变 `IReadOnlyList<KeyValuePair<string, UserScriptValue>>`，以提供原子的兼容性快照。否则网关会分别读取键和值，并产生 `MSC411_COMPATIBILITY_SNAPSHOT_DEGRADED`。
 - 批量 GM API 不需要额外的存储接口。写入/删除逐键提交，失败时保留之前的提交，并发出常规逐键事件。全量 `GM.getValues()` 优先使用快照能力，否则分别读取键和值。
 - `IUserScriptDependencyProvider` 负责 `@require` 的可信下载、缓存、HTTPS 策略及可选完整性验证；`ResourceScriptSourceResolver` 保持声明顺序、验证已声明的完整性，并将依赖原始字节总量限制为 `BridgeOptions.MaxResourceBytes`。
 - `LegacyCompatible` 中，缺少依赖提供程序会以 `MSR401_DEPENDENCY_PROVIDER_UNAVAILABLE` 跳过声明了 `@require` 的调用；提供程序失败产生 `MSR400_DEPENDENCY_RESOLUTION_FAILED`。`ModernStrict` 中，缺少提供程序时直接使用已安装的主源码。
@@ -295,7 +299,7 @@ SmokeHost 从 `Fixtures` 目录内嵌七个原创 `.user.js`，通过正常仓�
 
 | 结果 ID | 必须提供的验证证据 |
 | --- | --- |
-| `frames` | 主 frame、同源子 frame、不同端口的异源子 frame 实际调用单键和批量 GM 存储，覆盖全部六个现代/旧式批量入口；每文档执行一次、`@noframes`、子 frame 导航及上下文释放。 |
+| `frames` | 主 frame、同源子 frame、不同端口的异源子 frame 实际调用单键和批量 GM 存储，覆盖全部六个现代/旧式批量入口、带类型的 undefined、监听返回约定、跨实例通知及导航快照；每文档执行一次、`@noframes`、子 frame 导航及上下文释放。 |
 | `spaUrl` | `pushState`、`replaceState`、hash 导航与历史回退；两种 URL 回调、新旧 URL、宿主生命周期、grant 边界和不重复注入。 |
 | `download` | 现代 Promise/handle、legacy 回调；真实 HTTP 下载及文件字节校验、产生进度后取消、超时、HTTP 失败、唯一终态及临时文件清理。 |
 | `cookie` | 现代/legacy set、list、delete，监听与取消监听、共享 Chromium request context，以及匿名 XHR 不携带 cookie。 |

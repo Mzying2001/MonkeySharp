@@ -58,24 +58,18 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 case "GM.getValue":
                     var getKey = ReadKey(context.Parameters);
                     var stored = await _store.GetAsync(scriptKey, getKey, cancellationToken).ConfigureAwait(false);
-                    if (stored.Exists)
-                        return ApiResult.FromJson(stored.JsonValue);
-                    return context.Parameters.TryGetProperty("defaultValue", out var defaultValue)
-                        ? ApiResult.FromJson(defaultValue.GetRawText())
-                        : ApiResult.Undefined;
+                    return ApiResult.FromValue(new { exists = stored.Exists, value = stored.Value?.EncodedValue });
 
                 case "GM.setValue":
                     var setKey = ReadKey(context.Parameters);
                     if (!context.Parameters.TryGetProperty("value", out var value))
                         throw InvalidParams("The value parameter is required.");
-                    await _store.SetAsync(scriptKey, setKey, value.GetRawText(), cancellationToken).ConfigureAwait(false);
+                    await _store.SetAsync(scriptKey, setKey, ReadValue(value), cancellationToken).ConfigureAwait(false);
                     return ApiResult.Undefined;
 
                 case "GM.deleteValue":
-                    return ApiResult.FromValue(await _store.DeleteAsync(
-                        scriptKey,
-                        ReadKey(context.Parameters),
-                        cancellationToken).ConfigureAwait(false));
+                    await _store.DeleteAsync(scriptKey, ReadKey(context.Parameters), cancellationToken).ConfigureAwait(false);
+                    return ApiResult.Undefined;
 
                 case "GM.listValues":
                     EnsureObject(context.Parameters);
@@ -85,9 +79,10 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                     return await GetValuesAsync(scriptKey, context.Parameters, cancellationToken).ConfigureAwait(false);
 
                 case "GM.setValues":
-                    var values = ReadValues(context.Parameters, "values");
+                    var values = ReadValues(context.Parameters, "values").ToDictionary(
+                        item => item.Key, item => ReadValue(item.Value), StringComparer.Ordinal);
                     foreach (var item in values)
-                        await _store.SetAsync(scriptKey, item.Key, item.Value.GetRawText(), cancellationToken).ConfigureAwait(false);
+                        await _store.SetAsync(scriptKey, item.Key, item.Value, cancellationToken).ConfigureAwait(false);
                     return ApiResult.Undefined;
 
                 case "GM.deleteValues":
@@ -105,27 +100,21 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             string scriptKey, JsonElement parameters, CancellationToken cancellationToken)
         {
             EnsureObject(parameters);
-            var defaults = parameters.TryGetProperty("defaults", out _)
-                ? ReadValues(parameters, "defaults")
-                : new Dictionary<string, JsonElement>(StringComparer.Ordinal);
             var all = !parameters.TryGetProperty("keys", out var requested) || requested.ValueKind == JsonValueKind.Null;
             IReadOnlyList<string> keys = all ? null : ReadKeys(parameters);
             if (all && _store is IUserScriptValueSnapshotProvider snapshots)
             {
                 var snapshot = await snapshots.GetSnapshotAsync(scriptKey, cancellationToken).ConfigureAwait(false);
                 return ApiResult.FromValue(snapshot.ToDictionary(
-                    item => item.Key, item => JsonSerializer.Deserialize<JsonElement>(item.Value), StringComparer.Ordinal));
+                    item => item.Key, item => item.Value.EncodedValue, StringComparer.Ordinal));
             }
             if (all)
                 keys = await _store.ListKeysAsync(scriptKey, cancellationToken).ConfigureAwait(false);
-            var result = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+            var result = new Dictionary<string, string>(StringComparer.Ordinal);
             foreach (var key in keys)
             {
                 var stored = await _store.GetAsync(scriptKey, key, cancellationToken).ConfigureAwait(false);
-                if (stored.Exists)
-                    result[key] = JsonSerializer.Deserialize<JsonElement>(stored.JsonValue);
-                else if (defaults.TryGetValue(key, out var fallback))
-                    result[key] = fallback;
+                if (stored.Exists) result[key] = stored.Value.EncodedValue;
             }
             return ApiResult.FromValue(result);
         }
@@ -145,7 +134,6 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             var result = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
             foreach (var item in values.EnumerateObject())
             {
-                if (item.Name.Length == 0) throw InvalidParams("Storage keys cannot be empty.");
                 result[item.Name] = item.Value;
             }
             return result;
@@ -155,27 +143,33 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         {
             EnsureObject(parameters);
             if (!parameters.TryGetProperty("keys", out var keys) || keys.ValueKind != JsonValueKind.Array)
-                throw InvalidParams("The keys parameter must be an array of non-empty strings.");
+                throw InvalidParams("The keys parameter must be an array of strings.");
             var result = new List<string>();
             var seen = new HashSet<string>(StringComparer.Ordinal);
             foreach (var key in keys.EnumerateArray())
             {
-                if (key.ValueKind != JsonValueKind.String || string.IsNullOrEmpty(key.GetString()))
-                    throw InvalidParams("Storage keys must be non-empty strings.");
+                if (key.ValueKind != JsonValueKind.String)
+                    throw InvalidParams("Storage keys must be strings.");
                 if (seen.Add(key.GetString())) result.Add(key.GetString());
             }
             return result;
         }
 
-        private static string ReadKey(JsonElement parameters)
+        internal static string ReadKey(JsonElement parameters)
         {
             EnsureObject(parameters);
             if (!parameters.TryGetProperty("key", out var key) || key.ValueKind != JsonValueKind.String)
                 throw InvalidParams("The key parameter must be a string.");
             var value = key.GetString();
-            if (string.IsNullOrEmpty(value))
-                throw InvalidParams("The key parameter cannot be empty.");
             return value;
+        }
+
+        private static UserScriptValue ReadValue(JsonElement value)
+        {
+            if (value.ValueKind != JsonValueKind.String) throw InvalidParams("A typed storage value is required.");
+            try { return UserScriptValue.FromEncoded(value.GetString()); }
+            catch (Exception exception) when (exception is FormatException || exception is JsonException || exception is OverflowException)
+            { throw InvalidParams("Invalid storage value encoding."); }
         }
 
         private static void EnsureObject(JsonElement parameters)

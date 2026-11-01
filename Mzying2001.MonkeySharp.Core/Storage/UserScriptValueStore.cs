@@ -2,33 +2,34 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace Mzying2001.MonkeySharp.Core.Storage
 {
     /// <summary>
-    /// Represents either a stored JSON value or an explicitly missing value.
+    /// Represents either a stored userscript value or an explicitly missing value.
     /// </summary>
     public readonly struct StoredValue
     {
         /// <summary>Initializes a stored value.</summary>
         /// <param name="exists">Whether a value exists for the key.</param>
-        /// <param name="jsonValue">The stored JSON value, or <see langword="null"/> when missing.</param>
-        public StoredValue(bool exists, string jsonValue)
+        /// <param name="value">The stored userscript value, or <see langword="null"/> when missing.</param>
+        public StoredValue(bool exists, UserScriptValue value)
         {
-            if (exists && jsonValue == null)
-                throw new ArgumentNullException(nameof(jsonValue));
+            if (exists && value == null)
+                throw new ArgumentNullException(nameof(value));
+            if (!exists && value != null)
+                throw new ArgumentException("A missing key cannot contain a value.", nameof(value));
             Exists = exists;
-            JsonValue = jsonValue;
+            Value = value;
         }
 
         /// <summary>Gets whether the value exists.</summary>
         public bool Exists { get; }
 
-        /// <summary>Gets the stored JSON value, or <see langword="null"/> when missing.</summary>
-        public string JsonValue { get; }
+        /// <summary>Gets the stored userscript value, or <see langword="null"/> when missing.</summary>
+        public UserScriptValue Value { get; }
 
         /// <summary>Gets a value representing a missing storage key.</summary>
         public static StoredValue Missing => new StoredValue(false, null);
@@ -106,7 +107,7 @@ namespace Mzying2001.MonkeySharp.Core.Storage
     }
 
     /// <summary>
-    /// Stores canonical JSON values in isolated userscript partitions.
+    /// Stores typed userscript values in isolated userscript partitions.
     /// </summary>
     public interface IUserScriptValueStore
     {
@@ -120,10 +121,10 @@ namespace Mzying2001.MonkeySharp.Core.Storage
         /// <summary>Creates or replaces a value in a userscript storage partition.</summary>
         /// <param name="scriptKey">The storage partition identifier.</param>
         /// <param name="key">The storage key.</param>
-        /// <param name="jsonValue">The value encoded as JSON.</param>
+        /// <param name="value">The typed userscript value.</param>
         /// <param name="cancellationToken">A token that cancels the operation before it commits.</param>
         /// <returns>A task that completes after the value is committed.</returns>
-        Task SetAsync(string scriptKey, string key, string jsonValue, CancellationToken cancellationToken);
+        Task SetAsync(string scriptKey, string key, UserScriptValue value, CancellationToken cancellationToken);
 
         /// <summary>Deletes a value from a userscript storage partition.</summary>
         /// <param name="scriptKey">The storage partition identifier.</param>
@@ -132,7 +133,7 @@ namespace Mzying2001.MonkeySharp.Core.Storage
         /// <returns><see langword="true"/> when a value was deleted.</returns>
         Task<bool> DeleteAsync(string scriptKey, string key, CancellationToken cancellationToken);
 
-        /// <summary>Lists keys in ordinal sort order.</summary>
+        /// <summary>Lists keys in insertion order.</summary>
         /// <param name="scriptKey">The storage partition identifier.</param>
         /// <param name="cancellationToken">A token that cancels the lookup.</param>
         /// <returns>An immutable list of storage keys.</returns>
@@ -145,11 +146,11 @@ namespace Mzying2001.MonkeySharp.Core.Storage
     /// <summary>Provides an atomic snapshot of one userscript storage partition.</summary>
     public interface IUserScriptValueSnapshotProvider
     {
-        /// <summary>Gets canonical JSON values for all keys in a script partition.</summary>
+        /// <summary>Gets typed userscript values for all keys in a script partition.</summary>
         /// <param name="scriptKey">The storage partition identifier.</param>
         /// <param name="cancellationToken">A token that cancels the snapshot.</param>
-        /// <returns>An immutable key-to-JSON snapshot.</returns>
-        Task<IReadOnlyDictionary<string, string>> GetSnapshotAsync(
+        /// <returns>An immutable snapshot in key insertion order.</returns>
+        Task<IReadOnlyList<KeyValuePair<string, UserScriptValue>>> GetSnapshotAsync(
             string scriptKey,
             CancellationToken cancellationToken);
     }
@@ -172,7 +173,7 @@ namespace Mzying2001.MonkeySharp.Core.Storage
         public async Task<StoredValue> GetAsync(string scriptKey, string key, CancellationToken cancellationToken)
         {
             ValidateKey(scriptKey, nameof(scriptKey));
-            ValidateKey(key, nameof(key));
+            ValidateKey(key, nameof(key), allowEmpty: true);
             var partition = GetPartition(scriptKey);
             await partition.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
@@ -189,11 +190,11 @@ namespace Mzying2001.MonkeySharp.Core.Storage
         }
 
         /// <inheritdoc />
-        public async Task SetAsync(string scriptKey, string key, string jsonValue, CancellationToken cancellationToken)
+        public async Task SetAsync(string scriptKey, string key, UserScriptValue value, CancellationToken cancellationToken)
         {
             ValidateKey(scriptKey, nameof(scriptKey));
-            ValidateKey(key, nameof(key));
-            var canonicalValue = Canonicalize(jsonValue);
+            ValidateKey(key, nameof(key), allowEmpty: true);
+            if (value == null) throw new ArgumentNullException(nameof(value));
             var partition = GetPartition(scriptKey);
             await partition.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
@@ -203,14 +204,16 @@ namespace Mzying2001.MonkeySharp.Core.Storage
                 var oldValue = partition.Values.TryGetValue(key, out var existing)
                     ? new StoredValue(true, existing)
                     : StoredValue.Missing;
-                partition.Values[key] = canonicalValue;
+                if (oldValue.Exists && oldValue.Value.Equals(value)) return;
+                if (!oldValue.Exists) partition.Keys.Add(key);
+                partition.Values[key] = value;
                 OnCommitted(scriptKey, key, ValueChangeKind.Set);
                 Publish(new UserScriptValueChangedEventArgs(
                     Interlocked.Increment(ref _sequence),
                     scriptKey,
                     key,
                     oldValue,
-                    new StoredValue(true, canonicalValue),
+                    new StoredValue(true, value),
                     ValueChangeKind.Set));
             }
             finally
@@ -223,7 +226,7 @@ namespace Mzying2001.MonkeySharp.Core.Storage
         public async Task<bool> DeleteAsync(string scriptKey, string key, CancellationToken cancellationToken)
         {
             ValidateKey(scriptKey, nameof(scriptKey));
-            ValidateKey(key, nameof(key));
+            ValidateKey(key, nameof(key), allowEmpty: true);
             var partition = GetPartition(scriptKey);
             await partition.Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
@@ -233,6 +236,7 @@ namespace Mzying2001.MonkeySharp.Core.Storage
                 if (!partition.Values.TryGetValue(key, out var existing))
                     return false;
                 partition.Values.Remove(key);
+                partition.Keys.Remove(key);
                 OnCommitted(scriptKey, key, ValueChangeKind.Deleted);
                 Publish(new UserScriptValueChangedEventArgs(
                     Interlocked.Increment(ref _sequence),
@@ -259,7 +263,7 @@ namespace Mzying2001.MonkeySharp.Core.Storage
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 return new ReadOnlyCollection<string>(
-                    partition.Values.Keys.OrderBy(item => item, StringComparer.Ordinal).ToList());
+                    partition.Keys.ToList());
             }
             finally
             {
@@ -268,7 +272,7 @@ namespace Mzying2001.MonkeySharp.Core.Storage
         }
 
         /// <inheritdoc />
-        public async Task<IReadOnlyDictionary<string, string>> GetSnapshotAsync(
+        public async Task<IReadOnlyList<KeyValuePair<string, UserScriptValue>>> GetSnapshotAsync(
             string scriptKey,
             CancellationToken cancellationToken)
         {
@@ -278,8 +282,7 @@ namespace Mzying2001.MonkeySharp.Core.Storage
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                return new ReadOnlyDictionary<string, string>(
-                    new Dictionary<string, string>(partition.Values, StringComparer.Ordinal));
+                return partition.Keys.Select(key => new KeyValuePair<string, UserScriptValue>(key, partition.Values[key])).ToList().AsReadOnly();
             }
             finally
             {
@@ -346,25 +349,19 @@ namespace Mzying2001.MonkeySharp.Core.Storage
             ValueChanged?.Invoke(this, args);
         }
 
-        private static string Canonicalize(string jsonValue)
+        private static void ValidateKey(string value, string parameterName, bool allowEmpty = false)
         {
-            if (jsonValue == null)
-                throw new ArgumentNullException(nameof(jsonValue));
-            using (var document = JsonDocument.Parse(jsonValue))
-                return JsonSerializer.Serialize(document.RootElement);
-        }
-
-        private static void ValidateKey(string value, string parameterName)
-        {
-            if (string.IsNullOrEmpty(value))
-                throw new ArgumentException("The value cannot be null or empty.", parameterName);
+            if (value == null) throw new ArgumentNullException(parameterName);
+            if (!allowEmpty && value.Length == 0)
+                throw new ArgumentException("The script partition ID must be non-empty.", parameterName);
         }
 
         private sealed class Partition
         {
             public SemaphoreSlim Gate { get; } = new SemaphoreSlim(1, 1);
-            public Dictionary<string, string> Values { get; } =
-                new Dictionary<string, string>(StringComparer.Ordinal);
+            public List<string> Keys { get; } = new List<string>();
+            public Dictionary<string, UserScriptValue> Values { get; } =
+                new Dictionary<string, UserScriptValue>(StringComparer.Ordinal);
         }
     }
 }

@@ -82,8 +82,8 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
         public static string ValueChangeData(
             int listenerId,
             string key,
-            string oldJson,
-            string newJson,
+            string oldEncoded,
+            string newEncoded,
             string mutationId = null,
             string originExecutionId = null,
             long? sequence = null,
@@ -97,11 +97,11 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                     writer.WriteNumber("listenerId", listenerId);
                     writer.WriteString("key", key);
                     writer.WritePropertyName("oldValue");
-                    WriteOptionalValue(writer, oldJson);
+                    WriteStoredValue(writer, oldEncoded);
                     writer.WritePropertyName("newValue");
-                    WriteOptionalValue(writer, newJson);
-                    writer.WriteBoolean("oldValueExists", oldJson != null);
-                    writer.WriteBoolean("newValueExists", newJson != null);
+                    WriteStoredValue(writer, newEncoded);
+                    writer.WriteBoolean("oldValueExists", oldEncoded != null);
+                    writer.WriteBoolean("newValueExists", newEncoded != null);
                     writer.WriteBoolean("remote", true);
                     if (mutationId != null)
                         writer.WriteString("mutationId", mutationId);
@@ -117,17 +117,10 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             }
         }
 
-        private static void WriteOptionalValue(Utf8JsonWriter writer, string json)
+        private static void WriteStoredValue(Utf8JsonWriter writer, string encoded)
         {
-            if (json == null)
-            {
-                writer.WriteStartObject();
-                writer.WriteString("$monkeySharpType", "undefined");
-                writer.WriteEndObject();
-                return;
-            }
-            using (var value = JsonDocument.Parse(json))
-                value.RootElement.WriteTo(writer);
+            if (encoded == null) writer.WriteNullValue();
+            else writer.WriteStringValue(encoded);
         }
     }
 }

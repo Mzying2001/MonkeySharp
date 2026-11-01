@@ -174,15 +174,15 @@ MonkeySharp 在**页面世界**中，通过函数包装执行可信脚本。CefS
 | --- | --- | --- | --- |
 | `GM.info` | `GM_info` | 冻结对象，不是函数 | Core |
 | `GM.log` | `GM_log` | `Promise<undefined>` | Core 日志回调 |
-| `GM.getValue` | `GM_getValue` | `Promise<JSON 值或 undefined>` | 值存储 |
+| `GM.getValue` | `GM_getValue` | `Promise<value>` | 值存储 |
 | `GM.setValue` | `GM_setValue` | `Promise<undefined>` | 值存储 |
-| `GM.deleteValue` | `GM_deleteValue` | `Promise<boolean>` | 值存储 |
+| `GM.deleteValue` | `GM_deleteValue` | `Promise<undefined>` | 值存储 |
 | `GM.getValues` | `GM_getValues` | `Promise<object>` | 值存储 |
 | `GM.setValues` | `GM_setValues` | `Promise<undefined>` | 值存储 |
 | `GM.deleteValues` | `GM_deleteValues` | `Promise<undefined>` | 值存储 |
 | `GM.listValues` | `GM_listValues` | `Promise<string[]>` | 值存储 |
-| `GM.addValueChangeListener` | `GM_addValueChangeListener` | 立即返回数字 | Core |
-| `GM.removeValueChangeListener` | `GM_removeValueChangeListener` | `Promise<boolean>` | Core |
+| `GM.addValueChangeListener` | `GM_addValueChangeListener` | `Promise<number>` | Core |
+| `GM.removeValueChangeListener` | `GM_removeValueChangeListener` | `Promise<undefined>` | Core |
 | `GM.addStyle` | `GM_addStyle` | `Promise<HTMLStyleElement>` | 页面 DOM |
 | `GM.addElement` | `GM_addElement` | `Promise<Element>` | 页面 DOM |
 | `GM.getResourceText` | `GM_getResourceText` | `Promise<string>` | 资源提供器 |
@@ -228,7 +228,7 @@ script 包含 name、namespace、version、description、author、copyright、na
 
 ### GM.log(value) / GM_log(value)
 
-value 必须遵循下一节的 JSON 序列化规则。现代方法在投递给宿主日志回调后返回 `Promise<undefined>`；未配置日志接收器时可能没有可见输出。GM_log 返回 undefined，同时输出到页面控制台，并将异步宿主失败记录到控制台。只接收一个值，不提供 console.log 的多参数格式化功能。
+value 使用 JSON.stringify/JSON.parse 克隆：顶层 undefined、函数、symbol、BigInt 和循环引用无效。日志规则与下方的存储值编码相互独立。现代方法在投递给宿主日志回调后返回 `Promise<undefined>`；未配置日志接收器时可能没有可见输出。GM_log 返回 undefined，同时输出到页面控制台，并将异步宿主失败记录到控制台。只接收一个值，不提供 console.log 的多参数格式化功能。
 
 ```javascript
 // @grant GM.log
@@ -243,39 +243,43 @@ value 必须遵循下一节的 JSON 序列化规则。现代方法在投递给�
 
 存储按安装实例的 ScriptKey 隔离，同一安装实例的活动标签页/框架共享，与页面 localStorage 无关。重新安装成另一个实例不保证复用数据。Demo 更新现有安装时保留数据，卸载时删除；其他宿主可以选择不同持久化策略。
 
-键必须是非空字符串。值和默认值通过 JSON 序列化克隆：推荐使用字符串、有限数字、布尔值、null、数组和普通 JSON 对象。顶层 undefined、函数、symbol、BigInt 和循环引用无效；嵌套的不可表示属性、日期及非有限数遵循 JSON.stringify 的转换规则，需要保持类型时应避免使用。返回对象是副本，修改后需要显式保存。
+键为字符串，允许空字符串。支持存储 undefined、null、字符串、数字（包括 NaN 和正负无穷）、布尔值、数组及对象。已存储的 undefined 表示键存在：它出现在 listValues 中，读取时不会回退到默认值。只有 deleteValue/deleteValues 才会删除键。
+
+嵌套值遵循已核查的 Chromium Tampermonkey 5.5.1 行为：对象的 undefined 属性被省略，数组中的 undefined 和空位转为 null，嵌套非有限数转为 null。顶层负零转为零。对象仅序列化自身可枚举的字符串属性，不调用 toJSON，因此 Date 转为 {}。存储对象的读写均生成独立副本，修改后需显式保存。函数、symbol、BigInt 和循环引用不支持存储，嵌套出现时也会报错。
+
+默认值保留在 JavaScript 端，仅在键不存在时返回。默认值可以是任意类型，包括函数、symbol、BigInt 或循环对象，并保留原引用。批量默认值在调用时读取各属性，再进行异步查询。批量默认值对象中的显式 undefined 属性也会包含在结果中。Promise 兑现仍遵循 JavaScript 对 thenable 的通常处理。
 
 | 签名 | 参数与行为 | 返回值 |
 | --- | --- | --- |
-| `GM.getValue(key, defaultValue?)` | 存在时返回已存储值；不存在时返回提供的 JSON 默认值，未提供默认值则返回 undefined。传 undefined 等同于省略默认值。 | `Promise<value>` |
-| `GM.setValue(key, value)` | 替换存储值，提交前序列化。 | `Promise<undefined>` |
-| `GM.deleteValue(key)` | 存在时删除。 | `Promise<boolean>`，表示是否存在；使用镜像时是修改前的本地存在状态。 |
-| `GM.getValues(keysOrDefaults?)` | 接受字符串键名数组（省略不存在的键）或默认值对象。省略参数、传 null 或 undefined 时读取全部值；空数组和空对象返回空对象。undefined 默认值等同于未提供默认值。 | `Promise<object>` |
-| `GM.setValues(values)` | 写入对象自身可枚举的字符串键；修改存储前校验并 JSON 克隆全部值。 | `Promise<undefined>` |
+| `GM.getValue(key, defaultValue?)` | 键存在时返回存储值，否则返回默认值；未提供默认值则返回 undefined。 | `Promise<value>` |
+| `GM.setValue(key, value)` | 先编码并复制值，再排队提交。 | `Promise<undefined>` |
+| `GM.deleteValue(key)` | 存在时删除，不存在时无操作。 | `Promise<undefined>` |
+| `GM.getValues(keysOrDefaults?)` | 传键数组时省略不存在的键，传默认值对象时补全缺失项。省略、null 或 undefined 表示读取全部；[] 和 {} 返回空对象。结果对象没有原型。 | `Promise<object>` |
+| `GM.setValues(values)` | 写入对象自身可枚举的字符串键；修改存储前校验并编码全部值。 | `Promise<undefined>` |
 | `GM.deleteValues(keys)` | 删除数组中的多个键，忽略重复键和不存在的键。 | `Promise<undefined>` |
-| `GM.listValues()` | 返回键列表；镜像结果排序。 | `Promise<string[]>` |
-| `GM.addValueChangeListener(key, callback)` | 注册 callback(key, oldValue, newValue, remote)；缺失/已删除的值为 undefined。 | 立即返回正整数；注册失败会记录日志并移除本地处理器。 |
-| `GM.removeValueChangeListener(listenerId)` | 正整数，移除当前执行实例的监听器。 | `Promise<boolean>`，表示是否移除。 |
+| `GM.listValues()` | 按 JavaScript 属性枚举顺序列举：数组索引键在前，其余键按插入顺序排列。覆盖不改变位置，删除再创建会移到非索引键末尾。 | `Promise<string[]>` |
+| `GM.addValueChangeListener(key, callback)` | 注册 callback(key, oldValue, newValue, remote)；缺失或已删除值为 undefined。宿主注册失败时拒绝 Promise。 | `Promise<number>` |
+| `GM.removeValueChangeListener(listenerId)` | 移除当前执行实例的正整数监听器 ID；未知 ID 无操作。 | `Promise<undefined>` |
 
-每个方法都需要单独授权，批量授权与对应的单键授权互不包含。监听面向同一安装实例的活动执行，不涉及其他脚本。其他执行实例的修改传 remote: true。启用存储镜像时，本地写入提交成功后以 false 通知。批量写入按已提交键逐项通知一次，包括没有镜像时，以及后续键失败前已提交的键；删除不存在的键不通知。单键写入仍会抑制同一执行实例的宿主回声：没有镜像时（包括 ModernStrict），不要依赖监听器通知自己的单键写入，应在 await 写入后主动更新自己的界面。监听器随执行实例释放。
+每个方法均需单独授权，批量与单键授权互不包含。监听范围为同一安装实例的活动执行。每个已提交变更向每个监听器通知一次：来源执行实例收到 remote: false，其他执行实例或宿主直接修改时为 true。该行为适用于有镜像、无镜像及 ModernStrict 模式。重复写入相同编码值、删除不存在的键不通知。创建或删除已存储的 undefined 会通知，即使回调的旧值和新值均为 undefined。回调在提交后执行，也可能晚于写入 Promise 兑现。执行实例释放时清理监听器。
 
-旧版签名使用同样的参数：GM_getValue 立即返回值，GM_getValues 立即返回对象，GM_listValues 返回排序后的数组，GM_setValue/GM_deleteValue/GM_setValues/GM_deleteValues 返回 undefined，GM_addValueChangeListener 返回数字 ID，GM_removeValueChangeListener 返回本地移除布尔值。同步读写及旧版移除方法需要完整存储镜像。写入立即修改镜像，再串行异步提交；提交失败会回滚/重新同步，并产生 MSC413_COMPATIBILITY_MUTATION_FAILED。同步调用成功返回不代表已持久化。默认镜像模式中的现代写入也使用此队列，但可以通过 Promise 观察完成或失败。
+旧式签名使用相同参数：GM_getValue/GM_getValues/GM_listValues 同步返回值；GM_setValue/GM_deleteValue/GM_setValues/GM_deleteValues/GM_removeValueChangeListener 返回 undefined；GM_addValueChangeListener 立即返回数字 ID。同步值读写需要完整存储镜像，监听别名不依赖镜像。写入立即修改镜像，再串行异步提交；失败时回滚并重新同步，产生 MSC413_COMPATIBILITY_MUTATION_FAILED。同步返回成功不代表持久化完成。旧式监听注册失败时会移除本地处理器，并异步报告失败。
 
-每次批量写入/删除只发送一次桥接请求，再通过现有值存储逐键提交，不保证整批原子性：存储中途失败会停止后续操作，并保留已经提交的键。参数校验失败不会修改任何键。提交失败后会重新同步镜像，并重放后续排队操作。空批次合法。批量值遵循与单键值相同的 JSON 规则，不支持持久化 undefined。
+现代写入共享提交队列，通过 Promise 观察宿主提交成功或失败。每次批量写入或删除仅发送一个桥接请求，再逐键提交，不保证整批原子性：中途失败会停止后续操作，保留已提交的键及对应通知。参数校验失败不会修改任何键。失败后重新同步镜像并重放后续排队操作。空批次合法。
 
 ```javascript
 // @grant GM.getValues
 // @grant GM.setValues
 // @grant GM.deleteValues
 (async function () {
-    await GM.setValues({ theme: 'dark', enabled: true });
-    const settings = await GM.getValues({ theme: 'light', enabled: false });
-    console.log(settings);
-    await GM.deleteValues(['theme', 'enabled']);
+    await GM.setValues({ theme: 'dark', optional: undefined });
+    const settings = await GM.getValues({ theme: 'light', optional: 'fallback', absent: undefined });
+    console.log(settings.optional === undefined, Object.prototype.hasOwnProperty.call(settings, 'absent')); // true, true
+    await GM.deleteValues(['theme', 'optional']);
 })().catch(console.error);
 ```
 
-**与 Tampermonkey 的差异：**JSON 克隆不能保留存储的 undefined；现代 GM.addValueChangeListener 立即返回数字，而 [Tampermonkey 值存储参考](https://www.tampermonkey.net/documentation.php?q=GM_values)描述为 Promise。上述镜像限制和本地监听行为是 MonkeySharp 自身的约定。
+**与 Tampermonkey 的关系：**值转换、默认值和存储 API 返回类型遵循[官方参考](https://www.tampermonkey.net/documentation.php?q=GM_values)及已核查的 5.5.1 门面。MonkeySharp 保留宿主提交确认，在成功提交后通知；Tampermonkey 则立即更新本地状态并通知。启动快照限额及对不支持存储类型的明确拒绝仍是 MonkeySharp 的约束。
 
 ```javascript
 // @grant GM.getValue
@@ -285,7 +289,7 @@ value 必须遵循下一节的 JSON 序列化规则。现代方法在投递给�
 // @grant GM.addValueChangeListener
 // @grant GM.removeValueChangeListener
 (async function () {
-    const id = GM.addValueChangeListener("settings", (key, oldValue, newValue, remote) => {
+    const id = await GM.addValueChangeListener("settings", (key, oldValue, newValue, remote) => {
         console.log(key, oldValue, newValue, remote);
     });
     const settings = await GM.getValue("settings", { enabled: true });
@@ -293,11 +297,9 @@ value 必须遵循下一节的 JSON 序列化规则。现代方法在投递给�
     await GM.setValue("settings", settings);
     console.log(await GM.listValues());
     await GM.removeValueChangeListener(id);
-    console.log("Deleted:", await GM.deleteValue("settings"));
+    await GM.deleteValue("settings");
 })().catch(console.error);
 ```
-
-<a id="dom-helpers"></a>
 
 ## DOM 辅助方法
 
@@ -731,7 +733,7 @@ window.addEventListener("urlchange", onRoute);
 | 授权及模式 | GM.info 和 GM_info 无需授权，默认可用；其他 API 需要声明授权；ModernStrict 使用规范名称。 |
 | 时机 / SPA | 不依赖保证的 document-start 或历史导航后的自动重跑。 |
 | 子域名匹配 | 使用 *.domain 的 match 模式时，另外声明裸域名。 |
-| 存储 | 使用 JSON 数据，await 现代写入以观察失败，并考虑镜像限额及本地监听限制。 |
+| 存储 | 使用支持的存储值，await 现代写入以观察失败，并考虑镜像限额及提交后通知的时序。 |
 | 资源 | 使用精确 GM.getResourceURL，按 data URL 处理，并确认宿主资源提供器可用。 |
 | XHR | 检查代理/分区/Blob URL 等不支持项，适配进度/XML 行为，显式检查 HTTP 状态。 |
 | 菜单 / 剪贴板 | 使用字符串访问键及 MIME 字符串，移除不支持的选项对象/回调重载。 |

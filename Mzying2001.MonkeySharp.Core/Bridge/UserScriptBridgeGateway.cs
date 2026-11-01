@@ -327,20 +327,20 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             CancellationToken cancellationToken)
         {
             var scriptKey = execution.Installation.ScriptKey.ToString();
-            IReadOnlyDictionary<string, string> snapshot;
+            IReadOnlyList<KeyValuePair<string, UserScriptValue>> snapshot;
             if (_store is IUserScriptValueSnapshotProvider provider)
             {
                 snapshot = await provider.GetSnapshotAsync(scriptKey, cancellationToken).ConfigureAwait(false);
             }
             else
             {
-                var values = new Dictionary<string, string>(StringComparer.Ordinal);
+                var values = new List<KeyValuePair<string, UserScriptValue>>();
                 var keys = await _store.ListKeysAsync(scriptKey, cancellationToken).ConfigureAwait(false);
                 foreach (var key in keys)
                 {
                     var value = await _store.GetAsync(scriptKey, key, cancellationToken).ConfigureAwait(false);
                     if (value.Exists)
-                        values[key] = value.JsonValue;
+                        values.Add(new KeyValuePair<string, UserScriptValue>(key, value.Value));
                 }
                 snapshot = values;
                 EmitDiagnostic(
@@ -350,16 +350,10 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                     execution);
             }
 
-            var jsonValues = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
-            foreach (var item in snapshot)
-            {
-                using (var value = JsonDocument.Parse(item.Value))
-                    jsonValues[item.Key] = value.RootElement.Clone();
-            }
             var result = new Dictionary<string, object>
             {
                 ["complete"] = true,
-                ["values"] = jsonValues
+                ["entries"] = snapshot.Select(item => new[] { item.Key, item.Value.EncodedValue }).ToArray()
             };
             if (Encoding.UTF8.GetByteCount(JsonSerializer.Serialize(result)) > _options.MaxCompatibilityBootstrapBytes)
             {
@@ -368,7 +362,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                     "The compatibility storage snapshot exceeds the configured limit.",
                     null,
                     execution);
-                return new Dictionary<string, object> { ["complete"] = false, ["values"] = new Dictionary<string, object>() };
+                return new Dictionary<string, object> { ["complete"] = false, ["entries"] = Array.Empty<string[]>() };
             }
             return result;
         }
@@ -421,7 +415,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                     "The compatibility resource snapshot exceeds the configured limit.",
                     null,
                     execution);
-                return new Dictionary<string, object> { ["complete"] = false, ["values"] = new Dictionary<string, object>() };
+                return new Dictionary<string, object> { ["complete"] = false, ["entries"] = Array.Empty<string[]>() };
             }
             return result;
         }
@@ -679,8 +673,8 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
         {
             EnsureObject(parameters);
             var listenerId = ReadRequiredInt32(parameters, "listenerId");
-            var key = ReadRequiredString(parameters, "key");
-            if (listenerId <= 0 || key.Length == 0)
+            var key = BasicApiProvider.ReadKey(parameters);
+            if (listenerId <= 0)
                 throw new BridgeProtocolException(BridgeErrorCodes.InvalidParams, "listenerId and key are invalid.");
             lock (_stateLock)
             {
@@ -733,8 +727,8 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             var data = ProtocolJson.ValueChangeData(
                 0,
                 args.Key,
-                args.OldValue.Exists ? args.OldValue.JsonValue : null,
-                args.NewValue.Exists ? args.NewValue.JsonValue : null,
+                args.OldValue.Exists ? args.OldValue.Value.EncodedValue : null,
+                args.NewValue.Exists ? args.NewValue.Value.EncodedValue : null,
                 mutationId,
                 originExecutionId,
                 args.Sequence,

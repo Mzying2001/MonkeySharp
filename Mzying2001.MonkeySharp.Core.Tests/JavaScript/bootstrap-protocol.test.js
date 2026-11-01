@@ -51,8 +51,8 @@ test("bootstrap exposes only granted Promise APIs and authenticates notification
             let result = { $monkeySharpType: "undefined" };
             if (request.method === "GM.setValue") values.set(request.params.key, request.params.value);
             if (request.method === "GM.getValue") result = values.has(request.params.key)
-                ? values.get(request.params.key)
-                : request.params.defaultValue;
+                ? { exists: true, value: values.get(request.params.key) }
+                : { exists: false, value: null };
             if (request.method === "GM.addValueChangeListener") result = true;
             return JSON.stringify({
                 type: "response",
@@ -77,7 +77,7 @@ test("bootstrap exposes only granted Promise APIs and authenticates notification
                 "  await GM.setValue('theme', { dark: true });",
                 "  globalThis.__stored = await GM.getValue('theme');",
                 "  globalThis.__legacyType = typeof GM_getValue;",
-                "  globalThis.__listenerId = GM.addValueChangeListener('theme', (...args) => globalThis.__change = args);",
+                "  globalThis.__listenerId = await GM.addValueChangeListener('theme', (...args) => globalThis.__change = args);",
                 "})();"
             ].join("\n"),
             grants: ["GM.getValue", "GM.setValue", "GM.addValueChangeListener"],
@@ -111,8 +111,8 @@ test("bootstrap exposes only granted Promise APIs and authenticates notification
         data: {
             listenerId: globalThis.__listenerId,
             key: "theme",
-            oldValue: { $monkeySharpType: "undefined" },
-            newValue: "dark",
+            oldValue: null, oldValueExists: false,
+            newValue: "sdark", newValueExists: true,
             remote: true
         }
     }), true);

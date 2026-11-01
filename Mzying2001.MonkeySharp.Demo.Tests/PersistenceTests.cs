@@ -2,6 +2,7 @@ using Microsoft.Data.Sqlite;
 using Mzying2001.MonkeySharp.Core.Repository;
 using Mzying2001.MonkeySharp.Core.Storage;
 using Mzying2001.MonkeySharp.Demo.Persistence;
+using static Mzying2001.MonkeySharp.Core.Storage.UserScriptValue;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -91,13 +92,13 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
             {
                 var changes = new List<UserScriptValueChangedEventArgs>();
                 store.ValueChanged += (sender, args) => changes.Add(args);
-                await store.SetAsync("one", "key", "{ \"value\" : 2 }", CancellationToken.None);
+                await store.SetAsync("one", "key", FromJson("{ \"value\" : 2 }"), CancellationToken.None);
                 Assert.False((await store.GetAsync("two", "key", CancellationToken.None)).Exists);
-                await Task.WhenAll(Enumerable.Range(0, 30).Select(index => store.SetAsync("one", "key", index.ToString(), CancellationToken.None)));
+                await Task.WhenAll(Enumerable.Range(0, 30).Select(index => store.SetAsync("one", "key", FromJson(index.ToString()), CancellationToken.None)));
                 Assert.Equal(Enumerable.Range(1, 31).Select(index => (long)index), changes.Select(change => change.Sequence));
-                for (var index = 1; index < changes.Count; index++) Assert.Equal(changes[index - 1].NewValue.JsonValue, changes[index].OldValue.JsonValue);
+                for (var index = 1; index < changes.Count; index++) Assert.Equal(changes[index - 1].NewValue.Value.EncodedValue, changes[index].OldValue.Value.EncodedValue);
                 using (var restored = new SqliteUserScriptValueStore(fixture.Database))
-                    Assert.Equal(changes.Last().NewValue.JsonValue, (await restored.GetAsync("one", "key", CancellationToken.None)).JsonValue);
+                    Assert.Equal(changes.Last().NewValue.Value.EncodedValue, (await restored.GetAsync("one", "key", CancellationToken.None)).Value.EncodedValue);
                 Assert.True(await store.DeleteAsync("one", "key", CancellationToken.None));
                 Assert.False(await store.DeleteAsync("one", "key", CancellationToken.None));
                 Assert.Empty(await store.ListKeysAsync("one", CancellationToken.None));
@@ -139,6 +140,86 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
                 states.CloseTab("first");
                 Assert.Empty(await second.GetAllAsync(script.ScriptKey, CancellationToken.None));
                 await Assert.ThrowsAnyAsync<OperationCanceledException>(() => first.SaveAsync(script.ScriptKey, null, "{}", CancellationToken.None));
+            }
+        }
+
+        [Fact]
+        public async Task TypedValuesAndKeyOrderSurviveReopeningTheDatabase()
+        {
+            using (var fixture = await Fixture.Create())
+            {
+                using (var store = new SqliteUserScriptValueStore(fixture.Database))
+                {
+                    var changes = new List<UserScriptValueChangedEventArgs>();
+                    store.ValueChanged += (_, args) => changes.Add(args);
+                    await store.SetAsync("script", "z", FromEncoded("nNaN"), CancellationToken.None);
+                    await store.SetAsync("script", "", Undefined, CancellationToken.None);
+                    await store.SetAsync("script", "null", FromJson("null"), CancellationToken.None);
+                    await store.SetAsync("script", "", Undefined, CancellationToken.None);
+                    await store.SetAsync("script", "infinity", FromEncoded("nInfinity"), CancellationToken.None);
+                    await store.SetAsync("script", "negative", FromEncoded("n-Infinity"), CancellationToken.None);
+                    Assert.Equal(5, changes.Count);
+                    await store.DeleteAsync("script", "z", CancellationToken.None);
+                    await store.SetAsync("script", "z", FromEncoded("nNaN"), CancellationToken.None);
+                }
+                using (var reopened = new SqliteDatabase(fixture.Paths.DatabasePath))
+                {
+                    await reopened.InitializeAsync(CancellationToken.None);
+                    using (var store = new SqliteUserScriptValueStore(reopened))
+                    {
+                        var values = await store.GetSnapshotAsync("script", CancellationToken.None);
+                        Assert.Equal(new[] { "", "null", "infinity", "negative", "z" }, values.Select(item => item.Key));
+                        Assert.Equal(new[] { "u", "onull", "nInfinity", "n-Infinity", "nNaN" }, values.Select(item => item.Value.EncodedValue));
+                        Assert.True((await store.GetAsync("script", "", CancellationToken.None)).Exists);
+                        Assert.False((await store.GetAsync("other", "", CancellationToken.None)).Exists);
+                    }
+                }
+            }
+        }
+
+        [Fact]
+        public async Task FailedValueCommitDoesNotPublishOrReplaceStoredUndefined()
+        {
+            using (var fixture = await Fixture.Create())
+            using (var store = new SqliteUserScriptValueStore(fixture.Database))
+            {
+                await store.SetAsync("script", "", Undefined, CancellationToken.None);
+                using (var connection = fixture.Database.OpenReady())
+                using (var command = connection.CreateCommand())
+                {
+                    command.CommandText = "CREATE TRIGGER reject_value BEFORE UPDATE ON script_values BEGIN SELECT RAISE(ABORT, 'injected failure'); END;";
+                    command.ExecuteNonQuery();
+                }
+                var changes = 0;
+                store.ValueChanged += (_, __) => changes++;
+                await Assert.ThrowsAsync<SqliteException>(() => store.SetAsync("script", "", FromJson("42"), CancellationToken.None));
+                Assert.Equal(Undefined, (await store.GetAsync("script", "", CancellationToken.None)).Value);
+                Assert.Equal(0, changes);
+            }
+        }
+
+        [Theory]
+        [InlineData(0)]
+        [InlineData(1)]
+        [InlineData(3)]
+        public async Task UnsupportedDatabasesAreRejectedWithoutChangingTheFile(int version)
+        {
+            using (var fixture = await Fixture.Create())
+            {
+                var path = Path.Combine(fixture.Paths.UserScriptsDirectory, "unsupported.db");
+                using (var database = new SqliteDatabase(path))
+                {
+                    using (var connection = database.OpenReady())
+                    using (var command = connection.CreateCommand())
+                    {
+                        command.CommandText = "CREATE TABLE existing_data(value TEXT); INSERT INTO existing_data VALUES('keep'); PRAGMA user_version=" + version;
+                        command.ExecuteNonQuery();
+                    }
+                    var before = File.ReadAllBytes(path);
+                    var error = await Assert.ThrowsAsync<InvalidOperationException>(() => database.InitializeAsync(CancellationToken.None));
+                    Assert.Contains("rebuild", error.Message);
+                    Assert.Equal(before, File.ReadAllBytes(path));
+                }
             }
         }
 

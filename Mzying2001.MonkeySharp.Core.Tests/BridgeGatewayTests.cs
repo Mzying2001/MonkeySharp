@@ -5,6 +5,7 @@ using Mzying2001.MonkeySharp.Core.Permissions;
 using Mzying2001.MonkeySharp.Core.Repository;
 using Mzying2001.MonkeySharp.Core.Runtime;
 using Mzying2001.MonkeySharp.Core.Storage;
+using static Mzying2001.MonkeySharp.Core.Storage.UserScriptValue;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -83,13 +84,14 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             using (var fixture = await BridgeFixture.CreateAsync("GM.getValue", "GM.listValues"))
             {
                 await fixture.Store.SetAsync(
-                    fixture.Invocation.ScriptKey.ToString(), "theme", "{\"dark\":true}", CancellationToken.None);
+                    fixture.Invocation.ScriptKey.ToString(), "theme", FromJson("{\"dark\":true}"), CancellationToken.None);
 
                 var response = await fixture.HelloAsync();
                 var storage = response.GetProperty("compatibility").GetProperty("storage");
 
                 Assert.True(storage.GetProperty("complete").GetBoolean());
-                Assert.True(storage.GetProperty("values").GetProperty("theme").GetProperty("dark").GetBoolean());
+                Assert.Equal("theme", storage.GetProperty("entries")[0][0].GetString());
+                Assert.Equal("o{\"dark\":true}", storage.GetProperty("entries")[0][1].GetString());
             }
         }
 
@@ -141,25 +143,19 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                     ["nullable"] = null, ["nested"] = new { items = new[] { 1, 2 }, enabled = true },
                     ["__proto__"] = "ordinary", ["constructor"] = 42
                 };
-                var set = await fixture.RequestAsync("GM.setValues", new { values });
+                var set = await fixture.RequestAsync("GM.setValues", new { values = values.ToDictionary(item => item.Key, item => FromJson(JsonSerializer.Serialize(item.Value)).EncodedValue) });
                 Assert.True(set.GetProperty("ok").GetBoolean());
                 Assert.Equal("undefined", set.GetProperty("result").GetProperty("$monkeySharpType").GetString());
                 var read = (await fixture.RequestAsync("GM.getValues", new { keys = new[] { "nullable", "nested", "missing", "nested" } }))
                     .GetProperty("result");
-                Assert.Equal(JsonValueKind.Null, read.GetProperty("nullable").ValueKind);
-                Assert.Equal(2, read.GetProperty("nested").GetProperty("items").GetArrayLength());
+                Assert.Equal("onull", read.GetProperty("nullable").GetString());
+                Assert.Equal("o{\"items\":[1,2],\"enabled\":true}", read.GetProperty("nested").GetString());
                 Assert.False(read.TryGetProperty("missing", out _));
-                var defaults = (await fixture.RequestAsync("GM.getValues", new
-                {
-                    keys = new[] { "nullable", "fallback" }, defaults = new { nullable = "unused", fallback = new[] { false } }
-                })).GetProperty("result");
-                Assert.Equal(JsonValueKind.Null, defaults.GetProperty("nullable").ValueKind);
-                Assert.False(defaults.GetProperty("fallback")[0].GetBoolean());
-                await fixture.Store.SetAsync(Guid.NewGuid().ToString("D"), "other-script", "true", CancellationToken.None);
+                await fixture.Store.SetAsync(Guid.NewGuid().ToString("D"), "other-script", FromJson("true"), CancellationToken.None);
                 var all = (await fixture.RequestAsync("GM.getValues", new { keys = (string[])null })).GetProperty("result");
                 Assert.Equal(4, all.EnumerateObject().Count());
-                Assert.Equal("ordinary", all.GetProperty("__proto__").GetString());
-                Assert.Equal(42, all.GetProperty("constructor").GetInt32());
+                Assert.Equal("sordinary", all.GetProperty("__proto__").GetString());
+                Assert.Equal("n42", all.GetProperty("constructor").GetString());
                 Assert.Empty((await fixture.RequestAsync("GM.getValues", new { keys = Array.Empty<string>() }))
                     .GetProperty("result").EnumerateObject());
 
@@ -174,24 +170,23 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Theory]
-        [InlineData("GM.setValues", "{\"values\":{\"valid\":2,\"\":3}}")]
+        [InlineData("GM.setValues", "{\"values\":{\"valid\":\"n2\",\"bad\":\"invalid\"}}")]
         [InlineData("GM.setValues", "{\"values\":[]}")]
         [InlineData("GM.setValues", "{\"values\":null}")]
         [InlineData("GM.deleteValues", "{\"keys\":[\"valid\",12]}")]
-        [InlineData("GM.deleteValues", "{\"keys\":[\"valid\",\"\"]}")]
         [InlineData("GM.deleteValues", "{\"keys\":{}}")]
         [InlineData("GM.getValues", "{\"keys\":[\"valid\",false]}")]
-        [InlineData("GM.getValues", "{\"defaults\":[]}")]
+        [InlineData("GM.getValues", "{\"keys\":false}")]
         public async Task BulkStorageValidatesEntireRequestBeforeChangingValues(string method, string json)
         {
             using (var fixture = await BridgeFixture.CreateAsync(method))
             using (var parameters = JsonDocument.Parse(json))
             {
-                await fixture.Store.SetAsync(fixture.Invocation.ScriptKey.ToString(), "valid", "1", CancellationToken.None);
+                await fixture.Store.SetAsync(fixture.Invocation.ScriptKey.ToString(), "valid", FromJson("1"), CancellationToken.None);
                 var changes = 0;
                 fixture.Store.ValueChanged += (_, __) => changes++;
                 AssertError(await fixture.RequestAsync(method, parameters.RootElement), BridgeErrorCodes.InvalidParams);
-                Assert.Equal("1", (await fixture.Store.GetAsync(fixture.Invocation.ScriptKey.ToString(), "valid", CancellationToken.None)).JsonValue);
+                Assert.Equal("n1", (await fixture.Store.GetAsync(fixture.Invocation.ScriptKey.ToString(), "valid", CancellationToken.None)).Value.EncodedValue);
                 Assert.Equal(0, changes);
             }
         }
@@ -207,10 +202,10 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 var requestId = Guid.NewGuid().ToString("D");
                 AssertError(await fixture.RequestAsync("GM.setValues", new
                 {
-                    values = new { first = 1, fail = 2, last = 3 }
+                    values = new { first = "n1", fail = "n2", last = "n3" }
                 }, requestId), BridgeErrorCodes.Internal);
                 var scriptKey = fixture.Invocation.ScriptKey.ToString();
-                Assert.Equal("1", (await fixture.Store.GetAsync(scriptKey, "first", CancellationToken.None)).JsonValue);
+                Assert.Equal("n1", (await fixture.Store.GetAsync(scriptKey, "first", CancellationToken.None)).Value.EncodedValue);
                 Assert.False((await fixture.Store.GetAsync(scriptKey, "last", CancellationToken.None)).Exists);
                 Assert.Equal(2, notifications.Count);
                 foreach (var notification in notifications)
@@ -226,7 +221,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                     }
                 }
                 notifications.Clear();
-                await fixture.Store.SetAsync(scriptKey, "last", "4", CancellationToken.None);
+                await fixture.Store.SetAsync(scriptKey, "last", FromJson("4"), CancellationToken.None);
                 using (var data = JsonDocument.Parse(Assert.Single(notifications).DataJson))
                     Assert.False(data.RootElement.TryGetProperty("originExecutionId", out _));
             }
@@ -247,10 +242,10 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         {
             using (var fixture = await BridgeFixture.CreateWithStoreAsync(new KeyOnlyStore(), "GM.getValues", "GM.setValues"))
             {
-                await fixture.RequestAsync("GM.setValues", new { values = new { first = 1, second = "two" } });
+                await fixture.RequestAsync("GM.setValues", new { values = new { first = "n1", second = "stwo" } });
                 var result = (await fixture.RequestAsync("GM.getValues", new { })).GetProperty("result");
-                Assert.Equal(1, result.GetProperty("first").GetInt32());
-                Assert.Equal("two", result.GetProperty("second").GetString());
+                Assert.Equal("n1", result.GetProperty("first").GetString());
+                Assert.Equal("stwo", result.GetProperty("second").GetString());
             }
         }
 
@@ -321,20 +316,82 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 "GM.getValue", "GM.setValue", "GM.deleteValue", "GM.listValues"))
             {
                 var missing = await fixture.RequestAsync("GM.getValue", new { key = "missing", defaultValue = "fallback" });
-                await fixture.RequestAsync("GM.setValue", new { key = "null", value = (object)null });
-                await fixture.RequestAsync("GM.setValue", new { key = "object", value = new { nested = new[] { 1, 2 } } });
+                await fixture.RequestAsync("GM.setValue", new { key = "null", value = "onull" });
+                await fixture.RequestAsync("GM.setValue", new { key = "object", value = "o{\"nested\":[1,2]}" });
                 var storedNull = await fixture.RequestAsync("GM.getValue", new { key = "null", defaultValue = "fallback" });
                 var storedObject = await fixture.RequestAsync("GM.getValue", new { key = "object" });
                 var keys = await fixture.RequestAsync("GM.listValues", new { });
                 var deleted = await fixture.RequestAsync("GM.deleteValue", new { key = "null" });
                 var absentWithoutDefault = await fixture.RequestAsync("GM.getValue", new { key = "null" });
 
-                Assert.Equal("fallback", missing.GetProperty("result").GetString());
-                Assert.Equal(JsonValueKind.Null, storedNull.GetProperty("result").ValueKind);
-                Assert.Equal(2, storedObject.GetProperty("result").GetProperty("nested")[1].GetInt32());
+                Assert.False(missing.GetProperty("result").GetProperty("exists").GetBoolean());
+                Assert.Equal("onull", storedNull.GetProperty("result").GetProperty("value").GetString());
+                Assert.Equal("o{\"nested\":[1,2]}", storedObject.GetProperty("result").GetProperty("value").GetString());
                 Assert.Equal(new[] { "null", "object" }, keys.GetProperty("result").EnumerateArray().Select(item => item.GetString()));
-                Assert.True(deleted.GetProperty("result").GetBoolean());
-                Assert.Equal("undefined", absentWithoutDefault.GetProperty("result").GetProperty("$monkeySharpType").GetString());
+                Assert.Equal("undefined", deleted.GetProperty("result").GetProperty("$monkeySharpType").GetString());
+                Assert.False(absentWithoutDefault.GetProperty("result").GetProperty("exists").GetBoolean());
+            }
+        }
+
+        [Fact]
+        public async Task TypedUndefinedSurvivesSingleBulkSnapshotAndListenerBridgePaths()
+        {
+            using (var fixture = await BridgeFixture.CreateAsync("GM.getValue", "GM.setValue", "GM.getValues",
+                "GM.setValues", "GM.deleteValue", "GM.addValueChangeListener"))
+            {
+                var notifications = new List<BridgeNotificationEventArgs>();
+                fixture.Gateway.Notification += (_, item) => notifications.Add(item);
+                await fixture.RequestAsync("GM.addValueChangeListener", new { listenerId = 1, key = "" });
+                var set = await fixture.RequestAsync("GM.setValue", new { key = "", value = "u" });
+                Assert.True(set.GetProperty("ok").GetBoolean());
+                var read = (await fixture.RequestAsync("GM.getValue", new { key = "" })).GetProperty("result");
+                Assert.True(read.GetProperty("exists").GetBoolean());
+                Assert.Equal("u", read.GetProperty("value").GetString());
+                var all = (await fixture.RequestAsync("GM.getValues", new { })).GetProperty("result");
+                Assert.Equal("u", all.GetProperty("").GetString());
+                var snapshot = (await fixture.HelloAsync()).GetProperty("compatibility").GetProperty("storage");
+                Assert.Equal("", snapshot.GetProperty("entries")[0][0].GetString());
+                Assert.Equal("u", snapshot.GetProperty("entries")[0][1].GetString());
+                await fixture.RequestAsync("GM.setValue", new { key = "", value = "u" });
+                Assert.Equal(2, notifications.Count);
+                using (var created = JsonDocument.Parse(notifications[0].DataJson))
+                {
+                    Assert.False(created.RootElement.GetProperty("oldValueExists").GetBoolean());
+                    Assert.True(created.RootElement.GetProperty("newValueExists").GetBoolean());
+                    Assert.Equal("u", created.RootElement.GetProperty("newValue").GetString());
+                }
+                await fixture.RequestAsync("GM.deleteValue", new { key = "" });
+                Assert.Equal(4, notifications.Count);
+                using (var deleted = JsonDocument.Parse(notifications[2].DataJson))
+                {
+                    Assert.True(deleted.RootElement.GetProperty("oldValueExists").GetBoolean());
+                    Assert.False(deleted.RootElement.GetProperty("newValueExists").GetBoolean());
+                    Assert.Equal("u", deleted.RootElement.GetProperty("oldValue").GetString());
+                }
+                await fixture.RequestAsync("GM.setValues", new { values = new Dictionary<string, string>
+                {
+                    ["$monkeySharpType"] = "sundefined", ["__proto__"] = "o{\"safe\":true}",
+                    ["constructor"] = "nInfinity", ["undefined"] = "u"
+                } });
+                all = (await fixture.RequestAsync("GM.getValues", new { })).GetProperty("result");
+                Assert.Equal("sundefined", all.GetProperty("$monkeySharpType").GetString());
+                Assert.Equal("o{\"safe\":true}", all.GetProperty("__proto__").GetString());
+                Assert.Equal("nInfinity", all.GetProperty("constructor").GetString());
+                Assert.Equal("u", all.GetProperty("undefined").GetString());
+            }
+        }
+
+        [Theory]
+        [InlineData("o{invalid")]
+        [InlineData("o42")]
+        [InlineData("n1e999")]
+        [InlineData("invalid")]
+        public async Task InvalidTypedSingleValuesReturnInvalidParamsWithoutMutation(string encoded)
+        {
+            using (var fixture = await BridgeFixture.CreateAsync("GM.setValue"))
+            {
+                AssertError(await fixture.RequestAsync("GM.setValue", new { key = "", value = encoded }), BridgeErrorCodes.InvalidParams);
+                Assert.Empty(await fixture.Store.ListKeysAsync(fixture.Invocation.ScriptKey.ToString(), CancellationToken.None));
             }
         }
 
@@ -585,7 +642,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                     secondInvocation,
                     "GM.addValueChangeListener",
                     new { listenerId = 1, key = "theme" });
-                await fixture.Store.SetAsync(fixture.Invocation.ScriptKey.ToString(), "theme", "\"dark\"", CancellationToken.None);
+                await fixture.Store.SetAsync(fixture.Invocation.ScriptKey.ToString(), "theme", FromJson("\"dark\""), CancellationToken.None);
 
                 Assert.Equal(4, notifications.Count);
                 Assert.Equal(2, notifications.Count(item => item.EventName == "storage-sync"));
@@ -607,7 +664,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                     "GM.removeValueChangeListener",
                     new { listenerId = 1 });
                 notifications.Clear();
-                await fixture.Store.SetAsync(fixture.Invocation.ScriptKey.ToString(), "theme", "\"light\"", CancellationToken.None);
+                await fixture.Store.SetAsync(fixture.Invocation.ScriptKey.ToString(), "theme", FromJson("\"light\""), CancellationToken.None);
                 Assert.Equal(2, notifications.Count(item => item.EventName == "storage-sync"));
                 Assert.DoesNotContain(notifications, item => item.EventName == "value-change");
             }
@@ -626,7 +683,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 var notifications = new List<BridgeNotificationEventArgs>();
                 fixture.Gateway.Notification += (_, item) => notifications.Add(item);
 
-                await fixture.RequestAsync("GM.setValue", new { key = "count", value = 4 });
+                await fixture.RequestAsync("GM.setValue", new { key = "count", value = "n4" });
 
                 Assert.Equal(2, notifications.Count);
                 Assert.All(notifications, item => Assert.Equal("storage-sync", item.EventName));
@@ -650,14 +707,14 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             using (var fixture = await BridgeFixture.CreateWithStoreAsync(store, method))
             {
                 var request = fixture.RequestAsync(method, method == "GM.setValue"
-                    ? (object)new { key = "count", value = 1 } : new { values = new { count = 1, second = 2 } });
+                    ? (object)new { key = "count", value = "n1" } : new { values = new { count = "n1", second = "n2" } });
                 await store.Started.Task;
                 await fixture.Engine.InvalidateDocumentAsync(fixture.Frame.DocumentId, CancellationToken.None);
                 store.Release.TrySetResult(null);
                 var response = await request;
                 Assert.True(response.GetProperty("ok").GetBoolean());
-                Assert.Equal("1", (await store.GetAsync(
-                    fixture.Invocation.ScriptKey.ToString(), "count", CancellationToken.None)).JsonValue);
+                Assert.Equal("n1", (await store.GetAsync(
+                    fixture.Invocation.ScriptKey.ToString(), "count", CancellationToken.None)).Value.EncodedValue);
             }
         }
 
@@ -911,8 +968,8 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             }
             public Task<StoredValue> GetAsync(string scriptKey, string key, CancellationToken cancellationToken) =>
                 _inner.GetAsync(scriptKey, key, cancellationToken);
-            public Task SetAsync(string scriptKey, string key, string jsonValue, CancellationToken cancellationToken) =>
-                _inner.SetAsync(scriptKey, key, jsonValue, cancellationToken);
+            public Task SetAsync(string scriptKey, string key, UserScriptValue value, CancellationToken cancellationToken) =>
+                _inner.SetAsync(scriptKey, key, value, cancellationToken);
             public Task<bool> DeleteAsync(string scriptKey, string key, CancellationToken cancellationToken) =>
                 _inner.DeleteAsync(scriptKey, key, cancellationToken);
             public Task<IReadOnlyList<string>> ListKeysAsync(string scriptKey, CancellationToken cancellationToken) =>

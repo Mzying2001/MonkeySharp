@@ -166,15 +166,15 @@ Each row requires the capability in its first column unless stated otherwise. `P
 | --- | --- | --- | --- |
 | `GM.info` | `GM_info` | Frozen object, not a function | Core |
 | `GM.log` | `GM_log` | `Promise<undefined>` | Core logging sink |
-| `GM.getValue` | `GM_getValue` | `Promise<JSON value or undefined>` | Value store |
+| `GM.getValue` | `GM_getValue` | `Promise<value>` | Value store |
 | `GM.setValue` | `GM_setValue` | `Promise<undefined>` | Value store |
-| `GM.deleteValue` | `GM_deleteValue` | `Promise<boolean>` | Value store |
+| `GM.deleteValue` | `GM_deleteValue` | `Promise<undefined>` | Value store |
 | `GM.getValues` | `GM_getValues` | `Promise<object>` | Value store |
 | `GM.setValues` | `GM_setValues` | `Promise<undefined>` | Value store |
 | `GM.deleteValues` | `GM_deleteValues` | `Promise<undefined>` | Value store |
 | `GM.listValues` | `GM_listValues` | `Promise<string[]>` | Value store |
-| `GM.addValueChangeListener` | `GM_addValueChangeListener` | Number immediately | Core |
-| `GM.removeValueChangeListener` | `GM_removeValueChangeListener` | `Promise<boolean>` | Core |
+| `GM.addValueChangeListener` | `GM_addValueChangeListener` | `Promise<number>` | Core |
+| `GM.removeValueChangeListener` | `GM_removeValueChangeListener` | `Promise<undefined>` | Core |
 | `GM.addStyle` | `GM_addStyle` | `Promise<HTMLStyleElement>` | Page DOM |
 | `GM.addElement` | `GM_addElement` | `Promise<Element>` | Page DOM |
 | `GM.getResourceText` | `GM_getResourceText` | `Promise<string>` | Resource provider |
@@ -218,7 +218,7 @@ Read-only, recursively frozen installation snapshot. `GM_info === GM.info`. Both
 
 ### GM.log(value) / GM_log(value)
 
-`value` must be JSON-serializable under the rules in the next section. Modern calls return `Promise<undefined>` after delivery to the host logging callback. If no sink is configured, delivery has no visible output. `GM_log` returns `undefined`, additionally writes to the page console, and reports asynchronous host failures to the console. Only one value is accepted; this is not console.log's variadic formatting API.
+`value` is cloned using `JSON.stringify`/`JSON.parse`; top-level `undefined`, functions, symbols, BigInt, and cycles are invalid. This logging rule is separate from the storage value encoding below. Modern calls return `Promise<undefined>` after delivery to the host logging callback. If no sink is configured, delivery has no visible output. `GM_log` returns `undefined`, additionally writes to the page console, and reports asynchronous host failures to the console. Only one value is accepted; this is not console.log's variadic formatting API.
 
 ```javascript
 // @grant GM.log
@@ -231,39 +231,43 @@ Read-only, recursively frozen installation snapshot. `GM_info === GM.info`. Both
 
 Values are isolated by installation `ScriptKey`, shared by its active tabs/frames, and independent of page localStorage. Reinstalling as a different installation need not reuse values. The Demo preserves values when updating an existing installation and removes them on uninstall; other hosts choose persistence policy.
 
-Keys are non-empty strings. Values/defaults are cloned through JSON serialization: use strings, finite numbers, booleans, `null`, arrays, and plain JSON objects. Top-level `undefined`, functions, symbols, BigInt, and cycles are invalid. Nested unsupported properties, dates, and non-finite numbers follow `JSON.stringify` conversion, so avoid them when type preservation matters. Returned objects are copies; edit and save them explicitly.
+Keys are strings, including the empty string. Stored values may be `undefined`, `null`, strings, numbers (including `NaN` and positive/negative infinity), booleans, arrays, and objects. A stored `undefined` is an existing key: it appears in `listValues` and does not fall back to a default. Only `deleteValue`/`deleteValues` removes a key.
+
+Nested values follow the behavior checked against Chromium Tampermonkey 5.5.1: `undefined` object properties are omitted; array `undefined` values and holes become `null`; nested non-finite numbers become `null`. Top-level negative zero becomes zero. Objects are serialized from their own enumerable string properties without calling `toJSON`, so a `Date` becomes `{}`. Stored objects are detached copies; edit and save them explicitly. Functions, symbols, BigInt, and cycles are rejected as stored values, including inside objects/arrays.
+
+Defaults stay in JavaScript and are returned only for absent keys. They may be any value, including functions, symbols, BigInt, or cyclic objects; their references are preserved. Bulk default properties are captured when the API is called, before the asynchronous lookup. A defaults object's explicit `undefined` property is included in the bulk result. Promise resolution still follows JavaScript's usual thenable handling.
 
 | Signature | Parameters and behavior | Result |
 | --- | --- | --- |
-| `GM.getValue(key, defaultValue?)` | Return the stored value if `key` exists; otherwise return the provided JSON default, or `undefined` when no default is supplied. Passing `undefined` is equivalent to omitting the default. | `Promise<value>` |
-| `GM.setValue(key, value)` | Replace the stored value; serializes before committing. | `Promise<undefined>` |
-| `GM.deleteValue(key)` | Delete if present. | `Promise<boolean>` indicating whether it existed; with a mirror, this is the local pre-mutation existence state. |
-| `GM.getValues(keysOrDefaults?)` | Read a string array of keys (missing keys are omitted), or an object of defaults. Omitted, `null`, or `undefined` reads all values; `[]` and `{}` return `{}`. An `undefined` default means no default. | `Promise<object>` |
-| `GM.setValues(values)` | Set the object's own enumerable string keys; validate and JSON-clone every value before changing storage. | `Promise<undefined>` |
+| `GM.getValue(key, defaultValue?)` | Return the stored value when present, otherwise the default, or `undefined` if omitted. | `Promise<value>` |
+| `GM.setValue(key, value)` | Encode a detached value before queuing its commit. | `Promise<undefined>` |
+| `GM.deleteValue(key)` | Delete if present; absent keys are a no-op. | `Promise<undefined>` |
+| `GM.getValues(keysOrDefaults?)` | Read an array of keys (absent keys are omitted), or an object of defaults. Omitted, `null`, or `undefined` reads all values; `[]` and `{}` return empty objects. The result has no prototype. | `Promise<object>` |
+| `GM.setValues(values)` | Set the object's own enumerable string keys; validate and encode all values before changing storage. | `Promise<undefined>` |
 | `GM.deleteValues(keys)` | Delete an array of keys, ignoring duplicates and absent keys. | `Promise<undefined>` |
-| `GM.listValues()` | List keys; mirrored results are sorted. | `Promise<string[]>` |
-| `GM.addValueChangeListener(key, callback)` | Register `callback(key, oldValue, newValue, remote)`; missing/deleted values are `undefined`. | Positive number immediately; registration failure is logged and removes the local handler. |
-| `GM.removeValueChangeListener(listenerId)` | Positive integer; remove this execution's listener. | `Promise<boolean>` indicating removal. |
+| `GM.listValues()` | Return keys in JavaScript property enumeration order: array-index keys first, then other keys in insertion order. Replacing a key preserves its position; deleting and reinserting moves it to the end of the non-index keys. | `Promise<string[]>` |
+| `GM.addValueChangeListener(key, callback)` | Register `callback(key, oldValue, newValue, remote)`; absent/deleted values are `undefined`. Host registration failures reject. | `Promise<number>` |
+| `GM.removeValueChangeListener(listenerId)` | Remove this execution's positive-integer listener ID; unknown IDs are a no-op. | `Promise<undefined>` |
 
-Grant each method separately; a bulk grant does not grant its single-key counterpart, or vice versa. Listeners cover active executions of the same installation, not unrelated scripts. Remote changes pass `remote: true`. With a storage mirror, successful local writes notify with `false` after commit. Bulk writes notify once per committed key, including without a mirror and for keys committed before a later failure; deleting an absent key does not notify. For single-key writes, same-execution host echoes are suppressed: without a mirror (including `ModernStrict`), do not rely on notifications for your own single-key writes; update your own UI after awaiting the write. Listeners end with the execution.
+Grant each method separately; bulk and single-key grants do not imply one another. Listeners cover active executions of the same installation. Every committed change notifies each registered listener once, with `remote: false` for the originating execution and `true` for other executions or host-originated changes. This applies with or without a mirror, including `ModernStrict`. Identical encoded writes and deletion of absent keys do not notify. Creating or deleting a stored `undefined` does notify, even though both callback values can be `undefined`. Callbacks run after commit; they may arrive after the write Promise resolves. Listeners end with the execution.
 
-Legacy signatures use the same parameters: `GM_getValue` returns a value immediately, `GM_getValues` returns an object immediately, `GM_listValues` returns a sorted array, `GM_setValue`/`GM_deleteValue`/`GM_setValues`/`GM_deleteValues` return `undefined`, `GM_addValueChangeListener` returns a numeric ID, and `GM_removeValueChangeListener` returns a local removal boolean. The synchronous reads/writes and legacy removal method require a complete storage mirror. Writes change it immediately and queue serialized asynchronous commits. Failed commits roll back/reconcile and emit `MSC413_COMPATIBILITY_MUTATION_FAILED`; a successful synchronous return does not mean durable persistence. Modern writes in the default mirrored profile use this queue too, but their Promises expose completion/failure.
+Legacy signatures use the same parameters: `GM_getValue`/`GM_getValues`/`GM_listValues` return values immediately; `GM_setValue`/`GM_deleteValue`/`GM_setValues`/`GM_deleteValues`/`GM_removeValueChangeListener` return `undefined`; `GM_addValueChangeListener` returns a numeric ID immediately. Synchronous value reads/writes require a complete storage mirror. Listener aliases do not require a mirror. Writes update the mirror immediately and queue asynchronous commits. Failed commits roll back/reconcile and emit `MSC413_COMPATIBILITY_MUTATION_FAILED`; a successful synchronous return does not mean persistence. Legacy listener registration failures remove the local handler and report the failure asynchronously.
 
-Each bulk write/delete uses one bridge request and commits keys sequentially through the existing value store. It is not an atomic transaction: a storage failure stops the batch and preserves previously committed keys. Validation failures change no keys. The mirror is reconciled after a failed commit, with later queued mutations reapplied. Empty batches are valid. Bulk values follow the same JSON rules as single-key values; stored `undefined` is not supported.
+Modern writes share this commit queue and their Promises expose host completion/failure. Each bulk write/delete uses one bridge request and commits keys sequentially. A storage failure stops the batch and preserves previously committed keys and their notifications. Validation failures change no keys. Reconciliation reapplies later queued mutations. Empty batches are valid.
 
 ```javascript
 // @grant GM.getValues
 // @grant GM.setValues
 // @grant GM.deleteValues
 (async function () {
-    await GM.setValues({ theme: 'dark', enabled: true });
-    const settings = await GM.getValues({ theme: 'light', enabled: false });
-    console.log(settings);
-    await GM.deleteValues(['theme', 'enabled']);
+    await GM.setValues({ theme: 'dark', optional: undefined });
+    const settings = await GM.getValues({ theme: 'light', optional: 'fallback', absent: undefined });
+    console.log(settings.optional === undefined, Object.prototype.hasOwnProperty.call(settings, 'absent')); // true, true
+    await GM.deleteValues(['theme', 'optional']);
 })().catch(console.error);
 ```
 
-**Tampermonkey differences:** JSON cloning does not preserve stored `undefined`; modern `GM.addValueChangeListener` returns an immediate number rather than the Promise described in [Tampermonkey's values reference](https://www.tampermonkey.net/documentation.php?q=GM_values). Mirror limits and local-listener behavior above are MonkeySharp-specific.
+**Tampermonkey compatibility:** value conversion, defaults, and storage API return types follow the [values reference](https://www.tampermonkey.net/documentation.php?q=GM_values) and the checked 5.5.1 facade. MonkeySharp intentionally waits for host commit confirmation and notifies after commit; Tampermonkey updates local state and notifies immediately. Snapshot limits and rejection of unsupported stored types remain MonkeySharp constraints.
 
 ```javascript
 // @grant GM.getValue
@@ -273,7 +277,7 @@ Each bulk write/delete uses one bridge request and commits keys sequentially thr
 // @grant GM.addValueChangeListener
 // @grant GM.removeValueChangeListener
 (async function () {
-    const id = GM.addValueChangeListener("settings", (key, oldValue, newValue, remote) => {
+    const id = await GM.addValueChangeListener("settings", (key, oldValue, newValue, remote) => {
         console.log(key, oldValue, newValue, remote);
     });
     const settings = await GM.getValue("settings", { enabled: true });
@@ -281,7 +285,7 @@ Each bulk write/delete uses one bridge request and commits keys sequentially thr
     await GM.setValue("settings", settings);
     console.log(await GM.listValues());
     await GM.removeValueChangeListener(id);
-    console.log("Deleted:", await GM.deleteValue("settings"));
+    await GM.deleteValue("settings");
 })().catch(console.error);
 ```
 
@@ -699,7 +703,7 @@ window.addEventListener("urlchange", onRoute);
 | Grants and profiles | `GM.info` and `GM_info` are always available without grants. Declare other used APIs; choose canonical modern names for ModernStrict. |
 | Timing / SPA | Do not require guaranteed document-start or automatic reruns on history changes. |
 | Match subdomains | Add the bare domain separately when using `*.domain` match patterns. |
-| Stored values | Use JSON data; await modern writes for failures; account for bounded mirrors and local-listener limitations. |
+| Stored values | Use supported storage values; await modern writes for failures; account for bounded mirrors and post-commit notifications. |
 | Resources | Use exact `GM.getResourceURL`; expect a data URL and host-provided resource availability. |
 | XHR | Check unsupported proxy/partition/Blob-URL controls; adapt progress/XML behavior; inspect HTTP status explicitly. |
 | Menu / clipboard | Use string access keys and MIME strings; remove unsupported options objects/callback overloads. |

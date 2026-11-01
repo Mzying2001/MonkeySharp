@@ -2,9 +2,7 @@ using Microsoft.Data.Sqlite;
 using Mzying2001.MonkeySharp.Core.Storage;
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.Linq;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -25,29 +23,29 @@ namespace Mzying2001.MonkeySharp.Demo.Persistence
             return RunAsync(scriptKey, connection => Read(connection, key, scriptKey), cancellationToken);
         }
 
-        public Task SetAsync(string scriptKey, string key, string jsonValue, CancellationToken cancellationToken)
+        public Task SetAsync(string scriptKey, string key, UserScriptValue value, CancellationToken cancellationToken)
         {
             Validate(key);
-            string canonical;
-            using (var document = JsonDocument.Parse(jsonValue)) canonical = JsonSerializer.Serialize(document.RootElement);
+            if (value == null) throw new ArgumentNullException(nameof(value));
             return RunAsync(scriptKey, connection =>
             {
                 var old = Read(connection, key, scriptKey);
+                if (old.Exists && old.Value.Equals(value)) return false;
                 using (var transaction = connection.BeginTransaction())
                 using (var command = connection.CreateCommand())
                 {
                     command.Transaction = transaction;
-                    command.CommandText = @"INSERT INTO script_values(script_key,value_key,json_value,updated_at) VALUES($script,$key,$value,$updated)
-ON CONFLICT(script_key,value_key) DO UPDATE SET json_value=excluded.json_value,updated_at=excluded.updated_at";
+                    command.CommandText = @"INSERT INTO script_values(script_key,value_key,encoded_value,updated_at) VALUES($script,$key,$value,$updated)
+ON CONFLICT(script_key,value_key) DO UPDATE SET encoded_value=excluded.encoded_value,updated_at=excluded.updated_at";
                     command.Parameters.AddWithValue("$script", scriptKey);
                     command.Parameters.AddWithValue("$key", key);
-                    command.Parameters.AddWithValue("$value", canonical);
+                    command.Parameters.AddWithValue("$value", value.EncodedValue);
                     command.Parameters.AddWithValue("$updated", DateTimeOffset.UtcNow.ToString("O"));
                     command.ExecuteNonQuery();
                     cancellationToken.ThrowIfCancellationRequested();
                     transaction.Commit();
                 }
-                Publish(new UserScriptValueChangedEventArgs(++_sequence, scriptKey, key, old, new StoredValue(true, canonical), ValueChangeKind.Set));
+                Publish(new UserScriptValueChangedEventArgs(++_sequence, scriptKey, key, old, new StoredValue(true, value), ValueChangeKind.Set));
                 return true;
             }, cancellationToken);
         }
@@ -78,28 +76,28 @@ ON CONFLICT(script_key,value_key) DO UPDATE SET json_value=excluded.json_value,u
         public async Task<IReadOnlyList<string>> ListKeysAsync(string scriptKey, CancellationToken cancellationToken)
         {
             var values = await GetSnapshotAsync(scriptKey, cancellationToken).ConfigureAwait(false);
-            return values.Keys.OrderBy(key => key, StringComparer.Ordinal).ToList().AsReadOnly();
+            return values.Select(item => item.Key).ToList().AsReadOnly();
         }
 
-        public Task<IReadOnlyDictionary<string, string>> GetSnapshotAsync(string scriptKey, CancellationToken cancellationToken)
+        public Task<IReadOnlyList<KeyValuePair<string, UserScriptValue>>> GetSnapshotAsync(string scriptKey, CancellationToken cancellationToken)
         {
-            return RunAsync<IReadOnlyDictionary<string, string>>(scriptKey, connection =>
+            return RunAsync<IReadOnlyList<KeyValuePair<string, UserScriptValue>>>(scriptKey, connection =>
             {
-                var values = new Dictionary<string, string>(StringComparer.Ordinal);
+                var values = new List<KeyValuePair<string, UserScriptValue>>();
                 using (var command = connection.CreateCommand())
                 {
-                    command.CommandText = "SELECT value_key,json_value FROM script_values WHERE script_key=$script";
+                    command.CommandText = "SELECT value_key,encoded_value FROM script_values WHERE script_key=$script ORDER BY rowid";
                     command.Parameters.AddWithValue("$script", scriptKey);
                     using (var reader = command.ExecuteReader())
-                        while (reader.Read()) values.Add(reader.GetString(0), reader.GetString(1));
+                        while (reader.Read()) values.Add(new KeyValuePair<string, UserScriptValue>(reader.GetString(0), UserScriptValue.FromEncoded(reader.GetString(1))));
                 }
-                return new ReadOnlyDictionary<string, string>(values);
+                return values.AsReadOnly();
             }, cancellationToken);
         }
 
         private async Task<TResult> RunAsync<TResult>(string scriptKey, Func<SqliteConnection, TResult> operation, CancellationToken token)
         {
-            Validate(scriptKey);
+            if (string.IsNullOrEmpty(scriptKey)) throw new ArgumentException("A script key is required.");
             await _gate.WaitAsync(token).ConfigureAwait(false);
             try
             {
@@ -113,11 +111,11 @@ ON CONFLICT(script_key,value_key) DO UPDATE SET json_value=excluded.json_value,u
         {
             using (var command = connection.CreateCommand())
             {
-                command.CommandText = "SELECT json_value FROM script_values WHERE script_key=$script AND value_key=$key";
+                command.CommandText = "SELECT encoded_value FROM script_values WHERE script_key=$script AND value_key=$key";
                 command.Parameters.AddWithValue("$script", scriptKey);
                 command.Parameters.AddWithValue("$key", key);
                 var value = command.ExecuteScalar();
-                return value == null ? StoredValue.Missing : new StoredValue(true, (string)value);
+                return value == null ? StoredValue.Missing : new StoredValue(true, UserScriptValue.FromEncoded((string)value));
             }
         }
 
@@ -130,7 +128,7 @@ ON CONFLICT(script_key,value_key) DO UPDATE SET json_value=excluded.json_value,u
                 try { handler(this, args); } catch (Exception exception) { System.Diagnostics.Trace.TraceError(exception.ToString()); }
             }
         }
-        private static void Validate(string key) { if (string.IsNullOrEmpty(key)) throw new ArgumentException("A nonempty key is required."); }
+        private static void Validate(string key) { if (key == null) throw new ArgumentNullException(nameof(key)); }
         public void Dispose() { _disposed = true; }
     }
 }

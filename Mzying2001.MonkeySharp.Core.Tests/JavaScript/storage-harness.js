@@ -1,0 +1,113 @@
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+const vm = require("node:vm");
+
+const template = fs.readFileSync(path.resolve(__dirname, "../../Mzying2001.MonkeySharp.Core/Js/Init.js"), "utf8");
+const undefinedValue = { $monkeySharpType: "undefined" };
+const fixtureValue = value => typeof value === "undefined" ? "u" : value === null || typeof value === "object"
+    ? "o" + JSON.stringify(value) : ({ string: "s", number: "n", boolean: "b" })[typeof value] + String(value);
+const methods = ["GM.getValue", "GM.setValue", "GM.deleteValue", "GM.listValues",
+    "GM.getValues", "GM.setValues", "GM.deleteValues", "GM.addValueChangeListener", "GM.removeValueChangeListener"];
+let nextExecution = 0;
+
+async function waitFor(predicate) {
+    const deadline = Date.now() + 2000;
+    while (!predicate()) {
+        if (Date.now() > deadline) throw new Error("Timed out waiting for bulk storage.");
+        await new Promise(resolve => setTimeout(resolve, 5));
+    }
+}
+
+async function install(options = {}) {
+    const executionId = "bulk-storage-" + ++nextExecution;
+    const values = Object.assign(Object.create(null), Object.fromEntries(Object.entries(options.values || {}).map(([key, value]) => [key, fixtureValue(value)])));
+    const entries = () => Object.entries(values);
+    const requests = [];
+    const listeners = new Map();
+    const notifications = [];
+    let sequence = 0;
+    let failOnKey = options.failOnKey;
+    const deliver = notification => globalThis.__MonkeySharpRuntime.receive(notification);
+    const changed = (request, key, oldValue, newValue, oldValueExists, newValueExists) => {
+        const data = { key, oldValue, newValue, originExecutionId: executionId,
+            mutationId: request.requestId, mutationMethod: request.method, sequence: ++sequence,
+            oldValueExists, newValueExists };
+        const notification = { type: "notification", protocol: 1, executionId,
+            deliveryToken: executionId, event: "storage-sync", data };
+        if (options.deferNotifications) notifications.push(notification);
+        else deliver(notification);
+        listeners.forEach((listenerKey, listenerId) => {
+            if (key === listenerKey) {
+                const event = { ...notification, event: "value-change", data: { ...data, listenerId, remote: true } };
+                if (options.deferNotifications) notifications.push(event); else deliver(event);
+            }
+        });
+    };
+    globalThis.__MonkeySharpBridge = {
+        dispatch: async requestJson => {
+            const request = JSON.parse(requestJson);
+            const response = result => JSON.stringify({ type: "response", protocol: 1,
+                requestId: request.requestId, ok: true, result });
+            if (request.type === "hello") return JSON.stringify({
+                type: "hello-result", protocol: 1, ok: true, limits: {}, apis: options.grants || methods,
+                compatibility: { storage: { complete: options.mirror !== false, entries: entries() } }
+            });
+            requests.push(request);
+            const parameters = request.params;
+            if (request.method === "runtime.getStorageSnapshot") return response({ complete: true, entries: entries() });
+            if (request.method === "GM.addValueChangeListener") {
+                if (options.failRegistration) return JSON.stringify({ type: "response", protocol: 1, requestId: request.requestId,
+                    ok: false, error: { code: "MSP999_INTERNAL", message: "Registration failed" } });
+                listeners.set(parameters.listenerId, parameters.key);
+            }
+            if (request.method === "GM.removeValueChangeListener") listeners.delete(parameters.listenerId);
+            if (request.method === "GM.listValues") return response(Object.keys(values));
+            if (request.method === "GM.getValues") {
+                if (options.beforeRead) await options.beforeRead();
+                const result = Object.create(null);
+                (parameters.keys || Object.keys(values)).forEach(key => {
+                    if (Object.hasOwn(values, key)) result[key] = values[key];
+                });
+                return response(result);
+            }
+            if (request.method === "GM.getValue") return response({ exists: Object.hasOwn(values, parameters.key),
+                value: values[parameters.key] ?? null });
+            if (["GM.setValues", "GM.deleteValues", "GM.setValue", "GM.deleteValue"].includes(request.method)) {
+                const set = request.method === "GM.setValue" || request.method === "GM.setValues";
+                const bulk = request.method.endsWith("Values");
+                const keys = bulk ? (set ? Object.keys(parameters.values) : parameters.keys) : [parameters.key];
+                for (const key of keys) {
+                    if (failOnKey === key) {
+                        failOnKey = null;
+                        return JSON.stringify({ type: "response", protocol: 1, requestId: request.requestId,
+                            ok: false, error: { code: "MSP999_INTERNAL", message: "Simulated partial failure" } });
+                    }
+                    const existed = Object.hasOwn(values, key);
+                    const oldValue = existed ? values[key] : null;
+                    if (set) values[key] = bulk ? parameters.values[key] : parameters.value;
+                    else delete values[key];
+                    if (set ? !existed || oldValue !== values[key] : existed) changed(request, key, oldValue, set ? values[key] : null, existed, set);
+                }
+            }
+            return response(undefinedValue);
+        }
+    };
+    const payload = { protocol: 1, documentId: executionId, frameId: "main", runAt: "DocumentEnd", invocations: [{
+        executionId, scriptKey: "99999999-9999-9999-9999-999999999999", capability: executionId,
+        deliveryToken: executionId, grants: options.grants || methods, info: {},
+        compatibility: { profile: options.strict ? "ModernStrict" : "LegacyCompatible", strict: Boolean(options.strict),
+            legacyGlobals: !options.strict && options.legacyGlobals !== false },
+        source: `globalThis.__bulkExposure = { id: ${JSON.stringify(executionId)}, api: GM,
+            get: GM_getValues, set: GM_setValues, delete: GM_deleteValues,
+            single: { get: GM_getValue, set: GM_setValue, delete: GM_deleteValue, list: GM_listValues,
+                add: GM_addValueChangeListener, remove: GM_removeValueChangeListener } };`
+    }] };
+    vm.runInThisContext(template.replace("__MONKEYSHARP_PAYLOAD_BASE64__", Buffer.from(JSON.stringify(payload)).toString("base64")));
+    await waitFor(() => globalThis.__bulkExposure && globalThis.__bulkExposure.id === executionId);
+    return { ...globalThis.__bulkExposure, values, requests, notifications, deliver, executionId };
+}
+
+
+module.exports = { install, waitFor, fixtureValue };

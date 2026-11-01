@@ -48,6 +48,11 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                 await Evaluate(secondary, "window.__demoSetShared()");
                 await WaitAsync(async () => await EvaluateBoolean(primary, "window.__demo.remote === true"));
                 checks["crossTabValues"] = true;
+                checks["undefinedSnapshot"] = await EvaluateBoolean(secondary, "window.__demo.restoredUndefined === true");
+                await Evaluate(secondary, "location.href = '/page?reloaded'");
+                await WaitAsync(async () => await EvaluateBoolean(secondary,
+                    "location.search === '?reloaded' && window.__demo && window.__demo.ready && window.__demo.runs === 2"));
+                checks["undefinedNavigation"] = await EvaluateBoolean(secondary, "window.__demo.restoredUndefined && window.__demo.storage");
                 checks["sharedCookies"] = await EvaluateBoolean(secondary, "document.cookie.includes('demo-cookie=ready')");
                 await WaitAsync(async () => await EvaluateBoolean(primary, "window.__demo.tabClosed === true"));
                 checks["openInTab"] = true;
@@ -181,6 +186,10 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
 // @resource text __BASE__/resource
 // @grant GM_getValue
 // @grant GM_setValue
+// @grant GM_getValues
+// @grant GM_setValues
+// @grant GM_deleteValues
+// @grant GM_listValues
 // @grant GM_addValueChangeListener
 // @grant GM_addStyle
 // @grant GM_addElement
@@ -205,8 +214,12 @@ window.__demo = { runs: Number(sessionStorage.getItem('runs') || 0) + 1 };
 sessionStorage.setItem('runs', String(window.__demo.runs));
 (async function () {
     const result = window.__demo;
+    result.restoredUndefined = Object.prototype.hasOwnProperty.call(GM_getValues(), 'demo-undefined') && GM_getValue('demo-undefined', 'fallback') === undefined;
+    await GM.setValues({ 'demo-undefined': undefined, 'demo-nested': { absent: undefined, items: [undefined, NaN] } });
     await GM.setValue('demo', 42);
-    result.storage = (await GM.getValue('demo')) === 42 && GM_getValue('demo') === 42;
+    result.storage = (await GM.getValue('demo')) === 42 && GM_getValue('demo') === 42 &&
+        GM_getValue('demo-undefined', 'fallback') === undefined && (await GM.listValues()).includes('demo-undefined') &&
+        !Object.prototype.hasOwnProperty.call(GM_getValue('demo-nested'), 'absent') && GM_getValue('demo-nested').items.every(value => value === null);
     result.resources = window.__demoDependency && GM_getResourceText('text') === 'demo-resource' && (await GM.getResourceURL('text')).startsWith('data:');
     await GM.addStyle('body { color: rgb(20, 40, 60); }');
     await GM.addElement('div', { id: 'demo-marker', textContent: 'ready' });
@@ -219,8 +232,8 @@ sessionStorage.setItem('runs', String(window.__demo.runs));
     result.webRequest = !!webRule && typeof webRule.remove === 'function';
     await GM.saveTab({ marker: location.search });
     result.tabState = (await GM.getTab()).marker === location.search && Object.keys(await GM.getTabs()).length >= 1;
-    GM.addValueChangeListener('shared', function () { result.remote = true; });
-    window.__demoSetShared = function () { GM.setValue('shared', 'changed'); };
+    await GM.addValueChangeListener('shared', function (key, oldValue, newValue, remote) { result.remote = remote && newValue === undefined; });
+    window.__demoSetShared = function () { GM.setValue('shared', undefined); };
     if (location.search === '?primary') {
         await GM.registerMenuCommand('Demo smoke menu', function () { result.menu = true; });
         await GM.notification({ title: 'Demo smoke notification', text: 'Click to complete lifecycle test', onclick: function () { result.notificationClick = true; }, ondone: function () { result.notificationDone = true; } });

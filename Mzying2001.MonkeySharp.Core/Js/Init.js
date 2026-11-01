@@ -31,10 +31,54 @@
 
             const decodeResult = value => value && value.$monkeySharpType === "undefined" ? undefined : value;
 
-            const decodeStorageValue = function (data, name) {
-                const exists = data[name + "Exists"];
-                return exists === true ? data[name] : (exists === false ? undefined : decodeResult(data[name]));
+            const storageRecord = entries => Object.assign(Object.create(null), Object.fromEntries(entries));
+
+            const encodeStoredValue = function (value) {
+                const ancestors = new Set();
+                const normalize = function (item) {
+                    if (item === null || typeof item === "string" || typeof item === "boolean" || typeof item === "undefined") return item;
+                    if (typeof item === "number") return Number.isFinite(item) ? item : null;
+                    if (typeof item !== "object") throw new TypeError("Unsupported userscript storage value.");
+                    if (ancestors.has(item)) throw new TypeError("Circular userscript storage value.");
+                    ancestors.add(item);
+                    let result;
+                    if (Array.isArray(item)) {
+                        result = Array.from({ length: item.length }, (_, index) => {
+                            const value = normalize(item[index]);
+                            return typeof value === "undefined" ? null : value;
+                        });
+                    } else {
+                        result = Object.create(null);
+                        Object.keys(item).forEach(key => {
+                            const value = normalize(item[key]);
+                            if (typeof value !== "undefined") result[key] = value;
+                        });
+                    }
+                    ancestors.delete(item);
+                    return result;
+                };
+                switch (typeof value) {
+                    case "undefined": return "u";
+                    case "string": return "s" + value;
+                    case "boolean": return "b" + value;
+                    case "number": return "n" + String(value);
+                    case "object": return "o" + JSON.stringify(normalize(value));
+                    default: throw new TypeError("Unsupported userscript storage value.");
+                }
             };
+
+            const decodeStoredValue = function (value) {
+                switch (value[0]) {
+                    case "u": return undefined;
+                    case "s": return value.slice(1);
+                    case "b": return value.slice(1) === "true";
+                    case "n": return Number(value.slice(1));
+                    case "o": return JSON.parse(value.slice(1));
+                    default: throw new TypeError("Invalid userscript storage encoding.");
+                }
+            };
+
+            const decodeStorageValue = (data, name) => data[name + "Exists"] ? decodeStoredValue(data[name]) : undefined;
 
             const downloadError = function (error, fallback) {
                 if (error && typeof error === "object" && typeof error.error === "string") {
@@ -73,10 +117,6 @@
                 } catch (error) {
                     throw new TypeError("The value is not JSON serializable: " + error.message);
                 }
-            };
-
-            const cloneValue = function (value) {
-                return serializableValue(value);
             };
 
             const deepFreeze = function (value) {
@@ -151,15 +191,15 @@
                     error.code = response.error && response.error.code;
                     throw error;
                 }
-                // A bulk result is always a key/value object; its keys may match the undefined sentinel.
-                return method === "GM.getValues" ? response.result : decodeResult(response.result);
+                // Storage results have their own typed encoding and explicit key existence.
+                return method === "GM.getValue" || method === "GM.getValues" ? response.result : decodeResult(response.result);
             };
 
             const reportMutationFailure = async function (record, method, error) {
                 try {
                     const snapshot = await call(record, "runtime.getStorageSnapshot", {});
-                    if (snapshot && snapshot.complete && snapshot.values) {
-                        record.storageMirror = Object.assign(Object.create(null), snapshot.values);
+                    if (snapshot && snapshot.complete && snapshot.entries && record.storageMirror) {
+                        record.storageMirror = storageRecord(snapshot.entries);
                         record.pendingStorageMutations.forEach(mutation => {
                             if (!mutation.confirmed) applyStorageMutation(record, mutation);
                         });
@@ -183,24 +223,13 @@
             };
 
             const enqueueMutation = function (record, method, parameters, storageMutation) {
-                const batch = Array.isArray(storageMutation);
-                const mutations = batch ? storageMutation : (storageMutation ? [storageMutation] : []);
+                const mutations = Array.isArray(storageMutation) ? storageMutation : (storageMutation ? [storageMutation] : []);
                 const requestId = uuid();
                 mutations.forEach(mutation => { mutation.mutationId = requestId; });
                 const operation = record.mutationTail
                     .then(() => call(record, method, parameters, undefined, requestId))
                     .then(result => {
-                        mutations.forEach(mutation => {
-                            removePendingStorageMutation(record, mutation);
-                            // Bulk changes are acknowledged per key through storage-sync, including partial commits.
-                            if (!batch && (mutation.operation === "set" || mutation.existed)) {
-                                notifyLocalValueChange(
-                                    record,
-                                    mutation.key,
-                                    cloneOptionalValue(mutation.oldValue),
-                                    cloneOptionalValue(mutation.newValue));
-                            }
-                        });
+                        mutations.forEach(mutation => removePendingStorageMutation(record, mutation));
                         return result;
                     }, error => {
                         mutations.forEach(mutation => removePendingStorageMutation(record, mutation));
@@ -215,34 +244,13 @@
                 return operation;
             };
 
-            const notifyLocalValueChange = function (record, key, oldValue, newValue) {
-                record.valueListenerKeys.forEach((listenerKey, listenerId) => {
-                    if (listenerKey !== key) return;
-                    const handler = record.handlers.get(listenerId);
-                    if (!handler) return;
-                    try {
-                        handler(key, oldValue, newValue, false);
-                    } catch (error) {
-                        if (root.console && typeof root.console.error === "function") {
-                            root.console.error("[MonkeySharp] callback failed", error);
-                        }
-                    }
-                });
-            };
-
-            const cloneOptionalValue = function (value) {
-                return typeof value === "undefined" ? undefined : cloneValue(value);
-            };
-
             const applyStorageMutation = function (record, mutation) {
                 const existed = Object.prototype.hasOwnProperty.call(record.storageMirror, mutation.key);
-                mutation.oldValue = existed ? cloneValue(record.storageMirror[mutation.key]) : undefined;
+                mutation.oldValue = existed ? record.storageMirror[mutation.key] : undefined;
                 if (mutation.operation === "set") {
-                    record.storageMirror[mutation.key] = cloneValue(mutation.value);
-                    mutation.newValue = cloneValue(mutation.value);
+                    record.storageMirror[mutation.key] = mutation.value;
                 } else {
                     if (existed) delete record.storageMirror[mutation.key];
-                    mutation.newValue = undefined;
                 }
                 mutation.existed = existed;
             };
@@ -260,59 +268,72 @@
             };
 
             const rollbackStorageMutation = function (record, mutation) {
-                if (typeof mutation.oldValue === "undefined") delete record.storageMirror[mutation.key];
-                else record.storageMirror[mutation.key] = cloneValue(mutation.oldValue);
+                if (!mutation.existed) delete record.storageMirror[mutation.key];
+                else record.storageMirror[mutation.key] = mutation.oldValue;
                 record.pendingStorageMutations.forEach(pending => {
                     if (!pending.confirmed && pending.key === mutation.key) applyStorageMutation(record, pending);
                 });
             };
 
             const requireStorageKey = function (key) {
-                if (typeof key !== "string" || key.length === 0) throw new TypeError("key must be a non-empty string.");
+                if (typeof key !== "string") throw new TypeError("key must be a string.");
                 return key;
             };
 
             const storageKeys = function (keys) {
-                if (!Array.isArray(keys)) throw new TypeError("keys must be an array of non-empty strings.");
+                if (!Array.isArray(keys)) throw new TypeError("keys must be an array of strings.");
                 return Array.from(new Set(Array.from(keys, requireStorageKey)));
             };
 
-            const storageValues = function (values, allowUndefined) {
-                if (!values || typeof values !== "object" || Array.isArray(values)) {
-                    throw new TypeError("values must be an object.");
-                }
+            const storageValues = function (values) {
+                if (!values || typeof values !== "object" || Array.isArray(values)) throw new TypeError("values must be an object.");
                 const result = Object.create(null);
-                Object.keys(values).forEach(key => {
-                    requireStorageKey(key);
-                    const value = values[key];
-                    if (!allowUndefined || typeof value !== "undefined") result[key] = cloneValue(value);
-                });
+                Object.keys(values).forEach(key => { result[key] = encodeStoredValue(values[key]); });
                 return result;
             };
 
             const storageSelection = function (keysOrDefaults) {
                 if (keysOrDefaults == null) return { keys: null };
                 if (Array.isArray(keysOrDefaults)) return { keys: storageKeys(keysOrDefaults) };
-                const defaults = storageValues(keysOrDefaults, true);
-                return { keys: Object.keys(keysOrDefaults), defaults: defaults };
+                if (typeof keysOrDefaults !== "object") throw new TypeError("keysOrDefaults must be an array or object.");
+                const keys = Object.keys(keysOrDefaults);
+                const defaults = Object.create(null);
+                keys.forEach(key => { defaults[key] = keysOrDefaults[key]; });
+                return { keys, defaults };
             };
 
-            const readStorageValues = function (record, selection) {
-                const mirror = record.storageMirror;
-                const result = {};
-                (selection.keys || Object.keys(mirror)).forEach(key => {
-                    const source = Object.prototype.hasOwnProperty.call(mirror, key) ? mirror : selection.defaults;
-                    if (source && Object.prototype.hasOwnProperty.call(source, key)) {
-                        Object.defineProperty(result, key, {
-                            value: cloneValue(source[key]), enumerable: true, writable: true, configurable: true
-                        });
-                    }
+            const readStorageValues = function (values, selection) {
+                const result = Object.create(null);
+                (selection.keys || Object.keys(values)).forEach(key => {
+                    if (Object.prototype.hasOwnProperty.call(values, key)) result[key] = decodeStoredValue(values[key]);
+                    else if (selection.defaults && Object.prototype.hasOwnProperty.call(selection.defaults, key)) result[key] = selection.defaults[key];
                 });
                 return result;
             };
 
+            const registerValueListener = function (record, key, callback) {
+                requireStorageKey(key);
+                if (typeof callback !== "function") throw new TypeError("callback must be a function.");
+                const listenerId = nextListenerId++;
+                record.handlers.set(listenerId, callback);
+                const registered = enqueueMutation(record, "GM.addValueChangeListener", { listenerId, key }).catch(error => {
+                    record.handlers.delete(listenerId);
+                    throw error;
+                });
+                return { listenerId, registered };
+            };
+
+            const forgetValueListener = function (record, listenerId) {
+                record.handlers.delete(listenerId);
+                record.valueChangeSequences.delete(listenerId);
+            };
+
+            const requireListenerId = function (listenerId) {
+                if (!Number.isInteger(listenerId) || listenerId <= 0) throw new TypeError("listenerId must be a positive integer.");
+            };
+
             const writeStorageValues = function (record, method, parameters) {
-                if (!record.storageMirror) return call(record, method, parameters);
+                if (!record.storageMirror) return enqueueMutation(record, method, parameters);
                 const set = method === "GM.setValues";
                 const keys = set ? Object.keys(parameters.values) : parameters.keys;
                 const mutations = keys.map(key => beginStorageMutation(
@@ -472,85 +493,48 @@
                 const api = {};
                 Object.defineProperty(api, "info", { value: deepFreeze(invocation.info), enumerable: true });
                 if (enabled("GM.log")) api.log = async value => call(record, "GM.log", { value: serializableValue(value) });
-                if (enabled("GM.getValue")) {
-                    api.getValue = async function (key, defaultValue) {
-                        if (typeof key !== "string" || key.length === 0) throw new TypeError("key must be a non-empty string.");
-                        if (record.storageMirror) {
-                            if (Object.prototype.hasOwnProperty.call(record.storageMirror, key)) {
-                                return cloneValue(record.storageMirror[key]);
-                            }
-                            return arguments.length > 1 && typeof defaultValue !== "undefined"
-                                ? cloneValue(defaultValue) : undefined;
-                        }
-                        const parameters = { key: key };
-                        if (arguments.length > 1 && typeof defaultValue !== "undefined") {
-                            parameters.defaultValue = serializableValue(defaultValue);
-                        }
-                        return call(record, "GM.getValue", parameters);
-                    };
-                }
-                if (enabled("GM.setValue")) {
-                    api.setValue = async function (key, value) {
-                        if (typeof key !== "string" || key.length === 0) throw new TypeError("key must be a non-empty string.");
-                        const cloned = cloneValue(value);
-                        if (record.storageMirror) {
-                            const mutation = beginStorageMutation(record, "set", key, cloned);
-                            await enqueueMutation(record, "GM.setValue", { key: key, value: cloned }, mutation);
-                            return;
-                        }
-                        await call(record, "GM.setValue", { key: key, value: cloned });
-                    };
-                }
-                if (enabled("GM.deleteValue")) {
-                    api.deleteValue = async function (key) {
-                        if (typeof key !== "string" || key.length === 0) throw new TypeError("key must be a non-empty string.");
-                        if (record.storageMirror) {
-                            const mutation = beginStorageMutation(record, "delete", key);
-                            await enqueueMutation(record, "GM.deleteValue", { key: key }, mutation);
-                            return mutation.existed;
-                        }
-                        return call(record, "GM.deleteValue", { key: key });
-                    };
-                }
+                if (enabled("GM.getValue")) api.getValue = async function (key, defaultValue) {
+                    requireStorageKey(key);
+                    if (record.storageMirror) return Object.prototype.hasOwnProperty.call(record.storageMirror, key)
+                        ? decodeStoredValue(record.storageMirror[key]) : defaultValue;
+                    const stored = await call(record, "GM.getValue", { key });
+                    return stored.exists ? decodeStoredValue(stored.value) : defaultValue;
+                };
+                if (enabled("GM.setValue")) api.setValue = async function (key, value) {
+                    requireStorageKey(key);
+                    const encoded = encodeStoredValue(value);
+                    const mutation = record.storageMirror ? beginStorageMutation(record, "set", key, encoded) : null;
+                    await enqueueMutation(record, "GM.setValue", { key, value: encoded }, mutation);
+                };
+                if (enabled("GM.deleteValue")) api.deleteValue = async function (key) {
+                    requireStorageKey(key);
+                    const mutation = record.storageMirror ? beginStorageMutation(record, "delete", key) : null;
+                    await enqueueMutation(record, "GM.deleteValue", { key }, mutation);
+                };
                 if (enabled("GM.listValues")) api.listValues = async () => record.storageMirror
-                    ? Object.keys(record.storageMirror).sort()
-                    : call(record, "GM.listValues", {});
+                    ? Object.keys(record.storageMirror)
+                    : Object.keys(storageRecord((await call(record, "GM.listValues", {})).map(key => [key, true])));
                 if (enabled("GM.getValues")) api.getValues = async function (keysOrDefaults) {
                     const selection = storageSelection(keysOrDefaults);
-                    return record.storageMirror ? readStorageValues(record, selection) : call(record, "GM.getValues", selection);
+                    const values = record.storageMirror || await call(record, "GM.getValues", { keys: selection.keys });
+                    return readStorageValues(values, selection);
                 };
                 if (enabled("GM.setValues")) api.setValues = async function (values) {
-                    await writeStorageValues(record, "GM.setValues", { values: storageValues(values, false) });
+                    await writeStorageValues(record, "GM.setValues", { values: storageValues(values) });
                 };
                 if (enabled("GM.deleteValues")) api.deleteValues = async function (keys) {
                     await writeStorageValues(record, "GM.deleteValues", { keys: storageKeys(keys) });
                 };
-                if (enabled("GM.addValueChangeListener")) {
-                    api.addValueChangeListener = function (key, callback) {
-                        if (typeof key !== "string" || key.length === 0) throw new TypeError("key must be a non-empty string.");
-                        if (typeof callback !== "function") throw new TypeError("callback must be a function.");
-                        const listenerId = nextListenerId++;
-                        record.handlers.set(listenerId, callback);
-                        record.valueListenerKeys.set(listenerId, key);
-                        call(record, "GM.addValueChangeListener", { listenerId: listenerId, key: key }).catch(error => {
-                            record.handlers.delete(listenerId);
-                            record.valueListenerKeys.delete(listenerId);
-                            console.error("[MonkeySharp]", error);
-                        });
-                        return listenerId;
-                    };
-                }
-                if (enabled("GM.removeValueChangeListener")) {
-                    api.removeValueChangeListener = async function (listenerId) {
-                        if (!Number.isInteger(listenerId) || listenerId <= 0) throw new TypeError("listenerId must be a positive integer.");
-                        const removed = await call(record, "GM.removeValueChangeListener", { listenerId: listenerId });
-                        if (removed) {
-                            record.handlers.delete(listenerId);
-                            record.valueListenerKeys.delete(listenerId);
-                        }
-                        return removed;
-                    };
-                }
+                if (enabled("GM.addValueChangeListener")) api.addValueChangeListener = async function (key, callback) {
+                    const registration = registerValueListener(record, key, callback);
+                    await registration.registered;
+                    return registration.listenerId;
+                };
+                if (enabled("GM.removeValueChangeListener")) api.removeValueChangeListener = async function (listenerId) {
+                    requireListenerId(listenerId);
+                    await enqueueMutation(record, "GM.removeValueChangeListener", { listenerId });
+                    forgetValueListener(record, listenerId);
+                };
                 if (enabled("GM.addStyle")) {
                     api.addStyle = async function (css) {
                         if (typeof css !== "string") throw new TypeError("css must be a string.");
@@ -1180,7 +1164,6 @@
                     };
                 }
                 const aliases = {
-                    GM_addValueChangeListener: "addValueChangeListener",
                     GM_xmlhttpRequest: "xmlHttpRequest",
                     GM_registerMenuCommand: "registerMenuCommand", GM_unregisterMenuCommand: "unregisterMenuCommand",
                     GM_notification: "notification", GM_setClipboard: "setClipboard", GM_openInTab: "openInTab",
@@ -1190,52 +1173,41 @@
                     const member = api[aliases[name]];
                     if (typeof member === "function") facade[name] = member;
                 });
+                if (api.addValueChangeListener) facade.GM_addValueChangeListener = function (key, callback) {
+                    const registration = registerValueListener(record, key, callback);
+                    registration.registered.catch(error => console.error("[MonkeySharp] listener registration failed", error));
+                    return registration.listenerId;
+                };
+                if (api.removeValueChangeListener) facade.GM_removeValueChangeListener = function (listenerId) {
+                    requireListenerId(listenerId);
+                    forgetValueListener(record, listenerId);
+                    enqueueMutation(record, "GM.removeValueChangeListener", { listenerId });
+                };
                 if (record.storageMirror) {
-                    if (api.getValues) facade.GM_getValues = function (keysOrDefaults) {
-                        return readStorageValues(record, storageSelection(keysOrDefaults));
-                    };
+                    if (api.getValues) facade.GM_getValues = keysOrDefaults => readStorageValues(record.storageMirror, storageSelection(keysOrDefaults));
                     if (api.setValues) facade.GM_setValues = function (values) {
-                        writeStorageValues(record, "GM.setValues", { values: storageValues(values, false) });
+                        writeStorageValues(record, "GM.setValues", { values: storageValues(values) });
                     };
                     if (api.deleteValues) facade.GM_deleteValues = function (keys) {
                         writeStorageValues(record, "GM.deleteValues", { keys: storageKeys(keys) });
                     };
-                    const requireKey = key => {
-                        if (typeof key !== "string" || key.length === 0) {
-                            throw new TypeError("key must be a non-empty string.");
-                        }
-                        return key;
-                    };
                     if (api.getValue) facade.GM_getValue = function (key, defaultValue) {
-                        key = requireKey(key);
+                        requireStorageKey(key);
                         return Object.prototype.hasOwnProperty.call(record.storageMirror, key)
-                            ? cloneValue(record.storageMirror[key])
-                            : (arguments.length > 1 && typeof defaultValue !== "undefined"
-                                ? cloneValue(defaultValue) : undefined);
+                            ? decodeStoredValue(record.storageMirror[key]) : defaultValue;
                     };
                     if (api.setValue) facade.GM_setValue = function (key, value) {
-                        key = requireKey(key);
-                        const cloned = cloneValue(value);
-                        const mutation = beginStorageMutation(record, "set", key, cloned);
-                        enqueueMutation(record, "GM.setValue", { key: key, value: cloned }, mutation);
+                        requireStorageKey(key);
+                        const encoded = encodeStoredValue(value);
+                        const mutation = beginStorageMutation(record, "set", key, encoded);
+                        enqueueMutation(record, "GM.setValue", { key, value: encoded }, mutation);
                     };
                     if (api.deleteValue) facade.GM_deleteValue = function (key) {
-                        key = requireKey(key);
+                        requireStorageKey(key);
                         const mutation = beginStorageMutation(record, "delete", key);
-                        enqueueMutation(record, "GM.deleteValue", { key: key }, mutation);
+                        enqueueMutation(record, "GM.deleteValue", { key }, mutation);
                     };
-                    if (api.listValues) facade.GM_listValues = function () {
-                        return Object.keys(record.storageMirror).sort();
-                    };
-                    if (api.removeValueChangeListener) facade.GM_removeValueChangeListener = function (listenerId) {
-                        if (!Number.isInteger(listenerId) || listenerId <= 0) {
-                            throw new TypeError("listenerId must be a positive integer.");
-                        }
-                        const removed = record.handlers.delete(listenerId);
-                        record.valueListenerKeys.delete(listenerId);
-                        if (removed) enqueueMutation(record, "GM.removeValueChangeListener", { listenerId: listenerId });
-                        return removed;
-                    };
+                    if (api.listValues) facade.GM_listValues = () => Object.keys(record.storageMirror);
                 }
                 if (record.resourceMirror) {
                     if (api.getResourceText) facade.GM_getResourceText = function (name) {
@@ -1461,9 +1433,9 @@
                     tabHandlers: [],
                     cookieHandlers: new Map(),
                     webRequestHandlers: new Map(),
-                    valueListenerKeys: new Map(),
                     mutationTail: Promise.resolve(),
                     storageMirror: null,
+                    valueChangeSequences: new Map(),
                     pendingStorageMutations: [],
                     lastStorageSequence: 0,
                     resourceMirror: null
@@ -1480,8 +1452,8 @@
                     availableApis = new Set(hello.apis || []);
                     if (hello.compatibility && hello.compatibility.storage &&
                         hello.compatibility.storage.complete &&
-                        hello.compatibility.storage.values) {
-                        record.storageMirror = Object.assign(Object.create(null), hello.compatibility.storage.values);
+                        hello.compatibility.storage.entries) {
+                        record.storageMirror = storageRecord(hello.compatibility.storage.entries);
                     }
                     if (hello.compatibility && hello.compatibility.resources &&
                         hello.compatibility.resources.complete && hello.compatibility.resources.values) {
@@ -1530,12 +1502,9 @@
                 try {
                     if (notification.event === "storage-sync") {
                         if (data.sequence && data.sequence <= record.lastStorageSequence) return true;
-                        const ownBatch = data.originExecutionId === record.executionId &&
-                            (data.mutationMethod === "GM.setValues" || data.mutationMethod === "GM.deleteValues");
-                        if (record.storageMirror && data.key) {
-                            const incoming = decodeStorageValue(data, "newValue");
-                            if (typeof incoming === "undefined") delete record.storageMirror[data.key];
-                            else record.storageMirror[data.key] = cloneValue(incoming);
+                        if (record.storageMirror && typeof data.key === "string") {
+                            if (data.newValueExists) record.storageMirror[data.key] = data.newValue;
+                            else delete record.storageMirror[data.key];
                             record.pendingStorageMutations.forEach(mutation => {
                                 if (data.originExecutionId === record.executionId &&
                                     mutation.mutationId === data.mutationId && mutation.key === data.key) {
@@ -1545,16 +1514,13 @@
                             });
                         }
                         if (data.sequence) record.lastStorageSequence = data.sequence;
-                        if (ownBatch) notifyLocalValueChange(record, data.key,
-                            decodeStorageValue(data, "oldValue"), decodeStorageValue(data, "newValue"));
                         return true;
                     }
                     if (notification.event === "value-change") {
-                        if (data.originExecutionId === record.executionId) return true;
-                        if (record.storageMirror && data.key && (!data.sequence || data.sequence > record.lastStorageSequence)) {
-                            const incoming = decodeStorageValue(data, "newValue");
-                            if (typeof incoming === "undefined") delete record.storageMirror[data.key];
-                            else record.storageMirror[data.key] = cloneValue(incoming);
+                        if (data.sequence && data.sequence <= (record.valueChangeSequences.get(data.listenerId) || 0)) return true;
+                        if (record.storageMirror && typeof data.key === "string" && (!data.sequence || data.sequence > record.lastStorageSequence)) {
+                            if (data.newValueExists) record.storageMirror[data.key] = data.newValue;
+                            else delete record.storageMirror[data.key];
                             record.pendingStorageMutations.forEach(mutation => {
                                 if (!mutation.confirmed && mutation.key === data.key) applyStorageMutation(record, mutation);
                             });
@@ -1564,7 +1530,9 @@
                         }
                         const handler = record.handlers.get(data.listenerId);
                         if (!handler) return false;
-                        handler(data.key, decodeStorageValue(data, "oldValue"), decodeStorageValue(data, "newValue"), Boolean(data.remote));
+                        if (data.sequence) record.valueChangeSequences.set(data.listenerId, data.sequence);
+                        handler(data.key, decodeStorageValue(data, "oldValue"), decodeStorageValue(data, "newValue"),
+                            data.originExecutionId !== record.executionId);
                         return true;
                     }
                     if (notification.event === "menu-command") {

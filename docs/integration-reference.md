@@ -26,7 +26,7 @@ CI runs only on pull requests targeting `dev` or `main` and verifies `84.4.10`, 
 | Profile | Wrapper and API exposure |
 | --- | --- |
 | `LegacyCompatible` (default) | Non-strict wrapper; top-level `this` is the window facade. Exposes modern APIs and enabled `GM_*` aliases, with bounded synchronous storage and resource snapshots. |
-| `ModernStrict` | Strict wrapper; top-level `this` is `undefined`. Exposes modern API names and the always-available `GM_info` property; other legacy globals are disabled. Individual return contracts still apply: `GM.addValueChangeListener` returns a numeric ID, while `GM.openInTab` and `GM.webRequest` return handles immediately. |
+| `ModernStrict` | Strict wrapper; top-level `this` is `undefined`. Exposes modern API names and the always-available `GM_info` property; other legacy globals are disabled. Individual return contracts still apply: `GM.openInTab` and `GM.webRequest` return handles immediately. |
 
 Execution compatibility is selected by the host. Metadata compatibility is selected when the repository parser is created, so use the same profile for both. This example configures a host for trusted pages and scripts:
 
@@ -172,12 +172,16 @@ var repository = new PersistentUserScriptRepository(persistence, parser);
 await repository.InitializeAsync(CancellationToken.None);
 ```
 
+The Demo uses database format 2 and rejects older development databases without migration or deletion; back up and rebuild manually. Custom value stores must adopt the typed contract below.
+
 The persistence implementation must preserve `ScriptKey`, installation order, and timestamps, and commit mutations atomically. Cancellation after a successful commit must complete successfully; repository change notifications follow commit. Stable keys retain the association with GM storage. See the [Demo guide](../Mzying2001.MonkeySharp.Demo/README.md#portable-data-and-recovery) for a concrete persistence and recovery implementation.
 
 Provider requirements:
 
-- `IUserScriptValueStore` operations for one `ScriptKey` must be linearizable. Cancellation before commit makes no change; cancellation after commit completes successfully and emits one notification.
-- A value store should also implement `IUserScriptValueSnapshotProvider` for atomic compatibility snapshots. Without it, the gateway reads keys and values separately and reports `MSC411_COMPATIBILITY_SNAPSHOT_DEGRADED`.
+- `IUserScriptValueStore.SetAsync` accepts an immutable `UserScriptValue`; `StoredValue.Value` exposes it and `StoredValue.Exists` alone distinguishes absence. Use `UserScriptValue.FromJson(json)`, `UserScriptValue.Undefined`, or `UserScriptValue.FromEncoded(encoded)`. This replaces the former raw-JSON storage contract; there is no legacy overload.
+- Persist `EncodedValue` without dropping type information. Encodings are `u` for undefined, `btrue`/`bfalse`, `n` followed by a number or `NaN`/`Infinity`/`-Infinity`, `s` followed by literal string contents, and `o` followed by canonical object/array/null JSON. `FromEncoded` validates and canonicalizes them; a user object's property names never act as protocol markers.
+- Operations for one `ScriptKey` must be linearizable. Keys may be empty strings, but script partition IDs must be non-empty. Cancellation before commit makes no change; cancellation after commit succeeds. Emit one `ValueChanged` event per actual committed change, including creation/deletion of stored undefined; identical encoded writes and deletion of absent keys emit none. `ListKeysAsync` preserves insertion order, with updates retaining position and delete/reinsert moving a key to the end.
+- A value store should also implement `IUserScriptValueSnapshotProvider`, returning an immutable `IReadOnlyList<KeyValuePair<string, UserScriptValue>>` in insertion order for atomic compatibility snapshots. Without it, the gateway reads keys and values separately and reports `MSC411_COMPATIBILITY_SNAPSHOT_DEGRADED`.
 - Bulk GM APIs require no additional storage interface. Writes/deletes commit keys sequentially, preserve earlier commits on failure, and emit the usual per-key events. Full `GM.getValues()` reads use snapshot support when available, otherwise separate key/value reads.
 - `IUserScriptDependencyProvider` owns trusted download, caching, HTTPS policy, and optional integrity validation for `@require`. `ResourceScriptSourceResolver` preserves declaration order, verifies declared integrity, and limits the combined original dependency bytes to `BridgeOptions.MaxResourceBytes`.
 - In `LegacyCompatible`, a missing dependency provider skips an invocation that declares `@require` with `MSR401_DEPENDENCY_PROVIDER_UNAVAILABLE`. A provider failure emits `MSR400_DEPENDENCY_RESOLUTION_FAILED`. In `ModernStrict`, a missing provider leaves the installed main source unchanged.
@@ -295,7 +299,7 @@ The adapter resolves the current renderer's `location.href` before matching scri
 
 | Result ID | Required evidence |
 | --- | --- |
-| `frames` | Single-key and bulk GM storage calls, including all six modern/legacy bulk entry points, in the main frame, a same-origin child and a child on another port; once-per-document execution, `@noframes`, child navigation and context release. |
+| `frames` | Single-key and bulk GM storage calls, including all six modern/legacy bulk entry points, typed undefined, listener return contracts, cross-instance notifications and navigation snapshots, in the main frame, a same-origin child and a child on another port; once-per-document execution, `@noframes`, child navigation and context release. |
 | `spaUrl` | `pushState`, `replaceState`, hash navigation and history back; both URL callback forms, old/new URLs, host lifecycle events, grant gating and no reinjection. |
 | `download` | Modern Promise/handle and legacy callbacks; actual HTTP downloads with exact file bytes, cancellation after progress, timeout, HTTP failure, one terminal callback and partial-file cleanup. |
 | `cookie` | Modern and legacy set/list/delete, listener removal, request-context cookie sharing and anonymous XHR without cookies. |

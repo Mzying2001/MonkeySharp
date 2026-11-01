@@ -26,6 +26,9 @@ dotnet build Mzying2001.MonkeySharp.Demo/Mzying2001.MonkeySharp.Demo.csproj -c R
 
 ## Portable data and recovery
 
+The current Demo uses SQLite schema format **2**. Earlier development databases are rejected with a startup error; no migration or automatic deletion is performed. Close all Demo processes, back up the complete `Data/` directory, then manually move the old `Data/monkeysharp.db` and its `-wal`/`-shm` companions out of the profile before restarting. The new database starts empty: script source files are not automatically reimported. Custom storage providers must adopt the [typed value contract](../docs/integration-reference.md#host-service-contracts).
+
+
 ```text
 <executable directory>/Data/
   .profile.lock
@@ -40,7 +43,7 @@ dotnet build Mzying2001.MonkeySharp.Demo/Mzying2001.MonkeySharp.Demo.csproj -c R
 
 The EXE directory, not the process working directory, defines the profile. Startup fails with an actionable error if the directory is not writable or its profile is already open. Do not run as administrator just to bypass this check; use a writable application directory. There is no silent AppData fallback.
 
-SQLite stores stable script keys, source locations/hashes, origins, timestamps, enabled state, canonical GM JSON values, and live tab state. Sources are UTF-8 files named by stable identity, not script-supplied names. Save operations stage and flush a source, retain a backup during the SQLite commit, and recover an interrupted update by comparing the committed hash. Deletion uses a tombstone until the database transaction commits. Recovery failures are reported in the diagnostics log; missing/invalid/hash-mismatched sources remain visible but disabled. They are never silently replaced with empty files.
+SQLite stores stable script keys, source locations/hashes, origins, timestamps, enabled state, typed GM values (including stored undefined and non-finite numbers), and live tab state. Sources are UTF-8 files named by stable identity, not script-supplied names. Save operations stage and flush a source, retain a backup during the SQLite commit, and recover an interrupted update by comparing the committed hash. Deletion uses a tombstone until the database transaction commits. Recovery failures are reported in the diagnostics log; missing/invalid/hash-mismatched sources remain visible but disabled. They are never silently replaced with empty files.
 
 Do not edit installed source files behind the running application: the hash check deliberately detects unreviewed external changes. Paste/import a reviewed source into the existing manager entry to recover its stable identity and values. Uninstall removes that script's stored values as well. Back up the entire `Data` directory **after closing the application**, including SQLite sidecar files if present. Log rotation retains one previous Demo log at approximately 5 MiB.
 
@@ -50,7 +53,7 @@ Core's new `IUserScriptRepositoryPersistence`, `UserScriptPersistenceRecord`, an
 
 | API group | Demo implementation |
 | --- | --- |
-| Values and value listeners | Shared SQLite store with canonical JSON, serialized writes, atomic snapshots and ordered change notifications; supports legacy storage mirrors. |
+| Values and value listeners | Shared SQLite store with typed values, key insertion order, serialized writes, atomic snapshots and committed change notifications; supports legacy storage mirrors. |
 | DOM, info, log | Existing Core facade; logs are also shown in the diagnostics panel. |
 | `@require`, `@resource` | Persistent per-installation/revision URL cache. SRI `md5`/`sha256` hashes are checked against original bytes before caching and on cache reads. HTTP(S), at most 10 redirects, 30-second timeout, 10 MiB per fetched item. |
 | XHR, Cookie, webRequest | Existing CefSharp services follow the shared Chromium request context. Custom navigation handlers use the adapter's multiplexer, not a replacement request handler. |
@@ -77,7 +80,7 @@ node --test Mzying2001.MonkeySharp.Core.Tests/JavaScript/*.test.js
 powershell -NoProfile -ExecutionPolicy Bypass -File Mzying2001.MonkeySharp.Demo/Run-E2E.ps1
 ```
 
-The E2E runner starts a real WPF application with loopback fixtures and a separate `SmokeRuns/<id>/Data` profile, never the normal browser profile. It leaves a JSON report under `artifacts/demo-smoke` and logs under the reported profile. It tests background tabs, tab switching, iframe injection, shared values/cookies, resources, XHR/webRequest, menus, notifications, real downloads, tab state, navigation, script enable/disable and final disposal. The test does not overwrite the system clipboard. Test-project shadow copying is disabled so SQLite's native library resolves from the deployed test output.
+The E2E runner starts a real WPF application with loopback fixtures and a separate `SmokeRuns/<id>/Data` profile, never the normal browser profile. It leaves a JSON report under `artifacts/demo-smoke` and logs under the reported profile. It tests background tabs, tab switching, iframe injection, shared values/cookies, undefined persistence across tab creation/navigation, resources, XHR/webRequest, menus, notifications, real downloads, tab state, navigation, script enable/disable and final disposal. The test does not overwrite the system clipboard. Test-project shadow copying is disabled so SQLite's native library resolves from the deployed test output.
 
 CI runs the SmokeHost real-Chromium gate for CefSharp `84.4.10`, `121.3.70`, and `151.3.240` on x64 and x86. The WPF Demo smoke remains x64 on the default `121.3.70` version.
 

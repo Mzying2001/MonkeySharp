@@ -177,7 +177,21 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                 var result = await WaitResultAsync("globalThis.__compatFrame || null", frame);
                 Check(path + ":execution", result.GetProperty("runs").GetInt32() == 1 && result.GetProperty("value").GetString() == frame.Url.AbsoluteUri);
                 Check(path + ":bulkStorage", result.GetProperty("bulkStorage").GetBoolean());
+                Check(path + ":storageCompatibility", result.GetProperty("storageCompatibility").GetBoolean());
                 Check(path + ":noframes", result.GetProperty("noFrames").GetInt32() == (frame.IsMainFrame ? 1 : 0));
+            }
+            await ReadAsync("(globalThis.__compatPublishUndefined(), true)", FindFrame("/compat/frames/cross"));
+            foreach (var path in new[] { "/compat/frames", "/compat/frames/same", "/compat/frames/cross" })
+            {
+                var frame = FindFrame(path);
+                await WaitAsync(async () =>
+                {
+                    var value = await ReadAsync("globalThis.__compatFrame.sharedEvents.length === 1", frame);
+                    return value.HasValue && value.Value.GetBoolean();
+                });
+                var remote = path != "/compat/frames/cross" ? "true" : "false";
+                var result = await ReadAsync("globalThis.__compatFrame.sharedEvents.every(e => e.oldUndefined && e.newUndefined && e.remote === " + remote + ")", frame);
+                Check(path + ":undefinedListener", result.Value.GetBoolean());
             }
             var old = FindFrame("/compat/frames/same");
             await ReadAsync("(document.getElementById('same').src = '/compat/frames/same-next', true)");
@@ -186,6 +200,8 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             var nextResult = await WaitResultAsync("globalThis.__compatFrame || null", next);
             Check("childNavigation", next.DocumentId != old.DocumentId && nextResult.GetProperty("runs").GetInt32() == 1 && nextResult.GetProperty("value").GetString() == next.Url.AbsoluteUri);
             Check("childNavigation:bulkStorage", nextResult.GetProperty("bulkStorage").GetBoolean());
+            Check("childNavigation:storageCompatibility", nextResult.GetProperty("storageCompatibility").GetBoolean());
+            Check("childNavigation:undefinedSnapshot", nextResult.GetProperty("persistedUndefined").GetBoolean());
             Check("crossOrigin", FindFrame("/compat/frames/cross").Url.Port != _fixture.Port);
         }
 
