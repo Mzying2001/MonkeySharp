@@ -134,11 +134,34 @@ browser.RequestHandler = requestHandlers;
 host.Attach(browser);
 ```
 
-适配器会拒绝已被非 multiplexer 处理器占用的槽位。设置 `EnableDefaultNetworkServices = false` 会同时禁用三个默认网络服务；通过 `UseWebRequestService` 注入服务时仍须按上述方式组合处理器。已有渲染处理器还须单独使用 `RenderProcessMessageHandlerMultiplexer`，示例见 [README](../README.zh-CN.md#已有的渲染处理器)。
+适配器会拒绝已被非 multiplexer 处理器占用的槽位。设置 `EnableDefaultNetworkServices = false` 会同时禁用三个默认网络服务；通过 `UseWebRequestService` 注入服务时仍须按上述方式组合处理器。已有渲染处理器还须单独使用 `RenderProcessMessageHandlerMultiplexer`，示例见 [README](../README.zh-CN.md#已有的浏览器处理器)。
 
 ## 宿主服务契约
 
 Builder 只能使用一次。应用程序拥有仓库、浏览器以及通过 `UseValueStore`、`UsePermissionPolicy` 或 `Use...Service`/`Use...Provider` 传入的对象。宿主拥有自身引擎、网关、内部提供程序、默认网络服务和默认值存储。传给 `AddApiProvider` 的对象所有权转移给网关，适用时由网关释放。
+
+以下示例假设仓库及服务实例已创建，只需注册应用程序提供的服务。`TrustedPageWorld` 仅适用于可信页面和脚本：
+
+```csharp
+var host = new CefSharpUserScriptHostBuilder(repository)
+    .UseValueStore(persistentStore)
+    .UsePermissionPolicy(permissionPolicy)
+    .UseDependencyProvider(cachedDependencyProvider)
+    .UseResourceProvider(resourceProvider)
+    .UseMenuService(menuService)
+    .UseNotificationService(notificationService)
+    .UseClipboardService(clipboardService)
+    .UseTabService(tabService)
+    .UseDownloadService(downloadService)
+    .UseTabStateService(tabStateService)
+    .UseWindowService(windowService)
+    .UseHttpRequestService(httpRequestService) // 可选：替换默认服务
+    .UseCookieService(cookieService)           // 可选：替换默认服务
+    .UseWebRequestService(webRequestService)   // 可选：替换默认服务
+    .LogTo(entry => applicationLog.Write(entry.JsonValue))
+    .Configure(new CefSharpHostOptions { TrustedPageWorld = true })
+    .Build();
+```
 
 需要持久化安装时，将前述示例中的内存仓库替换为 `PersistentUserScriptRepository`，并由应用程序提供和管理 `IUserScriptRepositoryPersistence`。在使用仓库或附加宿主前完成初始化：
 
@@ -206,6 +229,19 @@ CefSharp 只能提供尽力而为的 document-start 钩子。相应执行产生 
 | `MSC412_COMPATIBILITY_BOOTSTRAP_LIMIT` | 快照超出字节预算并被标为不完整，对应同步别名不可用。 |
 
 ## 迁移说明
+
+从 v1 迁移集成代码时，可参考以下对照：
+
+| v1 | 3.0 |
+| --- | --- |
+| `JScript` / 随机 `ScriptId` | 仓库管理的 `UserScriptInstallation` / 稳定 `ScriptKey` |
+| `JScriptMeta` 字典 | 不可变 `UserScriptMetadata` 和解析器诊断 |
+| `InjectorBase` 上的 `IList<JScript>` | `IUserScriptRepository` 快照和变更事件 |
+| `IDataStore` / `MemDataStore` | `IUserScriptValueStore` / `InMemoryUserScriptValueStore` |
+| `Injector.AttachBrowser` | 构建宿主，并在浏览器初始化前调用 `Attach` |
+| 同步 Messenger/WCF | 通过异步字符串绑定传输的版本化 JSON |
+| `GM_*` 全局对象 | 默认 `LegacyCompatible` 配置提供的当前桥接别名 |
+| `IScriptVerifier` 字符扫描器 | 元数据诊断及 Chromium 语法/运行时报告 |
 
 版本 3 的宿主服务契约不兼容旧源码。`IHttpRequestService.SendAsync` 在开始前接收 `IUserScriptHttpObserver` 并返回 `IHttpRequestOperation`；请求体是可重复读取的流，响应数据增量传递，重定向授权为异步操作。现有适配器应把旧 task 包装为操作对象，并转发响应开始、数据、进度、完成和中止事件。
 

@@ -134,11 +134,34 @@ browser.RequestHandler = requestHandlers;
 host.Attach(browser);
 ```
 
-The adapter rejects an occupied non-multiplexer slot. Setting `EnableDefaultNetworkServices = false` omits all three default network services; supplying `UseWebRequestService` still requires the handler composition above. Existing render handlers separately require a `RenderProcessMessageHandlerMultiplexer`, as shown in the [README](../README.md#existing-render-handler).
+The adapter rejects an occupied non-multiplexer slot. Setting `EnableDefaultNetworkServices = false` omits all three default network services; supplying `UseWebRequestService` still requires the handler composition above. Existing render handlers separately require a `RenderProcessMessageHandlerMultiplexer`, as shown in the [README](../README.md#existing-browser-handlers).
 
 ## Host Service Contracts
 
 The builder is single-use. The application owns the repository, browser, and every object supplied through `UseValueStore`, `UsePermissionPolicy`, or a `Use...Service`/`Use...Provider` method. The host owns its engine, gateway, internally created providers, default network services, and default value store. Objects passed to `AddApiProvider` transfer to the gateway and are disposed when applicable.
+
+The following example assumes the repository and service instances have already been created. Register only the services the application supplies. `TrustedPageWorld` is appropriate only for trusted pages and scripts:
+
+```csharp
+var host = new CefSharpUserScriptHostBuilder(repository)
+    .UseValueStore(persistentStore)
+    .UsePermissionPolicy(permissionPolicy)
+    .UseDependencyProvider(cachedDependencyProvider)
+    .UseResourceProvider(resourceProvider)
+    .UseMenuService(menuService)
+    .UseNotificationService(notificationService)
+    .UseClipboardService(clipboardService)
+    .UseTabService(tabService)
+    .UseDownloadService(downloadService)
+    .UseTabStateService(tabStateService)
+    .UseWindowService(windowService)
+    .UseHttpRequestService(httpRequestService) // optional default override
+    .UseCookieService(cookieService)           // optional default override
+    .UseWebRequestService(webRequestService)   // optional default override
+    .LogTo(entry => applicationLog.Write(entry.JsonValue))
+    .Configure(new CefSharpHostOptions { TrustedPageWorld = true })
+    .Build();
+```
 
 For durable installations, replace the in-memory repository in the example above with a `PersistentUserScriptRepository` backed by an application-owned `IUserScriptRepositoryPersistence`. Initialize it before using it or attaching a host:
 
@@ -206,6 +229,19 @@ Compatibility snapshot diagnostics distinguish preparation failure, degraded con
 | `MSC412_COMPATIBILITY_BOOTSTRAP_LIMIT` | A snapshot exceeds its byte budget and is marked incomplete; the corresponding synchronous aliases are unavailable. |
 
 ## Migration Notes
+
+Use this mapping when migrating a v1 integration:
+
+| v1 | 3.0 |
+| --- | --- |
+| `JScript` / random `ScriptId` | Repository-owned `UserScriptInstallation` / stable `ScriptKey` |
+| `JScriptMeta` dictionary | Immutable `UserScriptMetadata` plus parser diagnostics |
+| `IList<JScript>` on `InjectorBase` | `IUserScriptRepository` snapshots and change events |
+| `IDataStore` / `MemDataStore` | `IUserScriptValueStore` / `InMemoryUserScriptValueStore` |
+| `Injector.AttachBrowser` | Build a host, then call `Attach` before browser initialization |
+| Synchronous Messenger/WCF | Versioned JSON over asynchronous string binding |
+| `GM_*` globals | Default `LegacyCompatible` aliases over the current bridge |
+| `IScriptVerifier` character scanner | Metadata diagnostics plus Chromium syntax/runtime reporting |
 
 Version 3 host service contracts are source-breaking. `IHttpRequestService.SendAsync` receives an `IUserScriptHttpObserver` before starting and returns `IHttpRequestOperation`; request bodies are repeatable streams, response data is incremental, and redirect authorization is asynchronous. Existing adapters should wrap old tasks in operation objects and forward response start, data, progress, completion, and abort.
 
