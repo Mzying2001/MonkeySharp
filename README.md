@@ -123,11 +123,13 @@ Exclusions override positive rules. URL fragments are ignored, hosts are IDN-nor
 
 The Demo's script manager can manually check for and install an update. `@updateURL` takes priority as the check source, while `@downloadURL` takes priority for the source being installed; `@downloadURL none` disables checking. Updates require matching non-empty name and namespace and a higher downloaded version. Checks do not run in the background or inherit browser login cookies, and the runtime bridge exposes no update API.
 
-`GM.info` and `GM_info` expose a frozen snapshot containing script metadata, declared and normalized grants, URL rules, resources, update/source links, handler, sandbox mode, and the raw metadata header. Static `@webRequest` entries are validated and included in this snapshot; they are not installed into the host network interceptor. Use the runtime `GM.webRequest(...)` API for registrations that affect requests.
+`GM.info` and `GM_info` expose the same deep-frozen snapshot containing script metadata, declared and normalized grants, URL rules, resources, update/source links, handler, sandbox mode, and the raw metadata header. The `compatibility` block is versioned (`contractVersion: 1`) and records MonkeySharp's page-world execution and field provenance. Static `@webRequest` entries are validated and included in this snapshot; they are not installed into the host network interceptor. Use the runtime `GM.webRequest(...)` API for registrations that affect requests.
 
 ## GM API Support
 
 Canonical `GM.*` APIs and legacy aliases are exposed only when the exact grant and required host provider are present.
+
+MonkeySharp publishes four compatibility states for each capability: **Core implemented**, **host service required**, **intentional degradation or unsupported**, and **behavior differs from Tampermonkey**. This is a CefSharp userscript runtime with an authenticated page-world bridge, not a complete Tampermonkey replacement. Scripts execute in the page world inside the MonkeySharp wrapper; `@sandbox`, `@unwrap`, `@run-in`, and non-page `@inject-into` declarations do not create an isolated world. `unsafeWindow` therefore does not provide an extension-style security boundary.
 
 | API | Availability | Notes |
 | --- | --- | --- |
@@ -137,7 +139,7 @@ Canonical `GM.*` APIs and legacy aliases are exposed only when the exact grant a
 | `GM.addValueChangeListener`, `GM.removeValueChangeListener` and aliases | Core | Notifications for active executions of the same installation. |
 | `GM.addStyle`, `GM.addElement` and aliases | Bootstrap | Page-local implementations. |
 | `GM.getResourceText`, `GM.getResourceURL` and aliases | Conditional | Require `IResourceProvider` and a declared `@resource`. |
-| `GM.xmlHttpRequest` / `GM_xmlhttpRequest` | CefSharp default | XHR with redirects, credentials, progress, abort, binary/multipart bodies, and text/JSON/binary/blob/stream responses. Requires `@connect`. |
+| `GM.xmlHttpRequest` / `GM_xmlhttpRequest` | CefSharp default | XHR with redirects, credentials, progress, abort, binary/multipart bodies, and text/JSON/arraybuffer/blob/document/xml/stream responses. `responseXML: true` uses the page DOMParser. Requires `@connect`; synchronous requests, `proxy`, and `cookiePartition` semantics return `MSP006_NOT_SUPPORTED`. |
 | `GM.registerMenuCommand`, `GM.unregisterMenuCommand` and aliases | Conditional | Require `IMenuService`. |
 | `GM.notification`, `GM.setClipboard`, `GM.openInTab`, `GM.download` and aliases | Conditional | Require their corresponding host services. Notifications support the legacy four-argument overload and the `highlight`, `silent`, and `timeout` options. |
 | `GM.getTab`, `GM.saveTab`, `GM.getTabs` and aliases | Conditional | Require `ITabStateService`. |
@@ -148,7 +150,7 @@ Canonical `GM.*` APIs and legacy aliases are exposed only when the exact grant a
 | `window.onurlchange` | Core | Requires the exact grant; observes `pushState`, `replaceState`, `popstate`, and `hashchange` URL changes. |
 | `unsafeWindow` | Trusted page world only | Exposed only for its exact grant. |
 
-Modern storage and resource reads return Promises; their legacy aliases use bounded synchronous bootstrap snapshots. Legacy callback APIs return their handle or ID immediately and report callback failures as diagnostics.
+Modern storage and resource reads return Promises; their legacy aliases use bounded synchronous bootstrap snapshots. Legacy callback APIs return their handle or ID immediately and report callback failures as diagnostics. Missing `@grant` exposes no `GM` facade, while explicit `@grant none` exposes only `GM.info`/`GM_info`. Static `@webRequest` metadata is reported through `GM.info` and is not automatically installed; use `GM.webRequest(...)` for active rules.
 
 If a declared API has no provider, it is normally absent and direct bridge calls return `MSP006_NOT_SUPPORTED`. Undeclared methods return `MSP004_GRANT_DENIED`. `UseWindowService` is required for `window.close` and `window.focus`; without it those properties remain unavailable even when granted. Detailed XHR, Cookie, and webRequest behavior is documented in the [network API reference](docs/integration-reference.md#network-apis).
 
@@ -180,7 +182,7 @@ The application owns the repository, browser, and supplied services. The host ow
 
 ## Lifecycle and Diagnostics
 
-Each `(document, frame, script, run-at)` combination executes once. Navigation, context release, detach, and disposal invalidate capabilities and cancel pending work. `@noframes` suppresses child-frame execution.
+Each `(document, frame, script, run-at)` combination executes once. `@run-at context-menu` scripts are added to the native CefSharp context menu for matching frames and create a fresh execution only after the user selects an entry. Navigation, context release, detach, and disposal invalidate capabilities and cancel pending work. `@noframes` suppresses child-frame execution.
 
 The adapter reports same-document URL changes from `history.pushState`, `history.replaceState`, `popstate`, and `hashchange` as lifecycle events. Scripts granted `window.onurlchange` receive those events through the `window.onurlchange` property or `addEventListener("urlchange", ...)`; the current URL is reflected in subsequent matching and `GM.info` snapshots.
 
@@ -213,6 +215,8 @@ Storage keys must be migrated explicitly when retaining v1 data. Custom host ser
 ## Build and Test
 
 The repository uses .NET SDK `9.0.315` and defaults to CefSharp `121.3.70`. CI covers `84.4.10`, `121.3.70`, and `151.3.240` on both x64 and x86, including .NET and JavaScript tests and a real-Chromium SmokeHost gate for every combination. The WPF Demo smoke gate runs on x64 with the default version.
+
+Every SmokeHost combination also runs the embedded compatibility userscripts for same/cross-origin frames, SPA URL events, real HTTP file downloads, Chromium cookies, and request cancellation/redirect/removal. CI uploads per-combination logs and JSON results even on failure; see [compatibility gate details](docs/integration-reference.md#chromium-compatibility-script-package).
 
 ```powershell
 dotnet restore MonkeySharp.slnx -p:Platform=x64 -p:CefSharpVersion=121.3.70

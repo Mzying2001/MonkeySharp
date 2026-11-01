@@ -37,6 +37,8 @@ dotnet build Mzying2001.MonkeySharp.Demo/Mzying2001.MonkeySharp.Demo.csproj -c R
 
 可执行文件目录必须可写，因为便携 profile 存储在其中的 `Data/` 目录。Demo 显式启用了 `TrustedPageWorld`：它是面向可信页面和脚本的集成示例，不是加固浏览器或完整的 Tampermonkey 替代品。使用方式、恢复流程、服务边界和验证方法见 [Demo 指南](Mzying2001.MonkeySharp.Demo/README.md)。
 
+Demo 脚本管理器的列表行直接提供启用/停用开关，并显示脚本图标、状态、版本和描述；图标优先使用 `@icon64`，其次使用 `@icon`，加载失败时显示脚本名称首字母占位。管理器支持按名称、描述、命名空间和来源搜索，按状态筛选及按名称排序。源码编辑器中的 `Ctrl+S` 等同于安装/保存并保留权限确认；元数据详情按基本信息、匹配规则、权限、依赖/资源和诊断分组只读展示。
+
 ### 最小宿主集成
 
 安装脚本、构建宿主、在浏览器初始化前附加宿主，然后把浏览器加入界面：
@@ -123,11 +125,13 @@ var host = new CefSharpUserScriptHostBuilder(repository)
 
 Demo 脚本管理器支持手动检查并安装更新。检查源优先使用 `@updateURL`，安装源优先使用 `@downloadURL`；`@downloadURL none` 会禁用更新检查。远程脚本必须有相同且非空的 name/namespace，下载版本必须高于当前版本。不会后台定时检查，也不会继承浏览器登录 Cookie；运行时 bridge 不公开更新 API。
 
-`GM.info` 和 `GM_info` 暴露不可变快照，包含脚本元数据、声明及规范化授权、URL 规则、资源、更新/来源地址、handler、sandbox 模式和原始元数据头。静态 `@webRequest` 条目会被校验并写入该快照，但不会安装到宿主网络拦截器；需要影响请求时请使用运行时 `GM.webRequest(...)` API。
+`GM.info` 和 `GM_info` 共用同一个深度冻结快照，包含脚本元数据、声明及规范化授权、URL 规则、资源、更新/来源地址、handler、sandbox 模式和原始元数据头。`compatibility` 块使用 `contractVersion: 1` 描述 MonkeySharp 的 page world 执行环境及字段来源。静态 `@webRequest` 条目会被校验并写入该快照，但不会安装到宿主网络拦截器；需要影响请求时请使用运行时 `GM.webRequest(...)` API。
 
 ## GM API 支持
 
 只有脚本声明了精确授权且宿主存在所需提供程序时，才会公开规范 `GM.*` API 和旧式别名。
+
+MonkeySharp 为能力提供四种兼容性状态：**Core 已实现**、**需要宿主 service**、**有意降级/不支持**、**与 Tampermonkey 存在行为差异**。这是基于 CefSharp、带认证页面世界桥接的 userscript runtime，并不等同于完整 Tampermonkey 替代品。脚本在页面世界的 MonkeySharp wrapper 中执行；`@sandbox`、`@unwrap`、`@run-in` 和非 page 的 `@inject-into` 不会创建隔离世界，因此 `unsafeWindow` 不能作为扩展式安全边界。
 
 | API | 可用性 | 说明 |
 | --- | --- | --- |
@@ -137,7 +141,7 @@ Demo 脚本管理器支持手动检查并安装更新。检查源优先使用 `@
 | `GM.addValueChangeListener`、`GM.removeValueChangeListener` 及别名 | Core | 通知同一安装实例的活动执行。 |
 | `GM.addStyle`、`GM.addElement` 及别名 | 引导代码 | 页面本地实现。 |
 | `GM.getResourceText`、`GM.getResourceURL` 及别名 | 条件支持 | 需要 `IResourceProvider` 和已声明的 `@resource`。 |
-| `GM.xmlHttpRequest` / `GM_xmlhttpRequest` | CefSharp 默认提供 | 支持重定向、凭据、进度、中止、二进制/多段请求体及多种响应类型；需要 `@connect`。 |
+| `GM.xmlHttpRequest` / `GM_xmlhttpRequest` | CefSharp 默认提供 | 支持重定向、凭据、进度、中止、binary 字符串请求体及 text/JSON/arraybuffer/blob/document/xml/stream 响应；`responseXML: true` 使用页面 DOMParser，需要 `@connect`。同步请求、`proxy` 和 `cookiePartition` 的语义不支持，适用时返回 `MSP006_NOT_SUPPORTED`。 |
 | `GM.registerMenuCommand`、`GM.unregisterMenuCommand` 及别名 | 条件支持 | 需要 `IMenuService`。 |
 | `GM.notification`、`GM.setClipboard`、`GM.openInTab`、`GM.download` 及别名 | 条件支持 | 需要对应宿主服务；通知支持四参数旧式重载以及 `highlight`、`silent`、`timeout` 选项。 |
 | `GM.getTab`、`GM.saveTab`、`GM.getTabs` 及别名 | 条件支持 | 需要 `ITabStateService`。 |
@@ -148,7 +152,7 @@ Demo 脚本管理器支持手动检查并安装更新。检查源优先使用 `@
 | `window.onurlchange` | Core | 需要精确授权；监听 `pushState`、`replaceState`、`popstate` 和 `hashchange` URL 变化。 |
 | `unsafeWindow` | 仅可信页面世界 | 仅在精确授权时公开。 |
 
-现代存储和资源读取返回 Promise；旧式别名使用有界的同步引导快照。旧式回调 API 会立即返回句柄或 ID，并将回调故障报告为诊断。
+现代存储和资源读取返回 Promise；旧式别名使用有界的同步引导快照。旧式回调 API 会立即返回句柄或 ID，并将回调故障报告为诊断。缺少 `@grant` 时不会公开 `GM` 门面，显式 `@grant none` 时只公开 `GM.info`/`GM_info`。静态 `@webRequest` 只通过 `GM.info` 报告，不会自动安装；需要活动规则时请调用 `GM.webRequest(...)`。
 
 缺少提供程序时，已声明 API 通常不会公开，直接桥接调用返回 `MSP006_NOT_SUPPORTED`；未声明的方法返回 `MSP004_GRANT_DENIED`。`window.close` 和 `window.focus` 需要通过 `UseWindowService` 注册服务；即使已授权，未注册时对应属性仍不可用。XHR、Cookie 和 webRequest 的详细行为见[网络 API 参考](docs/integration-reference.zh-CN.md#网络-api)。
 
@@ -180,7 +184,7 @@ var host = new CefSharpUserScriptHostBuilder(repository)
 
 ## 生命周期与诊断
 
-每个 `(document, frame, script, run-at)` 组合只执行一次。导航、上下文释放、分离和宿主释放都会使能力失效并取消待处理工作；`@noframes` 阻止子框架执行。
+每个 `(document, frame, script, run-at)` 组合只执行一次。`@run-at context-menu` 脚本会按匹配的 frame 加入 CefSharp 原生上下文菜单，只有用户选择菜单项后才创建一次新的执行。导航、上下文释放、分离和宿主释放都会使能力失效并取消待处理工作；`@noframes` 阻止子框架执行。
 
 适配器会把 `history.pushState`、`history.replaceState`、`popstate` 和 `hashchange` 产生的同文档 URL 变化报告为生命周期事件。获得 `window.onurlchange` 授权的脚本可通过 `window.onurlchange` 属性或 `addEventListener("urlchange", ...)` 接收事件；后续匹配和 `GM.info` 快照会使用当前 URL。
 
@@ -213,6 +217,8 @@ host.Diagnostic += (_, diagnostic) =>
 ## 构建与测试
 
 仓库使用 .NET SDK `9.0.315`，默认 CefSharp 版本为 `121.3.70`。CI 在 x64/x86 上覆盖 `84.4.10`、`121.3.70` 和 `151.3.240`，每个组合都会运行 .NET/JavaScript 测试及真实 Chromium SmokeHost 门禁。WPF Demo smoke 使用默认版本并仅运行 x64。
+
+每个 SmokeHost 组合还运行内嵌兼容性 userscript，覆盖同源/异源 frame、SPA URL 事件、真实 HTTP 文件下载、Chromium cookie，以及请求取消、重定向和规则移除。CI 在失败时也上传每个组合的日志和 JSON 结果；详见[兼容性门禁说明](docs/integration-reference.zh-CN.md#chromium-兼容性脚本包)。
 
 ```powershell
 dotnet restore MonkeySharp.slnx -p:Platform=x64 -p:CefSharpVersion=121.3.70

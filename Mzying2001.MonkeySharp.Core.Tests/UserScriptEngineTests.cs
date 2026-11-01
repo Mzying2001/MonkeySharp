@@ -33,6 +33,45 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Fact]
+        public async Task ContextMenuEntriesAreFilteredAndEachSelectionCreatesANewExecution()
+        {
+            var repository = new InMemoryUserScriptRepository();
+            var installation = await repository.InstallAsync(
+                MetadataAndMatchingTests.Script(
+                    "// @name context action\n// @match https://example.com/*\n// @grant none\n// @run-at context-menu"),
+                "test", true, CancellationToken.None);
+            using (var engine = new UserScriptEngine(repository))
+            {
+                var frame = Frame("context", true);
+                var entries = await engine.GetContextMenuEntriesAsync(frame, CancellationToken.None);
+                var entry = Assert.Single(entries);
+                Assert.Equal("context action", entry.Title);
+
+                var first = await engine.ProcessContextMenuAsync(frame, installation.ScriptKey, CancellationToken.None);
+                var second = await engine.ProcessContextMenuAsync(frame, installation.ScriptKey, CancellationToken.None);
+                Assert.Single(first.Invocations);
+                Assert.Single(second.Invocations);
+                Assert.NotEqual(first.Invocations[0].ExecutionId, second.Invocations[0].ExecutionId);
+            }
+        }
+
+        [Fact]
+        public async Task ContextMenuHonorsNoFrames()
+        {
+            var repository = new InMemoryUserScriptRepository();
+            var installation = await repository.InstallAsync(
+                MetadataAndMatchingTests.Script(
+                    "// @name context main\n// @match https://example.com/*\n// @noframes\n// @grant none\n// @run-at context-menu"),
+                "test", true, CancellationToken.None);
+            using (var engine = new UserScriptEngine(repository))
+            {
+                var child = Frame("context-child", false);
+                Assert.Empty(await engine.GetContextMenuEntriesAsync(child, CancellationToken.None));
+                Assert.Empty((await engine.ProcessContextMenuAsync(child, installation.ScriptKey, CancellationToken.None)).Invocations);
+            }
+        }
+
+        [Fact]
         public async Task AboutBlankMatchProducesAnInjectionPlanOncePerDocument()
         {
             var repository = new InMemoryUserScriptRepository();
@@ -242,6 +281,11 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                     Assert.Equal("document-end", root.GetProperty("script").GetProperty("run-at").GetString());
                     Assert.Equal("icon", root.GetProperty("script").GetProperty("resources")[0].GetProperty("name").GetString());
                     Assert.Equal("raw", root.GetProperty("sandboxMode").GetString());
+                    var compatibility = root.GetProperty("compatibility");
+                    Assert.Equal(1, compatibility.GetProperty("contractVersion").GetInt32());
+                    Assert.Equal("page", compatibility.GetProperty("executionWorld").GetString());
+                    Assert.False(compatibility.GetProperty("isolatedWorld").GetBoolean());
+                    Assert.Equal("metadata", compatibility.GetProperty("fields").GetProperty("scriptUpdateURL").GetString());
                     Assert.True(root.GetProperty("script").GetProperty("webRequest").ValueKind == JsonValueKind.Null);
                     Assert.Contains("@name info", root.GetProperty("scriptMetaStr").GetString());
                 }

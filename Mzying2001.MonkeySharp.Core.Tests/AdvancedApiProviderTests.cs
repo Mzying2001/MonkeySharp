@@ -174,6 +174,28 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Fact]
+        public async Task HttpApiAcceptsDocumentResponseType()
+        {
+            var installation = await InstallAsync(
+                "// @grant GM.xmlHttpRequest\n// @connect api.example.com");
+            var service = new FakeHttpService(new UserScriptHttpResponse(
+                200, "OK", new Uri("https://api.example.com/xml"),
+                new Dictionary<string, string>(), string.Empty, "application/xml", "utf-8"),
+                Encoding.UTF8.GetBytes("<root/>"));
+            using (var provider = new ResourceAndNetworkApiProvider(http: service))
+            {
+                var created = await provider.InvokeAsync(Context(installation, "GM.xmlHttpRequest", new
+                {
+                    operation = "create", xhrId = 19, url = "https://api.example.com/xml",
+                    responseType = "document"
+                }), CancellationToken.None);
+                var sessionId = Json(created.Json).GetProperty("sessionId").GetString();
+                await provider.InvokeAsync(Context(installation, "GM.xmlHttpRequest", new { operation = "execute", sessionId }), CancellationToken.None);
+                Assert.Equal(UserScriptHttpResponseType.Document, service.Request.Options.ResponseType);
+            }
+        }
+
+        [Fact]
         public async Task HttpApiAcceptsExtensionMethodsSpecialHeadersAndRequestOptions()
         {
             var installation = await InstallAsync("// @grant GM.xmlHttpRequest\n// @connect api.example.com");
@@ -518,6 +540,29 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                     "GM.unregisterMenuCommand",
                     new { commandId = 3 }), CancellationToken.None);
                 Assert.False(Json(removed.Json).GetBoolean());
+            }
+        }
+
+        [Fact]
+        public async Task HostHandlesRemoveTerminalOperationsAndRejectRepeatAbortOrClose()
+        {
+            var installation = await InstallAsync(
+                "// @grant GM.openInTab\n// @grant GM.download");
+            var services = new FakeHostServices();
+            using (var provider = new HostInteractionApiProvider(tabs: services, downloads: services))
+            {
+                await provider.InvokeAsync(Context(installation, "GM.openInTab", new { url = "https://example.com" }), CancellationToken.None);
+                var closed = await provider.InvokeAsync(Context(installation, "GM.openInTab", new { close = true, tabId = "tab" }), CancellationToken.None);
+                var repeatedClose = await provider.InvokeAsync(Context(installation, "GM.openInTab", new { close = true, tabId = "tab" }), CancellationToken.None);
+                Assert.True(Json(closed.Json).GetBoolean());
+                Assert.False(Json(repeatedClose.Json).GetBoolean());
+
+                var download = await provider.InvokeAsync(Context(installation, "GM.download", new { url = "https://example.com/file" }), CancellationToken.None);
+                var aborted = await provider.InvokeAsync(Context(installation, "GM.download", new { operation = "abort", downloadId = "download" }), CancellationToken.None);
+                var repeatedAbort = await provider.InvokeAsync(Context(installation, "GM.download", new { operation = "abort", downloadId = "download" }), CancellationToken.None);
+                Assert.Equal("download", Json(download.Json).GetProperty("id").GetString());
+                Assert.True(Json(aborted.Json).GetBoolean());
+                Assert.False(Json(repeatedAbort.Json).GetBoolean());
             }
         }
 

@@ -90,7 +90,10 @@ namespace Mzying2001.MonkeySharp.Core.Domain
         DocumentEnd,
 
         /// <summary>Runs after the document load phase when the host is idle.</summary>
-        DocumentIdle
+        DocumentIdle,
+
+        /// <summary>Runs only when the user selects the script from the browser context menu.</summary>
+        ContextMenu
     }
 
     /// <summary>Describes how a script declared its GM grants.</summary>

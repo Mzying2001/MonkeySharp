@@ -1,7 +1,22 @@
 <Window x:Class="Mzying2001.MonkeySharp.Demo.Views.ScriptManagerWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:views="clr-namespace:Mzying2001.MonkeySharp.Demo.Views"
         Title="MonkeySharp · 脚本管理器" Width="1150" Height="780" MinWidth="900" MinHeight="600" Background="#F4F6F9">
+    <Window.InputBindings>
+        <KeyBinding Key="S" Modifiers="Control" Command="{Binding SaveCommand}" />
+    </Window.InputBindings>
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BooleanVisibility" />
+        <DataTemplate x:Key="DetailListItem">
+            <TextBlock Text="{Binding}" Margin="0,1,0,1" TextWrapping="Wrap" Foreground="#334155" />
+        </DataTemplate>
+        <DataTemplate x:Key="CompatibilityStatusItem">
+            <Border Margin="0,2,0,2" Padding="8,5" Background="#F8FAFC" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="3">
+                <TextBlock Text="{Binding Display}" TextWrapping="Wrap" Foreground="{Binding Brush}" />
+            </Border>
+        </DataTemplate>
+    </Window.Resources>
     <DockPanel Margin="16">
         <TextBlock DockPanel.Dock="Top" Text="用户脚本" FontSize="26" FontWeight="SemiBold" Foreground="#172B40" Margin="0,0,0,10" />
         <Border DockPanel.Dock="Top" Background="#FFF4DB" Padding="12,6" Margin="0,0,0,10">
@@ -9,22 +24,142 @@
         </Border>
         <WrapPanel DockPanel.Dock="Top" IsEnabled="{Binding CanEdit}">
             <Button Content="新建" Command="{Binding NewCommand}" /><Button Content="导入文件" Click="ImportFile" />
-            <Button Content="启用 / 停用" Command="{Binding ToggleCommand}" /><Button Content="删除" Command="{Binding DeleteCommand}" />
+            <Button Content="删除" Command="{Binding DeleteCommand}" />
             <Button Content="检查并安装更新" Command="{Binding CheckUpdatesCommand}" />
-            <Button Content="验证元数据" Command="{Binding ValidateCommand}" /><Button Content="安装 / 保存" Command="{Binding SaveCommand}" />
+            <Button Content="安装 / 保存" Command="{Binding SaveCommand}" />
         </WrapPanel>
         <DockPanel DockPanel.Dock="Top" Margin="0,8,0,12" IsEnabled="{Binding CanEdit}">
             <Button DockPanel.Dock="Right" Margin="8,0,0,0" Content="从 URL 加载草稿" Command="{Binding InstallUrlCommand}" />
-            <TextBox Text="{Binding Url, UpdateSourceTrigger=PropertyChanged}" Padding="4" VerticalAlignment="Center" ToolTip="HTTP(S) .user.js 地址" />
+            <Grid VerticalAlignment="Center">
+                <TextBox x:Name="UrlTextBox" Text="{Binding Url, UpdateSourceTrigger=PropertyChanged}" Padding="4" ToolTip="HTTP(S) .user.js 地址" />
+                <TextBlock Text="HTTP(S) .user.js 地址" Margin="8,0,4,0" VerticalAlignment="Center" Foreground="#94A3B8"
+                           IsHitTestVisible="False" TextTrimming="CharacterEllipsis">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Text, ElementName=UrlTextBox}" Value="">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+            </Grid>
         </DockPanel>
-        <TextBlock DockPanel.Dock="Bottom" Style="{StaticResource HideWhenTextEmpty}" Text="{Binding Status}" Margin="0,10,0,0" TextWrapping="Wrap" Foreground="#334155" />
+        <StackPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
+            <TextBlock Text="有未保存的源码修改 · Ctrl+S 保存" Foreground="#9A6700" FontWeight="SemiBold"
+                       Visibility="{Binding Editor.IsDirty, Converter={StaticResource BooleanVisibility}}" />
+            <TextBlock Style="{StaticResource HideWhenTextEmpty}" Text="{Binding Status}" TextWrapping="Wrap" Foreground="#334155" />
+        </StackPanel>
         <Grid IsEnabled="{Binding CanEdit}">
             <Grid.ColumnDefinitions><ColumnDefinition Width="275" /><ColumnDefinition Width="8" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
             <DockPanel Grid.Column="0">
-                <TextBox DockPanel.Dock="Top" Text="{Binding Search, UpdateSourceTrigger=PropertyChanged}" Padding="4" Margin="0,0,0,8" ToolTip="搜索脚本名称" />
-                <ListBox ItemsSource="{Binding FilteredScripts}" SelectedItem="{Binding SelectedScript}" DisplayMemberPath="DisplayName" />
+                <StackPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                    <DockPanel>
+                        <Button DockPanel.Dock="Right" Margin="8,0,0,0" Padding="6,3" Content="{Binding SortLabel}" Command="{Binding ToggleSortCommand}"
+                                ToolTip="切换名称排序方向" />
+                        <Grid>
+                            <TextBox x:Name="SearchTextBox" Text="{Binding Search, UpdateSourceTrigger=PropertyChanged}" Padding="4"
+                                     ToolTip="搜索名称、描述、命名空间或来源" VerticalAlignment="Center" />
+                            <TextBlock Text="搜索名称、描述、命名空间或来源" Margin="8,0,4,0" VerticalAlignment="Center" Foreground="#94A3B8"
+                                       IsHitTestVisible="False" TextTrimming="CharacterEllipsis">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Text, ElementName=SearchTextBox}" Value="">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </Grid>
+                    </DockPanel>
+                    <StackPanel Margin="0,6,0,0">
+                        <ComboBox ItemsSource="{Binding StatusFilters}" SelectedItem="{Binding StatusFilter, UpdateSourceTrigger=PropertyChanged}" Padding="4" />
+                        <TextBlock Text="{Binding FilteredCount, StringFormat=匹配 {0} 项}" Foreground="#64748B"
+                                   HorizontalAlignment="Right" Margin="0,2,2,0" />
+                    </StackPanel>
+                </StackPanel>
+                <Grid>
+                <ListBox ItemsSource="{Binding FilteredScripts}" SelectedItem="{Binding SelectedScript}"
+                         HorizontalContentAlignment="Stretch" Padding="0"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="Background" Value="White" />
+                            <Setter Property="BorderBrush" Value="#D5DDE5" />
+                            <Setter Property="BorderThickness" Value="1" />
+                            <Setter Property="Padding" Value="8" />
+                            <Setter Property="Margin" Value="3" />
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                            <Setter Property="VerticalContentAlignment" Value="Center" />
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ListBoxItem">
+                                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                                BorderThickness="{TemplateBinding BorderThickness}" Padding="{TemplateBinding Padding}" CornerRadius="4">
+                                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                                              VerticalAlignment="{TemplateBinding VerticalContentAlignment}" />
+                                        </Border>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                            <Style.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Background" Value="#F8FBFF" />
+                                    <Setter Property="BorderBrush" Value="#A9C8E2" />
+                                </Trigger>
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter Property="Background" Value="#EAF3FB" />
+                                    <Setter Property="BorderBrush" Value="#3978B9" />
+                                </Trigger>
+                                <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                                    <Setter Property="BorderBrush" Value="#3978B9" />
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="48" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <views:ScriptIcon Grid.Column="0" IconUrl="{Binding IconUrl}" FallbackText="{Binding IconFallbackText}" />
+                                <StackPanel Grid.Column="1" Margin="8,0,8,0">
+                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Foreground="#172B40" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Margin="0,2,0,0" Foreground="#64748B" FontSize="11">
+                                        <Run Text="{Binding Version, Mode=OneWay}" /><Run Text=" · " /><Run Text="{Binding StatusLabel, Mode=OneWay}" />
+                                    </TextBlock>
+                                    <TextBlock Margin="0,3,0,0" Text="{Binding Description}" Foreground="#475569" FontSize="11"
+                                               TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                                <ToggleButton Grid.Column="2" VerticalAlignment="Center" Style="{StaticResource ToggleSwitchStyle}"
+                                              AutomationProperties.Name="{Binding ToggleLabel}"
+                                              IsChecked="{Binding Installation.IsEnabled, Mode=OneWay}"
+                                              IsEnabled="{Binding CanToggle}"
+                                              Command="{Binding DataContext.ToggleScriptCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                              CommandParameter="{Binding}" />
+                            </Grid>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="{Binding ShowNoScripts, Converter={StaticResource BooleanVisibility}}">
+                        <TextBlock Text="还没有脚本" FontSize="16" FontWeight="SemiBold" Foreground="#334155" HorizontalAlignment="Center" />
+                        <TextBlock Text="点击“新建”、导入文件或从 URL 加载草稿。" Margin="0,6,0,0" Foreground="#64748B" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="{Binding ShowNoResults, Converter={StaticResource BooleanVisibility}}">
+                        <TextBlock Text="没有匹配结果" FontSize="16" FontWeight="SemiBold" Foreground="#334155" HorizontalAlignment="Center" />
+                        <TextBlock Text="调整搜索文字或状态筛选。" Margin="0,6,0,0" Foreground="#64748B" />
+                    </StackPanel>
+                </Grid>
             </DockPanel>
-            <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Center" />
+            <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Center" Background="Transparent"/>
             <TabControl Grid.Column="2">
                 <TabItem Header="源码编辑器">
                     <TextBox Text="{Binding Editor.Source, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" AcceptsTab="True"
@@ -32,7 +167,59 @@
                              VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" />
                 </TabItem>
                 <TabItem Header="元数据 / 权限 / 诊断">
-                    <TextBox Text="{Binding Preview, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Padding="12" />
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="12">
+                        <StackPanel>
+                            <TextBlock Text="{Binding Details.MetadataStatus}" FontWeight="SemiBold" Foreground="#315A7D" Margin="0,0,0,12" />
+
+                            <TextBlock Text="基本信息" FontSize="15" FontWeight="SemiBold" Foreground="#172B40" />
+                            <Grid Margin="0,6,0,14">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="110" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition />
+                                </Grid.RowDefinitions>
+                                <TextBlock Grid.Row="0" Text="名称" Foreground="#64748B" /><TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Details.Name}" TextWrapping="Wrap" />
+                                <TextBlock Grid.Row="1" Text="版本" Foreground="#64748B" /><TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Details.Version}" />
+                                <TextBlock Grid.Row="2" Text="命名空间" Foreground="#64748B" /><TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Details.Namespace}" TextWrapping="Wrap" />
+                                <TextBlock Grid.Row="3" Text="作者" Foreground="#64748B" /><TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding Details.Author}" TextWrapping="Wrap" />
+                                <TextBlock Grid.Row="4" Text="描述" Foreground="#64748B" /><TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding Details.Description}" TextWrapping="Wrap" />
+                                <TextBlock Grid.Row="5" Text="运行时机" Foreground="#64748B" /><TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding Details.RunAt}" />
+                                <TextBlock Grid.Row="6" Text="来源" Foreground="#64748B" /><TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding Details.SourceOrigin}" TextWrapping="Wrap" />
+                            </Grid>
+
+                            <TextBlock Text="匹配规则" FontSize="15" FontWeight="SemiBold" Foreground="#172B40" />
+                            <Grid Margin="0,6,0,14">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="110" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions><RowDefinition /><RowDefinition /><RowDefinition /></Grid.RowDefinitions>
+                                <TextBlock Grid.Row="0" Text="Match" Foreground="#64748B" /><ItemsControl Grid.Row="0" Grid.Column="1" ItemsSource="{Binding Details.Matches}" ItemTemplate="{StaticResource DetailListItem}" />
+                                <TextBlock Grid.Row="1" Text="Include" Foreground="#64748B" /><ItemsControl Grid.Row="1" Grid.Column="1" ItemsSource="{Binding Details.Includes}" ItemTemplate="{StaticResource DetailListItem}" />
+                                <TextBlock Grid.Row="2" Text="排除" Foreground="#64748B" /><ItemsControl Grid.Row="2" Grid.Column="1" ItemsSource="{Binding Details.Excludes}" ItemTemplate="{StaticResource DetailListItem}" />
+                            </Grid>
+
+                            <TextBlock Text="权限与网络" FontSize="15" FontWeight="SemiBold" Foreground="#172B40" />
+                            <Grid Margin="0,6,0,14">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="110" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions><RowDefinition /><RowDefinition /></Grid.RowDefinitions>
+                                <TextBlock Grid.Row="0" Text="Grant" Foreground="#64748B" /><ItemsControl Grid.Row="0" Grid.Column="1" ItemsSource="{Binding Details.Grants}" ItemTemplate="{StaticResource DetailListItem}" />
+                                <TextBlock Grid.Row="1" Text="Connect" Foreground="#64748B" /><ItemsControl Grid.Row="1" Grid.Column="1" ItemsSource="{Binding Details.Connects}" ItemTemplate="{StaticResource DetailListItem}" />
+                            </Grid>
+
+                            <TextBlock Text="依赖与资源" FontSize="15" FontWeight="SemiBold" Foreground="#172B40" />
+                            <Grid Margin="0,6,0,14">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="110" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions><RowDefinition /><RowDefinition /></Grid.RowDefinitions>
+                                <TextBlock Grid.Row="0" Text="Require" Foreground="#64748B" /><ItemsControl Grid.Row="0" Grid.Column="1" ItemsSource="{Binding Details.Requires}" ItemTemplate="{StaticResource DetailListItem}" />
+                                <TextBlock Grid.Row="1" Text="Resource" Foreground="#64748B" /><ItemsControl Grid.Row="1" Grid.Column="1" ItemsSource="{Binding Details.Resources}" ItemTemplate="{StaticResource DetailListItem}" />
+                            </Grid>
+
+                            <TextBlock Text="诊断" FontSize="15" FontWeight="SemiBold" Foreground="#172B40" />
+                            <ItemsControl Margin="0,6,0,0" ItemsSource="{Binding Details.Diagnostics}" ItemTemplate="{StaticResource DetailListItem}" />
+
+                            <TextBlock Text="兼容性状态" FontSize="15" FontWeight="SemiBold" Foreground="#172B40" Margin="0,14,0,0" />
+                            <TextBlock Text="这些状态用于说明当前 MonkeySharp 契约与宿主边界，不会替代元数据错误诊断。"
+                                       Margin="0,4,0,4" Foreground="#64748B" TextWrapping="Wrap" />
+                            <ItemsControl ItemsSource="{Binding Details.CompatibilityStatuses}" ItemTemplate="{StaticResource CompatibilityStatusItem}" />
+                        </StackPanel>
+                    </ScrollViewer>
                 </TabItem>
             </TabControl>
         </Grid>

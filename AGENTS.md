@@ -23,8 +23,6 @@ The Core project targets `net462`, `netstandard2.0`, and `net8.0`; its tests tar
 
 ## Git Commit Conventions
 
-- Use Conventional Commits: `<type>(<scope>): <summary>`
-- Example types: `feat`, `fix`, `refactor`, `build`, `docs`, `test`, `chore`
-- Use an optional scope for the affected project, area, class, or file
-- Write concise English summaries
-- For non-trivial changes, include a body explaining the reason and implementation/fix approach
+- Use Conventional Commits: `<type>(<scope>): <summary>`, with concise English summaries.
+- Optional scope: affected project, area, class, or file.
+- For non-trivial changes, explain why and how in the body.

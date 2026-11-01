@@ -84,6 +84,115 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
             return plan;
         }
 
+        /// <summary>Gets context-menu scripts eligible for the supplied frame.</summary>
+        public async Task<IReadOnlyList<ContextMenuEntry>> GetContextMenuEntriesAsync(
+            DocumentFrame frame,
+            CancellationToken cancellationToken)
+        {
+            if (frame == null)
+                throw new ArgumentNullException(nameof(frame));
+            await _queue.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                ThrowIfDisposed();
+                var installations = await _repository.GetSnapshotAsync(cancellationToken).ConfigureAwait(false);
+                var entries = installations
+                    .Where(item => item.IsEnabled && item.Definition.Metadata != null &&
+                        item.Definition.Metadata.RunAt == UserScriptRunAt.ContextMenu &&
+                        (frame.IsMainFrame || !item.Definition.Metadata.NoFrames) &&
+                        _matcher.IsMatch(item.Definition.Metadata, frame.Url))
+                    .Select(item => new ContextMenuEntry(item.ScriptKey,
+                        string.IsNullOrWhiteSpace(item.Definition.Metadata.Name)
+                            ? item.ScriptKey.ToString()
+                            : item.Definition.Metadata.Name))
+                    .ToList();
+                return new ReadOnlyCollection<ContextMenuEntry>(entries);
+            }
+            finally
+            {
+                _queue.Release();
+            }
+        }
+
+        /// <summary>Creates a fresh execution for a selected context-menu script.</summary>
+        public async Task<InjectionPlan> ProcessContextMenuAsync(
+            DocumentFrame frame,
+            ScriptKey scriptKey,
+            CancellationToken cancellationToken)
+        {
+            if (frame == null)
+                throw new ArgumentNullException(nameof(frame));
+            var diagnostics = new List<UserScriptDiagnostic>();
+            await _queue.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                ThrowIfDisposed();
+                var installations = await _repository.GetSnapshotAsync(cancellationToken).ConfigureAwait(false);
+                var installation = installations.FirstOrDefault(item => item.ScriptKey == scriptKey);
+                if (installation == null || !installation.IsEnabled || installation.Definition.Metadata == null)
+                    return EmptyPlan(frame, UserScriptRunAt.ContextMenu);
+                var metadata = installation.Definition.Metadata;
+                if (metadata.RunAt != UserScriptRunAt.ContextMenu ||
+                    (!frame.IsMainFrame && metadata.NoFrames) ||
+                    !_matcher.IsMatch(metadata, frame.Url))
+                    return EmptyPlan(frame, UserScriptRunAt.ContextMenu);
+                if (_options.RequireVerifiedBridge &&
+                    frame.BridgeIntegrity == BridgeIntegrityGuarantee.Unverified && RequiresBridge(metadata))
+                {
+                    diagnostics.Add(new UserScriptDiagnostic(
+                        "MSR201_BRIDGE_INTEGRITY_REQUIRED", DiagnosticSeverity.Warning,
+                        "Host-backed GM APIs require a verified bridge.", scriptKey: installation.ScriptKey,
+                        documentId: frame.DocumentId, frameId: frame.FrameId));
+                    return EmptyPlan(frame, UserScriptRunAt.ContextMenu);
+                }
+                if (_options.Compatibility.Profile == UserScriptCompatibilityProfile.LegacyCompatible &&
+                    metadata.Requires.Count != 0 && _sourceResolver == null)
+                {
+                    diagnostics.Add(new UserScriptDiagnostic(
+                        "MSR401_DEPENDENCY_PROVIDER_UNAVAILABLE", DiagnosticSeverity.Error,
+                        "The script declares @require entries but no dependency provider is configured.",
+                        scriptKey: installation.ScriptKey, documentId: frame.DocumentId, frameId: frame.FrameId));
+                    return EmptyPlan(frame, UserScriptRunAt.ContextMenu);
+                }
+                string source;
+                try
+                {
+                    source = _sourceResolver == null
+                        ? installation.Definition.Source
+                        : await _sourceResolver.ResolveSourceAsync(installation, cancellationToken).ConfigureAwait(false);
+                    if (source == null)
+                        throw new InvalidOperationException("The script source resolver returned null.");
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception exception)
+                {
+                    diagnostics.Add(new UserScriptDiagnostic(
+                        exception is ResourceIntegrityException integrityException
+                            ? integrityException.Code : "MSR400_DEPENDENCY_RESOLUTION_FAILED",
+                        DiagnosticSeverity.Error, "The script dependencies could not be resolved.", exception,
+                        installation.ScriptKey, frame.DocumentId, frame.FrameId));
+                    return EmptyPlan(frame, UserScriptRunAt.ContextMenu);
+                }
+                var invocation = CreateInvocation(installation, source);
+                var execution = new ExecutionRecord(frame, installation, invocation, new CancellationTokenSource());
+                lock (_stateLock)
+                {
+                    _executions.Add(invocation.ExecutionId, execution);
+                    EnsureDocument(frame).ExecutionIds.Add(invocation.ExecutionId);
+                }
+                return new InjectionPlan(frame, UserScriptRunAt.ContextMenu, new[] { invocation });
+            }
+            finally
+            {
+                _queue.Release();
+                foreach (var diagnostic in diagnostics)
+                    Diagnostic?.Invoke(this, diagnostic);
+            }
+        }
+
         /// <summary>Ends active executions and releases state for a document.</summary>
         /// <param name="documentId">The document identifier to invalidate.</param>
         /// <param name="cancellationToken">A token that cancels invalidation before it starts.</param>
@@ -489,6 +598,25 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                 ["scriptMetaStr"] = header,
                 ["scriptUpdateURL"] = metadata.UpdateUrl,
                 ["scriptWillUpdate"] = false,
+                ["compatibility"] = new Dictionary<string, object>
+                {
+                    ["contractVersion"] = 1,
+                    ["handler"] = "MonkeySharp",
+                    ["executionWorld"] = "page",
+                    ["isolatedWorld"] = false,
+                    ["fields"] = new Dictionary<string, object>
+                    {
+                        ["scriptHandler"] = "fixed",
+                        ["sandboxMode"] = "fixed",
+                        ["downloadMode"] = "fixed",
+                        ["isIncognito"] = "fixed",
+                        ["scriptWillUpdate"] = "fixed",
+                        ["scriptUpdateURL"] = "metadata",
+                        ["script"] = "mixed",
+                        ["scriptKey"] = "extension",
+                        ["grantDeclarationState"] = "extension"
+                    }
+                },
                 ["script"] = script
             };
         }
@@ -500,6 +628,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                 case UserScriptRunAt.DocumentStart: return "document-start";
                 case UserScriptRunAt.DocumentBody: return "document-body";
                 case UserScriptRunAt.DocumentEnd: return "document-end";
+                case UserScriptRunAt.ContextMenu: return "context-menu";
                 default: return "document-idle";
             }
         }

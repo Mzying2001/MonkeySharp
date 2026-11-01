@@ -13,6 +13,8 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="CefSharp.WinForms" Version="$(CefSharpVersion)" />
+    <Reference Include="System.Net.Http" />
+    <EmbeddedResource Include="Fixtures\*.user.js" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Mzying2001.MonkeySharp.CefSharp\Mzying2001.MonkeySharp.CefSharp.csproj" />

@@ -243,6 +243,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                         NoCache = OptionalBoolean(context.Parameters, "nocache"),
                         Revalidate = OptionalBoolean(context.Parameters, "revalidate"),
                         Fetch = fetch,
+                        Binary = OptionalBoolean(context.Parameters, "binary"),
                         ResponseType = ReadResponseType(context.Parameters)
                     }),
                 RaiseHttpNotification,
@@ -766,6 +767,8 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 case "arraybuffer": return UserScriptHttpResponseType.ArrayBuffer;
                 case "blob": return UserScriptHttpResponseType.Blob;
                 case "stream": return UserScriptHttpResponseType.Stream;
+                case "document":
+                case "xml": return UserScriptHttpResponseType.Document;
                 default: throw ProviderParameters.Invalid("responseType is not supported.");
             }
         }

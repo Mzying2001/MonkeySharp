@@ -39,7 +39,10 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         Blob,
 
         /// <summary>Returns a ReadableStream backed by host response chunks.</summary>
-        Stream
+        Stream,
+
+        /// <summary>Parses the response as an XML or HTML document in the page.</summary>
+        Document
     }
 
     /// <summary>
@@ -115,6 +118,8 @@ namespace Mzying2001.MonkeySharp.Core.Apis
     /// <summary>Contains optional Tampermonkey-compatible HTTP request controls.</summary>
     public sealed class UserScriptHttpRequestOptions
     {
+        /// <summary>Gets or sets whether a string request body uses low-byte binary encoding.</summary>
+        public bool Binary { get; set; }
         /// <summary>Gets or sets cookies appended to the outgoing Cookie header.</summary>
         public string Cookie { get; set; }
 

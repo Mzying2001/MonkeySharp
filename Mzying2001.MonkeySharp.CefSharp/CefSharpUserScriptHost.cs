@@ -12,6 +12,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Reflection;
 
 namespace Mzying2001.MonkeySharp.CefSharp
 {
@@ -38,6 +39,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
         private IUserScriptBridge _bridge;
         private IWebBrowser _browser;
         private RenderProcessMessageHandlerMultiplexer _multiplexer;
+        private ContextMenuHandler _contextMenuHandler;
         private CefSharpWebRequestHandlerMultiplexer _requestMultiplexer;
         private CefSharpWebRequestHandler _webRequestHandler;
         private bool _ownsRequestMultiplexer;
@@ -118,6 +120,10 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 throw new InvalidOperationException("MonkeySharp must be attached before the CefSharp browser is initialized.");
             if (browser.JavascriptObjectRepository.IsBound(BridgeObjectName))
                 throw new InvalidOperationException("The MonkeySharp bridge name is already registered.");
+            var contextMenuProperty = GetContextMenuHandlerProperty(browser);
+            var existingContextMenuHandler = contextMenuProperty == null
+                ? null
+                : contextMenuProperty.GetValue(browser, null) as IContextMenuHandler;
             if (browser.RenderProcessMessageHandler != null &&
                 !(browser.RenderProcessMessageHandler is RenderProcessMessageHandlerMultiplexer))
             {
@@ -170,6 +176,9 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     isAsync: true,
                     options: BindingOptions.DefaultBinder);
                 browser.FrameLoadEnd += BrowserFrameLoadEnd;
+                _contextMenuHandler = new ContextMenuHandler(this, existingContextMenuHandler);
+                if (contextMenuProperty != null)
+                    contextMenuProperty.SetValue(browser, _contextMenuHandler, null);
                 lock (_sync)
                 {
                     _browser = browser;
@@ -199,6 +208,8 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     browser.JavascriptObjectRepository.UnRegister(BridgeObjectName);
                 if (ownsMultiplexer && ReferenceEquals(browser.RenderProcessMessageHandler, multiplexer))
                     browser.RenderProcessMessageHandler = null;
+                if (contextMenuProperty != null && ReferenceEquals(contextMenuProperty.GetValue(browser, null), _contextMenuHandler))
+                    contextMenuProperty.SetValue(browser, existingContextMenuHandler, null);
                 if (requestMultiplexer != null)
                 {
                     requestMultiplexer.Remove(webRequestHandler);
@@ -222,6 +233,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             bool ownsRequestMultiplexer;
             bool ownsMultiplexer;
             CancellationTokenSource attachmentCancellation;
+            ContextMenuHandler contextMenuHandler;
             FrameSession[] sessions;
             long attachmentGeneration;
             lock (_sync)
@@ -235,6 +247,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 ownsRequestMultiplexer = _ownsRequestMultiplexer;
                 ownsMultiplexer = _ownsMultiplexer;
                 attachmentCancellation = _attachmentCancellation;
+                contextMenuHandler = _contextMenuHandler;
                 attachmentGeneration = _attachmentGeneration;
                 sessions = _sessions.Values.ToArray();
                 _sessions.Clear();
@@ -245,6 +258,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 _ownsRequestMultiplexer = false;
                 _ownsMultiplexer = false;
                 _attachmentCancellation = null;
+                _contextMenuHandler = null;
                 _browserSessionId = null;
             }
 
@@ -254,6 +268,9 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 session.Cancellation.Cancel();
 
             browser.FrameLoadEnd -= BrowserFrameLoadEnd;
+            var contextMenuProperty = GetContextMenuHandlerProperty(browser);
+            if (contextMenuProperty != null && ReferenceEquals(contextMenuProperty.GetValue(browser, null), contextMenuHandler))
+                contextMenuProperty.SetValue(browser, contextMenuHandler.Previous, null);
             multiplexer.HandlerFailed -= MultiplexerHandlerFailed;
             multiplexer.Remove(_renderObserver);
             if (ownsMultiplexer && ReferenceEquals(browser.RenderProcessMessageHandler, multiplexer))
@@ -517,6 +534,23 @@ namespace Mzying2001.MonkeySharp.CefSharp
             await session.OperationGate.WaitAsync(session.Cancellation.Token).ConfigureAwait(false);
             try
             {
+                // Older CefSharp releases can report the previous navigation's URL
+                // in OnContextCreated. Resolve the renderer's current location before
+                // matching even document-start scripts against this new document.
+                IWebBrowser browser;
+                lock (_sync) browser = _browser;
+                var refreshedFrame = browser == null ? null : GetFrameByIdentifier(browser.GetBrowser(), session.Frame.FrameId);
+                try
+                {
+                    var response = await (refreshedFrame ?? session.CefFrame).EvaluateScriptAsync(
+                        "location.href", timeout: TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+                    session.Cancellation.Token.ThrowIfCancellationRequested();
+                    if (response == null || !response.Success || !(response.Result is string location) ||
+                        !Uri.TryCreate(location, UriKind.Absolute, out var currentUrl))
+                        throw new InvalidOperationException("The current CefSharp document URL could not be resolved: " + response?.Message);
+                    session.UpdateUrl(currentUrl);
+                }
+                finally { refreshedFrame?.Dispose(); }
                 await ProcessLifecycleAsync(
                     DocumentLifecycleKind.ContextCreated,
                     session,
@@ -532,6 +566,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 if (startPlan.Invocations.Count != 0)
                     script.AppendLine().Append(BridgeScriptBuilder.BuildInjection(startPlan));
                 await ExecuteAsync(session.Frame, script.ToString(), session.Cancellation.Token).ConfigureAwait(false);
+                session.Initialized = true;
             }
             finally
             {
@@ -561,6 +596,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             await session.OperationGate.WaitAsync(session.Cancellation.Token).ConfigureAwait(false);
             try
             {
+                if (!session.Initialized) return;
                 while (session.CompletedRank < requestedRank)
                 {
                     session.CompletedRank++;
@@ -855,6 +891,53 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 return _sessions.Values.FirstOrDefault(item => item.Frame.DocumentId == documentId);
         }
 
+        private static PropertyInfo GetContextMenuHandlerProperty(IWebBrowser browser)
+        {
+            if (browser == null)
+                return null;
+            var flags = BindingFlags.Instance | BindingFlags.Public;
+            return browser.GetType().GetProperty("MenuHandler", flags) ??
+                browser.GetType().GetProperty("ContextMenuHandler", flags);
+        }
+
+        private IReadOnlyList<ContextMenuEntry> GetContextMenuEntries(IFrame cefFrame)
+        {
+            FrameSession session;
+            lock (_sync)
+                _sessions.TryGetValue(GetFrameIdentifier(cefFrame), out session);
+            if (session == null || !session.Initialized)
+                return new ContextMenuEntry[0];
+            return _engine.GetContextMenuEntriesAsync(session.Frame, CancellationToken.None)
+                .GetAwaiter().GetResult();
+        }
+
+        private void ExecuteContextMenu(IFrame cefFrame, ScriptKey scriptKey)
+        {
+            FrameSession session;
+            lock (_sync)
+                _sessions.TryGetValue(GetFrameIdentifier(cefFrame), out session);
+            if (session == null)
+                return;
+            Observe(ExecuteContextMenuAsync(session, scriptKey), "MSC104_CONTEXT_MENU_FAILED", session);
+        }
+
+        private async Task ExecuteContextMenuAsync(FrameSession session, ScriptKey scriptKey)
+        {
+            await session.OperationGate.WaitAsync(session.Cancellation.Token).ConfigureAwait(false);
+            try
+            {
+                var plan = await _engine.ProcessContextMenuAsync(
+                    session.Frame, scriptKey, session.Cancellation.Token).ConfigureAwait(false);
+                if (plan.Invocations.Count != 0)
+                    await ExecuteAsync(session.Frame, BridgeScriptBuilder.BuildInjection(plan), session.Cancellation.Token)
+                        .ConfigureAwait(false);
+            }
+            finally
+            {
+                session.OperationGate.Release();
+            }
+        }
+
         private CancellationToken GetAttachmentToken()
         {
             lock (_sync)
@@ -958,6 +1041,67 @@ namespace Mzying2001.MonkeySharp.CefSharp
             }
         }
 
+        private sealed class ContextMenuHandler : IContextMenuHandler
+        {
+            private readonly CefSharpUserScriptHost _host;
+            private readonly IContextMenuHandler _inner;
+            private readonly object _sync = new object();
+            private readonly Dictionary<CefMenuCommand, ScriptKey> _commands =
+                new Dictionary<CefMenuCommand, ScriptKey>();
+
+            public ContextMenuHandler(CefSharpUserScriptHost host, IContextMenuHandler inner)
+            {
+                _host = host;
+                _inner = inner;
+            }
+
+            public IContextMenuHandler Previous => _inner;
+
+            public void OnBeforeContextMenu(IWebBrowser browser, IBrowser cefBrowser, IFrame frame,
+                IContextMenuParams parameters, IMenuModel model)
+            {
+                _inner?.OnBeforeContextMenu(browser, cefBrowser, frame, parameters, model);
+                lock (_sync) _commands.Clear();
+                var entries = _host.GetContextMenuEntries(frame);
+                if (entries.Count == 0)
+                    return;
+                model.AddSeparator();
+                for (var index = 0; index < entries.Count; index++)
+                {
+                    var command = (CefMenuCommand)((int)CefMenuCommand.UserFirst + index);
+                    lock (_sync) _commands[command] = entries[index].ScriptKey;
+                    model.AddItem(command, entries[index].Title);
+                }
+            }
+
+            public bool OnContextMenuCommand(IWebBrowser browser, IBrowser cefBrowser, IFrame frame,
+                IContextMenuParams parameters, CefMenuCommand commandId, CefEventFlags eventFlags)
+            {
+                if (_inner != null && _inner.OnContextMenuCommand(browser, cefBrowser, frame, parameters, commandId, eventFlags))
+                    return true;
+                ScriptKey scriptKey;
+                lock (_sync)
+                {
+                    if (!_commands.TryGetValue(commandId, out scriptKey))
+                        return false;
+                }
+                _host.ExecuteContextMenu(frame, scriptKey);
+                return true;
+            }
+
+            public void OnContextMenuDismissed(IWebBrowser browser, IBrowser cefBrowser, IFrame frame)
+            {
+                lock (_sync) _commands.Clear();
+                _inner?.OnContextMenuDismissed(browser, cefBrowser, frame);
+            }
+
+            public bool RunContextMenu(IWebBrowser browser, IBrowser cefBrowser, IFrame frame,
+                IContextMenuParams parameters, IMenuModel model, IRunContextMenuCallback callback)
+            {
+                return _inner != null && _inner.RunContextMenu(browser, cefBrowser, frame, parameters, model, callback);
+            }
+        }
+
         private sealed class FrameSession : IDisposable
         {
             public FrameSession(IFrame cefFrame, DocumentFrame frame, string lifecycleToken)
@@ -973,6 +1117,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             public CancellationTokenSource Cancellation { get; } = new CancellationTokenSource();
             public SemaphoreSlim OperationGate { get; } = new SemaphoreSlim(1, 1);
             public int CompletedRank { get; set; }
+            public bool Initialized { get; set; }
 
             public void UpdateUrl(Uri url)
             {

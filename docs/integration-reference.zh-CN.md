@@ -63,6 +63,8 @@ CefSharp 宿主默认提供 `GM.xmlHttpRequest`、`GM.cookie` 和 `GM.webRequest
 
 ### HTTP 请求
 
+兼容性状态分为 Core 已实现、需要宿主 service、有意降级/不支持、与 Tampermonkey 存在行为差异。运行时在 CefSharp 页面世界的 MonkeySharp wrapper 中执行；`@sandbox`、`@unwrap`、`@run-in` 和非 page 的 `@inject-into` 会保留并产生诊断，但不会创建隔离世界。
+
 脚本必须声明 `@grant GM.xmlHttpRequest` 或 `@grant GM_xmlhttpRequest`，并为每个目标声明 `@connect`。方法名不区分大小写，除 `CONNECT`、`TRACE` 和 `TRACK` 外可使用有效的 HTTP token。
 
 请求体支持字符串、`ArrayBuffer`、类型化数组、`DataView`、`Blob`/`File`、`FormData`、`URLSearchParams`、普通对象和数组。对象及数组使用 JSON，`URLSearchParams` 使用表单编码，`FormData` 保留生成的 boundary、文件名和媒体类型。请求体以 64 KiB 分块跨越桥接。
@@ -71,13 +73,13 @@ CefSharp 宿主默认提供 `GM.xmlHttpRequest`、`GM.cookie` 和 `GM.webRequest
 
 可以设置 `User-Agent`、`Referer`、`Origin` 和 `Cookie` 等兼容性请求头。MonkeySharp 拒绝 `Host`、`Content-Length`、连接/传输控制头及所有 `Sec-*`、`Proxy-*` 头。`anonymous:true` 禁用已存储的 Cookie 和凭据；`fetch:true` 忽略超时和进度，只报告 readyState 4。
 
-`responseType` 接受 `text`、`json`、`arraybuffer`、`blob` 和 `stream`。非流式响应通过 64 KiB 宿主读取拼装。响应包含 readyState 1 至 4、状态、最终 URL、保留重复字段的原始响应头、响应数据、适用的文本及原始 JavaScript context。HTTP 4xx/5xx 调用 `onload`；网络、权限、序列化和桥接故障调用 `onerror`。
+`binary: true` 只接受字符串请求体，并将每个 UTF-16 code unit 转换为其低八位；普通字符串仍使用 UTF-8。`responseType` 接受 `text`、`json`、`arraybuffer`、`blob`、`document`、`xml` 和 `stream`。`responseXML: true` 使用页面的 `DOMParser` 解析；document 类型也会把解析结果放入 `response`。没有 DOMParser 时 `responseXML` 为 `null`，不会伪造 XML。非流式响应通过 64 KiB 宿主读取拼装。响应包含 readyState 1 至 4、状态、最终 URL、保留重复字段的原始响应头、响应数据、适用的文本、responseXML 及原始 JavaScript context。HTTP 4xx/5xx 调用 `onload`；网络、权限、序列化和桥接故障调用 `onerror`，错误对象为 `{ error, details, code }`，分类包括 `not_supported`、`not_permitted`、`timeout` 和 `not_succeeded`。
 
 回调包括 `onloadstart`、`onreadystatechange`、`onprogress`、`onuploadprogress`、`onload`、`onerror`、`ontimeout`、`onabort` 和 `onloadend`。`GM.xmlHttpRequest` 返回带 `.abort()` 的 Promise；`GM_xmlhttpRequest` 立即返回中止句柄并通过回调报告结果。`AbortSignal` 和流取消都会传递到宿主。
 
 请求和响应默认不限大小。单方向数据在 256 KiB 以内保留在内存，超过后转存临时文件，并在所有终止路径中删除。请求体传输和长时间运行的 `execute` 不受桥接通用消息大小及普通请求超时限制。
 
-`proxy`、`cookiePartition` 以及作为 URL 的 `Blob`/`File` 返回 `MSP006_NOT_SUPPORTED`。Cookie 分区键属于浏览器扩展管理器状态，CefSharp 公开请求上下文 API 不提供该状态。
+`proxy`、`cookiePartition`、同步请求以及作为 URL 的 `Blob`/`File` 返回 `MSP006_NOT_SUPPORTED`。Cookie 分区键属于浏览器扩展管理器状态，CefSharp 公开请求上下文 API 不提供该状态。现代和 legacy XHR 输入校验使用同一错误码。
 
 ### Cookie
 
@@ -127,9 +129,9 @@ Builder 只能使用一次。应用程序拥有仓库、浏览器以及通过 `U
 
 ## 生命周期与诊断
 
-适配器为每个框架文档建立身份，并对每个 `(document, frame, script, run-at)` 组合执行一次。导航、上下文释放、分离和宿主释放都会使能力失效并取消待处理工作。
+适配器为每个框架文档建立身份，并对每个 `(document, frame, script, run-at)` 组合执行一次。`@run-at context-menu` 脚本会按当前 frame 匹配规则出现在 CefSharp 原生上下文菜单中，只有用户选择菜单项后才创建一次新的执行。导航、上下文释放、分离和宿主释放都会使能力失效并取消待处理工作。
 
-授权状态具有语义差异：缺少 `@grant` 时不会公开 `GM` 门面；显式 `@grant none` 时只公开 `GM.info`/`GM_info`。`GM.info` 是包含规范化元数据、授权、URL 规则、资源、更新状态、handler、sandbox 模式和原始元数据文本的深度冻结快照。
+授权状态具有语义差异：缺少 `@grant` 时不会公开 `GM` 门面；显式 `@grant none` 时只公开 `GM.info`/`GM_info`。两个名称引用同一个深度冻结快照，包含规范化元数据、授权、URL 规则、资源、更新状态、handler、sandbox 模式和原始元数据文本。版本化的 `compatibility` 块使用 `contractVersion: 1` 标出固定值、元数据来源、混合来源和扩展字段，并明确 page world 执行边界。
 
 CefSharp 只能提供尽力而为的 document-start 钩子。相应执行产生 `MSR100_DOCUMENT_START_BEST_EFFORT`；设置 `RequireGuaranteedDocumentStart = true` 后会跳过并产生 `MSR101_DOCUMENT_START_UNAVAILABLE`。
 
@@ -162,8 +164,10 @@ node --test Mzying2001.MonkeySharp.Core.Tests/JavaScript/*.test.js
 
 使用 `-p:Platform=x86` 重复 .NET 命令；x86 配置会排除仅支持 x64 的 Demo 项目。Core 及不同平台适配器应输出到不同目录：
 
+Solution 的两个平台均将 Core 映射到 AnyCPU，产物位于 `bin/Release/<framework>/`。打包 Core 时应使用 `-p:Platform=AnyCPU`，通过 `--no-build` 复用 solution 产物时也应如此。CefSharp 适配器则需要显式指定 x64 或 x86 平台。
+
 ```powershell
-dotnet pack Mzying2001.MonkeySharp.Core/Mzying2001.MonkeySharp.Core.csproj -c Release -p:Platform=x64 -p:CefSharpVersion=121.3.70 -o artifacts/packages/core
+dotnet pack Mzying2001.MonkeySharp.Core/Mzying2001.MonkeySharp.Core.csproj -c Release -p:Platform=AnyCPU -p:CefSharpVersion=121.3.70 -o artifacts/packages/core
 dotnet pack Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj -c Release -p:Platform=x64 -p:CefSharpVersion=121.3.70 -o artifacts/packages/x64
 dotnet pack Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj -c Release -p:Platform=x86 -p:CefSharpVersion=121.3.70 -o artifacts/packages/x86
 ```
@@ -176,4 +180,26 @@ dotnet pack Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.cspr
 powershell -NoProfile -ExecutionPolicy Bypass -File Mzying2001.MonkeySharp.Demo/Run-E2E.ps1 -CefSharpVersion 121.3.70
 ```
 
-验证其他受支持版本时，所有 restore/build/test/pack/SmokeHost 命令都传入相同的 `-CefSharpVersion`。SmokeHost 应分别对 x64/x86 和 `84.4.10`、`121.3.70`、`151.3.240` 运行；Demo gate 固定为默认版本 `121.3.70` 的 x64。PowerShell runner 会把同一版本传入 restore、clean、build 和 run。两个验证入口都使用隔离 profile 和 `TrustedPageWorld`；它们是集成测试，不是安全沙箱。
+验证其他受支持版本时，所有 restore/build/test/pack/SmokeHost 命令都传入相同的 `-CefSharpVersion`。SmokeHost 应分别对 x64/x86 和 `84.4.10`、`121.3.70`、`151.3.240` 运行；Demo gate 固定为默认版本 `121.3.70` 的 x64。在已有工作区切换版本前，先执行 `dotnet clean MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=<目标版本>`（位数使用目标平台），避免混用不同 CefSharp 版本的增量构建产物。SmokeHost runner 已使用选定版本执行 restore、clean、build，并核对实际运行的程序集版本和进程位数。两个验证入口都使用隔离 profile 和 `TrustedPageWorld`；它们是集成测试，不是安全沙箱。
+
+### Chromium 兼容性脚本包
+
+SmokeHost 从 `Fixtures` 目录内嵌七个原创 `.user.js`，通过正常仓库安装流程运行。两个动态端口的 loopback HTTP 服务提供全部运行输入。脚本验证 MonkeySharp 公开契约，不包含第三方脚本或 Tampermonkey 差分运行结果。
+
+适配器在匹配脚本前读取当前渲染器的 `location.href`，因为旧版 CefSharp 的上下文创建回调可能仍携带上一次导航的 URL。读取失败时跳过该文档，包括 load fallback 和上下文菜单执行。document-start 仍为 best effort。
+
+| 结果 ID | 必须提供的验证证据 |
+| --- | --- |
+| `frames` | 主 frame、同源子 frame、不同端口的异源子 frame 实际调用 GM 存储；每文档执行一次、`@noframes`、子 frame 导航及上下文释放。 |
+| `spaUrl` | `pushState`、`replaceState`、hash 导航与历史回退；两种 URL 回调、新旧 URL、宿主生命周期、grant 边界和不重复注入。 |
+| `download` | 现代 Promise/handle、legacy 回调；真实 HTTP 下载及文件字节校验、产生进度后取消、超时、HTTP 失败、唯一终态及临时文件清理。 |
+| `cookie` | 现代/legacy set、list、delete，监听与取消监听、共享 Chromium request context，以及匿名 XHR 不携带 cookie。 |
+| `webRequest` | 浏览器原生 fetch 的取消/重定向、回调详情、服务端请求计数、主动移除及导航清理。 |
+
+下载服务仅用于测试：Chromium 执行 GM 调用，宿主服务将本地 HTTP 数据写入隔离临时目录，不测试 Chromium 下载界面。原有存储、XHR、通知、标签页和导航断言仍为必需。
+
+每个场景输出 `compatibility-case` JSON，包含 `caseId`、`success`、具名 `checks` 及失败上下文（`frameId`、`documentId`、`url`、`state`、`error`）。`smoke-summary.compatibility` 必须包含五项成功结果。runner 独立拒绝缺失/重复场景、失败断言、实际位数或 CefSharp 程序集版本不符、未 detach/dispose 和非零退出。轮询截止时间为 15 秒；宿主总超时 90 秒，runner 在 120 秒后终止停滞的进程树。
+
+执行 `powershell -NoProfile -ExecutionPolicy Bypass -File Mzying2001.MonkeySharp.CefSharp.SmokeHost/Test-SmokeResults.ps1` 可在不启动浏览器的情况下验证结果解析。脚本同时支持 Windows PowerShell 和 PowerShell 7。
+
+日志保存到 `artifacts/smoke/<version>-<platform>/`（构建步骤有输出时的 `restore.log`、`clean.log`、`build.log`，以及 `stdout.log`、`stderr.log`、`results.jsonl`）；可通过 `-OutputDirectory` 覆盖路径。CI 在失败时也将该目录上传为 `chromium-<version>-<platform>`。定位问题时先查看失败的 `compatibility-case`，再检查相邻的生命周期、console 和 diagnostic 记录。

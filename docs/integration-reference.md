@@ -63,6 +63,8 @@ The CefSharp host supplies default `GM.xmlHttpRequest`, `GM.cookie`, and `GM.web
 
 ### HTTP Requests
 
+Compatibility status is reported as Core implemented, host service required, intentional degradation or unsupported, or behavior different from Tampermonkey. The runtime executes in the CefSharp page world inside the MonkeySharp wrapper. `@sandbox`, `@unwrap`, `@run-in`, and non-page `@inject-into` are preserved and diagnosed, but they do not create an isolated world.
+
 Declare `@grant GM.xmlHttpRequest` or `@grant GM_xmlhttpRequest` and an `@connect` entry for every destination. Methods are case-insensitive valid HTTP tokens except `CONNECT`, `TRACE`, and `TRACK`.
 
 Request bodies support strings, `ArrayBuffer`, typed arrays, `DataView`, `Blob`/`File`, `FormData`, `URLSearchParams`, plain objects, and arrays. Objects and arrays use JSON; `URLSearchParams` uses form encoding; `FormData` retains its generated boundary, filename, and media type. Bodies cross the bridge in 64 KiB chunks.
@@ -71,13 +73,13 @@ Supported controls include `headers`, `cookie`, `user`, `password`, `anonymous`,
 
 Compatibility headers such as `User-Agent`, `Referer`, `Origin`, and `Cookie` may be set. MonkeySharp rejects `Host`, `Content-Length`, connection and transfer-control headers, and all `Sec-*` and `Proxy-*` headers. `anonymous:true` disables stored cookies and credentials. `fetch:true` ignores timeout and progress and reports only readyState 4.
 
-`responseType` accepts `text`, `json`, `arraybuffer`, `blob`, and `stream`. Non-stream responses are assembled from 64 KiB host reads. The response exposes readyState 1 through 4, status, final URL, raw repeated response headers, response data, applicable response text, and the original JavaScript context. HTTP 4xx and 5xx responses call `onload`; network, permission, serialization, and bridge failures call `onerror`.
+`binary: true` accepts only a string request body and maps each UTF-16 code unit to its low eight bits. Other string bodies use UTF-8. `responseType` accepts `text`, `json`, `arraybuffer`, `blob`, `document`, `xml`, and `stream`. `responseXML: true` parses the response with the page's `DOMParser`; a document response also appears as `response`. If `DOMParser` is unavailable, `responseXML` is `null` and the response is not treated as parsed XML. Non-stream responses are assembled from 64 KiB host reads. The response exposes readyState 1 through 4, status, final URL, raw repeated response headers, response data, applicable response text, response XML, and the original JavaScript context. HTTP 4xx and 5xx responses call `onload`; network, permission, serialization, and bridge failures call `onerror` with `{ error, details, code }`, using categories such as `not_supported`, `not_permitted`, `timeout`, and `not_succeeded`.
 
 Callbacks are `onloadstart`, `onreadystatechange`, `onprogress`, `onuploadprogress`, `onload`, `onerror`, `ontimeout`, `onabort`, and `onloadend`. `GM.xmlHttpRequest` returns a Promise with `.abort()`; `GM_xmlhttpRequest` immediately returns an abort handle and reports through callbacks. `AbortSignal` and stream cancellation propagate to the host.
 
 Request and response sizes are unlimited by default. Each direction stays in memory through 256 KiB and then spills to a temporary file, which is removed on every terminal path. Body transfer and the long-running `execute` operation are independent of the bridge's general message and request limits.
 
-`proxy`, `cookiePartition`, and `Blob`/`File` URLs return `MSP006_NOT_SUPPORTED`. Partitioned-cookie keys are browser-extension manager state that the public CefSharp request-context API does not expose.
+`proxy`, `cookiePartition`, synchronous requests, and `Blob`/`File` URLs return `MSP006_NOT_SUPPORTED`. Partitioned-cookie keys are browser-extension manager state that the public CefSharp request-context API does not expose. The same code is used by modern and legacy XHR input validation.
 
 ### Cookies
 
@@ -127,9 +129,9 @@ Provider requirements:
 
 ## Lifecycle and Diagnostics
 
-The adapter creates an identity per frame document and executes each `(document, frame, script, run-at)` once. Navigation, context release, detach, and disposal invalidate capabilities and cancel pending work.
+The adapter creates an identity per frame document and executes each `(document, frame, script, run-at)` once. `@run-at context-menu` scripts are listed by the native CefSharp context menu for the matching frame and execute a fresh invocation only after the user selects an entry. Navigation, context release, detach, and disposal invalidate capabilities and cancel pending work.
 
-Grant state is significant: a missing `@grant` declaration exposes no `GM` facade, while explicit `@grant none` exposes only `GM.info`/`GM_info`. `GM.info` is a deep-frozen snapshot of normalized metadata, grants, URL rules, resources, update state, handler, sandbox mode, and raw metadata text.
+Grant state is significant: a missing `@grant` declaration exposes no `GM` facade, while explicit `@grant none` exposes only `GM.info`/`GM_info`. Both names reference the same deep-frozen snapshot of normalized metadata, grants, URL rules, resources, update state, handler, sandbox mode, and raw metadata text. Its versioned `compatibility` block has `contractVersion: 1` and identifies fixed, metadata-derived, mixed, and extension-owned fields, including the page-world execution boundary.
 
 CefSharp exposes only best-effort document-start hooks. Selected document-start executions emit `MSR100_DOCUMENT_START_BEST_EFFORT`. Set `RequireGuaranteedDocumentStart = true` to skip them with `MSR101_DOCUMENT_START_UNAVAILABLE`.
 
@@ -162,8 +164,10 @@ node --test Mzying2001.MonkeySharp.Core.Tests/JavaScript/*.test.js
 
 Repeat the .NET commands with `-p:Platform=x86`. The x86 solution configuration excludes the x64-only Demo projects. Package Core and each adapter platform into separate directories:
 
+Both solution platforms map Core to AnyCPU, with outputs under `bin/Release/<framework>/`. Use `-p:Platform=AnyCPU` when packing Core, including with `--no-build` to reuse solution outputs. The CefSharp adapter requires its explicit x64 or x86 platform.
+
 ```powershell
-dotnet pack Mzying2001.MonkeySharp.Core/Mzying2001.MonkeySharp.Core.csproj -c Release -p:Platform=x64 -p:CefSharpVersion=121.3.70 -o artifacts/packages/core
+dotnet pack Mzying2001.MonkeySharp.Core/Mzying2001.MonkeySharp.Core.csproj -c Release -p:Platform=AnyCPU -p:CefSharpVersion=121.3.70 -o artifacts/packages/core
 dotnet pack Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj -c Release -p:Platform=x64 -p:CefSharpVersion=121.3.70 -o artifacts/packages/x64
 dotnet pack Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj -c Release -p:Platform=x86 -p:CefSharpVersion=121.3.70 -o artifacts/packages/x86
 ```
@@ -176,4 +180,26 @@ Run the real-Chromium gates from a Windows desktop session:
 powershell -NoProfile -ExecutionPolicy Bypass -File Mzying2001.MonkeySharp.Demo/Run-E2E.ps1 -CefSharpVersion 121.3.70
 ```
 
-Pass the same `-CefSharpVersion` to every restore/build/test/pack/SmokeHost command when validating another supported version. Run the SmokeHost commands for x64 and x86 at `84.4.10`, `121.3.70`, and `151.3.240`; the Demo gate stays on x64/default `121.3.70`. The PowerShell runner passes that version to its restore, clean, build, and run steps. Both gates use isolated profiles and `TrustedPageWorld`; they are integration checks, not security sandboxes.
+Pass the same `-CefSharpVersion` to every restore/build/test/pack/SmokeHost command when validating another supported version. Run the SmokeHost commands for x64 and x86 at `84.4.10`, `121.3.70`, and `151.3.240`; the Demo gate stays on x64/default `121.3.70`. When switching versions in an existing checkout, first run `dotnet clean MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=<target-version>` (use the target platform) to avoid mixing incremental outputs from different CefSharp versions. The SmokeHost runner already restores, cleans and builds with the selected version, then verifies the running assembly version and process platform. Both gates use isolated profiles and `TrustedPageWorld`; they are integration checks, not security sandboxes.
+
+### Chromium Compatibility Script Package
+
+The SmokeHost embeds seven original `.user.js` fixtures from its `Fixtures` directory and installs them through the normal repository. Two ephemeral loopback HTTP servers provide all runtime inputs. These fixtures verify MonkeySharp's documented contract; they are not third-party scripts or differential results from Tampermonkey.
+
+The adapter resolves the current renderer's `location.href` before matching scripts, because older CefSharp releases can expose the previous navigation's URL in the context-created callback. If that lookup fails, the document is skipped, including load fallback and context-menu execution. Document-start remains best effort.
+
+| Result ID | Required evidence |
+| --- | --- |
+| `frames` | GM storage calls in the main frame, a same-origin child and a child on another port; once-per-document execution, `@noframes`, child navigation and context release. |
+| `spaUrl` | `pushState`, `replaceState`, hash navigation and history back; both URL callback forms, old/new URLs, host lifecycle events, grant gating and no reinjection. |
+| `download` | Modern Promise/handle and legacy callbacks; actual HTTP downloads with exact file bytes, cancellation after progress, timeout, HTTP failure, one terminal callback and partial-file cleanup. |
+| `cookie` | Modern and legacy set/list/delete, listener removal, request-context cookie sharing and anonymous XHR without cookies. |
+| `webRequest` | Browser-native fetch cancellation and redirect, callback details, server request counts, explicit removal and navigation cleanup. |
+
+The download service is test-only: Chromium executes GM calls and the supplied host service transfers local HTTP bytes to an isolated temporary directory. It does not test Chromium's download UI. Existing storage/XHR/notification/tab/navigation checks remain required.
+
+Each case emits a `compatibility-case` JSON record containing `caseId`, `success`, named `checks`, and failure context (`frameId`, `documentId`, `url`, `state`, `error`). `smoke-summary.compatibility` must contain all five successful results. The runner independently rejects missing/duplicate cases, failed assertions, wrong process architecture or CefSharp assembly version, missing detach/disposal and nonzero exits. Polling has a 15-second deadline; the host has a 90-second watchdog and the runner kills a stalled process tree after 120 seconds.
+
+Run `powershell -NoProfile -ExecutionPolicy Bypass -File Mzying2001.MonkeySharp.CefSharp.SmokeHost/Test-SmokeResults.ps1` to check result validation without launching a browser. Both Windows PowerShell and PowerShell 7 can run the scripts.
+
+Logs are written to `artifacts/smoke/<version>-<platform>/` (`restore.log`, `clean.log`, `build.log` when output is present, `stdout.log`, `stderr.log`, and `results.jsonl`); `-OutputDirectory` overrides the location. CI uploads that directory as `chromium-<version>-<platform>` even on failure. Inspect failed `compatibility-case` records first, then the adjacent lifecycle, console and diagnostic records.

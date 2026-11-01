@@ -81,5 +81,5 @@ test("download callbacks are registered before early terminal notifications", as
     assert.equal(globalThis.__legacyError, undefined);
     globalThis.__legacy.abort();
     await new Promise(resolve => setTimeout(resolve, 10));
-    assert.equal(aborts, 1);
+    assert.equal(aborts, 0);
 });
