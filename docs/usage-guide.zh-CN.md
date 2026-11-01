@@ -186,7 +186,7 @@ MonkeySharp 在**页面世界**中，通过函数包装执行可信脚本。CefS
 | `GM.addStyle` | `GM_addStyle` | `Promise<HTMLStyleElement>` | 页面 DOM |
 | `GM.addElement` | `GM_addElement` | `Promise<Element>` | 页面 DOM |
 | `GM.getResourceText` | `GM_getResourceText` | `Promise<string>` | 资源提供器 |
-| `GM.getResourceURL` | `GM_getResourceURL` | `Promise<string>` | 资源提供器 |
+| `GM.getResourceURL` / `GM.getResourceUrl` | `GM_getResourceURL` | `Promise<string>` | 资源提供器 |
 | `GM.xmlHttpRequest` | `GM_xmlhttpRequest` | 可 abort 的 `Promise<Response>` | CefSharp 默认服务 |
 | `GM.registerMenuCommand` | `GM_registerMenuCommand` | `Promise<number>` | 菜单服务 |
 | `GM.unregisterMenuCommand` | `GM_unregisterMenuCommand` | `Promise<boolean>` | 菜单服务 |
@@ -337,20 +337,22 @@ attributes 是可选对象：textContent/innerHTML 设置内容，字符串 styl
 
 需要对应授权、资源提供器和 @resource name url。name 是非空、区分大小写的字符串。现代返回 `Promise<string>`，使用提供器给出的文本，否则将字节按 UTF-8 解码。旧版从完整启动资源快照立即返回字符串。未声明的资源导致拒绝；缺少旧版快照时不暴露别名，在可用快照中找不到名称时抛出错误。
 
-### GM.getResourceURL(name) / GM_getResourceURL(name)
+### GM.getResourceURL(name) / GM.getResourceUrl(name) / GM_getResourceURL(name)
 
-前提和名称规则相同，但需要自己的授权。现代返回 `Promise<string>`，内容为 **data URL**：`data:<media-type>;base64,<bytes>`；旧版从快照立即返回该 URL。它不是原始下载地址，也不是需要 revoke 的对象 URL。不支持 isBlobUrl 参数或其他大小写别名。两种资源 API 均应用完整性检查和大小限制。
+前提和名称规则相同，但需要自己的授权。现代返回 `Promise<string>`，内容为 **data URL**：`data:<media-type>;base64,<bytes>`；旧版从快照立即返回该 URL。它不是原始下载地址，也不是需要 revoke 的对象 URL。不支持 isBlobUrl 参数。两种资源 API 均应用完整性检查和大小限制。
 
-**与 Tampermonkey 的差异：** Tampermonkey 的现代名称是 GM.getResourceUrl，而 MonkeySharp 只暴露 GM.getResourceURL；两者的旧版名称都是 GM_getResourceURL。必须使用 MonkeySharp 的精确拼写并按 data URL 处理，不应假定其他管理器的扩展 URL、对象 URL 或附加选项，参见[官方资源参考](https://www.tampermonkey.net/documentation.php?q=GM_getResource)。
+`GM.getResourceUrl` 与 `GM.getResourceURL` 引用同一个函数。声明任一现代拼写的 grant，即授权两个名称；所有兼容模式均支持，包括 `AcceptLegacyGrantAliases` 为 false 时。接受旧版 grant 别名时，`GM_getResourceURL` 也授权两个现代名称；其同步全局函数仍需要启用旧版全局及完整资源快照。原始 grant 声明保留，运行时能力和桥接方法仍为 `GM.getResourceURL`。
+
+请按 data URL 处理，不应假定其他管理器的扩展 URL、对象 URL 或附加选项，参见[官方资源参考](https://www.tampermonkey.net/documentation.php?q=GM_getResource)。
 
 请将下面片段中的 badge URL 替换为真实可访问的图片资源；示例域名不保证该路径存在 favicon。
 
 ```javascript
 // @resource badge https://example.com/favicon.ico
-// @grant GM.getResourceURL
+// @grant GM.getResourceUrl
 (async function () {
     const image = document.createElement("img");
-    image.src = await GM.getResourceURL("badge");
+    image.src = await GM.getResourceUrl("badge");
     document.body.appendChild(image);
 })().catch(console.error);
 ```
@@ -736,7 +738,7 @@ window.addEventListener("urlchange", onRoute);
 | 时机 / SPA | 不依赖保证的 document-start 或历史导航后的自动重跑。 |
 | 子域名匹配 | `*.domain` 的 match 模式包含裸域名及其所有层级的子域名。 |
 | 存储 | 使用支持的存储值，await 现代写入以观察失败，并考虑镜像限额及提交后通知的时序。 |
-| 资源 | 使用精确 GM.getResourceURL，按 data URL 处理，并确认宿主资源提供器可用。 |
+| 资源 | 使用 `GM.getResourceUrl` 或 `GM.getResourceURL`，声明任一对应 grant，按 data URL 处理，并确认宿主资源提供器可用。 |
 | XHR | 检查代理/分区/Blob URL 等不支持项，适配进度/XML 行为，显式检查 HTTP 状态。 |
 | 菜单 / 剪贴板 | 使用字符串访问键及 MIME 字符串，移除不支持的选项对象/回调重载。 |
 | 通知 | 只使用支持字段；现代 Promise 在注册后兑现，而非关闭后。 |

@@ -143,7 +143,7 @@ This table summarizes availability. Parameters, return values, callbacks, and [T
 | `GM.log` / `GM_log` | Core | Delivered to the builder's logging callback. |
 | Value storage and change listeners | Core | Single-key and bulk `getValues`/`setValues`/`deleteValues` APIs with `GM_*` aliases; Typed value storage (including stored `undefined`) isolated by stable `ScriptKey`, with committed change notifications. |
 | `GM.addStyle`, `GM.addElement` and aliases | Bootstrap | Page-local implementations. |
-| `GM.getResourceText`, `GM.getResourceURL` and aliases | Conditional | Require `IResourceProvider` and a declared `@resource`. |
+| `GM.getResourceText`, `GM.getResourceURL` / `GM.getResourceUrl` and legacy aliases | Conditional | Require `IResourceProvider` and a declared `@resource`; either modern URL grant authorizes both URL names. |
 | `GM.xmlHttpRequest` / `GM_xmlhttpRequest` | CefSharp default | Requires `@connect`; supports redirects, credentials, progress, abort, and binary/multipart bodies. See [HTTP requests](docs/usage-guide.md#http-requests) for response types and limitations. |
 | `GM.registerMenuCommand`, `GM.unregisterMenuCommand` and aliases | Conditional | Require `IMenuService`. |
 | `GM.notification`, `GM.setClipboard`, `GM.openInTab` and aliases | Conditional | Require their corresponding host services. |

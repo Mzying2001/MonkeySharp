@@ -74,6 +74,11 @@ namespace Mzying2001.MonkeySharp.Core.Compatibility
         {
             if (declaredGrant == null)
                 throw new ArgumentNullException(nameof(declaredGrant));
+            if (declaredGrant == "GM.getResourceUrl")
+            {
+                canonicalGrant = "GM.getResourceURL";
+                return true;
+            }
             if (declaredGrant == "none" || declaredGrant == "unsafeWindow" ||
                 CanonicalGrants.Contains(declaredGrant))
             {

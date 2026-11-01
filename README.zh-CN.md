@@ -143,7 +143,7 @@ var host = new CefSharpUserScriptHostBuilder(repository)
 | `GM.log` / `GM_log` | Core | 传递给 builder 的日志回调。 |
 | 值存储与变更监听 | Core | 单键及批量 `getValues`/`setValues`/`deleteValues` API，支持 `GM_*` 别名；按稳定 `ScriptKey` 隔离的类型化值存储（包括已存储的 undefined）及提交后变更通知。 |
 | `GM.addStyle`、`GM.addElement` 及别名 | 引导代码 | 页面本地实现。 |
-| `GM.getResourceText`、`GM.getResourceURL` 及别名 | 条件支持 | 需要 `IResourceProvider` 和已声明的 `@resource`。 |
+| `GM.getResourceText`、`GM.getResourceURL` / `GM.getResourceUrl` 及旧版别名 | 条件支持 | 需要 `IResourceProvider` 和已声明的 `@resource`；任一现代 URL grant 均授权两个 URL 名称。 |
 | `GM.xmlHttpRequest` / `GM_xmlhttpRequest` | CefSharp 默认提供 | 需要 `@connect`；支持重定向、凭据、进度、中止及二进制/multipart 请求体。响应类型和限制见 [HTTP 请求](docs/usage-guide.zh-CN.md#http-请求)。 |
 | `GM.registerMenuCommand`、`GM.unregisterMenuCommand` 及别名 | 条件支持 | 需要 `IMenuService`。 |
 | `GM.notification`、`GM.setClipboard`、`GM.openInTab` 及别名 | 条件支持 | 需要对应宿主服务。 |

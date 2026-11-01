@@ -95,6 +95,57 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             }
         }
 
+        [Theory]
+        [InlineData("GM.getResourceUrl")]
+        [InlineData("GM.getResourceURL")]
+        [InlineData("GM_getResourceURL")]
+        public async Task ResourceUrlGrantsAuthorizeCanonicalBridgeAndBootstrapResources(string grant)
+        {
+            var source = MetadataAndMatchingTests.Script(
+                "// @name resource\n// @match https://example.com/*\n// @run-at document-end\n" +
+                "// @grant " + grant + "\n// @resource template https://cdn.example/template.txt");
+            using (var provider = new ResourceAndNetworkApiProvider(new FixtureResourceProvider()))
+            using (var fixture = await BridgeFixture.CreateFromSourceAsync(
+                source, new IUserScriptApiProvider[] { provider }))
+            {
+                Assert.Equal(new[] { grant }, fixture.Invocation.DeclaredGrants);
+                Assert.Equal(new[] { "GM.getResourceURL" }, fixture.Invocation.Grants);
+                var hello = await fixture.HelloAsync();
+                Assert.Contains("GM.getResourceURL", hello.GetProperty("apis").EnumerateArray().Select(item => item.GetString()));
+                var resources = hello.GetProperty("compatibility").GetProperty("resources");
+                Assert.True(resources.GetProperty("complete").GetBoolean());
+                Assert.Equal("data:text/plain;base64,aGVsbG8=",
+                    resources.GetProperty("values").GetProperty("template").GetProperty("url").GetString());
+
+                var response = await fixture.RequestAsync("GM.getResourceURL", new { name = "template" });
+                Assert.True(response.GetProperty("ok").GetBoolean());
+                Assert.Equal("data:text/plain;base64,aGVsbG8=", response.GetProperty("result").GetString());
+                AssertError(await fixture.RequestAsync("GM.getResourceText", new { name = "template" }),
+                    BridgeErrorCodes.GrantDenied);
+            }
+        }
+
+        [Theory]
+        [InlineData(null)]
+        [InlineData("none")]
+        [InlineData("GM.getResourceText")]
+        public async Task ResourceUrlBridgeRequiresItsOwnGrant(string grant)
+        {
+            var source = MetadataAndMatchingTests.Script(
+                "// @name resource\n// @match https://example.com/*\n// @run-at document-end\n" +
+                (grant == null ? "" : "// @grant " + grant + "\n") +
+                "// @resource template https://cdn.example/template.txt");
+            using (var provider = new ResourceAndNetworkApiProvider(new FixtureResourceProvider()))
+            using (var fixture = await BridgeFixture.CreateFromSourceAsync(
+                source, new IUserScriptApiProvider[] { provider }))
+            {
+                var hello = await fixture.HelloAsync();
+                Assert.DoesNotContain("GM.getResourceURL", hello.GetProperty("apis").EnumerateArray().Select(item => item.GetString()));
+                AssertError(await fixture.RequestAsync("GM.getResourceURL", new { name = "template" }),
+                    BridgeErrorCodes.GrantDenied);
+            }
+        }
+
         [Fact]
         public async Task ForgedIdentityAndStaleDocumentAreRejected()
         {
@@ -975,6 +1026,15 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             public Task<IReadOnlyList<string>> ListKeysAsync(string scriptKey, CancellationToken cancellationToken) =>
                 _inner.ListKeysAsync(scriptKey, cancellationToken);
             public void Dispose() => _inner.Dispose();
+        }
+
+        private sealed class FixtureResourceProvider : IResourceProvider
+        {
+            public Task<ResourceContent> GetAsync(
+                UserScriptInstallation installation, ResourceDeclaration resource, CancellationToken cancellationToken)
+            {
+                return Task.FromResult(new ResourceContent(Encoding.UTF8.GetBytes("hello"), "text/plain", "hello"));
+            }
         }
 
         private sealed class BridgeFixture : IDisposable

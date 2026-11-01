@@ -178,7 +178,7 @@ Each row requires the capability in its first column unless stated otherwise. `P
 | `GM.addStyle` | `GM_addStyle` | `Promise<HTMLStyleElement>` | Page DOM |
 | `GM.addElement` | `GM_addElement` | `Promise<Element>` | Page DOM |
 | `GM.getResourceText` | `GM_getResourceText` | `Promise<string>` | Resource provider |
-| `GM.getResourceURL` | `GM_getResourceURL` | `Promise<string>` | Resource provider |
+| `GM.getResourceURL` / `GM.getResourceUrl` | `GM_getResourceURL` | `Promise<string>` | Resource provider |
 | `GM.xmlHttpRequest` | `GM_xmlhttpRequest` | Abortable `Promise<Response>` | CefSharp default |
 | `GM.registerMenuCommand` | `GM_registerMenuCommand` | `Promise<number>` | Menu service |
 | `GM.unregisterMenuCommand` | `GM_unregisterMenuCommand` | `Promise<boolean>` | Menu service |
@@ -321,20 +321,22 @@ Legacy: `GM_addElement` with the same overloads; grant `GM.addElement` or its al
 
 Requires its grant, a resource provider, and `@resource name url`. `name` is a non-empty, case-sensitive string. Modern result: `Promise<string>`, using provider text or UTF-8 decoding of bytes. Legacy returns a string immediately from the complete bootstrap resource snapshot. An undeclared resource rejects; a missing legacy snapshot makes the alias unavailable, and an absent name in an available snapshot throws.
 
-### GM.getResourceURL(name) / GM_getResourceURL(name)
+### GM.getResourceURL(name) / GM.getResourceUrl(name) / GM_getResourceURL(name)
 
-Same prerequisites and name rules, with its own grant. Modern result: `Promise<string>` containing a **data URL**, `data:<media-type>;base64,<bytes>`; legacy returns that URL immediately from its snapshot. It is not the download URL and is not a revocable object URL. There is no supported `isBlobUrl` parameter or alternate-casing alias. Integrity and size limits apply to both resource APIs.
+Same prerequisites and name rules, with its own grant. Modern result: `Promise<string>` containing a **data URL**, `data:<media-type>;base64,<bytes>`; legacy returns that URL immediately from its snapshot. It is not the download URL and is not a revocable object URL. There is no supported `isBlobUrl` parameter. Integrity and size limits apply to both resource APIs.
 
-**Tampermonkey difference:** Tampermonkey's modern name is `GM.getResourceUrl`, while MonkeySharp only exposes `GM.getResourceURL`; both use the legacy name `GM_getResourceURL`. Use MonkeySharp's exact spelling and data-URL contract; do not assume browser-extension/object-URL behavior or additional options from other managers. See the [official resource reference](https://www.tampermonkey.net/documentation.php?q=GM_getResource).
+`GM.getResourceUrl` and `GM.getResourceURL` reference the same function. Declaring either modern grant authorizes both names in every compatibility profile, including when `AcceptLegacyGrantAliases` is false. When legacy grant aliases are accepted, `GM_getResourceURL` also authorizes both modern names; its synchronous global still requires legacy globals and a complete resource snapshot. Original grant declarations are preserved, while the runtime capability and bridge method remain `GM.getResourceURL`.
+
+Use the data-URL contract; do not assume browser-extension/object-URL behavior or additional options from other managers. See the [official resource reference](https://www.tampermonkey.net/documentation.php?q=GM_getResource).
 
 Replace the badge URL in this fragment with an actual reachable image resource; the example domain does not guarantee a favicon at that path.
 
 ```javascript
 // @resource badge https://example.com/favicon.ico
-// @grant GM.getResourceURL
+// @grant GM.getResourceUrl
 (async function () {
     const image = document.createElement("img");
-    image.src = await GM.getResourceURL("badge");
+    image.src = await GM.getResourceUrl("badge");
     document.body.appendChild(image);
 })().catch(console.error);
 ```
@@ -704,7 +706,7 @@ window.addEventListener("urlchange", onRoute);
 | Timing / SPA | Do not require guaranteed document-start or automatic reruns on history changes. |
 | Match subdomains | `*.domain` match patterns include the bare domain and all its subdomains. |
 | Stored values | Use supported storage values; await modern writes for failures; account for bounded mirrors and post-commit notifications. |
-| Resources | Use exact `GM.getResourceURL`; expect a data URL and host-provided resource availability. |
+| Resources | Use `GM.getResourceUrl` or `GM.getResourceURL` with either grant; expect a data URL and host-provided resource availability. |
 | XHR | Check unsupported proxy/partition/Blob-URL controls; adapt progress/XML behavior; inspect HTTP status explicitly. |
 | Menu / clipboard | Use string access keys and MIME strings; remove unsupported options objects/callback overloads. |
 | Notifications | Use supported detail fields; modern resolution is registration, not dismissal. |

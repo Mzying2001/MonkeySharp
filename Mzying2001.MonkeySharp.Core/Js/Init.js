@@ -582,6 +582,7 @@
                         }
                         return call(record, "GM.getResourceURL", { name: name });
                     };
+                    api.getResourceUrl = api.getResourceURL;
                 }
                 if (enabled("GM.xmlHttpRequest")) {
                     api.xmlHttpRequest = function (details) {

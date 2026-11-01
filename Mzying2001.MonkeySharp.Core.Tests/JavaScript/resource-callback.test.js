@@ -75,6 +75,7 @@ test("legacy resource and XHR facades use snapshots and abort handles", async ()
             source: [
                 "globalThis.__resourceText = GM_getResourceText('template');",
                 "globalThis.__resourceUrl = GM_getResourceURL('template');",
+                "globalThis.__modernResourceUrl = GM.getResourceUrl('template');",
                 "globalThis.__xhrHandle = GM_xmlhttpRequest({",
                 "  url: 'https://api.example.com/data',",
                 "  onprogress: value => globalThis.__callbackProgress = value,",
@@ -94,6 +95,7 @@ test("legacy resource and XHR facades use snapshots and abort handles", async ()
     await waitFor(() => globalThis.__callbackLoaded);
     assert.equal(globalThis.__resourceText, "fixture text");
     assert.equal(globalThis.__resourceUrl, "data:text/plain;base64,ZA==");
+    assert.equal(await globalThis.__modernResourceUrl, "data:text/plain;base64,ZA==");
     assert.equal(globalThis.__handleType, "function");
     assert.equal(globalThis.__callbackProgress.loaded, 4);
     assert.equal(globalThis.__callbackProgress.total, 8);
