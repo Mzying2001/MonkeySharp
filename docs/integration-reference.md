@@ -260,6 +260,11 @@ Browser-extension-only cookie partitioning, manager UI state, download shelf pre
 
 ## Build, Package, and Verify
 
+The [Tampermonkey contract inventory](compatibility/api-contract.md) separates
+target behavior from versioned evidence. Run `scripts/compatibility/Run-Baseline.ps1`
+for the clean 84/x64 baseline, including the WPF Demo. CI runs the Demo on both
+84/x64 and 121/x64; its report verifies the actual assembly version and architecture.
+
 CI's verified toolchain is Windows Server 2022, .NET SDK `9.0.315`, and Node.js `24`. These are tested versions, not a statement of minimum requirements. Use an SDK that supports `MonkeySharp.slnx`; Core tests target `net8.0`, while CefSharp tests and applications target `net462`. Real-Chromium gates require a Windows desktop session.
 
 Use the same `CefSharpVersion` property for restore, build, test, and package commands:

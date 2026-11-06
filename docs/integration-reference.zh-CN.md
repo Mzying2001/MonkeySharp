@@ -260,6 +260,10 @@ CefSharp 只能提供尽力而为的 document-start 钩子。相应执行产生 
 
 ## 构建、打包与验证
 
+[Tampermonkey 契约清单](compatibility/api-contract.md) 区分目标行为与版本化实测证据。
+运行 `scripts/compatibility/Run-Baseline.ps1` 可清理并验证 84/x64 基线（含 WPF Demo）。
+CI 覆盖 84/x64 和 121/x64 的 Demo；报告核验实际程序集版本与进程架构。
+
 CI 已验证的工具链为 Windows Server 2022、.NET SDK `9.0.315` 和 Node.js `24`。这些是已测试版本，不代表最低要求。SDK 需要支持 `MonkeySharp.slnx`；Core 测试目标为 `net8.0`，CefSharp 测试及应用程序目标为 `net462`。真实 Chromium 验证需要 Windows 桌面会话。
 
 还原、构建、测试和打包必须使用相同的 `CefSharpVersion` 属性：

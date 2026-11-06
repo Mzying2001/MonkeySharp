@@ -1,0 +1,449 @@
+{
+  "schemaVersion": 1,
+  "caseId": "returns",
+  "immediateReturn": {
+    "GM_addStyle": {
+      "type": "object",
+      "prototype": "[object HTMLStyleElement]",
+      "then": false,
+      "abort": false,
+      "close": false,
+      "closed": null
+    },
+    "GM.addStyle": {
+      "type": "object",
+      "prototype": "[object Promise]",
+      "then": true,
+      "abort": false,
+      "close": false,
+      "closed": null
+    },
+    "GM_addElement": {
+      "type": "object",
+      "prototype": "[object HTMLSpanElement]",
+      "then": false,
+      "abort": false,
+      "close": false,
+      "closed": null
+    },
+    "GM.addElement": {
+      "type": "object",
+      "prototype": "[object Promise]",
+      "then": true,
+      "abort": false,
+      "close": false,
+      "closed": null
+    },
+    "GM_registerMenuCommand": {
+      "type": "number",
+      "prototype": "[object Number]",
+      "then": false,
+      "abort": false,
+      "close": false,
+      "closed": null
+    },
+    "GM_unregisterMenuCommand": {
+      "type": "undefined",
+      "prototype": null,
+      "then": false,
+      "abort": false,
+      "close": false,
+      "closed": null
+    },
+    "GM.registerMenuCommand": {
+      "type": "object",
+      "prototype": "[object Promise]",
+      "then": true,
+      "abort": false,
+      "close": false,
+      "closed": null
+    },
+    "GM_openInTab": {
+      "type": "object",
+      "prototype": "[object Object]",
+      "then": false,
+      "abort": false,
+      "close": true,
+      "closed": false
+    },
+    "GM.openInTab": {
+      "type": "object",
+      "prototype": "[object Promise]",
+      "then": true,
+      "abort": false,
+      "close": false,
+      "closed": null
+    },
+    "GM_notification": {
+      "type": "undefined",
+      "prototype": null,
+      "then": false,
+      "abort": false,
+      "close": false,
+      "closed": null
+    },
+    "GM.notification": {
+      "type": "object",
+      "prototype": "[object Promise]",
+      "then": true,
+      "abort": false,
+      "close": false,
+      "closed": null
+    },
+    "GM.unregisterMenuCommand": {
+      "type": "object",
+      "prototype": "[object Promise]",
+      "then": true,
+      "abort": false,
+      "close": false,
+      "closed": null
+    }
+  },
+  "events": [
+    {
+      "name": "GM_addStyle:return",
+      "value": {
+        "type": "object",
+        "prototype": "[object HTMLStyleElement]",
+        "then": false,
+        "abort": false,
+        "close": false,
+        "closed": null
+      }
+    },
+    {
+      "name": "GM.addStyle:return",
+      "value": {
+        "type": "object",
+        "prototype": "[object Promise]",
+        "then": true,
+        "abort": false,
+        "close": false,
+        "closed": null
+      }
+    },
+    {
+      "name": "GM_addElement:return",
+      "value": {
+        "type": "object",
+        "prototype": "[object HTMLSpanElement]",
+        "then": false,
+        "abort": false,
+        "close": false,
+        "closed": null
+      }
+    },
+    {
+      "name": "GM.addElement:return",
+      "value": {
+        "type": "object",
+        "prototype": "[object Promise]",
+        "then": true,
+        "abort": false,
+        "close": false,
+        "closed": null
+      }
+    },
+    {
+      "name": "GM_registerMenuCommand:return",
+      "value": {
+        "type": "number",
+        "prototype": "[object Number]",
+        "then": false,
+        "abort": false,
+        "close": false,
+        "closed": null
+      }
+    },
+    {
+      "name": "GM_unregisterMenuCommand:return",
+      "value": {
+        "type": "undefined",
+        "prototype": null,
+        "then": false,
+        "abort": false,
+        "close": false,
+        "closed": null
+      }
+    },
+    {
+      "name": "GM.registerMenuCommand:return",
+      "value": {
+        "type": "object",
+        "prototype": "[object Promise]",
+        "then": true,
+        "abort": false,
+        "close": false,
+        "closed": null
+      }
+    },
+    {
+      "name": "GM_openInTab:return",
+      "value": {
+        "type": "object",
+        "prototype": "[object Object]",
+        "then": false,
+        "abort": false,
+        "close": true,
+        "closed": false
+      }
+    },
+    {
+      "name": "GM.openInTab:return",
+      "value": {
+        "type": "object",
+        "prototype": "[object Promise]",
+        "then": true,
+        "abort": false,
+        "close": false,
+        "closed": null
+      }
+    },
+    {
+      "name": "GM_notification:return",
+      "value": {
+        "type": "undefined",
+        "prototype": null,
+        "then": false,
+        "abort": false,
+        "close": false,
+        "closed": null
+      }
+    },
+    {
+      "name": "GM.notification:return",
+      "value": {
+        "type": "object",
+        "prototype": "[object Promise]",
+        "then": true,
+        "abort": false,
+        "close": false,
+        "closed": null
+      }
+    },
+    {
+      "name": "GM.addStyle:fulfilled",
+      "value": {
+        "type": "object",
+        "prototype": "[object HTMLStyleElement]",
+        "then": false,
+        "abort": false,
+        "close": false,
+        "closed": null
+      }
+    },
+    {
+      "name": "GM.addElement:fulfilled",
+      "value": {
+        "type": "object",
+        "prototype": "[object HTMLSpanElement]",
+        "then": false,
+        "abort": false,
+        "close": false,
+        "closed": null
+      }
+    },
+    {
+      "name": "GM.registerMenuCommand:fulfilled",
+      "value": {
+        "type": "number",
+        "prototype": "[object Number]",
+        "then": false,
+        "abort": false,
+        "close": false,
+        "closed": null
+      }
+    },
+    {
+      "name": "GM.unregisterMenuCommand:return",
+      "value": {
+        "type": "object",
+        "prototype": "[object Promise]",
+        "then": true,
+        "abort": false,
+        "close": false,
+        "closed": null
+      }
+    },
+    {
+      "name": "GM.openInTab:fulfilled",
+      "value": {
+        "type": "object",
+        "prototype": "[object Object]",
+        "then": false,
+        "abort": false,
+        "close": true,
+        "closed": false
+      }
+    },
+    {
+      "name": "microtask"
+    },
+    {
+      "name": "GM.unregisterMenuCommand:fulfilled",
+      "value": {
+        "type": "undefined",
+        "prototype": null,
+        "then": false,
+        "abort": false,
+        "close": false,
+        "closed": null
+      }
+    },
+    {
+      "name": "legacy-tab-closed",
+      "value": {
+        "closed": true
+      }
+    },
+    {
+      "name": "modern-tab-closed",
+      "value": {
+        "closed": true
+      }
+    },
+    {
+      "name": "legacy-notification-done"
+    },
+    {
+      "name": "modern-notification-done"
+    },
+    {
+      "name": "GM.notification:fulfilled",
+      "value": {
+        "type": "boolean",
+        "prototype": "[object Boolean]",
+        "then": false,
+        "abort": false,
+        "close": false,
+        "closed": null
+      }
+    }
+  ],
+  "promise": {
+    "GM.addStyle": {
+      "state": "fulfilled",
+      "shape": {
+        "type": "object",
+        "prototype": "[object HTMLStyleElement]",
+        "then": false,
+        "abort": false,
+        "close": false,
+        "closed": null
+      },
+      "value": null
+    },
+    "GM.addElement": {
+      "state": "fulfilled",
+      "shape": {
+        "type": "object",
+        "prototype": "[object HTMLSpanElement]",
+        "then": false,
+        "abort": false,
+        "close": false,
+        "closed": null
+      },
+      "value": null
+    },
+    "GM.registerMenuCommand": {
+      "state": "fulfilled",
+      "shape": {
+        "type": "number",
+        "prototype": "[object Number]",
+        "then": false,
+        "abort": false,
+        "close": false,
+        "closed": null
+      },
+      "value": null
+    },
+    "GM.openInTab": {
+      "state": "fulfilled",
+      "shape": {
+        "type": "object",
+        "prototype": "[object Object]",
+        "then": false,
+        "abort": false,
+        "close": true,
+        "closed": false
+      },
+      "value": null
+    },
+    "GM.notification": {
+      "state": "fulfilled",
+      "shape": {
+        "type": "boolean",
+        "prototype": "[object Boolean]",
+        "then": false,
+        "abort": false,
+        "close": false,
+        "closed": null
+      },
+      "value": false
+    },
+    "GM.unregisterMenuCommand": {
+      "state": "fulfilled",
+      "shape": {
+        "type": "undefined",
+        "prototype": null,
+        "then": false,
+        "abort": false,
+        "close": false,
+        "closed": null
+      },
+      "value": null
+    }
+  },
+  "effects": {
+    "legacyStyle": true,
+    "legacyElement": true,
+    "modernStyle": true,
+    "modernElement": true,
+    "styles": [
+      "17",
+      "23"
+    ],
+    "nodes": [
+      true,
+      true
+    ],
+    "tabsBefore": 4,
+    "tabsAfter": 4
+  },
+  "info": {
+    "handler": "Tampermonkey",
+    "version": "5.5.1",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36 Edg/156.0.0.0"
+  },
+  "fixtureHash": "9ee5e230e049020ee37f2b33c55dfae298f35e11e68376a5c9a2848c68dbb387",
+  "contractSource": [
+    "https://www.tampermonkey.net/documentation.php?locale=en",
+    "Tampermonkey 5.5.1/MV3 runtime"
+  ],
+  "environment": {
+    "manager": "Tampermonkey",
+    "managerVersion": "5.5.1",
+    "chromiumVersion": "Edg/156.0.4314.58",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36 Edg/156.0.0.0",
+    "manifestVersion": 3,
+    "settings": {
+      "headless": true,
+      "userScriptsAccess": true,
+      "freshProfile": true
+    },
+    "commit": "536126c69d5889c90c6eb8e7faa67ed9ab400c0c",
+    "platform": "x64",
+    "capabilities": {
+      "referenceReturnProbe": true
+    },
+    "world": "manager-selected"
+  },
+  "checks": {
+    "noInvocationErrors": true,
+    "domNodes": true,
+    "stylesApplied": true,
+    "promisesSettled": true,
+    "openedTabsClosed": true
+  },
+  "status": "passed"
+}

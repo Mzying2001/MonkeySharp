@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Userscript differential evidence",
+  "type": "object",
+  "required": ["schemaVersion", "caseId", "fixtureHash", "contractSource", "environment", "immediateReturn", "events", "promise", "effects", "status"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "caseId": { "type": "string", "minLength": 1 },
+    "fixtureHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "contractSource": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+    "environment": {
+      "type": "object",
+      "required": ["manager", "managerVersion", "chromiumVersion", "manifestVersion", "settings", "commit", "platform", "capabilities", "world"],
+      "properties": {
+        "manager": { "type": "string" },
+        "managerVersion": { "type": ["string", "null"] },
+        "chromiumVersion": { "type": ["string", "null"] },
+        "manifestVersion": { "type": ["integer", "null"] },
+        "settings": { "type": "object" },
+        "commit": { "type": ["string", "null"] },
+        "platform": { "type": "string" },
+        "capabilities": { "type": "object" },
+        "world": { "type": ["string", "null"] }
+      }
+    },
+    "immediateReturn": { "type": "object" },
+    "events": { "type": "array" },
+    "promise": { "type": "object" },
+    "effects": { "type": "object" },
+    "status": { "enum": ["passed", "expected-engine-limitation", "blocked", "failed"] },
+    "reason": { "type": "string" }
+  }
+}

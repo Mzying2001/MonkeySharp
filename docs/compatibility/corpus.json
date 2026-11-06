@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "entries": [
+    { "category": "dom-decoration", "status": "pending", "reason": "Pin licensed upstream source and local page prerequisites." },
+    { "category": "page-hook", "status": "pending", "reason": "Pin licensed upstream source and CSP requirements." },
+    { "category": "authenticated-xhr", "status": "pending", "reason": "Pin source and provide local authentication fixture." },
+    { "category": "download", "status": "pending", "reason": "Pin source, expected bytes and SHA-256." },
+    { "category": "storage-listener", "status": "pending", "reason": "Pin source and cross-instance scenario." },
+    { "category": "menu-configuration", "status": "pending", "reason": "Pin source and interaction scenario." },
+    { "category": "iframe-spa", "status": "pending", "reason": "Pin source and frame/navigation prerequisites." }
+  ]
+}
