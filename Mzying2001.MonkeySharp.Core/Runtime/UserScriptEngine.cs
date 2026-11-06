@@ -332,38 +332,6 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                         frameId: frame.FrameId));
                 }
 
-                if (!string.IsNullOrEmpty(metadata.InjectInto) &&
-                    !string.Equals(metadata.InjectInto, "page", StringComparison.OrdinalIgnoreCase))
-                {
-                    diagnostics.Add(new UserScriptDiagnostic(
-                        "MSR210_UNSUPPORTED_INJECT_WORLD",
-                        DiagnosticSeverity.Warning,
-                        "The requested @inject-into world is not available in the CefSharp page world.",
-                        scriptKey: installation.ScriptKey,
-                        documentId: frame.DocumentId,
-                        frameId: frame.FrameId));
-                }
-                if (!string.IsNullOrEmpty(metadata.Sandbox) &&
-                    !string.Equals(metadata.Sandbox, "raw", StringComparison.OrdinalIgnoreCase))
-                {
-                    diagnostics.Add(new UserScriptDiagnostic(
-                        "MSR212_UNSUPPORTED_SANDBOX",
-                        DiagnosticSeverity.Warning,
-                        "The requested @sandbox mode is not available; the script remains in the page world.",
-                        scriptKey: installation.ScriptKey,
-                        documentId: frame.DocumentId,
-                        frameId: frame.FrameId));
-                }
-                if (metadata.Unwrap)
-                {
-                    diagnostics.Add(new UserScriptDiagnostic(
-                        "MSR213_UNSUPPORTED_UNWRAP",
-                        DiagnosticSeverity.Warning,
-                        "@unwrap is not available; the script remains inside the MonkeySharp wrapper.",
-                        scriptKey: installation.ScriptKey,
-                        documentId: frame.DocumentId,
-                        frameId: frame.FrameId));
-                }
                 var source = installation.PreparedRevision?.Source ?? throw new InvalidOperationException("The installation has no prepared revision.");
                 var invocation = CreateInvocation(installation, source, frame);
                 var execution = new ExecutionRecord(frame, installation, invocation, new CancellationTokenSource());
@@ -420,8 +388,38 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                 ExecutionEnded?.Invoke(execution);
         }
 
+        /// <summary>Resolves the requested Chromium world without silently downgrading an explicit requirement.</summary>
+        public static string RequestedWorld(UserScriptMetadata metadata)
+        {
+            var sandbox = metadata.Sandbox;
+            if (!string.IsNullOrEmpty(sandbox) && !new[] { "raw", "JavaScript", "DOM" }.Contains(sandbox, StringComparer.OrdinalIgnoreCase)) return null;
+            var world = string.Equals(sandbox, "DOM", StringComparison.OrdinalIgnoreCase) ? "isolated" : "page";
+            if (!string.IsNullOrEmpty(metadata.InjectInto) && metadata.InjectInto != "auto")
+            {
+                if (metadata.InjectInto == "content") { if (sandbox != null && world != "isolated") return null; world = "isolated"; }
+                else if (metadata.InjectInto != "page" || world != "page") return null;
+            }
+            return world;
+        }
+
         private bool Matches(UserScriptInstallation installation, DocumentFrame frame, bool contextMenu, ICollection<UserScriptDiagnostic> diagnostics)
         {
+            var metadata = installation.Definition.Metadata;
+            if (frame.ScriptScope.HasValue && frame.ScriptScope.Value != installation.ScriptKey) return false;
+            if (frame.RevisionScope.HasValue && frame.RevisionScope.Value != installation.RevisionId) return false;
+            var world = RequestedWorld(metadata);
+            string unsupported = null;
+            if (world == null) unsupported = "The requested execution world is not supported.";
+            else if (metadata.Unwrap) unsupported = "@unwrap requires direct top-level execution and cannot use this wrapper.";
+            else if (world == "isolated" && metadata.Capabilities.Contains("unsafeWindow")) unsupported = "DOM isolation cannot expose the page's unsafeWindow; request raw/JavaScript access explicitly.";
+            else if (world == "isolated" && !_options.SupportsIsolatedWorlds) unsupported = "This host does not supply per-script isolated contexts.";
+            if (unsupported != null)
+            {
+                diagnostics.Add(new UserScriptDiagnostic("MSR215_EXECUTION_WORLD_UNAVAILABLE", DiagnosticSeverity.Error, unsupported,
+                    scriptKey: installation.ScriptKey, documentId: frame.DocumentId, frameId: frame.FrameId));
+                return false;
+            }
+            if (world != frame.ExecutionWorld) return false;
             var rules = installation.PreparedRevision.UrlRules;
             var context = _options.EnvironmentProvider?.Invoke(frame)?.IsIncognito;
             if (!rules.AllowsEnvironment(context, out var reason))
@@ -443,7 +441,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
         {
             var metadata = installation.Definition.Metadata;
             var environment = _options.EnvironmentProvider?.Invoke(frame) ?? new UserScriptExecutionEnvironment();
-            var info = JsonSerializer.Serialize(BuildInfo(installation, environment));
+            var info = JsonSerializer.Serialize(BuildInfo(installation, environment, frame));
             return new ScriptInvocation(
                 Guid.NewGuid().ToString("D"),
                 installation.ScriptKey,
@@ -456,7 +454,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                 CreateToken());
         }
 
-        private object BuildInfo(UserScriptInstallation installation, UserScriptExecutionEnvironment environment)
+        private object BuildInfo(UserScriptInstallation installation, UserScriptExecutionEnvironment environment, DocumentFrame frame)
         {
             var metadata = installation.Definition.Metadata;
             var header = ExtractMetadataHeader(installation.Definition.Source);
@@ -532,7 +530,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                 ["grants"] = metadata.DeclaredGrants,
                 ["grantDeclarationState"] = metadata.GrantDeclarationState.ToString(),
                 ["downloadMode"] = environment.DownloadMode,
-                ["sandboxMode"] = environment.SandboxMode,
+                ["sandboxMode"] = frame.ExecutionWorld == "isolated" ? "DOM" : "raw",
                 ["scriptHandler"] = "MonkeySharp",
                 ["scriptMetaStr"] = header,
                 ["scriptUpdateURL"] = metadata.UpdateUrl,
@@ -540,11 +538,11 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                 {
                     ["contractVersion"] = 2,
                     ["handler"] = "MonkeySharp",
-                    ["executionWorld"] = environment.ExecutionWorld,
-                    ["isolatedWorld"] = environment.ExecutionWorld == "isolated",
+                    ["executionWorld"] = frame.ExecutionWorld,
+                    ["isolatedWorld"] = frame.ExecutionWorld == "isolated",
                     ["capabilities"] = UserScriptGrantCatalog.KnownCanonicalGrants
                         .Where(name => name.StartsWith("GM.", StringComparison.Ordinal))
-                        .ToDictionary(name => name, name => _hostCapabilities.Contains(name) ? "available" :
+                        .ToDictionary(name => name, name => frame.ExecutionWorld == "isolated" && name == "GM.webRequest" ? "isolated-frame-interception-unavailable" : _hostCapabilities.Contains(name) ? "available" :
                             environment.UnavailableCapabilities.TryGetValue(name, out var reason) ? reason : "service-unavailable"),
                     ["fields"] = new Dictionary<string, object>
                     {
@@ -624,6 +622,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                 case DocumentLifecycleKind.DocumentStart: return UserScriptRunAt.DocumentStart;
                 case DocumentLifecycleKind.BodyAvailable: return UserScriptRunAt.DocumentBody;
                 case DocumentLifecycleKind.DomContentLoaded: return UserScriptRunAt.DocumentEnd;
+                case DocumentLifecycleKind.DocumentIdle:
                 case DocumentLifecycleKind.Load: return UserScriptRunAt.DocumentIdle;
                 default: throw new ArgumentOutOfRangeException(nameof(kind), kind, "The lifecycle event does not run scripts.");
             }

@@ -23,6 +23,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
         private readonly SmokeHttpDownloadService _downloads;
         private readonly object _sync = new object();
         private readonly Dictionary<string, DocumentFrame> _frames = new Dictionary<string, DocumentFrame>();
+        private readonly Dictionary<string, DocumentFrame> _isolatedFrames = new Dictionary<string, DocumentFrame>();
         private readonly List<DocumentLifecycleEventArgs> _events = new List<DocumentLifecycleEventArgs>();
         private Dictionary<string, bool> _checks;
         private string _lastState;
@@ -58,6 +59,9 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             var results = new Dictionary<string, bool>();
             results["prepared"] = await RunCaseAsync("prepared", PreparedAsync);
             results["conditions"] = await RunCaseAsync("conditions", ConditionsAsync);
+            results["isolated"] = await RunCaseAsync("isolated", IsolatedAsync);
+            results["replay"] = await RunCaseAsync("replay", ReplayAsync);
+            results["csp"] = await RunCaseAsync("csp", CspAsync);
             results["frames"] = await RunCaseAsync("frames", FramesAsync);
             results["spaUrl"] = await RunCaseAsync("spaUrl", SpaAsync);
             results["download"] = await RunCaseAsync("download", DownloadAsync);
@@ -121,11 +125,82 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             Check("exclusion", (await ReadAsync("document.documentElement.dataset.matchCondition === undefined")).Value.GetBoolean());
         }
 
+        private async Task IsolatedAsync()
+        {
+            await NavigateAsync("/compat/isolated");
+            const string readA = "JSON.parse(document.documentElement.getAttribute('data-isolated-a') || 'null')";
+            const string readB = "JSON.parse(document.documentElement.getAttribute('data-isolated-b') || 'null')";
+            var a = await WaitResultAsync(readA);
+            var b = await WaitResultAsync(readB);
+            Check("world", a.GetProperty("world").GetString() == "isolated" && b.GetProperty("world").GetString() == "isolated");
+            Check("perScriptGlobals", a.GetProperty("privateValue").GetString() == "A" && b.GetProperty("value").GetString() == "B");
+            Check("pageIsolation", a.GetProperty("page").GetString() == "undefined" && b.GetProperty("page").GetString() == "undefined" &&
+                (await ReadAsync("typeof privateWorldValue === 'undefined' && typeof __MonkeySharpIsolatedTransport === 'undefined'")).Value.GetBoolean());
+            Check("unsafeWindow", a.GetProperty("unsafe").GetString() == "undefined");
+            Check("synchronousData", a.GetProperty("resource").GetString() == "ready" && a.GetProperty("synchronousValue").GetInt32() == 41 && a.GetProperty("committedValue").GetInt32() == 42);
+            Check("xhr", a.GetProperty("xhr").GetString() == "legacy xhr ok");
+            Check("nativeProofScope", a.GetProperty("forgeryDenied").GetBoolean());
+            Check("rawRunsOnce", (await ReadAsync("window.__rawControlCount === 1")).Value.GetBoolean());
+            DocumentFrame[] main;
+            lock (_sync) main = _isolatedFrames.Values.Where(frame => frame.IsMainFrame && frame.Url.AbsolutePath == "/compat/isolated").ToArray();
+            Check("nativeIdentity", main.Length == 2 && main.All(frame => frame.FrameId.StartsWith("cdp:") && frame.ScriptScope.HasValue) && main.Select(frame => frame.DocumentId).Distinct().Count() == 2);
+            await ReadAsync("(history.pushState({},'', '/compat/isolated-spa'), true)");
+            await WaitAsync(async () => (await ReadAsync(readA + ".changes.length === 1"))?.GetBoolean() == true);
+            Check("urlchange", true);
+            await ReadAsync("(function(){var f=document.createElement('iframe');f.src='/compat/isolated-child';document.body.appendChild(f);return true;})()");
+            await WaitAsync(() => Task.FromResult(FindFrame("/compat/isolated-child") != null));
+            var child = await WaitResultAsync(readA, FindFrame("/compat/isolated-child"));
+            Check("childFrame", child.GetProperty("privateValue").GetString() == "A" && child.GetProperty("committedValue").GetInt32() == 42);
+            Check("childRawRunsOnce", (await ReadAsync("window.__rawControlCount === 1", FindFrame("/compat/isolated-child"))).Value.GetBoolean());
+            await ReadAsync("(function(){var f=document.createElement('iframe');f.id='isolated-blank';document.body.appendChild(f);var s=document.createElement('iframe');s.srcdoc='<html><body>srcdoc</body></html>';document.body.appendChild(s);return true;})()");
+            await WaitAsync(() => Task.FromResult(FindFrame("blank") != null && FindFrame("srcdoc") != null));
+            foreach (var path in new[] { "blank", "srcdoc" })
+            {
+                await WaitAsync(async () => (await ReadAsync("document.documentElement.getAttribute('data-about-isolated') === 'about:" + path + "|isolated'", FindFrame(path)))?.GetBoolean() == true);
+                Check("about:" + path, true);
+            }
+            var documents = main.Select(frame => frame.DocumentId).ToArray();
+            await NavigateAsync("/compat/cleanup");
+            await WaitAsync(() => Task.FromResult(documents.All(id => EventCount(DocumentLifecycleKind.ContextReleased, id) == 1)));
+            Check("contextRevocation", true);
+        }
+
+        private async Task ReplayAsync()
+        {
+            await NavigateAsync("/compat/replay");
+            foreach (var world in new[] { "raw", "isolated" })
+            {
+                var result = await WaitResultAsync("JSON.parse(document.documentElement.getAttribute('data-replay-" + world + "') || 'null')");
+                var events = result.GetProperty("events").EnumerateArray().ToArray();
+                Check(world + ":order", events.Length == 2 && events[0].GetProperty("type").GetString() == "DOMContentLoaded" && events[1].GetProperty("type").GetString() == "load");
+                Check(world + ":cachedDOMContentLoaded", !events[0].GetProperty("trusted").GetBoolean());
+            }
+            Check("idleBeforeLoad", (await ReadAsync("document.documentElement.dataset.idleBeforeLoad === 'true'")).Value.GetBoolean());
+        }
+
+        private async Task CspAsync()
+        {
+            await NavigateAsync("/compat/csp");
+            var isolated = await WaitResultAsync("JSON.parse(document.documentElement.getAttribute('data-csp-isolated') || 'null')");
+            Check("isolatedSource", isolated.GetProperty("world").GetString() == "isolated");
+            Check("isolatedDom", isolated.GetProperty("dom").GetBoolean());
+            Check("pagePolicyIntact", (await ReadAsync("typeof pageCspBypassed === 'undefined'")).Value.GetBoolean());
+            Check("stylePolicyIntact", isolated.GetProperty("color").GetString() != "rgb(11, 22, 33)");
+            Console.WriteLine(JsonSerializer.Serialize(new { type = "csp-observation", isolatedColor = isolated.GetProperty("color").GetString(),
+                rawSource = (await ReadAsync("document.documentElement.dataset.cspRaw === 'executed'")).Value.GetBoolean() }));
+        }
+
         private void Lifecycle(object sender, DocumentLifecycleEventArgs args)
         {
             lock (_sync)
             {
                 _events.Add(args);
+                if (args.Frame.ExecutionWorld == "isolated")
+                {
+                    if (args.Kind == DocumentLifecycleKind.ContextReleased) _isolatedFrames.Remove(args.Frame.DocumentId);
+                    else _isolatedFrames[args.Frame.DocumentId] = args.Frame;
+                    return;
+                }
                 if (args.Kind == DocumentLifecycleKind.ContextReleased || args.Kind == DocumentLifecycleKind.NavigationSuperseded)
                 {
                     if (_frames.TryGetValue(args.Frame.FrameId, out var current) && current.DocumentId == args.Frame.DocumentId)

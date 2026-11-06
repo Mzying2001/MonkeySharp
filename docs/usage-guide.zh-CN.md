@@ -137,7 +137,7 @@ URL 正则支持有界的 ECMAScript 子集：字面量、字符类、分组/非
 | `document-start` | 由 CefSharp 尽力注入，不保证早于页面脚本。要求保证时机的宿主可以跳过此类执行。 |
 | `document-body` | body 可用时执行。 |
 | `document-end` | 对应 DOMContentLoaded 生命周期事件。 |
-| `document-idle` | 对应 load 生命周期事件，不应假定与 Tampermonkey 的调度策略相同。 |
+| `document-idle` | 在 DOMContentLoaded 后调度，不等待缓慢资源的 load；无法取得早期信号时 load 作为晚期补发。 |
 | `context-menu` | 仅在用户选择匹配脚本的原生右键菜单项后执行，每次选择都创建新的执行实例。 |
 
 每个 `(document, frame, script, run-at)` 组合只执行一次。同文档导航会更新匹配上下文，并可产生 urlchange，但不会自动重跑同一生命周期调用。SPA 更新请使用 [window.onurlchange](#window-extensions) 或 DOM 观察器。完整导航会撤销旧执行实例及其待处理操作、监听器和注册项。
@@ -163,7 +163,7 @@ GM_getValue 还允许现代存储写入，但不会暴露未声明的 GM_setValu
 宿主服务和权限政策仍决定操作是否可用、是否获准。
 
 调用风格不强制 strict，也不选择世界；strict 由源码指令决定。顶层 this 为 window 门面，
-none 按 5.5.1 实测使用独立对象 receiver。生产执行仍在可信页面世界，CDP 隔离世界实验
+DOM/content 使用原生 context 验证的隔离派发，raw/JavaScript 使用受宿主信任政策约束的页面世界；完整 GM 的 document-start 不保证严格时序。
 尚不是生产特权沙箱。document-start 保持 best effort，显式要求保证时拒绝执行。
 
 旧式同步存储和资源依赖完整快照，默认预算 1 MiB、准备超时 5 秒。宿主交互需要对应服务。
@@ -734,7 +734,7 @@ window.addEventListener("urlchange", onRoute);
 | 用户代码在第一句前失败 | 检查完整的存储/资源准备、快照分块、重放保留范围及大小/时间预算；MSC410_COMPATIBILITY_BOOTSTRAP_FAILED。准备失败会阻止执行，不会删去已授权 API 后继续。 |
 | 旧版写入看似成功后又回退 | 异步提交失败，查看 MSC413_COMPATIBILITY_MUTATION_FAILED；改用可 await 的现代写入。 |
 | 依赖不可用 | 检查宿主依赖提供器及 MSR400_DEPENDENCY_RESOLUTION_FAILED / MSR401_DEPENDENCY_PROVIDER_UNAVAILABLE。 |
-| 执行过晚或世界不符 | document-start 尽力执行（MSR100/MSR101），sandbox/unwrap 不创建隔离（MSR212/MSR213）。 |
+| 执行过晚或世界不符 | document-start 尽力执行（MSR100/MSR101），不支持或冲突的执行世界明确拒绝（MSR215），参见执行矩阵。 |
 | XHR 重定向后失败 | @connect 必须允许每个重定向目标，并检查宿主策略。 |
 | 浏览器已登录但下载失败 | 检查实际 RequestContext、anonymous 选项、重定向授权及宿主权限；GM 下载共用浏览器网络服务；如果应用提供认证下载/原生下载路径，可使用该路径。 |
 | 导航后异步回调停止 | 旧执行已释放，需要在新文档重新注册。 |
@@ -746,3 +746,11 @@ window.addEventListener("urlchange", onRoute);
 
 MonkeySharp 行为依据[授权目录](../Mzying2001.MonkeySharp.Core/Compatibility/UserScriptGrantCatalog.cs)、[JavaScript 门面](../Mzying2001.MonkeySharp.Core/Js/Init.js)、[Core API 提供器](../Mzying2001.MonkeySharp.Core/Apis/)、[元数据解析器](../Mzying2001.MonkeySharp.Core/Parsing/UserScriptMetadataParser.cs)、[运行时信息构建](../Mzying2001.MonkeySharp.Core/Runtime/UserScriptEngine.cs)、[CefSharp 服务](../Mzying2001.MonkeySharp.CefSharp/)及 [JavaScript 行为测试](../Mzying2001.MonkeySharp.Core.Tests/JavaScript/)核对。具体持久化及交互服务见 [Demo 指南](../Mzying2001.MonkeySharp.Demo/README.md)。升级运行时或替换宿主服务时，可据此复核。
 
+
+## 原生隔离世界与生命周期
+
+DOM/content 需求使用每安装脚本的独立 CDP 世界，身份来自原生 frame/loader/context 事件，派发绑定脚本及版本，源码/通知通过固定 context 代际的 remote object 投递。页面绑定拒绝隔离执行证明。raw/默认/Chromium JavaScript 需求仍使用页面世界和明确的 TrustedPageWorld 政策；DOM + unsafeWindow 冲突及未支持的 unwrap 会在源码启动前以 MSR215 拒绝，不静默退回 raw。
+
+document-idle 在 DOMContentLoaded 后调度，不等待缓慢资源的 load。沙箱 window 按脚本私有地回放 DOMContentLoaded/load 缓存，回放事件 isTrusted 为 false；idle 不回放更早的 DOMContentLoaded。监听支持 once、移除及 abort，执行结束清理运行时拥有的监听；直接在页面 DOM 上注册的监听由用户代码管理。源码、DOM、样式的 CSP 效果分别验证，不全站关闭 CSP。
+
+完整 GM 的 document-start 仍为 best effort，显式保证要求会拒绝。OOPIF 不支持时明确失败且没有 raw 回退；BFCache 缓存执行撤销，需要新导航。isolated 的历史 page-frame webRequest 不支持，子 frame 的隔离手动菜单尚未与原生 CEF 菜单 frame 映射。详见[执行证据和边界](compatibility/execution-worlds.md)。

@@ -16,6 +16,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
         {
             Calls++;
             if (Offline) throw new InvalidOperationException("Execution attempted to fetch installed content.");
+            if (resource.Name == "isolatedText") return Task.FromResult(new ResourceContent(Encoding.UTF8.GetBytes("ready"), "text/plain"));
             return Task.FromResult(new ResourceContent(new byte[] { 0, 255, 1 }.Concat(Enumerable.Repeat((byte)97, 600000)).ToArray(), "application/octet-stream"));
         }
         public Task<ResourceContent> GetScriptAsync(UserScriptInstallation installation, UserScriptDependencyDeclaration dependency, CancellationToken token)

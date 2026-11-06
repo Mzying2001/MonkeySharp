@@ -44,6 +44,8 @@
   </PropertyGroup>
   <ItemGroup>
     <EmbeddedResource Include="Js\Lifecycle.js" />
+    <EmbeddedResource Include="Js\Isolated.js" />
+    <EmbeddedResource Include="Js\LifecycleEvents.js" />
     <None Include="..\README.md">
       <Pack>true</Pack>
       <PackagePath>\</PackagePath>

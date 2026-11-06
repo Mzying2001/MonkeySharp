@@ -1,0 +1,51 @@
+{
+  "caseId": "lifecycle-idle",
+  "schemaVersion": 1,
+  "events": [
+    {
+      "name": "source"
+    },
+    {
+      "name": "registered"
+    },
+    {
+      "name": "window:load",
+      "trusted": false
+    }
+  ],
+  "promise": {},
+  "immediateReturn": {
+    "readyState": "complete"
+  },
+  "effects": {
+    "tabsBefore": 4,
+    "tabsAfter": 4
+  },
+  "fixtureHash": "597fe1af13f3e2b960bd8075a7b13e12d5d2bbd96d8b12732188281dd9647642",
+  "contractSource": [
+    "https://www.tampermonkey.net/documentation.php?locale=en",
+    "Tampermonkey 5.5.1/MV3 runtime"
+  ],
+  "environment": {
+    "manager": "Tampermonkey",
+    "managerVersion": "5.5.1",
+    "chromiumVersion": "Edg/156.0.4314.58",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36 Edg/156.0.0.0",
+    "manifestVersion": 3,
+    "settings": {
+      "headless": true,
+      "userScriptsAccess": true,
+      "freshProfile": true
+    },
+    "commit": "ece22afc12e1d12e7ebfa9fb2c568e0d909ba6e2",
+    "platform": "x64",
+    "capabilities": {
+      "referenceReturnProbe": true
+    },
+    "world": "manager-selected"
+  },
+  "checks": {
+    "exposureRecorded": true
+  },
+  "status": "passed"
+}

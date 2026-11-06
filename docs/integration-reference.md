@@ -34,7 +34,7 @@ runtime. `unsafeWindow` is absent for `none`; other declarations expose the
 page global. The wrapper preserves source `"use strict"` directives; calling
 style never selects strictness or execution world. Top-level `this` is the
 window facade except for `none`, which has a separate object receiver as
-observed in the reference. Production execution remains in the page world.
+observed in the reference. Production DOM execution now uses per-script isolated CDP contexts; see [world and lifecycle evidence](compatibility/execution-worlds.md).
 
 ```csharp
 var repository = new InMemoryUserScriptRepository();
@@ -80,7 +80,7 @@ The CefSharp host supplies default `GM.xmlHttpRequest`, `GM.cookie`, and `GM.web
 
 For full parameter tables, callback contracts, and script examples, see the [HTTP request guide](usage-guide.md#http-requests).
 
-Compatibility status is reported as Core implemented, host service required, intentional degradation or unsupported, or behavior different from Tampermonkey. The runtime executes in the CefSharp page world inside the MonkeySharp wrapper. `@sandbox`, `@unwrap`, and non-page `@inject-into` are preserved and diagnosed, but they do not create an isolated world.
+Compatibility status is reported as Core implemented, host service required, intentional degradation or unsupported, or behavior different from Tampermonkey. Raw/default and Chromium JavaScript access use the page world. DOM/content requests use per-script isolated contexts. Unsupported/conflicting requests fail before execution.
 
 Declare `@grant GM.xmlHttpRequest` or `@grant GM_xmlhttpRequest` and an `@connect` entry for every destination. Methods are case-insensitive valid HTTP tokens except `CONNECT`, `TRACE`, and `TRACK`.
 
@@ -217,7 +217,7 @@ The adapter creates an identity per frame document and executes each `(document,
 
 CefSharp exposes only best-effort document-start hooks. Selected document-start executions emit `MSR100_DOCUMENT_START_BEST_EFFORT`. Set `RequireGuaranteedDocumentStart = true` to skip them with `MSR101_DOCUMENT_START_UNAVAILABLE`.
 
-`@sandbox` values other than `raw` emit `MSR212_UNSUPPORTED_SANDBOX`, and `@unwrap` emits `MSR213_UNSUPPORTED_UNWRAP`. Both declarations are preserved in metadata and `GM.info`, but execution remains in the page world and inside the MonkeySharp wrapper.
+`@sandbox DOM` and `@inject-into content` select native isolated contexts. Raw/default/JavaScript select page access. DOM plus unsafeWindow and unsupported unwrap reject with `MSR215_EXECUTION_WORLD_UNAVAILABLE`; the adapter never silently downgrades an explicit world.
 
 Protocol errors use stable codes `MSP001` through `MSP010` and `MSP999`. Diagnostics never include capability tokens or stored values. Configure limits by assigning a new `BridgeOptions(...)` to `CefSharpHostOptions.Bridge`:
 
@@ -311,3 +311,9 @@ Logs are written to `artifacts/smoke/<version>-<platform>/` (`restore.log`, `cle
 `RunIn` is now a read-only selector list. `CefSharpHostOptions.IsIncognito` must report the real host-owned request context; an unknown context rejects restricted execution with `MSR211_RUN_IN_UNAVAILABLE`. Container declarations warn with `MSM083_UNSUPPORTED_CONTAINER`; unknown selector syntax is an installation error. Manual context-menu execution ignores include/exclude, while retaining match/exclude-match, noframes, privacy and trust checks. These checks do not create private contexts.
 
 Unicode host text in `@match` is retained but does not match normalized browser hosts in the pinned manager. Use Punycode; installation reports `MSM084_UNSUPPORTED_IDN_MATCH` for this ineffective declaration. Punycode rules match canonical IDN browser URLs.
+
+## Native isolated execution
+
+The adapter uses native CDP frame/loader/context events, installation/revision scopes, context-ID bindings and remote global-object IDs for isolated source/delivery. Object IDs pin context generations and prevent numeric ID reuse from retargeting a response. The page binding accepts only active page-world document IDs; isolated proofs cannot pass through it. Shared protocol domains and other observers remain intact. `DocumentFrame` exposes actual `ExecutionWorld`, optional `ScriptScope` and `RevisionScope`; frame IDs are opaque and CDP IDs are never cast from CEF IDs. `UserScriptExecutionEnvironment` supplies service/privacy/update facts; execution-world info derives from the native frame.
+
+Call PrepareAsync/NavigateAsync from an about:blank control for early preparation. Late preparation is explicit and full GM remains best effort. Unsupported OOPIF routing fails without raw fallback; BFCache cached executions are revoked and require fresh navigation. Historical page-frame webRequest interception is unavailable from isolated contexts. The main-frame native context menu supports both worlds; isolated child-frame manual selection is not yet mapped to a native CEF menu frame. See [evidence and limits](compatibility/execution-worlds.md).

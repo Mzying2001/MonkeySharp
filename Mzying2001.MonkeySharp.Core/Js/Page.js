@@ -21,6 +21,50 @@
                 });
             };
 
+            const listenerCapture = options => typeof options === "boolean" ? options : Boolean(options && options.capture);
+            const removePageListener = function (record, type, listener, options) {
+                const capture = listenerCapture(options);
+                record.pageListeners.forEach(entry => { if (entry.type === String(type) && entry.listener === listener && entry.capture === capture) entry.remove(); });
+            };
+            const addPageListener = function (record, type, listener, options) {
+                if (listener == null || record.disposed) return;
+                if (typeof listener !== "function" && typeof listener !== "object") throw new TypeError("listener must be a function or event listener object.");
+                type = String(type);
+                const capture = listenerCapture(options);
+                if (Array.from(record.pageListeners).some(entry => entry.type === type && entry.listener === listener && entry.capture === capture)) return;
+                const signal = options && typeof options === "object" && options.signal;
+                if (signal && (typeof signal.addEventListener !== "function" || typeof signal.removeEventListener !== "function")) throw new TypeError("signal must be an AbortSignal.");
+                if (signal && signal.aborted) return;
+                const entry = { type, listener, capture, active: true, seen: new WeakSet() };
+                const deliver = function (event, original) {
+                    if (!entry.active || record.disposed || entry.seen.has(original)) return;
+                    entry.seen.add(original);
+                    if (options && options.once) entry.remove();
+                    if (typeof listener === "function") listener.call(record.windowFacade, event);
+                    else if (typeof listener.handleEvent === "function") listener.handleEvent(event);
+                };
+                const wrapped = event => deliver(event, event);
+                entry.remove = function () {
+                    entry.active = false;
+                    root.removeEventListener.call(root, type, wrapped, capture);
+                    if (signal) signal.removeEventListener("abort", entry.remove);
+                    record.pageListeners.delete(entry);
+                };
+                record.pageListeners.add(entry);
+                root.addEventListener.call(root, type, wrapped, { capture, passive: Boolean(options && options.passive) });
+                if (signal) signal.addEventListener("abort", entry.remove, { once: true });
+                const cache = root.__MonkeySharpLifecycleEvents;
+                if (cache && cache.documentId === record.proof.documentId) cache.snapshot(type, record.runAt, record.invocationMoment).forEach(item => {
+                    Promise.resolve().then(() => {
+                        if (!entry.active || record.disposed) return;
+                        try {
+                            Object.defineProperty(item.event, "currentTarget", { value: record.windowFacade, configurable: true });
+                            deliver(item.event, item.original);
+                        } catch (error) { console.error("[MonkeySharp] replayed event listener failed", error); }
+                    });
+                });
+            };
+
             const createWindowFacade = function (record, invocation, availableApis) {
                 const grants = new Set(invocation.grants);
                 const closeEnabled = grants.has("window.close") && availableApis.has("window.close");
@@ -56,7 +100,7 @@
                                     record.urlChangeHandlers.add(listener);
                                     return;
                                 }
-                                return root.addEventListener.call(root, type, listener, options);
+                                return addPageListener(record, type, listener, options);
                             };
                         }
                         if (property === "removeEventListener") {
@@ -65,7 +109,7 @@
                                     record.urlChangeHandlers.delete(listener);
                                     return;
                                 }
-                                return root.removeEventListener.call(root, type, listener, options);
+                                return removePageListener(record, type, listener, options);
                             };
                         }
                         const value = Reflect.get(root, property, root);

@@ -57,6 +57,7 @@
             };
 
             const resolveDispatch = async function () {
+                if (root.__MonkeySharpIsolatedTransport) return root.__MonkeySharpIsolatedTransport.dispatch.bind(root.__MonkeySharpIsolatedTransport);
                 if (root.CefSharp && typeof root.CefSharp.BindObjectAsync === "function") {
                     await root.CefSharp.BindObjectAsync("__MonkeySharpBridge");
                 }
@@ -164,6 +165,7 @@
             };
 
             const runInvocation = async function (plan, invocation, getDispatch) {
+                const invocationMoment = root.performance && root.performance.now ? root.performance.now() : Date.now();
                 const grantState = invocation.grantDeclarationState || "ExplicitList";
                 const requiresBridge = grantState === "ExplicitList" &&
                     invocation.grants.some(name => name !== "none" && name !== "GM.info");
@@ -177,6 +179,9 @@
                     handlers: new Map(),
                     valueListenerKeys: new Map(),
                     disposed: false,
+                    runAt: plan.runAt,
+                    invocationMoment,
+                    pageListeners: new Set(),
                     menuHandlers: new Map(),
                     xhrHandlers: new Map(),
                     downloadHandlers: new Map(),
@@ -232,7 +237,7 @@
                 const gm = createApi(record, invocation, availableApis);
                 record.windowFacade = createWindowFacade(record, invocation, availableApis);
                 const legacy = createLegacyFacade(record, invocation, gm);
-                const unsafeWindow = grantState !== "ExplicitNone" ? root : undefined;
+                const unsafeWindow = grantState !== "ExplicitNone" && plan.executionWorld !== "isolated" ? root : undefined;
                 try {
                     const names = ["GM", "GM_info", "unsafeWindow", "window"].concat(legacyNames);
                     const values = [gm, gm.info, unsafeWindow, record.windowFacade].concat(legacyNames.map(name => legacy[name]));
@@ -406,6 +411,7 @@
 
             const endExecution = function (record) {
                 record.disposed = true;
+                record.pageListeners.forEach(listener => listener.remove());
                 record.handlers.clear();
                 record.valueListenerKeys.clear();
                 record.valueChangeSequences.clear();
@@ -418,6 +424,7 @@
 
             const endDocument = function (documentId) {
                 executions.forEach(record => { if (record.proof.documentId === documentId) endExecution(record); });
+                if (root.__MonkeySharpLifecycle && root.__MonkeySharpLifecycle.documentId === documentId) root.__MonkeySharpLifecycle.dispose();
                 return true;
             };
 

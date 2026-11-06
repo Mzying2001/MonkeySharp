@@ -133,7 +133,7 @@ Unicode host text in `@match` is retained but does not match normalized browser 
 | `document-start` | Best effort through CefSharp; not guaranteed before page scripts. A host requiring guaranteed start can skip these executions. |
 | `document-body` | Runs when the body becomes available. |
 | `document-end` | Associated with DOMContentLoaded. |
-| `document-idle` | Associated with the load lifecycle event. Do not assume Tampermonkey's scheduling heuristics. |
+| `document-idle` | Scheduled after DOMContentLoaded, without waiting for slow subresources or load. Load remains a late fallback when earlier lifecycle signals were unavailable. |
 | `context-menu` | Runs only when the user selects the matching script's native context-menu entry; each selection creates a fresh execution. |
 
 Each `(document, frame, script, run-at)` executes once. Same-document navigation updates matching context and can emit `urlchange`; it does not automatically rerun the same lifecycle invocation. Use [window.onurlchange](#window-extensions) or DOM observers for SPA updates. Full navigation revokes the old execution and its pending operations, listeners, and registrations.
@@ -161,13 +161,10 @@ host policy still determine whether operations are available and permitted.
 
 Calling style does not force strictness or select a world. Source directives
 control strictness. Top-level this is the window facade, except `none` uses a
-separate object receiver as observed in 5.5.1. All production execution remains
-in the trusted page world; the CDP isolated-world experiment is not a privileged
-production sandbox. Document-start remains best effort, and guaranteed timing
+separate object receiver as observed in 5.5.1. Raw/default and Chromium JavaScript access use the page world; DOM access uses a per-script isolated world and native context-authenticated dispatch. Conflicting unsafeWindow/DOM requirements and unsupported unwrap fail before source execution. Document-start remains best effort, and guaranteed timing
 requirements fail explicitly.
 
-Legacy synchronous storage/resource reads require complete snapshots. Preparation
-has a 1 MiB default budget and a five-second timeout. Host-backed UI APIs require
+Legacy synchronous storage/resource reads require complete snapshots. Preparation uses complete chunked snapshots with a 64 MiB total bootstrap budget and a five-second host snapshot timeout. Host-backed UI APIs require
 their services. [Integration details](integration-reference.md#api-contract-and-grants)
 describe trust, providers and actual environment facts.
 
@@ -223,7 +220,7 @@ Read-only, recursively frozen installation snapshot. `GM_info === GM.info`. Both
 | `scriptHandler`, `sandboxMode` | MonkeySharp identity and actual execution mode. |
 | `downloadMode`, `isIncognito`, `scriptWillUpdate` | Actual download backend and host context/update policy. Unknown context/policy fields are omitted. |
 | `scriptMetaStr`, `scriptUpdateURL` | Raw metadata header and declared update URL. |
-| `compatibility` | `contractVersion: 2`, `handler: "MonkeySharp"`, `executionWorld: "page"`, `isolatedWorld: false`; `fields` records field provenance. |
+| `compatibility` | `contractVersion: 2`, `handler: "MonkeySharp"`, `executionWorld` and `isolatedWorld` from the actual native context; `fields` records field provenance. |
 | `script` | Metadata object detailed below. |
 
 `script` contains `name`, `namespace`, `version`, `description`, `author`, `copyright`, `name_i18n`, `description_i18n`, `icon`, `icon64`, `homepage`, `supportURL`, `downloadURL`, `updateURL`, `fileURL` (installation source), `header`, `grant`, `connects`, `matches`, `includes`, `excludes` (including exclude-match entries), `resources`, `antifeatures`, `webRequest`, `run-at`, and `unwrap`. `lastModified` is installation-update Unix **milliseconds**; unsupported manager-only `position` and `blockers` fields are omitted. `resources` entries are `{name, url, integrity: [{algorithm, digest}]}`; antifeatures are grouped by type, then locale (`default` for unlocalized). `webRequest` is `null` when absent. `options` contains `sandbox`, `noframes`, `unwrap`, and `run_at`.
@@ -712,7 +709,7 @@ Defaults: ordinary bridge requests/responses are limited to 1 MiB each, resource
 | User code fails before its first statement | Complete storage/resource preparation, snapshot chunk delivery, replay retention and configured byte/time budgets; `MSC410_COMPATIBILITY_BOOTSTRAP_FAILED`. Preparation failure does not remove granted APIs and continue. |
 | A legacy write seemed to succeed but data reverted | Async commit failed; inspect `MSC413_COMPATIBILITY_MUTATION_FAILED`; use awaited modern writes. |
 | A dependency is missing | Host dependency provider and `MSR400_DEPENDENCY_RESOLUTION_FAILED` / `MSR401_DEPENDENCY_PROVIDER_UNAVAILABLE`. |
-| Code runs too late or in the wrong world | document-start is best effort (`MSR100`/`MSR101`); sandbox/unwrap requests cannot create isolation (`MSR212`/`MSR213`). |
+| Code runs too late or in the wrong world | document-start is best effort (`MSR100`/`MSR101`); explicit unsupported/conflicting worlds reject (`MSR215`); see the [execution matrix](compatibility/execution-worlds.md). |
 | XHR fails after a redirect | Allow every redirect destination with `@connect`; check host policy. |
 | Download fails despite browser login | Check the actual RequestContext, anonymous option, redirect authorization, and host permission policy. |
 | Async callback stopped after navigation | The old execution was released; register again in the new document. |
@@ -722,3 +719,5 @@ Defaults: ordinary bridge requests/responses are limited to 1 MiB each, resource
 
 MonkeySharp behavior was checked against the [grant catalog](../Mzying2001.MonkeySharp.Core/Compatibility/UserScriptGrantCatalog.cs), [JavaScript facade](../Mzying2001.MonkeySharp.Core/Js/Init.js), [Core API providers](../Mzying2001.MonkeySharp.Core/Apis/), [metadata parser](../Mzying2001.MonkeySharp.Core/Parsing/UserScriptMetadataParser.cs), [runtime info builder](../Mzying2001.MonkeySharp.Core/Runtime/UserScriptEngine.cs), [CefSharp services](../Mzying2001.MonkeySharp.CefSharp/), and [JavaScript contract tests](../Mzying2001.MonkeySharp.Core.Tests/JavaScript/). The [Demo guide](../Mzying2001.MonkeySharp.Demo/README.md) documents its concrete persistence and interaction services. Use these sources when upgrading the runtime or replacing host services.
 
+
+The sandbox window privately replays cached DOMContentLoaded/load events after listener registration, using untrusted synthetic events as observed in the reference. Document-idle does not replay the earlier DOMContentLoaded event. Window listeners support once/removal/abort and are cleared with their execution; direct page DOM listeners remain user-owned. Raw source evaluation and inserted styles remain subject to page CSP. Isolated source/DOM and style effects have separate browser evidence; the adapter never enables whole-page CSP bypass.

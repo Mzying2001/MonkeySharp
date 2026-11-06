@@ -120,13 +120,11 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
             }
 
             var unsupported = new List<string>();
-            if (!string.IsNullOrWhiteSpace(metadata.Sandbox) &&
-                !string.Equals(metadata.Sandbox, "raw", StringComparison.OrdinalIgnoreCase))
-                unsupported.Add("@sandbox 非 raw 不创建隔离世界");
-            if (metadata.Unwrap) unsupported.Add("@unwrap 不移除 MonkeySharp wrapper");
-            if (!string.IsNullOrWhiteSpace(metadata.InjectInto) &&
-                !string.Equals(metadata.InjectInto, "page", StringComparison.OrdinalIgnoreCase))
-                unsupported.Add("@inject-into 非 page 不可用");
+            if (!string.IsNullOrWhiteSpace(metadata.Sandbox) && !new[] { "raw", "JavaScript", "DOM" }.Contains(metadata.Sandbox, StringComparer.OrdinalIgnoreCase))
+                unsupported.Add("@sandbox 执行环境不支持");
+            if (metadata.Unwrap) unsupported.Add("@unwrap 当前拒绝执行");
+            if (!string.IsNullOrWhiteSpace(metadata.InjectInto) && !new[] { "page", "content", "auto" }.Contains(metadata.InjectInto, StringComparer.Ordinal))
+                unsupported.Add("@inject-into 执行环境不支持");
             if (metadata.RunIn.Any(value => value.StartsWith("container-id-", StringComparison.Ordinal))) unsupported.Add("@run-in 容器选择不可用");
             if (!string.IsNullOrWhiteSpace(source))
             {

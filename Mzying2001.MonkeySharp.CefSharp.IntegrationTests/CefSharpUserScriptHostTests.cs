@@ -132,6 +132,28 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
         }
 
         [Fact]
+        public async Task PageBindingRejectsAValidIsolatedExecutionProof()
+        {
+            var repository = new InMemoryUserScriptRepository();
+            var script = await repository.InstallAsync("// ==UserScript==\n// @name native proof\n// @match https://example.com/*\n// @sandbox DOM\n// @grant GM_getValue\n// @run-at document-end\n// ==/UserScript==", "test", true, CancellationToken.None);
+            using (var host = new CefSharpUserScriptHostBuilder(repository).Build())
+            {
+                var browser = new BrowserFixture();
+                host.Attach(browser.Browser.Object);
+                var frame = new DocumentFrame("browser", "isolated-document", "cdp:native-frame", new Uri("https://example.com/"), true,
+                    TimingGuarantee.BestEffortDocumentStart, BridgeIntegrityGuarantee.Verified, "isolated", script.ScriptKey, script.RevisionId);
+                var invocation = Assert.Single((await host.Engine.ProcessLifecycleAsync(new DocumentLifecycleEventArgs(DocumentLifecycleKind.DomContentLoaded, frame), CancellationToken.None)).Invocations);
+                var request = JsonSerializer.Serialize(new { protocol = 2, type = "hello", documentId = frame.DocumentId, scriptKey = script.ScriptKey.ToString(), capability = invocation.Capability });
+                using (var native = JsonDocument.Parse(await host.Gateway.DispatchAsync(request, CancellationToken.None))) Assert.True(native.RootElement.GetProperty("ok").GetBoolean());
+                using (var page = JsonDocument.Parse(await browser.DispatchFromPageAsync(request)))
+                {
+                    Assert.False(page.RootElement.GetProperty("ok").GetBoolean());
+                    Assert.Equal(BridgeErrorCodes.SessionExpired, page.RootElement.GetProperty("error").GetProperty("code").GetString());
+                }
+            }
+        }
+
+        [Fact]
         public async Task ContextCreationExecutesPerFrameAndReportsBestEffortTiming()
         {
             using (var host = await CreateHostAsync(Script("none", "document-start")))

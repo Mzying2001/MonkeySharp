@@ -66,6 +66,9 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
         /// <param name="isMainFrame">Whether this is the browser's main frame.</param>
         /// <param name="timingGuarantee">The document-start timing guarantee.</param>
         /// <param name="bridgeIntegrity">The bridge integrity guarantee.</param>
+        /// <param name="executionWorld">The native world owning this context.</param>
+        /// <param name="scriptScope">The installation owning a per-script context.</param>
+        /// <param name="revisionScope">The revision captured when that native context was prepared.</param>
         public DocumentFrame(
             string browserSessionId,
             string documentId,
@@ -73,7 +76,8 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
             Uri url,
             bool isMainFrame,
             TimingGuarantee timingGuarantee,
-            BridgeIntegrityGuarantee bridgeIntegrity = BridgeIntegrityGuarantee.Unverified)
+            BridgeIntegrityGuarantee bridgeIntegrity = BridgeIntegrityGuarantee.Unverified,
+            string executionWorld = "page", ScriptKey? scriptScope = null, Guid? revisionScope = null)
         {
             BrowserSessionId = Require(browserSessionId, nameof(browserSessionId));
             DocumentId = Require(documentId, nameof(documentId));
@@ -82,7 +86,18 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
             IsMainFrame = isMainFrame;
             TimingGuarantee = timingGuarantee;
             BridgeIntegrity = bridgeIntegrity;
+            if (executionWorld != "page" && executionWorld != "isolated") throw new ArgumentException("Unknown execution world.", nameof(executionWorld));
+            ExecutionWorld = executionWorld;
+            ScriptScope = scriptScope;
+            RevisionScope = revisionScope;
         }
+
+        /// <summary>Gets the native execution world that owns this descriptor.</summary>
+        public string ExecutionWorld { get; }
+        /// <summary>Gets the installation owning a per-script native context, if applicable.</summary>
+        public ScriptKey? ScriptScope { get; }
+        /// <summary>Gets the immutable revision owning the native context.</summary>
+        public Guid? RevisionScope { get; }
 
         /// <summary>Gets the containing browser session identifier.</summary>
         public string BrowserSessionId { get; }
@@ -129,6 +144,9 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
 
         /// <summary>The DOM content loaded event occurred.</summary>
         DomContentLoaded,
+
+        /// <summary>The document-idle scheduling point after DOMContentLoaded was reached.</summary>
+        DocumentIdle,
 
         /// <summary>The document load event occurred.</summary>
         Load,
@@ -316,6 +334,9 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
         /// <summary>Gets or sets whether scripts requiring privileged APIs need a verified bridge.</summary>
         public bool RequireVerifiedBridge { get; set; } = true;
 
+        /// <summary>Gets or sets whether the host supplies context-authenticated per-script isolated execution.</summary>
+        public bool SupportsIsolatedWorlds { get; set; }
+
         /// <summary>Gets or sets the actual execution environment reported by the host.</summary>
         public Func<DocumentFrame, UserScriptExecutionEnvironment> EnvironmentProvider { get; set; }
     }
@@ -325,14 +346,12 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
     {
         /// <summary>Initializes an environment snapshot from actual host services and context.</summary>
         public UserScriptExecutionEnvironment(string downloadMode = "disabled", bool? isIncognito = null,
-            bool? scriptWillUpdate = null, string executionWorld = "page", string sandboxMode = "raw",
+            bool? scriptWillUpdate = null,
             IReadOnlyDictionary<string, string> unavailableCapabilities = null)
         {
             if (downloadMode != "disabled" && downloadMode != "native" && downloadMode != "browser")
                 throw new ArgumentException("Unknown download mode.", nameof(downloadMode));
             DownloadMode = downloadMode; IsIncognito = isIncognito; ScriptWillUpdate = scriptWillUpdate;
-            ExecutionWorld = executionWorld ?? throw new ArgumentNullException(nameof(executionWorld));
-            SandboxMode = sandboxMode ?? throw new ArgumentNullException(nameof(sandboxMode));
             UnavailableCapabilities = new ReadOnlyDictionary<string, string>(unavailableCapabilities == null
                 ? new Dictionary<string, string>() : unavailableCapabilities.ToDictionary(item => item.Key, item => item.Value));
         }
@@ -342,10 +361,6 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
         public bool? IsIncognito { get; }
         /// <summary>Gets automatic update policy, or null when unknown.</summary>
         public bool? ScriptWillUpdate { get; }
-        /// <summary>Gets the world actually used for this execution.</summary>
-        public string ExecutionWorld { get; }
-        /// <summary>Gets the sandbox mode actually used for this execution.</summary>
-        public string SandboxMode { get; }
         /// <summary>Gets explicit engine or policy reasons for unavailable capabilities.</summary>
         public IReadOnlyDictionary<string, string> UnavailableCapabilities { get; }
     }

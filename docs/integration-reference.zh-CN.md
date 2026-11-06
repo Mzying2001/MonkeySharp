@@ -29,7 +29,7 @@ MonkeySharp 只有一套用户脚本契约，保留两种官方调用形式。
 未声明、显式 none、未知授权和 info-only 保留各自元数据状态。固定对照环境在这些情况下
 均提供 `GM_info` 和 `GM.info`。none 不提供 unsafeWindow，其余声明可访问页面 global。
 包装器尊重源码自身的 `"use strict"`，调用风格不选择 strict 或执行世界。
-顶层 this 是 window 门面；none 按实测使用独立对象 receiver。生产执行仍在页面世界。
+顶层 this 是 window 门面；none 按实测使用独立对象 receiver。DOM/content 执行使用每脚本原生隔离世界；raw 保持页面世界。
 
 ```csharp
 var repository = new InMemoryUserScriptRepository();
@@ -69,7 +69,7 @@ CefSharp 宿主默认提供 `GM.xmlHttpRequest`、`GM.cookie` 和 `GM.webRequest
 
 完整参数表、回调契约和脚本示例见 [HTTP 请求使用指南](usage-guide.zh-CN.md#http-请求)。
 
-兼容性状态分为 Core 已实现、需要宿主 service、有意降级/不支持、与 Tampermonkey 存在行为差异。运行时在 CefSharp 页面世界的 MonkeySharp wrapper 中执行；`@sandbox`、`@unwrap` 和非 page 的 `@inject-into` 会保留并产生诊断，但不会创建隔离世界。
+兼容性状态分为 Core 已实现、需要宿主 service、有意降级/不支持、与 Tampermonkey 存在行为差异。raw/默认/JavaScript 使用页面世界；DOM/content 使用每脚本隔离 context；不支持或冲突的要求会在执行前拒绝。
 
 脚本必须声明 `@grant GM.xmlHttpRequest` 或 `@grant GM_xmlhttpRequest`，并为每个目标声明 `@connect`。方法名不区分大小写，除 `CONNECT`、`TRACE` 和 `TRACK` 外可使用有效的 HTTP token。
 
@@ -207,7 +207,7 @@ compatibility 块的 contractVersion 为 2，记录真实执行世界、可用 A
 
 CefSharp 只能提供尽力而为的 document-start 钩子。相应执行产生 `MSR100_DOCUMENT_START_BEST_EFFORT`；设置 `RequireGuaranteedDocumentStart = true` 后会跳过并产生 `MSR101_DOCUMENT_START_UNAVAILABLE`。
 
-除 `raw` 外的 `@sandbox` 值会产生 `MSR212_UNSUPPORTED_SANDBOX`，`@unwrap` 会产生 `MSR213_UNSUPPORTED_UNWRAP`。这两个声明仍保留在元数据和 `GM.info` 中，但脚本仍在页面世界和 MonkeySharp wrapper 内执行。
+`@sandbox DOM`/`@inject-into content` 选择原生隔离 context。raw/默认/JavaScript 选择页面访问；DOM + unsafeWindow 及未支持的 unwrap 以 MSR215 明确拒绝，不退回错误世界。
 
 协议错误使用稳定代码 `MSP001` 至 `MSP010` 以及 `MSP999`。诊断不会包含能力令牌或存储值。将新建的 `BridgeOptions(...)` 赋给 `CefSharpHostOptions.Bridge` 即可配置限制：
 
@@ -299,3 +299,11 @@ SmokeHost 从 `Fixtures` 目录内嵌七个原创 `.user.js`，通过正常仓�
 `RunIn` 为只读选择器列表。`CefSharpHostOptions.IsIncognito` 必须反映宿主实际拥有的 RequestContext；未知环境会以 MSR211_RUN_IN_UNAVAILABLE 拒绝受限执行。容器选择报告 MSM083_UNSUPPORTED_CONTAINER，未知选择器是安装错误。手动 context-menu 忽略 include/exclude，保留 match/exclude-match、noframes、隐私和信任检查；这些筛选不创建私密上下文。
 
 固定管理器中，@match 的 Unicode 主机声明被保留但不匹配规范化后的浏览器主机；应使用 Punycode。安装会以 MSM084_UNSUPPORTED_IDN_MATCH 提示该无效声明。Punycode 规则可匹配 IDN 浏览器 URL。
+
+## 原生隔离世界与生命周期
+
+DOM/content 需求使用每安装脚本的独立 CDP 世界，身份来自原生 frame/loader/context 事件，派发绑定脚本及版本，源码/通知通过固定 context 代际的 remote object 投递。页面绑定拒绝隔离执行证明。raw/默认/Chromium JavaScript 需求仍使用页面世界和明确的 TrustedPageWorld 政策；DOM + unsafeWindow 冲突及未支持的 unwrap 会在源码启动前以 MSR215 拒绝，不静默退回 raw。
+
+document-idle 在 DOMContentLoaded 后调度，不等待缓慢资源的 load。沙箱 window 按脚本私有地回放 DOMContentLoaded/load 缓存，回放事件 isTrusted 为 false；idle 不回放更早的 DOMContentLoaded。监听支持 once、移除及 abort，执行结束清理运行时拥有的监听；直接在页面 DOM 上注册的监听由用户代码管理。源码、DOM、样式的 CSP 效果分别验证，不全站关闭 CSP。
+
+完整 GM 的 document-start 仍为 best effort，显式保证要求会拒绝。OOPIF 不支持时明确失败且没有 raw 回退；BFCache 缓存执行撤销，需要新导航。isolated 的历史 page-frame webRequest 不支持，子 frame 的隔离手动菜单尚未与原生 CEF 菜单 frame 映射。详见[执行证据和边界](compatibility/execution-worlds.md)。

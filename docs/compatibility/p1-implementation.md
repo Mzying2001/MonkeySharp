@@ -8,7 +8,7 @@ Date: 2026-11-07. Work proceeds through steps 7–14, with one validated commit 
 | 8. Atomic storage snapshot and sequence | Complete | [Storage preparation matrix](evidence/atomic-storage-p1.json) |
 | 9. Synchronous storage and listeners | Complete | [Storage timing reference](evidence/tampermonkey-5.5.1-storage-timing.json), [Mirror validation](evidence/storage-mirror-p1.json) |
 | 10. Matching and metadata conditions | Complete | [URL reference](evidence/tampermonkey-5.5.1-matching-conditions.json), [Execution conditions matrix](evidence/execution-conditions-p1.json) |
-| 11. Execution worlds and lifecycle | Pending | — |
+| 11. Execution worlds and lifecycle | Complete within verified scope | [World/lifecycle matrix](evidence/execution-worlds-p1.json), [explicit limits](execution-worlds.md) |
 | 12. Authorization prompts | Pending | — |
 | 13. XHR and binary downloads | Pending | — |
 | 14. DOM, log, tabs and windows | Pending | — |
@@ -56,3 +56,13 @@ URL regexes accept the documented ECMAScript-compatible subset. Unsupported flag
 Repeatable `@run-in` selectors use OR semantics and the real host privacy context for both automatic/manual execution. Unknown context cannot satisfy a single normal/private restriction; both supported selectors cover either context. Unknown syntax is an installation error; container selectors are diagnosed and unavailable rather than executed in another context. Demo details reflect implemented normal/private filtering. Private-tab creation remains step 18, outside this change.
 
 Validation: 273 Core + 43 adapter + 40 Demo tests at 84/121 x64, 103 JS tests, seven browser compatibility cases in all six SmokeHost/CDP combinations, and 84/121 x64 WPF. The new real-Chromium case proves normal-context execution, private-condition rejection, include/exclude behavior and actual DOM effects of an explicitly selected context-menu script. Core tests compare the prepared rules directly against the complete reference URL matrix and cover timeout isolation, privacy unions/unknown contexts, diagnostics, IPv6/port canonicalization and immutable rule reuse.
+
+## Step 11
+
+DOM/content execution now uses per-installation, per-revision CDP worlds with native frame/loader/context ownership, context-ID binding and generation-pinned remote object delivery. Page dispatch rejects isolated proofs. The engine enforces requested worlds and scopes, reports actual world facts, rejects contradictory DOM/unsafeWindow and unsupported unwrap, and preserves raw/JavaScript trust policy. CEF's extra isolated V8 callbacks no longer reinject raw scripts or prematurely revoke page state.
+
+The runtime privately replays cached window lifecycle events, matching the original document-end/idle reference fixtures; idle is scheduled after DOMContentLoaded rather than waiting for slow load. Window listeners and native protocol ownership clean up on execution/document/attachment end. Same-process frames, explicit blank/srcdoc documents, SPA events and navigation revocation have real effects. CSP evidence distinguishes isolated source/DOM success from blocked styles, blocked page inline code and blocked raw Function-based execution; no global CSP bypass is enabled.
+
+Validation: 279 Core + 44 adapter + 40 Demo tests at 84/121 x64, 105 JS tests, ten real browser compatibility cases in all six SmokeHost/CDP combinations, and 84/121 x64 WPF. A focused security review completed context research, data-flow assessment and mandatory filtering; no high-confidence HIGH/MEDIUM finding was retained. [Review table](execution-security-review.md).
+
+The [execution record](execution-worlds.md) explicitly excludes guaranteed full-GM start, unsupported OOPIF routing, transparent BFCache restoration, isolated child-frame native manual menu mapping and isolated historical page-frame webRequest interception. Unsupported combinations fail or revoke rather than using a wrong world; these capabilities are not counted as passed.

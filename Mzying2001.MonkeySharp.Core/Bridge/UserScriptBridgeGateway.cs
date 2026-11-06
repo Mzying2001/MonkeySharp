@@ -252,7 +252,8 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             }
 
             var grants = execution.Installation.Definition.Metadata.Capabilities;
-            var supported = SupportedApis().Where(api => api == "GM.info" || grants.Contains(api));
+            var supported = SupportedApis().Where(api => (api == "GM.info" || grants.Contains(api)) &&
+                !(execution.Frame.ExecutionWorld == "isolated" && api == "GM.webRequest"));
             var compatibility = new Dictionary<string, object>();
             if (HasStorageCapability(grants))
             {
@@ -398,6 +399,8 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             if (!TryReadExecution(root, out var execution))
                 return Limit(ProtocolJson.Error(requestId, BridgeErrorCodes.SessionExpired, "The script execution session is not active."));
             var method = ReadRequiredString(root, "method");
+            if (execution.Frame.ExecutionWorld == "isolated" && method == "GM.webRequest")
+                return Limit(ProtocolJson.Error(requestId, BridgeErrorCodes.NotSupported, "Historical webRequest page-frame interception is not implemented for isolated contexts."));
             if (!root.TryGetProperty("params", out var parameters))
                 return Limit(ProtocolJson.Error(requestId, BridgeErrorCodes.MalformedMessage, "The params field is required."));
             parameters = parameters.Clone();

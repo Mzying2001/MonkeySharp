@@ -47,14 +47,15 @@ support it. Registration alone is not a passing full-GM timing result.
 Use CDP for the basic Cookie backend. Keep the isolated-world route as a
 prototype until the P1 prepared execution package supplies complete values,
 resources and context-authenticated dispatch before user source starts.
-Production execution still uses the existing trusted page world. No sandbox
-or strict document-start claim follows from these experiments; explicit
-guaranteed-start requirements continue to be rejected by the engine.
+P0 experiments alone did not establish a production sandbox. P1 now adds
+per-script DOM execution with prepared data and native context-authenticated
+dispatch; see [execution worlds](execution-worlds.md). Guaranteed full-GM start
+continues to be rejected and is not inferred from protocol registration.
 
 The probe's context dictionary demonstrates native event ownership only. It
 does not implement a production CEF-frame/CDP-frame/document-generation map,
 OOPIF routing, unsafeWindow access, BFCache restoration, or a privileged
-isolated-world transport. Those remain P1 execution work. Chromium 84 lacks
+isolated-world transport. The production route now owns CDP frame/context/document identities directly and pins source/delivery to remote global-object IDs. OOPIF and transparent BFCache restoration remain explicit limits in the P1 execution record. Chromium 84 lacks
 future-world `executionContextName` binding; context-ID registration is
 necessarily later than context creation. Do not use that registration to
 claim GM readiness before first inline.

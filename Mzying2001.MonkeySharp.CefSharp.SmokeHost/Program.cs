@@ -53,7 +53,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
         {
             using (var fixture = new LocalHttpFixture())
             using (var otherFixture = new LocalHttpFixture())
-            using (var values = new Mzying2001.MonkeySharp.Core.Storage.InMemoryUserScriptValueStore())
+            using (var values = new PreparedValueStore())
             {
                 var startUri = fixture.Start();
                 otherFixture.Start();
@@ -67,6 +67,8 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                     CancellationToken.None);
                 await CompatibilitySuite.InstallAsync(repository, fixture.Port, otherFixture.Port);
                 preparedContent.Offline = true;
+                foreach (var script in await repository.GetSnapshotAsync(CancellationToken.None))
+                    if (script.Definition.Metadata.Name.StartsWith("Replay ", StringComparison.Ordinal)) values.SnapshotDelays[script.ScriptKey.ToString()] = TimeSpan.FromMilliseconds(500);
                 var preparedScript = (await repository.GetSnapshotAsync(CancellationToken.None)).Single(script => script.Definition.Metadata.Name == "Prepared content");
                 await values.SetAsync(preparedScript.ScriptKey.ToString(), "large", Mzying2001.MonkeySharp.Core.Storage.UserScriptValue.FromEncoded("s" + new string('v', 600000)), CancellationToken.None);
 
@@ -410,7 +412,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             _timeoutTimer.Stop();
             await _host.DetachAsync(CancellationToken.None).ConfigureAwait(true);
             var success = _initialFixturePassed && _mainFrameLoads >= 2 && _childFrameLoads >= 1 && _contextReleased >= 1 &&
-                !_host.IsAttached && _compatibilityResults != null && _compatibilityResults.Count == 7 && _compatibilityResults.Values.All(value => value);
+                !_host.IsAttached && _compatibilityResults != null && _compatibilityResults.Count == 10 && _compatibilityResults.Values.All(value => value);
             object fixture = null;
             if (!string.IsNullOrEmpty(_initialFixtureJson))
             {
@@ -557,6 +559,8 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                         await WriteDownloadAsync(stream, request.Path.EndsWith("slow"), _cancellation.Token).ConfigureAwait(false);
                         return;
                     }
+                    if (request.Path == "/compat/replay-image") await Task.Delay(3000, _cancellation.Token).ConfigureAwait(false);
+                    if (request.Path == "/compat/replay-defer") await Task.Delay(200, _cancellation.Token).ConfigureAwait(false);
                     if (request.Path == "/compat/files/stalled") await Task.Delay(1500, _cancellation.Token).ConfigureAwait(false);
                     if (request.Path == "/stream")
                     {
@@ -596,6 +600,28 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                             contentType = "text/html; charset=utf-8";
                             body = Encoding.UTF8.GetBytes("<!doctype html><html><body><iframe id='same' src='/compat/frames/same'></iframe>" +
                                 "<iframe src='http://127.0.0.1:" + OtherPort + "/compat/frames/cross'></iframe></body></html>");
+                            break;
+                        case "/compat/replay":
+                            contentType = "text/html; charset=utf-8";
+                            body = Encoding.UTF8.GetBytes("<!doctype html><html><head><script defer src='/compat/replay-defer'></script></head><body><img src='/compat/replay-image'></body></html>");
+                            break;
+                        case "/compat/csp":
+                            contentType = "text/html; charset=utf-8";
+                            headers.Add(new KeyValuePair<string, string>("Content-Security-Policy", "default-src 'none';script-src 'none';style-src 'none'"));
+                            body = Encoding.UTF8.GetBytes("<!doctype html><html><head><script>window.pageCspBypassed=true;</script></head><body>CSP fixture</body></html>");
+                            break;
+                        case "/compat/replay-defer":
+                            contentType = "text/javascript";
+                            body = Encoding.UTF8.GetBytes("window.replayDeferred=true;");
+                            break;
+                        case "/compat/replay-image":
+                            contentType = "image/png";
+                            body = new byte[] { 0, 1, 2 };
+                            break;
+                        case "/compat/isolated":
+                        case "/compat/isolated-child":
+                            contentType = "text/html; charset=utf-8";
+                            body = Encoding.UTF8.GetBytes("<!doctype html><html><head><script>window.pageOnlyCanary='page';window.isolatedAtFirstInline=document.documentElement.getAttribute('data-isolated-a');</script></head><body>Isolated execution fixture</body></html>");
                             break;
                         case "/compat/cookie-echo":
                             request.Headers.TryGetValue("Cookie", out var compatCookie);

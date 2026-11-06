@@ -104,14 +104,14 @@ Only compose slots that already have application handlers. `Attach` rejects an i
 
 ## Security Model
 
-CefSharp's public APIs execute bootstrap code in the page's main world, so MonkeySharp reports this bridge as `Unverified`.
+Page-world bootstrap uses CefSharp binding and is reported as `Unverified`; per-script DOM worlds use a context-authenticated CDP transport.
 
-- The default policy runs scripts with no explicit API grants, `@grant none`, or only info grants. Scripts with explicit grants other than `none` or info are suppressed unless the application opts into `TrustedPageWorld`.
+- Page-world execution with host-backed grants requires `TrustedPageWorld`; no-grant/none/info scripts can run without that opt-in. Explicit DOM worlds use the verified isolated transport and still require metadata grants and host authorization.
 - `TrustedPageWorld` enables explicitly granted APIs only when the application trusts both the page and installed scripts.
 - Per-execution capabilities prevent unrelated callers from impersonating an installation, but they are not an extension-style isolation boundary. Hostile page code can intercept a capability and invoke APIs granted to that script.
 - Installed userscripts are trusted code. Applications need their own review, signature, or trust policy for unknown sources.
 
-Enable privileged APIs only after accepting that limitation:
+Enable page-world privileged APIs only after accepting that limitation:
 
 ```csharp
 var host = new CefSharpUserScriptHostBuilder(repository)
@@ -121,7 +121,7 @@ var host = new CefSharpUserScriptHostBuilder(repository)
 
 Default-mode suppressions emit `MSR201_BRIDGE_INTEGRITY_REQUIRED`; trusted-mode executions that require the bridge emit `MSR200_UNVERIFIED_BRIDGE`. Info-only executions need no bridge binding or handshake.
 
-Scripts execute in the page world inside the MonkeySharp wrapper. `@sandbox`, `@unwrap`, `@run-in`, and non-page `@inject-into` declarations do not create an isolated world; `unsafeWindow` does not provide an extension-style security boundary.
+`@sandbox DOM` (or `@inject-into content`) selects a per-installation isolated world with context-authenticated CDP dispatch. Raw/default and Chromium JavaScript access use the page world and the trust policy above. DOM isolation cannot expose the actual page unsafeWindow; conflicting requirements and unsupported unwrap are rejected. Full GM document-start is best effort, and OOPIF/BFCache limits are explicit. See [execution evidence](docs/compatibility/execution-worlds.md).
 
 ## Metadata
 

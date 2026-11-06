@@ -107,7 +107,8 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
             Assert.Contains(details.CompatibilityStatuses, item => item.Category == "有意降级/不支持");
             Assert.Contains(details.CompatibilityStatuses, item => item.Category == "与 Tampermonkey 有差异" &&
                 item.Message.Contains("静态 @webRequest"));
-            Assert.Contains("@sandbox", details.ToConfirmationText());
+            Assert.Contains("@unwrap", details.ToConfirmationText());
+            Assert.DoesNotContain("@sandbox 非 raw", details.ToConfirmationText());
             Assert.Contains("proxy", details.ToConfirmationText());
         }
 

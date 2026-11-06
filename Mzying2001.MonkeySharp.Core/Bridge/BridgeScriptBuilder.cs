@@ -32,6 +32,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                 ["protocol"] = plan.ProtocolVersion,
                 ["documentId"] = plan.Frame.DocumentId,
                 ["frameId"] = plan.Frame.FrameId,
+                ["executionWorld"] = plan.Frame.ExecutionWorld,
                 ["runAt"] = plan.RunAt.ToString(),
                 ["invocations"] = plan.Invocations.Select(invocation => new Dictionary<string, object>
                 {

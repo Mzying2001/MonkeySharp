@@ -121,7 +121,7 @@ var host = new CefSharpUserScriptHostBuilder(repository)
 
 默认模式跳过的执行会产生 `MSR201_BRIDGE_INTEGRITY_REQUIRED`；可信页面模式下，需要桥接的执行会产生 `MSR200_UNVERIFIED_BRIDGE`。仅提供 info 的执行无需桥接绑定或握手。
 
-脚本在页面世界的 MonkeySharp 包装器中执行。`@sandbox`、`@unwrap`、`@run-in` 和非 page 的 `@inject-into` 声明不会创建隔离世界；`unsafeWindow` 也不提供浏览器扩展式安全边界。
+`@sandbox DOM`（或 `@inject-into content`）选择每安装脚本的独立世界，并通过原生 context 验证的 CDP 派发 GM。raw/默认及 Chromium JavaScript 需求使用页面世界和上述信任政策。DOM 隔离不能暴露真实页面 unsafeWindow，冲突要求和未支持的 unwrap 会拒绝。完整 GM 的 document-start 保持 best effort，OOPIF/BFCache 边界见[执行证据](docs/compatibility/execution-worlds.md)。
 
 ## 元数据
 

@@ -146,7 +146,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Fact]
-        public async Task UnsupportedInjectMetadataProducesWarningsButDoesNotChangePageExecution()
+        public async Task UnavailableWorldDoesNotFallBackToPageExecution()
         {
             var repository = new InMemoryUserScriptRepository();
             await repository.InstallAsync(
@@ -162,8 +162,8 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                     new DocumentLifecycleEventArgs(DocumentLifecycleKind.DomContentLoaded, Frame("worlds", true)),
                     CancellationToken.None);
 
-                Assert.Single(plan.Invocations);
-                Assert.Contains(diagnostics, item => item.Code == "MSR210_UNSUPPORTED_INJECT_WORLD");
+                Assert.Empty(plan.Invocations);
+                Assert.Contains(diagnostics, item => item.Code == "MSR215_EXECUTION_WORLD_UNAVAILABLE" && item.Severity == DiagnosticSeverity.Error);
             }
         }
 
@@ -206,7 +206,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Fact]
-        public async Task SandboxAndUnwrapDeclarationsProduceExplicitWarnings()
+        public async Task UnsupportedUnwrapRejectsExecutionInsteadOfKeepingAWrapper()
         {
             var repository = new InMemoryUserScriptRepository();
             await repository.InstallAsync(
@@ -222,9 +222,8 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                     new DocumentLifecycleEventArgs(DocumentLifecycleKind.DomContentLoaded, Frame("isolation", true)),
                     CancellationToken.None);
 
-                Assert.Single(plan.Invocations);
-                Assert.Contains(diagnostics, item => item.Code == "MSR212_UNSUPPORTED_SANDBOX");
-                Assert.Contains(diagnostics, item => item.Code == "MSR213_UNSUPPORTED_UNWRAP");
+                Assert.Empty(plan.Invocations);
+                Assert.Contains(diagnostics, item => item.Code == "MSR215_EXECUTION_WORLD_UNAVAILABLE" && item.Severity == DiagnosticSeverity.Error);
             }
         }
 
