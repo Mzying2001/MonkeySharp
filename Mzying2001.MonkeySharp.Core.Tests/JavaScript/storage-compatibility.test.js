@@ -108,15 +108,15 @@ for (const chunked of [false, true]) {
         const changes = [];
         await api.addValueChangeListener("key", (...args) => changes.push(args));
         await api.setValue("key", 1);
-        assert.deepEqual(changes, []);
+        assert.deepEqual(changes, [["key", undefined, 1, false]]);
         notifications.forEach(deliver);
         notifications.forEach(deliver);
         assert.deepEqual(changes, [["key", undefined, 1, false]]);
     });
 }
 
-test("legacy listener aliases are synchronous even without a storage mirror", async () => {
-    const { single, api, requests } = await install({ mirror: false });
+test("legacy listener aliases are synchronous with a chunked snapshot", async () => {
+    const { single, api, requests } = await install({ chunked: true });
     const changes = [];
     const id = single.add("key", (...args) => changes.push(args));
     assert.equal(typeof id, "number");

@@ -151,7 +151,7 @@ namespace Mzying2001.MonkeySharp.Core.Storage
         Task<UserScriptValueChangeBatch> GetChangesAsync(string scriptKey, long afterSequence, CancellationToken cancellationToken);
 
         /// <summary>Validates and commits the complete batch atomically, preserving authenticated origin data in its ordered events.</summary>
-        Task<IReadOnlyList<UserScriptValueChangedEventArgs>> ApplyAsync(string scriptKey,
+        Task<UserScriptValueCommit> ApplyAsync(string scriptKey,
             IEnumerable<UserScriptValueMutation> mutations, UserScriptValueMutationOrigin origin, CancellationToken cancellationToken);
 
         /// <summary>Occurs after a storage mutation commits.</summary>
@@ -204,7 +204,7 @@ namespace Mzying2001.MonkeySharp.Core.Storage
             => (await ApplyAsync(scriptKey, new[] { new UserScriptValueMutation(key, null) }, null, cancellationToken).ConfigureAwait(false)).Count != 0;
 
         /// <inheritdoc />
-        public async Task<IReadOnlyList<UserScriptValueChangedEventArgs>> ApplyAsync(string scriptKey,
+        public async Task<UserScriptValueCommit> ApplyAsync(string scriptKey,
             IEnumerable<UserScriptValueMutation> mutations, UserScriptValueMutationOrigin origin, CancellationToken cancellationToken)
         {
             ValidateKey(scriptKey, nameof(scriptKey));
@@ -237,7 +237,7 @@ namespace Mzying2001.MonkeySharp.Core.Storage
                 }
                 foreach (var change in changes) OnCommitted(scriptKey, change.Key, change.Kind);
                 foreach (var change in changes) Publish(change);
-                return changes.AsReadOnly();
+                return new UserScriptValueCommit(changes, _journal.Sequence(scriptKey));
             }
             finally { partition.Gate.Release(); }
         }

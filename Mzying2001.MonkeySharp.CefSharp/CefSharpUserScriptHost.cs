@@ -338,6 +338,17 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 _browserSessionId = null;
             }
 
+            foreach (var session in sessions)
+            {
+                try
+                {
+                    using (var frame = GetFrameByIdentifier(browser.GetBrowser(), session.Frame.FrameId))
+                        if (frame != null && !frame.IsDisposed && frame.IsValid)
+                            frame.ExecuteJavaScriptAsync("if(globalThis.__MonkeySharpRuntime) globalThis.__MonkeySharpRuntime.endDocument(" +
+                                JsonSerializer.Serialize(session.Frame.DocumentId) + ");", "monkeysharp://end-document", 1);
+                }
+                catch (Exception exception) { EmitDiagnostic("MSC103_RENDERER_RELEASE_FAILED", DiagnosticSeverity.Warning, "The renderer execution could not be released during detach.", exception, session); }
+            }
             webRequestHandler?.Dispose();
             attachmentCancellation.Cancel();
             if (cdpPreparation != null)

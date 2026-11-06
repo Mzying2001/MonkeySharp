@@ -64,12 +64,10 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                     var setKey = ReadKey(context.Parameters);
                     if (!context.Parameters.TryGetProperty("value", out var value))
                         throw InvalidParams("The value parameter is required.");
-                    await _store.ApplyAsync(scriptKey, new[] { new UserScriptValueMutation(setKey, ReadValue(value)) }, Origin(context), cancellationToken).ConfigureAwait(false);
-                    return ApiResult.Undefined;
+                    return CommitResult(await _store.ApplyAsync(scriptKey, new[] { new UserScriptValueMutation(setKey, ReadValue(value)) }, Origin(context), cancellationToken).ConfigureAwait(false));
 
                 case "GM.deleteValue":
-                    await _store.ApplyAsync(scriptKey, new[] { new UserScriptValueMutation(ReadKey(context.Parameters), null) }, Origin(context), cancellationToken).ConfigureAwait(false);
-                    return ApiResult.Undefined;
+                    return CommitResult(await _store.ApplyAsync(scriptKey, new[] { new UserScriptValueMutation(ReadKey(context.Parameters), null) }, Origin(context), cancellationToken).ConfigureAwait(false));
 
                 case "GM.listValues":
                     EnsureObject(context.Parameters);
@@ -81,13 +79,11 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 case "GM.setValues":
                     var values = ReadValues(context.Parameters, "values").ToDictionary(
                         item => item.Key, item => ReadValue(item.Value), StringComparer.Ordinal);
-                    await _store.ApplyAsync(scriptKey, values.Select(item => new UserScriptValueMutation(item.Key, item.Value)), Origin(context), cancellationToken).ConfigureAwait(false);
-                    return ApiResult.Undefined;
+                    return CommitResult(await _store.ApplyAsync(scriptKey, values.Select(item => new UserScriptValueMutation(item.Key, item.Value)), Origin(context), cancellationToken).ConfigureAwait(false));
 
                 case "GM.deleteValues":
                     var keys = ReadKeys(context.Parameters);
-                    await _store.ApplyAsync(scriptKey, keys.Select(key => new UserScriptValueMutation(key, null)), Origin(context), cancellationToken).ConfigureAwait(false);
-                    return ApiResult.Undefined;
+                    return CommitResult(await _store.ApplyAsync(scriptKey, keys.Select(key => new UserScriptValueMutation(key, null)), Origin(context), cancellationToken).ConfigureAwait(false));
 
                 default:
                     throw new UnsupportedApiException("The API '" + context.Method + "' is not supported.");
@@ -110,6 +106,8 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             }
             return ApiResult.FromValue(result);
         }
+
+        private static ApiResult CommitResult(UserScriptValueCommit commit) => ApiResult.FromValue(new { sequence = commit.Sequence });
 
         private static UserScriptValueMutationOrigin Origin(ApiInvocationContext context) =>
             new UserScriptValueMutationOrigin(context.RequestId, context.ExecutionId, context.Method);

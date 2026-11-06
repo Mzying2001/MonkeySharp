@@ -141,7 +141,7 @@ var host = new CefSharpUserScriptHostBuilder(repository)
 | --- | --- | --- |
 | `GM.info` / `GM_info` | Core | 共用不可变的安装信息，无需授权或桥接，默认可用。 |
 | `GM.log` / `GM_log` | Core | 传递给 builder 的日志回调。 |
-| 值存储与变更监听 | Core | 单键及批量 `getValues`/`setValues`/`deleteValues` API，支持 `GM_*` 别名；按稳定 `ScriptKey` 隔离的类型化值存储（包括已存储的 undefined）及提交后变更通知。 |
+| 值存储与变更监听 | Core | 单键及批量 `getValues`/`setValues`/`deleteValues` API，支持 `GM_*` 别名；按稳定 `ScriptKey` 隔离的类型化值存储（包括已存储的 undefined）、本地同步监听及去重的远端提交通知。 |
 | `GM.addStyle`、`GM.addElement` 及别名 | 引导代码 | 页面本地实现。 |
 | `GM.getResourceText`、`GM.getResourceUrl`、`GM_getResourceText`、`GM_getResourceURL` | 支持 | 消费安装时已准备的声明资源；旧式名称需要精确 grant。 |
 | `GM.xmlHttpRequest` / `GM_xmlhttpRequest` | CefSharp 默认提供 | 需要 `@connect`；支持重定向、凭据、进度、中止及二进制/multipart 请求体。响应类型和限制见 [HTTP 请求](docs/usage-guide.zh-CN.md#http-请求)。 |

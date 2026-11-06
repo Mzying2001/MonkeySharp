@@ -32,11 +32,11 @@ namespace Mzying2001.MonkeySharp.Demo.Persistence
         public async Task<bool> DeleteAsync(string scriptKey, string key, CancellationToken cancellationToken)
             => (await ApplyAsync(scriptKey, new[] { new UserScriptValueMutation(key, null) }, null, cancellationToken).ConfigureAwait(false)).Count != 0;
 
-        public Task<IReadOnlyList<UserScriptValueChangedEventArgs>> ApplyAsync(string scriptKey,
+        public Task<UserScriptValueCommit> ApplyAsync(string scriptKey,
             IEnumerable<UserScriptValueMutation> mutations, UserScriptValueMutationOrigin origin, CancellationToken cancellationToken)
         {
             var batch = UserScriptValueMutation.Validate(mutations);
-            return RunAsync<IReadOnlyList<UserScriptValueChangedEventArgs>>(scriptKey, connection =>
+            return RunAsync<UserScriptValueCommit>(scriptKey, connection =>
             {
                 var pending = new List<Tuple<string, StoredValue, StoredValue>>();
                 using (var transaction = connection.BeginTransaction())
@@ -69,7 +69,7 @@ ON CONFLICT(script_key,value_key) DO UPDATE SET encoded_value=excluded.encoded_v
                 }
                 var changes = pending.Select(item => _journal.Append(scriptKey, item.Item1, item.Item2, item.Item3, origin)).ToList().AsReadOnly();
                 foreach (var change in changes) Publish(change);
-                return changes;
+                return new UserScriptValueCommit(changes, _journal.Sequence(scriptKey));
             }, cancellationToken);
         }
 

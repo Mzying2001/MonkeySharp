@@ -195,7 +195,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 };
                 var set = await fixture.RequestAsync("GM.setValues", new { values = values.ToDictionary(item => item.Key, item => FromJson(JsonSerializer.Serialize(item.Value)).EncodedValue) });
                 Assert.True(set.GetProperty("ok").GetBoolean());
-                Assert.Equal("undefined", set.GetProperty("result").GetProperty("$monkeySharpType").GetString());
+                Assert.Equal((await fixture.Store.GetSnapshotAsync(fixture.Invocation.ScriptKey.ToString(), CancellationToken.None)).Sequence, set.GetProperty("result").GetProperty("sequence").GetInt64());
                 var read = (await fixture.RequestAsync("GM.getValues", new { keys = new[] { "nullable", "nested", "missing", "nested" } }))
                     .GetProperty("result");
                 Assert.Equal("onull", read.GetProperty("nullable").GetString());
@@ -212,7 +212,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 var changes = new List<UserScriptValueChangedEventArgs>();
                 fixture.Store.ValueChanged += (_, change) => changes.Add(change);
                 var deleted = await fixture.RequestAsync("GM.deleteValues", new { keys = new[] { "nullable", "nullable", "missing" } });
-                Assert.Equal("undefined", deleted.GetProperty("result").GetProperty("$monkeySharpType").GetString());
+                Assert.Equal((await fixture.Store.GetSnapshotAsync(fixture.Invocation.ScriptKey.ToString(), CancellationToken.None)).Sequence, deleted.GetProperty("result").GetProperty("sequence").GetInt64());
                 Assert.Equal("nullable", Assert.Single(changes).Key);
                 Assert.True((await fixture.RequestAsync("GM.setValues", new { values = new { } })).GetProperty("ok").GetBoolean());
                 Assert.True((await fixture.RequestAsync("GM.deleteValues", new { keys = Array.Empty<string>() })).GetProperty("ok").GetBoolean());
@@ -366,7 +366,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 Assert.Equal("onull", storedNull.GetProperty("result").GetProperty("value").GetString());
                 Assert.Equal("o{\"nested\":[1,2]}", storedObject.GetProperty("result").GetProperty("value").GetString());
                 Assert.Equal(new[] { "null", "object" }, keys.GetProperty("result").EnumerateArray().Select(item => item.GetString()));
-                Assert.Equal("undefined", deleted.GetProperty("result").GetProperty("$monkeySharpType").GetString());
+                Assert.Equal((await fixture.Store.GetSnapshotAsync(fixture.Invocation.ScriptKey.ToString(), CancellationToken.None)).Sequence, deleted.GetProperty("result").GetProperty("sequence").GetInt64());
                 Assert.False(absentWithoutDefault.GetProperty("result").GetProperty("exists").GetBoolean());
             }
         }
@@ -780,6 +780,9 @@ namespace Mzying2001.MonkeySharp.Core.Tests
 
                 delivered = null;
                 await fixture.Engine.InvalidateDocumentAsync(fixture.Frame.DocumentId, CancellationToken.None);
+                Assert.Equal("execution-ended", delivered.EventName);
+                Assert.Equal(fixture.Invocation.DeliveryToken, delivered.DeliveryToken);
+                delivered = null;
                 provider.Emit(fixture.Invocation.ScriptKey, fixture.Invocation.ExecutionId);
 
                 Assert.Equal(fixture.Invocation.ExecutionId, provider.EndedExecutionId);

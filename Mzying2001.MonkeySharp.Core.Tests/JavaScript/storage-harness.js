@@ -30,10 +30,10 @@ async function install(options = {}) {
     const notifications = [];
     let sequence = 0;
     const journal = [];
-    let failOnKey = options.failOnKey;
+    const failOnKeys = options.failOnKeys || (options.failOnKey === undefined ? [] : [options.failOnKey]);
     const deliver = notification => globalThis.__MonkeySharpRuntime.receive(notification);
     const changed = (request, key, oldValue, newValue, oldValueExists, newValueExists) => {
-        const data = { key, oldValue, newValue, originExecutionId: executionId,
+        const data = { key, oldValue, newValue, originExecutionId: request.originExecutionId || executionId,
             mutationId: request.requestId, mutationMethod: request.method, sequence: ++sequence,
             oldValueExists, newValueExists };
         journal.push(data);
@@ -83,11 +83,12 @@ async function install(options = {}) {
             if (request.method === "GM.getValue") return response({ exists: Object.hasOwn(values, parameters.key),
                 value: values[parameters.key] ?? null });
             if (["GM.setValues", "GM.deleteValues", "GM.setValue", "GM.deleteValue"].includes(request.method)) {
+                if (options.beforeMutation) await options.beforeMutation(request);
                 const set = request.method === "GM.setValue" || request.method === "GM.setValues";
                 const bulk = request.method.endsWith("Values");
                 const keys = bulk ? (set ? Object.keys(parameters.values) : parameters.keys) : [parameters.key];
-                if (keys.includes(failOnKey)) {
-                    failOnKey = null;
+                if (keys.includes(failOnKeys[0])) {
+                    failOnKeys.shift();
                     return JSON.stringify({ type: "response", protocol: 2, requestId: request.requestId,
                         ok: false, error: { code: "MSP999_INTERNAL", message: "Simulated atomic batch failure" } });
                 }
@@ -99,7 +100,7 @@ async function install(options = {}) {
                     if (set ? !existed || oldValue !== values[key] : existed) changed(request, key, oldValue, set ? values[key] : null, existed, set);
                 }
             }
-            return response(undefinedValue);
+            return response(["GM.setValue", "GM.deleteValue", "GM.setValues", "GM.deleteValues"].includes(request.method) ? { sequence } : undefinedValue);
         }
     };
     const payload = { protocol: 2, documentId: executionId, frameId: "main", runAt: "DocumentEnd", invocations: [{
@@ -108,11 +109,17 @@ async function install(options = {}) {
         source: `globalThis.__bulkExposure = { id: ${JSON.stringify(executionId)}, api: GM,
             get: GM_getValues, set: GM_setValues, delete: GM_deleteValues,
             single: { get: GM_getValue, set: GM_setValue, delete: GM_deleteValue, list: GM_listValues,
-                add: GM_addValueChangeListener, remove: GM_removeValueChangeListener } };`
+                add: GM_addValueChangeListener, remove: GM_removeValueChangeListener } };` + (options.source || "")
     }] };
     vm.runInThisContext(template.replace("__MONKEYSHARP_PAYLOAD_BASE64__", Buffer.from(JSON.stringify(completePlan(payload))).toString("base64")));
     await waitFor(() => globalThis.__bulkExposure && globalThis.__bulkExposure.id === executionId);
-    return { ...globalThis.__bulkExposure, values, requests, notifications, deliver, executionId };
+    return { ...globalThis.__bulkExposure, values, requests, notifications, deliver, executionId,
+        externalSet(key, value) {
+            const oldValueExists = Object.hasOwn(values, key), oldValue = values[key];
+            values[key] = fixtureValue(value);
+            changed({ requestId: "external-" + (sequence + 1), method: "host", originExecutionId: "another-execution" }, key, oldValue, values[key], oldValueExists, true);
+        }
+    };
 }
 
 

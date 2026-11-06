@@ -107,7 +107,9 @@ for (const operation of ["set", "delete"]) {
         await waitFor(() => requests.some(request => request.method === "runtime.reportError"));
         assert.deepEqual({ ...get() }, { first: 9, fail: 2, last: 3 });
         assert.deepEqual({ ...values }, { first: "n9", fail: "n2", last: "n3" });
-        assert.deepEqual(changes, [["first", 1, 9, false]]);
+        const intermediate = operation === "set" ? 10 : undefined;
+        assert.deepEqual(changes, [["first", 1, intermediate, false], ["fail", 2, operation === "set" ? 20 : undefined, false],
+            ["last", 3, operation === "set" ? 30 : undefined, false], ["first", intermediate, 9, false]]);
         assert.equal(requests.filter(request => request.method === "runtime.getStorageSnapshot").length, 1);
     });
 }
@@ -125,7 +127,7 @@ test("bulk commit notifications work with a chunked snapshot and tolerate delive
     const changes = [];
     await api.addValueChangeListener("key", (...args) => changes.push(args));
     await api.setValues({ key: 1 });
-    assert.deepEqual(changes, []);
+    assert.deepEqual(changes, [["key", undefined, 1, false]]);
     notifications.forEach(deliver);
     notifications.forEach(deliver);
     assert.deepEqual(changes, [["key", undefined, 1, false]]);

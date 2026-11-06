@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "caseId": "storage-timing",
+  "events": [
+    {
+      "name": "before-legacy"
+    },
+    {
+      "name": "listener",
+      "newValue": 1,
+      "remote": false,
+      "current": 1
+    },
+    {
+      "name": "after-legacy"
+    },
+    {
+      "name": "listener",
+      "oldValue": 1,
+      "newValue": 2,
+      "remote": false,
+      "current": 2
+    },
+    {
+      "name": "after-modern"
+    },
+    {
+      "name": "microtask-legacy"
+    },
+    {
+      "name": "modern-settled"
+    }
+  ],
+  "promise": {},
+  "immediateReturn": {
+    "listenerId": "number",
+    "modern": "function"
+  },
+  "effects": {
+    "immediateValue": 2,
+    "bulkPrototype": "null",
+    "defaultReference": true,
+    "bulkDefaultReference": true,
+    "tabsBefore": 4,
+    "tabsAfter": 4
+  },
+  "info": {
+    "handler": "Tampermonkey",
+    "version": "5.5.1",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36 Edg/156.0.0.0"
+  },
+  "fixtureHash": "25f5775e1a229f47f83bff21a3ead2b1267a3c4e7e1ea1eee4c7608e5d9a94bf",
+  "contractSource": [
+    "https://www.tampermonkey.net/documentation.php?locale=en",
+    "Tampermonkey 5.5.1/MV3 runtime"
+  ],
+  "environment": {
+    "manager": "Tampermonkey",
+    "managerVersion": "5.5.1",
+    "chromiumVersion": "Edg/156.0.4314.58",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36 Edg/156.0.0.0",
+    "manifestVersion": 3,
+    "settings": {
+      "headless": true,
+      "userScriptsAccess": true,
+      "freshProfile": true
+    },
+    "commit": "c7c10e15fec7d02cf35877847bf9da10e2fdd5e9",
+    "platform": "x64",
+    "capabilities": {
+      "referenceReturnProbe": true
+    },
+    "world": "manager-selected"
+  },
+  "checks": {
+    "eventOrder": true,
+    "localListeners": true,
+    "immediateMirror": true,
+    "nullPrototype": true,
+    "defaultReferences": true
+  },
+  "status": "passed"
+}

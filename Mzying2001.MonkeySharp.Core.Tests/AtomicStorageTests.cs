@@ -23,8 +23,12 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 var snapshot = await store.GetSnapshotAsync("script", CancellationToken.None);
                 await store.SetAsync("another", "key", UserScriptValue.FromEncoded("n1"), CancellationToken.None);
                 var origin = new UserScriptValueMutationOrigin("mutation", "execution", "GM.setValues");
-                await store.ApplyAsync("script", new[] { new UserScriptValueMutation("second", UserScriptValue.FromEncoded("n2")),
+                var commit = await store.ApplyAsync("script", new[] { new UserScriptValueMutation("second", UserScriptValue.FromEncoded("n2")),
                     new UserScriptValueMutation("first", UserScriptValue.FromEncoded("n3")) }, origin, CancellationToken.None);
+                Assert.Equal(3, commit.Sequence);
+                var noOp = await store.ApplyAsync("script", new[] { new UserScriptValueMutation("first", UserScriptValue.FromEncoded("n3")) }, origin, CancellationToken.None);
+                Assert.Empty(noOp);
+                Assert.Equal(3, noOp.Sequence);
                 var replay = await store.GetChangesAsync("script", snapshot.Sequence, CancellationToken.None);
                 Assert.True(replay.Complete);
                 Assert.Equal(new long[] { 2, 3 }, replay.Changes.Select(change => change.Sequence));

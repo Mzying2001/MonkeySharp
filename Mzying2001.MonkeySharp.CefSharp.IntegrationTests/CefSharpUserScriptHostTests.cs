@@ -109,6 +109,29 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
         }
 
         [Fact]
+        public async Task DetachReleasesRendererExecutionsUsingTheCapturedDocumentIdentity()
+        {
+            using (var host = await CreateHostAsync(Script("none", "document-start")))
+            {
+                var browser = new BrowserFixture();
+                browser.Browser.Setup(item => item.GetBrowser()).Returns(browser.CefBrowser.Object);
+#if CEF_SHARP_STRING_FRAME_IDS
+                browser.CefBrowser.Setup(item => item.GetFrameByIdentifier("42")).Returns(browser.Frame.Object);
+#else
+                browser.CefBrowser.Setup(item => item.GetFrame(42)).Returns(browser.Frame.Object);
+#endif
+                string documentId = null;
+                host.DocumentLifecycle += (_, args) => documentId = args.Frame.DocumentId;
+                host.Attach(browser.Browser.Object);
+                browser.CreateContext();
+                await browser.WaitForScriptCountAsync(1);
+                Assert.NotNull(documentId);
+                await host.DetachAsync(CancellationToken.None);
+                Assert.Contains(browser.Scripts, script => script.Contains("endDocument(" + JsonSerializer.Serialize(documentId) + ")"));
+            }
+        }
+
+        [Fact]
         public async Task ContextCreationExecutesPerFrameAndReportsBestEffortTiming()
         {
             using (var host = await CreateHostAsync(Script("none", "document-start")))

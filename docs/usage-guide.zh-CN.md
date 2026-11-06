@@ -259,11 +259,13 @@ value 使用 JSON.stringify/JSON.parse 克隆：顶层 undefined、函数、symb
 | `GM.addValueChangeListener(key, callback)` | 注册 callback(key, oldValue, newValue, remote)；缺失或已删除值为 undefined。宿主注册失败时拒绝 Promise。 | `Promise<number>` |
 | `GM.removeValueChangeListener(listenerId)` | 移除当前执行实例的正整数监听器 ID；未知 ID 无操作。 | `Promise<undefined>` |
 
-现代存储按家族授权，旧式全局需要精确声明。监听范围为同一安装实例的活动执行。每个已提交变更通知一次：来源执行收到 remote: false，其他执行或宿主修改时为 true。该行为适用于有镜像、无镜像。相同编码写入和删除不存在键不通知；创建或删除已存储 undefined 会通知。回调在提交后执行，也可能晚于写入 Promise；执行释放时清理监听器。
+现代存储按家族授权，旧式全局需要精确声明。每次执行先准备完整快照。本地监听在镜像更新后、setter 返回前同步触发；同值写入和删除不存在键不通知，创建/删除已存储 undefined 会通知。回调异常不阻止其他监听器或排队写入。远端已提交变更以 remote: true 通知一次，来源执行的提交回声被去除。保留范围内的缺失变更按序重放；历史无法重建时恢复值并报告 MSC414_STORAGE_REPLAY_RESET。
 
-旧式签名使用相同参数：GM_getValue/GM_getValues/GM_listValues 同步返回值；GM_setValue/GM_deleteValue/GM_setValues/GM_deleteValues/GM_removeValueChangeListener 返回 undefined；GM_addValueChangeListener 立即返回数字 ID。同步值读写需要完整存储镜像，监听别名不依赖镜像。写入立即修改镜像，再串行异步提交；失败时回滚并重新同步，产生 MSC413_COMPATIBILITY_MUTATION_FAILED。同步返回成功不代表持久化完成。旧式监听注册失败时会移除本地处理器，并异步报告失败。
+旧式签名使用相同参数：GM_getValue/GM_getValues/GM_listValues 同步返回；写入、删除和监听移除返回 undefined；GM_addValueChangeListener 立即返回数字 ID。监听立即在本地生效，移除立即停止回调。导航、执行失效及宿主分离会清理监听和待提交本地状态。
 
-现代写入共享提交队列，通过 Promise 观察宿主提交成功或失败。每次批量写入或删除仅发送一个桥接请求，在全量校验后原子提交；失败保留原分区且不发送部分通知。这是 MonkeySharp 的存储契约，不宣称 Tampermonkey 保证事务。参数校验失败不会修改任何键。失败后重新同步镜像并重放后续排队操作。空批次合法。
+现代与旧式写入共用有序提交队列和编码。现代 Promise 等待宿主提交/重放确认或在失败时拒绝；这一确认边界是明确的宿主契约，不宣称 IPC 延迟与 Tampermonkey 完全相同。本地回调描述本地变更，后续持久化失败时回调已发生。恢复从已确认值重放尚待提交的操作，不发出补偿回调，也不会用旧值覆盖后续写入。旧式失败报告 MSC413_COMPATIBILITY_MUTATION_FAILED。
+
+批量操作在任何本地修改前完整校验，仅发送一个变更请求。宿主原子提交整批；失败保留原宿主分区且不发送部分宿主事件。这是 MonkeySharp 存储契约，不宣称 Tampermonkey 保证事务。空批次合法。读取保留缺省对象引用、typed undefined、顶层非有限数及 JavaScript 键顺序；批量结果使用固定对照证实的无原型对象。
 
 ```javascript
 // @grant GM.getValues
@@ -277,7 +279,7 @@ value 使用 JSON.stringify/JSON.parse 克隆：顶层 undefined、函数、symb
 })().catch(console.error);
 ```
 
-**与 Tampermonkey 的关系：** 值转换、默认值和存储 API 返回类型遵循[官方参考](https://www.tampermonkey.net/documentation.php?q=GM_values)及已核查的 5.5.1 门面。MonkeySharp 保留宿主提交确认，在成功提交后通知；Tampermonkey 则立即更新本地状态并通知。启动快照限额及对不支持存储类型的明确拒绝仍是 MonkeySharp 的约束。
+**与 Tampermonkey 的关系：** 值转换、默认值和存储 API 返回类型遵循[官方参考](https://www.tampermonkey.net/documentation.php?q=GM_values)及已核查的 5.5.1 门面。二者都立即更新本地状态并触发本地监听。MonkeySharp 额外保留宿主提交/重放确认后才兑现现代写入 Promise；确认边界不改变本地监听时机。启动快照限额及对不支持存储类型的明确拒绝仍是 MonkeySharp 的约束。
 
 ```javascript
 // @grant GM.getValue
@@ -685,7 +687,7 @@ window.addEventListener("urlchange", onRoute);
 | 授权 | info 默认可用，旧式全局需要精确声明；现代 API 家族按固定 5.5.1 实测开放。 |
 | 时机 / SPA | 不依赖保证的 document-start 或历史导航后的自动重跑。 |
 | 子域名匹配 | `*.domain` 的 match 模式包含裸域名及其所有层级的子域名。 |
-| 存储 | 使用支持的存储值，await 现代写入以观察失败，并考虑镜像限额及提交后通知的时序。 |
+| 存储 | 使用支持的存储值，await 现代写入以观察失败，并考虑镜像限额、本地同步监听及远端提交通知的时序。 |
 | 资源 | 使用 `GM.getResourceUrl` 或 `GM.getResourceUrl`，声明任一对应 grant，按 data URL 处理，并确认宿主资源提供器可用。 |
 | XHR | 检查代理/分区/Blob URL 等不支持项，适配进度/XML 行为，显式检查 HTTP 状态。 |
 | 菜单 / 剪贴板 | 菜单选项及 ID 更新、通知交互完成、文本/HTML 剪贴板 info 与回调重载。 |

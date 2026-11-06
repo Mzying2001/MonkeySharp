@@ -71,7 +71,13 @@ async function main() {
         const result = await Promise.race([evidence, new Promise((_, reject) => { deadline = setTimeout(() => reject(new Error("No userscript evidence within 20 seconds.")), 20000); })]).finally(() => clearTimeout(deadline));
         result.effects.tabsBefore = tabsBefore;
         result.effects.tabsAfter = await worker.evaluate(() => chrome.tabs.query({}).then(tabs => tabs.length));
-        const checks = result.caseId === "prepared-content" ? {
+        const checks = result.caseId === "storage-timing" ? {
+            eventOrder: result.events.map(event => event.name).join(",") === "before-legacy,listener,after-legacy,listener,after-modern,microtask-legacy,modern-settled",
+            localListeners: result.events.filter(event => event.name === "listener").every(event => event.remote === false && event.current === event.newValue),
+            immediateMirror: result.effects.immediateValue === 2,
+            nullPrototype: result.effects.bulkPrototype === "null",
+            defaultReferences: result.effects.defaultReference === true && result.effects.bulkDefaultReference === true
+        } : result.caseId === "prepared-content" ? {
             sourceExecuted: result.effects.shared === 3,
             strictInherited: result.effects.strict === true,
             nonUtf8: result.effects.accented === "café",

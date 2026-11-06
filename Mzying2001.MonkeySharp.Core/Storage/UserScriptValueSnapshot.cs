@@ -5,6 +5,16 @@ using System.Linq;
 
 namespace Mzying2001.MonkeySharp.Core.Storage
 {
+    /// <summary>Contains the committed events and exact partition watermark of an atomic mutation.</summary>
+    public sealed class UserScriptValueCommit : ReadOnlyCollection<UserScriptValueChangedEventArgs>
+    {
+        /// <summary>Creates an immutable commit acknowledgement, including no-op batches.</summary>
+        public UserScriptValueCommit(IEnumerable<UserScriptValueChangedEventArgs> changes, long sequence) : base(changes.ToList())
+        { if (sequence < 0) throw new ArgumentOutOfRangeException(nameof(sequence)); Sequence = sequence; }
+        /// <summary>Gets the watermark at the commit boundary.</summary>
+        public long Sequence { get; }
+    }
+
     /// <summary>Contains one atomic partition snapshot and the last included change sequence.</summary>
     public sealed class UserScriptValueSnapshot : ReadOnlyCollection<KeyValuePair<string, UserScriptValue>>
     {

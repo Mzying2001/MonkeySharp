@@ -141,7 +141,7 @@ This table summarizes availability. Parameters, return values, callbacks, and [T
 | --- | --- | --- |
 | `GM.info` / `GM_info` | Core | Same frozen installation information; always available without a grant or bridge. |
 | `GM.log` / `GM_log` | Core | Delivered to the builder's logging callback. |
-| Value storage and change listeners | Core | Single-key and bulk `getValues`/`setValues`/`deleteValues` APIs with `GM_*` aliases; Typed value storage (including stored `undefined`) isolated by stable `ScriptKey`, with committed change notifications. |
+| Value storage and change listeners | Core | Single-key and bulk `getValues`/`setValues`/`deleteValues` APIs with `GM_*` aliases; Typed value storage (including stored `undefined`) isolated by stable `ScriptKey`, with synchronous local listeners and deduplicated remote commit notifications. |
 | `GM.addStyle`, `GM.addElement` and aliases | Bootstrap | Page-local implementations. |
 | `GM.getResourceText`, `GM.getResourceUrl`, `GM_getResourceText`, `GM_getResourceURL` | Supported | Consume the declared resources prepared with the installation; legacy names require exact grants. |
 | `GM.xmlHttpRequest` / `GM_xmlhttpRequest` | CefSharp default | Requires `@connect`; supports redirects, credentials, progress, abort, and binary/multipart bodies. See [HTTP requests](docs/usage-guide.md#http-requests) for response types and limitations. |

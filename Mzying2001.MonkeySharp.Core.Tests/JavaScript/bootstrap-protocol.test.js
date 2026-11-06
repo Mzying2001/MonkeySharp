@@ -30,6 +30,7 @@ function executePayload(payload) {
 
 test("bootstrap exposes only granted Promise APIs and authenticates notifications", async () => {
     const values = new Map();
+    const journal = [];
     const methods = [];
     const capability = "capability-token";
     globalThis.__MonkeySharpBridge = {
@@ -49,10 +50,15 @@ test("bootstrap exposes only granted Promise APIs and authenticates notification
                     compatibility: { storage: { complete: true, sequence: 0, entries: [] } }
                 });
             }
-            if (request.method === "runtime.getStorageChanges") return JSON.stringify({ protocol: 2, type: "response", ok: true, requestId: request.requestId, result: { complete: true, sequence: 0, changes: [] } });
+            if (request.method === "runtime.getStorageChanges") return JSON.stringify({ protocol: 2, type: "response", ok: true, requestId: request.requestId, result: { complete: true, sequence: journal.length, changes: journal.filter(change => change.sequence > request.params.afterSequence) } });
             methods.push(request.method);
             let result = { $monkeySharpType: "undefined" };
-            if (request.method === "GM.setValue") values.set(request.params.key, request.params.value);
+            if (request.method === "GM.setValue") {
+                values.set(request.params.key, request.params.value);
+                journal.push({ sequence: journal.length + 1, key: request.params.key, newValue: request.params.value, newValueExists: true,
+                    oldValueExists: false, mutationId: request.requestId, originExecutionId: "execution" });
+                result = { sequence: journal.length };
+            }
             if (request.method === "GM.getValue") result = values.has(request.params.key)
                 ? { exists: true, value: values.get(request.params.key) }
                 : { exists: false, value: null };

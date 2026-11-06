@@ -461,6 +461,8 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                         {
                             var json = JsonSerializer.Serialize(new { complete = replay.Complete, sequence = replay.Sequence,
                                 changes = changes.Select(document => document.RootElement.Clone()).ToArray() });
+                            if (!replay.Complete || Encoding.UTF8.GetByteCount(json) > _options.MaxResponseBytes / 2)
+                                EmitDiagnostic("MSC414_STORAGE_REPLAY_RESET", "Storage replay requires a new snapshot; listener events outside retained or transferable history cannot be reconstructed.", null, execution, requestId);
                             if (Encoding.UTF8.GetByteCount(json) > _options.MaxResponseBytes / 2)
                                 json = JsonSerializer.Serialize(new { complete = false, sequence = replay.Sequence });
                             return Limit(ProtocolJson.Success(requestId, json));
@@ -829,6 +831,12 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
 
         private void EngineExecutionEnded(UserScriptEngine.ExecutionRecord execution)
         {
+            var handlers = Notification;
+            if (handlers != null)
+                foreach (EventHandler<BridgeNotificationEventArgs> handler in handlers.GetInvocationList())
+                    try { handler(this, new BridgeNotificationEventArgs(execution.Frame, execution.Invocation.ExecutionId,
+                        execution.Invocation.DeliveryToken, "execution-ended", "{}")); }
+                    catch (Exception exception) { System.Diagnostics.Trace.TraceError(exception.ToString()); }
             lock (_stateLock)
             {
                 _listeners.Remove(execution.Invocation.ExecutionId);

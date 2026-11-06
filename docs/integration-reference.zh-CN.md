@@ -169,7 +169,7 @@ Demo 使用数据库格式 2，拒绝旧开发数据库，不进行迁移或删�
 - 持久化 `EncodedValue`，不得丢失类型信息。编码为：undefined 使用 `u`，布尔使用 `btrue`/`bfalse`，数字使用 `n` 加数字或 `NaN`/`Infinity`/`-Infinity`，字符串使用 `s` 加原文，对象/数组/null 使用 `o` 加规范 JSON。`FromEncoded` 校验并规范化编码，用户对象的属性名不会作为协议标记。
 - 同一 `ScriptKey` 的操作必须线性一致。值键允许空字符串，脚本分区 ID 必须非空。提交前取消不产生更改，提交后取消仍成功完成。每个实际提交变更仅发出一次 `ValueChanged`，包括创建或删除已存储的 undefined；相同编码值的重复写入及删除不存在的键不通知。`ListKeysAsync` 保留插入顺序，覆盖不移动，删除再创建移到末尾。
 - `IUserScriptValueStore` 必须提供原子 `GetSnapshotAsync`（值及分区水位）、`GetChangesAsync`（从水位读取连续后缀）和 `ApplyAsync`（携带请求/执行来源的原子批次）。先订阅 `ValueChanged`，再获取快照并重放水位后的变更；没有逐键快照回退。内存与 SQLite 每脚本保留 4096 条变更，过期或未来水位要求重新快照。水位属于一个存储服务会话；宿主重启后执行凭据失效。
-- 批量写入/删除通过一次 `ApplyAsync` 全量校验和原子提交，失败不保留部分键或通知。事件贯通 mutationId、originExecutionId、方法和每脚本序列。此原子性是 MonkeySharp 存储契约，不宣称 Tampermonkey 保证事务。批量读取使用一次原子快照。
+- 批量写入/删除通过一次 `ApplyAsync` 全量校验和原子提交，失败不保留部分键或通知。事件贯通 mutationId、originExecutionId、方法和每脚本序列。此原子性是 MonkeySharp 存储契约，不宣称 Tampermonkey 保证事务。批量读取使用一次原子快照。`ApplyAsync` 返回带精确水位的 `UserScriptValueCommit`，空操作也有确认水位。JS 门面确认重放后才兑现写入 Promise；已确认镜像与有序 pending 分开维护，本地回调同步触发，提交回声去重。
 - `UserScriptPreparer` 在安装前配置给仓库，负责获取和校验依赖/资源，保留依赖顺序和作用域，并在全部成功后原子激活不可变版本。默认源码及内容总预算为 32 MiB。安装或更新失败不会发布新版本；执行不再抓取安装内容。
 - 缺少依赖提供程序时以 `MSR401_DEPENDENCY_PROVIDER_UNAVAILABLE` 跳过执行；提供器失败产生 `MSR400_DEPENDENCY_RESOLUTION_FAILED`，不区分调用风格。
 - `IResourceProvider` 返回事先授权的已声明资源，内容受 `BridgeOptions.MaxResourceBytes` 限制。

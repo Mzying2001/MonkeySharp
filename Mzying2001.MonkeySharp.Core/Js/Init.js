@@ -81,6 +81,7 @@
             };
 
             const call = async function (record, method, parameters, signal, requestId) {
+                if (record.disposed) throw Object.assign(new Error("The script execution ended."), { code: "MSP003_SESSION_EXPIRED" });
                 if (signal && signal.aborted) {
                     const error = new Error("The request was canceled.");
                     error.name = "AbortError";
@@ -174,6 +175,8 @@
                     dispatch: dispatch,
                     deliveryToken: invocation.deliveryToken,
                     handlers: new Map(),
+                    valueListenerKeys: new Map(),
+                    disposed: false,
                     menuHandlers: new Map(),
                     xhrHandlers: new Map(),
                     downloadHandlers: new Map(),
@@ -182,6 +185,7 @@
                     webRequestHandlers: new Map(),
                     mutationTail: Promise.resolve(),
                     storageMirror: null,
+                    storageConfirmed: null,
                     storageReady: false,
                     storageNotifications: [],
                     valueChangeSequences: new Map(),
@@ -223,6 +227,7 @@
                     throw new Error("The complete resource package must be ready before running this script.");
                 }
                 if (record.storageResync) await record.storageResync;
+                if (record.disposed) return;
                 if (record.storageMirror && !record.storageReady) throw new Error("Storage synchronization did not complete.");
                 const gm = createApi(record, invocation, availableApis);
                 record.windowFacade = createWindowFacade(record, invocation, availableApis);
@@ -263,6 +268,10 @@
                 if (!record || record.deliveryToken !== notification.deliveryToken) return false;
                 const data = notification.data || {};
                 try {
+                    if (notification.event === "execution-ended") {
+                        endExecution(record);
+                        return true;
+                    }
                     if ((notification.event === "storage-sync" || notification.event === "value-change") && !record.storageReady) {
                         record.storageNotifications.push(notification);
                         return true;
@@ -283,11 +292,7 @@
                             resynchronizeStorage(record).catch(() => {});
                             return true;
                         }
-                        const handler = record.handlers.get(data.listenerId);
-                        if (!handler) return false;
-                        if (data.sequence) record.valueChangeSequences.set(data.listenerId, data.sequence);
-                        handler(data.key, decodeStorageValue(data, "oldValue"), decodeStorageValue(data, "newValue"),
-                            data.originExecutionId !== record.executionId);
+                        notifyValueListeners(record, data, false);
                         return true;
                     }
                     if (notification.event === "menu-command") {
@@ -399,6 +404,23 @@
                 }
             };
 
+            const endExecution = function (record) {
+                record.disposed = true;
+                record.handlers.clear();
+                record.valueListenerKeys.clear();
+                record.valueChangeSequences.clear();
+                record.pendingStorageMutations.length = 0;
+                record.storageNotifications.length = 0;
+                record.storageMirror = null;
+                record.storageConfirmed = null;
+                executions.delete(record.executionId);
+            };
+
+            const endDocument = function (documentId) {
+                executions.forEach(record => { if (record.proof.documentId === documentId) endExecution(record); });
+                return true;
+            };
+
             const urlChanged = function (data) {
                 if (!data || typeof data.url !== "string") return false;
                 const info = { url: data.url, oldURL: typeof data.oldURL === "string" ? data.oldURL : "" };
@@ -414,7 +436,7 @@
                 return true;
             };
 
-            return Object.freeze({ install: install, receive: receive, urlChanged: urlChanged });
+            return Object.freeze({ install: install, receive: receive, urlChanged: urlChanged, endDocument: endDocument });
         })();
 
         Object.defineProperty(root, runtimeName, {
