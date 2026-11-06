@@ -21,12 +21,15 @@ async function main() {
     const profile = fs.mkdtempSync(path.join(artifacts, "reference-profile-"));
     let resolveEvidence;
     const evidence = new Promise(resolve => { resolveEvidence = resolve; });
-    const server = http.createServer((request, response) => {
+    const received = [];
+    const requestHandler = (request, response) => {
         if (request.url === "/evidence" && request.method === "POST") {
             const chunks = [];
             request.on("data", chunk => chunks.push(chunk));
             request.on("end", () => {
-                resolveEvidence(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+                const value = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+                received.push(value);
+                resolveEvidence(value);
                 response.end("ok");
             });
         } else if (/^\/fixture-content\/[a-z0-9.-]+$/.test(request.url)) {
@@ -38,13 +41,20 @@ async function main() {
             response.setHeader("Content-Type", "text/html; charset=utf-8");
             response.end("<!doctype html><html><head><title>Return contract fixture</title></head><body>Return contract fixture</body></html>");
         }
-    });
+    };
+    const server = http.createServer(requestHandler);
     await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+    const matching = path.basename(fixture) === "matching-conditions.user.js";
+    const matchingScenarios = matching ? JSON.parse(fs.readFileSync(fixture.replace(/\.user\.js$/, ".json"), "utf8")) : [];
+    const noAutomaticMatch = ["matching-default.user.js", "matching-all-urls.user.js"].includes(path.basename(fixture));
+    const ipv6 = matching ? http.createServer(requestHandler) : null;
     let context;
     try {
+        if (ipv6) await new Promise((resolve, reject) => { ipv6.once("error", reject); ipv6.listen(0, "::1", resolve); });
         context = await chromium.launchPersistentContext(profile, {
             executablePath: path.resolve(browserPath), headless: true,
-            args: [`--disable-extensions-except=${path.resolve(extensionPath)}`, `--load-extension=${path.resolve(extensionPath)}`, "--no-first-run"]
+            args: [`--disable-extensions-except=${path.resolve(extensionPath)}`, `--load-extension=${path.resolve(extensionPath)}`, "--no-first-run",
+                ...(matching ? ["--no-proxy-server", "--host-resolver-rules=MAP xn--fsqu00a.xn--0zwm56d 127.0.0.1"] : [])]
         });
         const worker = context.serviceWorkers()[0] || await context.waitForEvent("serviceworker");
         if (await worker.evaluate(() => chrome.runtime.getManifest().version) !== manifest.version) throw new Error("Wrong running extension version.");
@@ -56,7 +66,8 @@ async function main() {
         await page.locator("input[type=file]").waitFor({ state: "attached" });
         // Import through Tampermonkey's own installation UI, not storage injection.
         const askPromise = context.waitForEvent("page", page => page.url().includes("/ask.html"));
-        const fixtureSource = fs.readFileSync(fixture, "utf8").replaceAll("__PORT__", String(server.address().port));
+        const expand = value => value.replaceAll("__PORT__", String(server.address().port)).replaceAll("__IPV6_PORT__", String(ipv6 && ipv6.address().port));
+        const fixtureSource = expand(fs.readFileSync(fixture, "utf8"));
         await page.locator("input[type=file]").setInputFiles({ name: path.basename(fixture), mimeType: "text/javascript", buffer: Buffer.from(fixtureSource) });
         const ask = await askPromise;
         const installed = ask.waitForEvent("close", { timeout: 5000 }).catch(() => undefined);
@@ -66,12 +77,34 @@ async function main() {
         const session = await context.newCDPSession(target);
         const browserVersion = await session.send("Browser.getVersion");
         const tabsBefore = await worker.evaluate(() => chrome.tabs.query({}).then(tabs => tabs.length));
-        await target.goto(`http://127.0.0.1:${server.address().port}/`);
         let deadline;
-        const result = await Promise.race([evidence, new Promise((_, reject) => { deadline = setTimeout(() => reject(new Error("No userscript evidence within 20 seconds.")), 20000); })]).finally(() => clearTimeout(deadline));
+        let result;
+        if (matching) {
+            const cases = [];
+            for (const scenario of matchingScenarios) {
+                await target.goto("about:blank");
+                const url = expand(scenario.url);
+                await target.goto(url);
+                await target.waitForTimeout(400);
+                cases.push({ id: scenario.id, url, matched: await target.evaluate(() => document.documentElement.dataset.matchProbe === "ran") });
+            }
+            result = { schemaVersion: 1, caseId: "matching-conditions", events: received.map(value => ({ name: "source", url: value.effects.url })),
+                promise: {}, immediateReturn: { probe: "completed" }, effects: { cases } };
+        } else if (noAutomaticMatch) {
+            await target.goto(`http://127.0.0.1:${server.address().port}/`);
+            await target.waitForTimeout(1000);
+            result = { schemaVersion: 1, caseId: path.basename(fixture).replace(".user.js", ""), events: received,
+                promise: {}, immediateReturn: { probe: "completed" }, effects: { automaticExecutions: received.length } };
+        } else {
+            await target.goto(`http://127.0.0.1:${server.address().port}/`);
+            result = await Promise.race([evidence, new Promise((_, reject) => { deadline = setTimeout(() => reject(new Error("No userscript evidence within 20 seconds.")), 20000); })]).finally(() => clearTimeout(deadline));
+        }
         result.effects.tabsBefore = tabsBefore;
         result.effects.tabsAfter = await worker.evaluate(() => chrome.tabs.query({}).then(tabs => tabs.length));
-        const checks = result.caseId === "storage-timing" ? {
+        const checks = matching ? {
+            allCasesRecorded: result.effects.cases.length === matchingScenarios.length,
+            expectedMatches: result.effects.cases.every(value => value.matched === matchingScenarios.find(scenario => scenario.id === value.id).expected)
+        } : noAutomaticMatch ? { noAutomaticExecution: result.effects.automaticExecutions === 0 } : result.caseId === "storage-timing" ? {
             eventOrder: result.events.map(event => event.name).join(",") === "before-legacy,listener,after-legacy,listener,after-modern,microtask-legacy,modern-settled",
             localListeners: result.events.filter(event => event.name === "listener").every(event => event.remote === false && event.current === event.newValue),
             immediateMirror: result.effects.immediateValue === 2,
@@ -110,6 +143,7 @@ async function main() {
     } finally {
         if (context) await context.close();
         await new Promise(resolve => server.close(resolve));
+        if (ipv6) await new Promise(resolve => ipv6.close(resolve));
     }
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

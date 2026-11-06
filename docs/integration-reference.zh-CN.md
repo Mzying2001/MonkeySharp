@@ -69,7 +69,7 @@ CefSharp 宿主默认提供 `GM.xmlHttpRequest`、`GM.cookie` 和 `GM.webRequest
 
 完整参数表、回调契约和脚本示例见 [HTTP 请求使用指南](usage-guide.zh-CN.md#http-请求)。
 
-兼容性状态分为 Core 已实现、需要宿主 service、有意降级/不支持、与 Tampermonkey 存在行为差异。运行时在 CefSharp 页面世界的 MonkeySharp wrapper 中执行；`@sandbox`、`@unwrap`、`@run-in` 和非 page 的 `@inject-into` 会保留并产生诊断，但不会创建隔离世界。
+兼容性状态分为 Core 已实现、需要宿主 service、有意降级/不支持、与 Tampermonkey 存在行为差异。运行时在 CefSharp 页面世界的 MonkeySharp wrapper 中执行；`@sandbox`、`@unwrap` 和非 page 的 `@inject-into` 会保留并产生诊断，但不会创建隔离世界。
 
 脚本必须声明 `@grant GM.xmlHttpRequest` 或 `@grant GM_xmlhttpRequest`，并为每个目标声明 `@connect`。方法名不区分大小写，除 `CONNECT`、`TRACE` 和 `TRACK` 外可使用有效的 HTTP token。
 
@@ -291,3 +291,11 @@ SmokeHost 从 `Fixtures` 目录内嵌七个原创 `.user.js`，通过正常仓�
 执行 `powershell -NoProfile -ExecutionPolicy Bypass -File Mzying2001.MonkeySharp.CefSharp.SmokeHost/Test-SmokeResults.ps1` 可在不启动浏览器的情况下验证结果解析。脚本同时支持 Windows PowerShell 和 PowerShell 7。
 
 日志保存到 `artifacts/smoke/<version>-<platform>/`（构建步骤有输出时的 `restore.log`、`clean.log`、`build.log`，以及 `stdout.log`、`stderr.log`、`results.jsonl`）；可通过 `-OutputDirectory` 覆盖路径。CI 在失败时也将该目录上传为 `chromium-<version>-<platform>`。定位问题时先查看失败的 `compatibility-case`，再检查相邻的生命周期、console 和 diagnostic 记录。
+
+## 已准备的执行条件
+
+`PreparedScriptRevision.UrlRules` 在激活前编译 URL 规则和可重复的 run-in 选择器，并跨 frame 复用，缓存随元数据生命周期释放。include glob 的 scheme/host 通配有边界，? 为普通字符，整体忽略大小写；正则支持公布的 ECMAScript 子集并限时 100 ms。超时以 MSR214_URL_RULE_TIMEOUT 拒绝该脚本。固定对照覆盖 IPv6、IDN、显式/通配端口、query/hash 及百分号编码的非保留字符。
+
+`RunIn` 为只读选择器列表。`CefSharpHostOptions.IsIncognito` 必须反映宿主实际拥有的 RequestContext；未知环境会以 MSR211_RUN_IN_UNAVAILABLE 拒绝受限执行。容器选择报告 MSM083_UNSUPPORTED_CONTAINER，未知选择器是安装错误。手动 context-menu 忽略 include/exclude，保留 match/exclude-match、noframes、隐私和信任检查；这些筛选不创建私密上下文。
+
+固定管理器中，@match 的 Unicode 主机声明被保留但不匹配规范化后的浏览器主机；应使用 Punycode。安装会以 MSM084_UNSUPPORTED_IDN_MATCH 提示该无效声明。Punycode 规则可匹配 IDN 浏览器 URL。

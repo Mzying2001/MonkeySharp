@@ -127,7 +127,7 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
             if (!string.IsNullOrWhiteSpace(metadata.InjectInto) &&
                 !string.Equals(metadata.InjectInto, "page", StringComparison.OrdinalIgnoreCase))
                 unsupported.Add("@inject-into 非 page 不可用");
-            if (!string.IsNullOrWhiteSpace(metadata.RunIn)) unsupported.Add("@run-in 未实现");
+            if (metadata.RunIn.Any(value => value.StartsWith("container-id-", StringComparison.Ordinal))) unsupported.Add("@run-in 容器选择不可用");
             if (!string.IsNullOrWhiteSpace(source))
             {
                 var sourceLower = source.ToLowerInvariant();

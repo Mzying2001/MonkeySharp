@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "caseId": "matching-all-urls",
+  "events": [],
+  "promise": {},
+  "immediateReturn": {
+    "probe": "completed"
+  },
+  "effects": {
+    "automaticExecutions": 0,
+    "tabsBefore": 4,
+    "tabsAfter": 4
+  },
+  "fixtureHash": "7c7535d92ae39b68234319912c9289525d50bc34d87efd878151d5f42562b0a3",
+  "contractSource": [
+    "https://www.tampermonkey.net/documentation.php?locale=en",
+    "Tampermonkey 5.5.1/MV3 runtime"
+  ],
+  "environment": {
+    "manager": "Tampermonkey",
+    "managerVersion": "5.5.1",
+    "chromiumVersion": "Edg/156.0.4314.58",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36 Edg/156.0.0.0",
+    "manifestVersion": 3,
+    "settings": {
+      "headless": true,
+      "userScriptsAccess": true,
+      "freshProfile": true
+    },
+    "commit": "152e0a33884c6f9b89ac5207cbc8527bd05711db",
+    "platform": "x64",
+    "capabilities": {
+      "referenceReturnProbe": true
+    },
+    "world": "manager-selected"
+  },
+  "checks": {
+    "noAutomaticExecution": true
+  },
+  "status": "passed"
+}

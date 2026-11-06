@@ -163,7 +163,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             Assert.False(pattern.IsMatch(new Uri("about:blank?query=1")));
             Assert.False(pattern.IsMatch(new Uri("about:srcdoc")));
             Assert.False(pattern.IsMatch(new Uri("about://blank")));
-            Assert.False(MatchPatternCompiler.Compile("<all_urls>").IsMatch(new Uri("about:blank")));
+            Assert.False(MatchPatternCompiler.TryCompile("<all_urls>", out _, out _));
         }
 
         [Theory]
@@ -182,8 +182,8 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         [InlineData("https://*.example.com:8443/path*", "https://example.com/path", false)]
         [InlineData("https://*.example.com:8443/path*", "https://www.example.com/path", false)]
         [InlineData("https://*.example.com:8443/path*", "https://example.com:8443/other", false)]
-        [InlineData("https://*.\u4f8b\u5b50.\u6d4b\u8bd5/*", "https://xn--fsqu00a.xn--0zwm56d/page", true)]
-        [InlineData("https://*.\u4f8b\u5b50.\u6d4b\u8bd5/*", "https://www.xn--fsqu00a.xn--0zwm56d/page", true)]
+        [InlineData("https://*.xn--fsqu00a.xn--0zwm56d/*", "https://xn--fsqu00a.xn--0zwm56d/page", true)]
+        [InlineData("https://*.xn--fsqu00a.xn--0zwm56d/*", "https://www.xn--fsqu00a.xn--0zwm56d/page", true)]
         public void MatchPatternHostRulesHonorWildcardsAndConstraints(string rule, string url, bool expected)
         {
             var pattern = MatchPatternCompiler.Compile(rule);
@@ -203,9 +203,11 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         [Fact]
         public void MatchPatternNormalizesIdnAndIgnoresFragment()
         {
-            var pattern = MatchPatternCompiler.Compile("https://\u4f8b\u5b50.\u6d4b\u8bd5/path?*");
+            var pattern = MatchPatternCompiler.Compile("https://xn--fsqu00a.xn--0zwm56d/path?*");
 
             Assert.True(pattern.IsMatch(new Uri("https://xn--fsqu00a.xn--0zwm56d/path?q=1#different")));
+            Assert.True(pattern.IsMatch(new Uri("https://\u4f8b\u5b50.\u6d4b\u8bd5/path?q=1#different")));
+            Assert.False(MatchPatternCompiler.Compile("https://\u4f8b\u5b50.\u6d4b\u8bd5/path?*").IsMatch(new Uri("https://xn--fsqu00a.xn--0zwm56d/path?q=1")));
         }
 
         [Fact]

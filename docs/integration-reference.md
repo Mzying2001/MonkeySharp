@@ -80,7 +80,7 @@ The CefSharp host supplies default `GM.xmlHttpRequest`, `GM.cookie`, and `GM.web
 
 For full parameter tables, callback contracts, and script examples, see the [HTTP request guide](usage-guide.md#http-requests).
 
-Compatibility status is reported as Core implemented, host service required, intentional degradation or unsupported, or behavior different from Tampermonkey. The runtime executes in the CefSharp page world inside the MonkeySharp wrapper. `@sandbox`, `@unwrap`, `@run-in`, and non-page `@inject-into` are preserved and diagnosed, but they do not create an isolated world.
+Compatibility status is reported as Core implemented, host service required, intentional degradation or unsupported, or behavior different from Tampermonkey. The runtime executes in the CefSharp page world inside the MonkeySharp wrapper. `@sandbox`, `@unwrap`, and non-page `@inject-into` are preserved and diagnosed, but they do not create an isolated world.
 
 Declare `@grant GM.xmlHttpRequest` or `@grant GM_xmlhttpRequest` and an `@connect` entry for every destination. Methods are case-insensitive valid HTTP tokens except `CONNECT`, `TRACE`, and `TRACK`.
 
@@ -303,3 +303,11 @@ Each case emits a `compatibility-case` JSON record containing `caseId`, `success
 Run `powershell -NoProfile -ExecutionPolicy Bypass -File Mzying2001.MonkeySharp.CefSharp.SmokeHost/Test-SmokeResults.ps1` to check result validation without launching a browser. Both Windows PowerShell and PowerShell 7 can run the scripts.
 
 Logs are written to `artifacts/smoke/<version>-<platform>/` (`restore.log`, `clean.log`, `build.log` when output is present, `stdout.log`, `stderr.log`, and `results.jsonl`); `-OutputDirectory` overrides the location. CI uploads that directory as `chromium-<version>-<platform>` even on failure. Inspect failed `compatibility-case` records first, then the adjacent lifecycle, console and diagnostic records.
+
+## Prepared execution conditions
+
+`PreparedScriptRevision.UrlRules` compiles URL rules and repeatable run-in selectors before activation. Matching reuses immutable rules across frames, with metadata-lifetime caching. Include globs use bounded scheme/host wildcards, literal question marks and case-insensitive comparison; `/expression/` uses the documented ECMAScript subset with a 100 ms timeout. Timeouts fail closed with `MSR214_URL_RULE_TIMEOUT`. IPv6, IDN, explicit/wildcard ports, queries, fragments and escaped unreserved characters are covered by the fixed manager fixture.
+
+`RunIn` is now a read-only selector list. `CefSharpHostOptions.IsIncognito` must report the real host-owned request context; an unknown context rejects restricted execution with `MSR211_RUN_IN_UNAVAILABLE`. Container declarations warn with `MSM083_UNSUPPORTED_CONTAINER`; unknown selector syntax is an installation error. Manual context-menu execution ignores include/exclude, while retaining match/exclude-match, noframes, privacy and trust checks. These checks do not create private contexts.
+
+Unicode host text in `@match` is retained but does not match normalized browser hosts in the pinned manager. Use Punycode; installation reports `MSM084_UNSUPPORTED_IDN_MATCH` for this ineffective declaration. Punycode rules match canonical IDN browser URLs.

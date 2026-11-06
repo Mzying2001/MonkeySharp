@@ -19,6 +19,7 @@ namespace Mzying2001.MonkeySharp.Core.Repository
         internal PreparedScriptRevision(UserScriptDefinition definition, IEnumerable<ResourceContent> dependencies,
             IDictionary<string, ResourceContent> resources)
         {
+            UrlRules = Matching.UserScriptUrlRules.Compile(definition.Metadata);
             Dependencies = new ReadOnlyCollection<ResourceContent>(dependencies.ToArray());
             Resources = new ReadOnlyDictionary<string, ResourceContent>(new Dictionary<string, ResourceContent>(resources, StringComparer.Ordinal));
             var source = new StringBuilder();
@@ -33,6 +34,9 @@ namespace Mzying2001.MonkeySharp.Core.Repository
                 values = Resources.ToDictionary(item => item.Key, item => new
                 { text = item.Value.DecodeText(), url = "data:" + item.Value.MediaType + ";base64," + Convert.ToBase64String(item.Value.Bytes) }, StringComparer.Ordinal) });
         }
+
+        /// <summary>Gets the URL and context conditions compiled with this revision.</summary>
+        public Matching.UserScriptUrlRules UrlRules { get; }
 
         /// <summary>Gets the executable source with dependency order, scope and statement boundaries preserved.</summary>
         public string Source { get; }

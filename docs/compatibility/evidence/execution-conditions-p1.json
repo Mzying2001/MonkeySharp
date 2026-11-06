@@ -1,0 +1,257 @@
+{
+  "schemaVersion": 1,
+  "caseId": "execution-conditions-p1",
+  "date": "2026-11-07",
+  "baseCommit": "152e0a3",
+  "runs": [
+    {
+      "version": "84.4.10",
+      "platform": "x64",
+      "status": "passed",
+      "checks": {
+        "normalContext": true,
+        "privateContextRejected": true,
+        "manualDoesNotAutoRun": true,
+        "manualIgnoresIncludeExclude": true,
+        "exclusion": true
+      },
+      "compatibility": {
+        "prepared": true,
+        "conditions": true,
+        "frames": true,
+        "spaUrl": true,
+        "download": true,
+        "cookie": true,
+        "webRequest": true
+      }
+    },
+    {
+      "version": "84.4.10",
+      "platform": "x86",
+      "status": "passed",
+      "checks": {
+        "normalContext": true,
+        "privateContextRejected": true,
+        "manualDoesNotAutoRun": true,
+        "manualIgnoresIncludeExclude": true,
+        "exclusion": true
+      },
+      "compatibility": {
+        "prepared": true,
+        "conditions": true,
+        "frames": true,
+        "spaUrl": true,
+        "download": true,
+        "cookie": true,
+        "webRequest": true
+      }
+    },
+    {
+      "version": "121.3.70",
+      "platform": "x64",
+      "status": "passed",
+      "checks": {
+        "normalContext": true,
+        "privateContextRejected": true,
+        "manualDoesNotAutoRun": true,
+        "manualIgnoresIncludeExclude": true,
+        "exclusion": true
+      },
+      "compatibility": {
+        "prepared": true,
+        "conditions": true,
+        "frames": true,
+        "spaUrl": true,
+        "download": true,
+        "cookie": true,
+        "webRequest": true
+      }
+    },
+    {
+      "version": "121.3.70",
+      "platform": "x86",
+      "status": "passed",
+      "checks": {
+        "normalContext": true,
+        "privateContextRejected": true,
+        "manualDoesNotAutoRun": true,
+        "manualIgnoresIncludeExclude": true,
+        "exclusion": true
+      },
+      "compatibility": {
+        "prepared": true,
+        "conditions": true,
+        "frames": true,
+        "spaUrl": true,
+        "download": true,
+        "cookie": true,
+        "webRequest": true
+      }
+    },
+    {
+      "version": "151.3.240",
+      "platform": "x64",
+      "status": "passed",
+      "checks": {
+        "normalContext": true,
+        "privateContextRejected": true,
+        "manualDoesNotAutoRun": true,
+        "manualIgnoresIncludeExclude": true,
+        "exclusion": true
+      },
+      "compatibility": {
+        "prepared": true,
+        "conditions": true,
+        "frames": true,
+        "spaUrl": true,
+        "download": true,
+        "cookie": true,
+        "webRequest": true
+      }
+    },
+    {
+      "version": "151.3.240",
+      "platform": "x86",
+      "status": "passed",
+      "checks": {
+        "normalContext": true,
+        "privateContextRejected": true,
+        "manualDoesNotAutoRun": true,
+        "manualIgnoresIncludeExclude": true,
+        "exclusion": true
+      },
+      "compatibility": {
+        "prepared": true,
+        "conditions": true,
+        "frames": true,
+        "spaUrl": true,
+        "download": true,
+        "cookie": true,
+        "webRequest": true
+      }
+    }
+  ],
+  "dotnet": {
+    "84.4.10-x64": {
+      "core": 273,
+      "adapter": 43,
+      "demo": 40
+    },
+    "121.3.70-x64": {
+      "core": 273,
+      "adapter": 43,
+      "demo": 40
+    }
+  },
+  "javascript": {
+    "passed": 103
+  },
+  "reference": [
+    "tampermonkey-5.5.1-matching-conditions.json",
+    "tampermonkey-5.5.1-matching-default.json",
+    "tampermonkey-5.5.1-matching-all-urls.json"
+  ],
+  "demo": [
+    {
+      "version": "84.4.10",
+      "environment": {
+        "cefSharpVersion": "84.4.10.0",
+        "platform": "x64"
+      },
+      "checks": {
+        "storageResourcesXhrCookieWebRequest": true,
+        "domAndInfo": true,
+        "iframe": true,
+        "menu": true,
+        "menuOptions": true,
+        "menuUpdate": true,
+        "multiFrameMenu": true,
+        "backgroundTab": true,
+        "tabSwitchPreservesDocument": true,
+        "crossTabValues": true,
+        "undefinedSnapshot": true,
+        "undefinedNavigation": true,
+        "sharedCookies": true,
+        "openInTab": true,
+        "download": true,
+        "downloadSaveCanceled": true,
+        "notificationWaits": true,
+        "notification": true,
+        "notificationTag": true,
+        "notificationPreventDefault": true,
+        "notificationUrl": true,
+        "notificationHighlight": true,
+        "clipboardHtml": true,
+        "clipboardText": true,
+        "tabState": true,
+        "tabFavicon": true,
+        "selectedTabColors": true,
+        "inactiveSelectedTabColors": true,
+        "scriptManagerDetails": true,
+        "scriptManagerInlineToggle": true,
+        "scriptManagerCtrlS": true,
+        "navigationCleanup": true,
+        "disableAndReload": true,
+        "enableAndReload": true,
+        "closeTab": true,
+        "closeTabSelectsPrevious": true,
+        "closeTabsDuringRequests": true,
+        "finalDisposal": true
+      },
+      "status": "passed"
+    },
+    {
+      "version": "121.3.70",
+      "environment": {
+        "cefSharpVersion": "121.3.70.0",
+        "platform": "x64"
+      },
+      "checks": {
+        "storageResourcesXhrCookieWebRequest": true,
+        "domAndInfo": true,
+        "iframe": true,
+        "menu": true,
+        "menuOptions": true,
+        "menuUpdate": true,
+        "multiFrameMenu": true,
+        "backgroundTab": true,
+        "tabSwitchPreservesDocument": true,
+        "crossTabValues": true,
+        "undefinedSnapshot": true,
+        "undefinedNavigation": true,
+        "sharedCookies": true,
+        "openInTab": true,
+        "download": true,
+        "downloadSaveCanceled": true,
+        "notificationWaits": true,
+        "notification": true,
+        "notificationTag": true,
+        "notificationPreventDefault": true,
+        "notificationUrl": true,
+        "notificationHighlight": true,
+        "clipboardHtml": true,
+        "clipboardText": true,
+        "tabState": true,
+        "tabFavicon": true,
+        "selectedTabColors": true,
+        "inactiveSelectedTabColors": true,
+        "scriptManagerDetails": true,
+        "scriptManagerInlineToggle": true,
+        "scriptManagerCtrlS": true,
+        "navigationCleanup": true,
+        "disableAndReload": true,
+        "enableAndReload": true,
+        "closeTab": true,
+        "closeTabSelectsPrevious": true,
+        "closeTabsDuringRequests": true,
+        "finalDisposal": true
+      },
+      "status": "passed"
+    }
+  ],
+  "limitations": [
+    "Firefox container selectors are diagnosed and do not select a Chromium context.",
+    "Private-tab creation remains step 18.",
+    "The supported ECMAScript URL-regex subset is explicit; unsupported syntax fails installation."
+  ]
+}

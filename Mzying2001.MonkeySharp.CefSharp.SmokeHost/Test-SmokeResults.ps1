@@ -7,10 +7,10 @@ $sample = @(
         storageMirror = $true; xhr = $true; xhrExtended = $true; notification = $true; tab = $true;
         download = $true; cookie = $true; webRequest = $true; navigation = $true;
         mainFrameLoads = 2; childFrameLoads = 1; contextReleased = 1;
-        compatibility = @{ prepared = $true; frames = $true; spaUrl = $true; download = $true; cookie = $true; webRequest = $true } },
+        compatibility = @{ conditions = $true; prepared = $true; frames = $true; spaUrl = $true; download = $true; cookie = $true; webRequest = $true } },
     @{ type = 'final-disposal'; disposed = $true; platform = 'x64'; cefSharpVersion = '121.3.70.0' }
 )
-foreach ($id in @('prepared', 'frames', 'spaUrl', 'download', 'cookie', 'webRequest')) {
+foreach ($id in @('prepared', 'conditions', 'frames', 'spaUrl', 'download', 'cookie', 'webRequest')) {
     $sample += @{ type = 'compatibility-case'; caseId = $id; success = $true; checks = @{ assertion = $true }; error = $null }
 }
 $sampleJson = ConvertTo-Json -InputObject $sample -Depth 20

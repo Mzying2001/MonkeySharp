@@ -57,6 +57,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
         {
             var results = new Dictionary<string, bool>();
             results["prepared"] = await RunCaseAsync("prepared", PreparedAsync);
+            results["conditions"] = await RunCaseAsync("conditions", ConditionsAsync);
             results["frames"] = await RunCaseAsync("frames", FramesAsync);
             results["spaUrl"] = await RunCaseAsync("spaUrl", SpaAsync);
             results["download"] = await RunCaseAsync("download", DownloadAsync);
@@ -100,6 +101,24 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             var child = await WaitResultAsync("globalThis.__preparedResult || null", FindFrame("/compat/prepared-frame"));
             Check("frameResources", child.GetProperty("length").GetInt32() == 600003 && child.GetProperty("shared").GetInt32() == 2);
             Check("frameStorageSnapshot", child.GetProperty("storageLength").GetInt32() == 600000);
+        }
+
+        private async Task ConditionsAsync()
+        {
+            await NavigateAsync("/compat/conditions");
+            await WaitAsync(async () => (await ReadAsync("document.documentElement.dataset.normalCondition === 'ran' && document.documentElement.dataset.matchCondition === 'ran'"))?.GetBoolean() == true);
+            Check("normalContext", true);
+            Check("privateContextRejected", (await ReadAsync("document.documentElement.dataset.privateCondition === undefined")).Value.GetBoolean());
+            Check("manualDoesNotAutoRun", (await ReadAsync("document.documentElement.dataset.manualCondition === undefined")).Value.GetBoolean());
+            var frame = FindFrame("/compat/conditions");
+            var entry = (await _host.Engine.GetContextMenuEntriesAsync(frame, CancellationToken.None)).Single(value => value.Title == "Manual metadata condition");
+            var plan = await _host.Engine.ProcessContextMenuAsync(frame, entry.ScriptKey, CancellationToken.None);
+            await _host.ExecuteAsync(frame, Mzying2001.MonkeySharp.Core.Bridge.BridgeScriptBuilder.BuildInjection(plan), CancellationToken.None);
+            await WaitAsync(async () => (await ReadAsync("document.documentElement.dataset.manualCondition === 'ran'"))?.GetBoolean() == true);
+            Check("manualIgnoresIncludeExclude", true);
+            await NavigateAsync("/compat/conditions-blocked");
+            await WaitAsync(async () => (await ReadAsync("document.documentElement.dataset.normalCondition === 'ran'"))?.GetBoolean() == true);
+            Check("exclusion", (await ReadAsync("document.documentElement.dataset.matchCondition === undefined")).Value.GetBoolean());
         }
 
         private void Lifecycle(object sender, DocumentLifecycleEventArgs args)

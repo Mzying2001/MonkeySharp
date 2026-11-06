@@ -1,0 +1,107 @@
+[
+  {
+    "id": "include",
+    "url": "http://127.0.0.1:__PORT__/allowed",
+    "expected": true
+  },
+  {
+    "id": "include-case",
+    "url": "http://127.0.0.1:__PORT__/ALLOWED",
+    "expected": true
+  },
+  {
+    "id": "exclude",
+    "url": "http://127.0.0.1:__PORT__/allowed/excluded",
+    "expected": false
+  },
+  {
+    "id": "regex-case",
+    "url": "http://127.0.0.1:__PORT__/regex/Mixed",
+    "expected": true
+  },
+  {
+    "id": "regex-case-lower",
+    "url": "http://127.0.0.1:__PORT__/regex/mixed",
+    "expected": true
+  },
+  {
+    "id": "regex-hash",
+    "url": "http://127.0.0.1:__PORT__/regex/Mixed#hash",
+    "expected": true
+  },
+  {
+    "id": "question-query",
+    "url": "http://127.0.0.1:__PORT__/literal?query=one",
+    "expected": true
+  },
+  {
+    "id": "question-literal",
+    "url": "http://127.0.0.1:__PORT__/literalXquery=one",
+    "expected": false
+  },
+  {
+    "id": "match-query",
+    "url": "http://127.0.0.1:__PORT__/match?value=one#hash",
+    "expected": true
+  },
+  {
+    "id": "match-query-case",
+    "url": "http://127.0.0.1:__PORT__/MATCH?value=one",
+    "expected": false
+  },
+  {
+    "id": "http-star",
+    "url": "http://127.0.0.1:__PORT__/Scheme",
+    "expected": true
+  },
+  {
+    "id": "host-escape",
+    "url": "http://127.0.0.1:__PORT__/?http://sub.example.test/host",
+    "expected": false
+  },
+  {
+    "id": "authority-escape",
+    "url": "http://127.0.0.1:__PORT__/?http://127.0.0.1:__PORT__/allowed",
+    "expected": false
+  },
+  {
+    "id": "ipv6",
+    "url": "http://[::1]:__IPV6_PORT__/ipv6",
+    "expected": true
+  },
+  {
+    "id": "encoded-path-query",
+    "url": "http://127.0.0.1:__PORT__/encoded/%41?%61=one",
+    "expected": true
+  },
+  {
+    "id": "unescaped-path-query",
+    "url": "http://127.0.0.1:__PORT__/encoded/A?a=one",
+    "expected": false
+  },
+  {
+    "id": "idn-host",
+    "url": "http://xn--fsqu00a.xn--0zwm56d:__PORT__/idn",
+    "expected": false
+  },
+  {
+    "id": "host-case",
+    "url": "http://XN--FSQU00A.XN--0ZWM56D:__PORT__/idn",
+    "expected": false
+  },
+  {
+    "id": "wildcard-port",
+    "url": "http://127.0.0.1:__PORT__/wild-port",
+    "expected": true
+  },
+  {
+    "id": "punycode-host",
+    "url": "http://xn--fsqu00a.xn--0zwm56d:__PORT__/puny",
+    "expected": true
+  },
+  {
+    "id": "punycode-host-case",
+    "url": "http://XN--FSQU00A.XN--0ZWM56D:__PORT__/puny",
+    "expected": true
+  }
+]

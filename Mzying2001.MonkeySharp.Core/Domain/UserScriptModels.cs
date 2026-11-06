@@ -238,7 +238,7 @@ namespace Mzying2001.MonkeySharp.Core.Domain
             UserScriptRunAt runAt,
             GrantDeclarationState grantDeclarationState,
             bool noFrames,
-            string runIn,
+            IEnumerable<string> runIn,
             string injectInto,
             string sandbox,
             bool unwrap,
@@ -275,7 +275,7 @@ namespace Mzying2001.MonkeySharp.Core.Domain
             RunAt = runAt;
             GrantDeclarationState = grantDeclarationState;
             NoFrames = noFrames;
-            RunIn = runIn;
+            RunIn = ReadOnlyList(runIn);
             InjectInto = injectInto;
             Sandbox = sandbox;
             Unwrap = unwrap;
@@ -352,7 +352,7 @@ namespace Mzying2001.MonkeySharp.Core.Domain
         public bool NoFrames { get; }
 
         /// <summary>Gets the declared execution environment.</summary>
-        public string RunIn { get; }
+        public IReadOnlyList<string> RunIn { get; }
 
         /// <summary>Gets the declared JavaScript world into which the script should be injected.</summary>
         public string InjectInto { get; }

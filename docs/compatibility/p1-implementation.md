@@ -7,7 +7,7 @@ Date: 2026-11-07. Work proceeds through steps 7–14, with one validated commit 
 | 7. Installation preparation | Complete | [Prepared revisions matrix](evidence/prepared-revisions-p1.json), [Tampermonkey 5.5.1/MV3 reference](evidence/tampermonkey-5.5.1-prepared-content.json) |
 | 8. Atomic storage snapshot and sequence | Complete | [Storage preparation matrix](evidence/atomic-storage-p1.json) |
 | 9. Synchronous storage and listeners | Complete | [Storage timing reference](evidence/tampermonkey-5.5.1-storage-timing.json), [Mirror validation](evidence/storage-mirror-p1.json) |
-| 10. Matching and metadata conditions | Pending | — |
+| 10. Matching and metadata conditions | Complete | [URL reference](evidence/tampermonkey-5.5.1-matching-conditions.json), [Execution conditions matrix](evidence/execution-conditions-p1.json) |
 | 11. Execution worlds and lifecycle | Pending | — |
 | 12. Authorization prompts | Pending | — |
 | 13. XHR and binary downloads | Pending | — |
@@ -44,3 +44,15 @@ The original timing fixture was run against unmodified Tampermonkey 5.5.1/MV3 an
 Listener registration/removal takes local effect immediately, including writes made before asynchronous registration finishes. Callback reentrancy preserves commit order, and callback exceptions do not stop other listeners. Authenticated execution-end notifications clear state; native detach sends document-scoped cleanup before removing the bridge, and stale document IDs cannot revoke another document's execution.
 
 Validation: 248 Core + 43 adapter + 40 Demo tests at 84/121 x64; 103 JS tests. New coverage includes the original reference fixture, consecutive write failures interleaved with a remote write, callback reentrancy/exceptions, registration/removal races, replay of lost remote notifications and execution/document cleanup. All six SmokeHost/CDP combinations and 84/121 x64 WPF passed. The real frame fixture asserts that the local undefined-value listener fires before the modern setter returns; existing cross-frame/tab remote flags and navigation persistence continue to pass.
+
+## Step 10
+
+Prepared revisions now hold immutable URL/context rules. Matching reuses metadata-lifetime caches instead of recompiling on every frame or accumulating an unbounded string-key regex cache. The fixed TM 5.5.1/MV3 probe covers 21 URLs: include/regex case folding, literal question marks, bounded scheme/host wildcards, exclusions, query/hash handling, escaped unreserved characters, explicit/wildcard ports, IPv6 and IDN hosts. `@match` paths remain case-sensitive. Browser-serialized percent escapes are preserved while dot segments are normalized.
+
+The probe found that Unicode host text in `@match` does not trigger injection, while Punycode rules do. Declarations are retained with `MSM084_UNSUPPORTED_IDN_MATCH`; the matcher preserves that target behavior and tells authors to use Punycode. The former tests asserting Unicode-pattern normalization were corrected. Independent probes confirm no automatic injection for missing selectors or `<all_urls>`; MonkeySharp explicitly diagnoses the latter during installation.
+
+URL regexes accept the documented ECMAScript-compatible subset. Unsupported flags, lookbehind/named groups, backreferences, Unicode-property escapes, class subtraction and .NET-only constructs fail installation. A 100 ms timeout rejects the script even when the timed-out rule is an exclusion, records `MSR214_URL_RULE_TIMEOUT` and allows other scripts to proceed. Context-menu selection ignores include/exclude while retaining explicit match/exclude-match, noframes and privacy/trust checks, following the [documented manual-trigger contract](https://www.tampermonkey.net/documentation.php?locale=en&q=run_at).
+
+Repeatable `@run-in` selectors use OR semantics and the real host privacy context for both automatic/manual execution. Unknown context cannot satisfy a single normal/private restriction; both supported selectors cover either context. Unknown syntax is an installation error; container selectors are diagnosed and unavailable rather than executed in another context. Demo details reflect implemented normal/private filtering. Private-tab creation remains step 18, outside this change.
+
+Validation: 273 Core + 43 adapter + 40 Demo tests at 84/121 x64, 103 JS tests, seven browser compatibility cases in all six SmokeHost/CDP combinations, and 84/121 x64 WPF. The new real-Chromium case proves normal-context execution, private-condition rejection, include/exclude behavior and actual DOM effects of an explicitly selected context-menu script. Core tests compare the prepared rules directly against the complete reference URL matrix and cover timeout isolation, privacy unions/unknown contexts, diagnostics, IPv6/port canonicalization and immutable rule reuse.

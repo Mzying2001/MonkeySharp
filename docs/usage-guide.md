@@ -101,7 +101,7 @@ The header begins with `// ==UserScript==` and ends with `// ==/UserScript==`. P
 | `@description`, `@author`, `@license`, `@copyright` | Descriptive strings. `@name:locale` and `@description:locale` preserve localized variants. |
 | `@icon`, `@iconURL`, `@icon64`, `@icon64URL` | Icon URLs. URL-suffixed forms take precedence over their respective short forms; the Demo prefers the 64-pixel icon. |
 | `@match pattern` | Repeatable positive WebExtension-style URL patterns. At least one matching `@match` or `@include` is needed for execution. |
-| `@include pattern` | Repeatable URL globs or slash-delimited .NET regular expressions, for example `/^https:\/\/example\.com\//`. Regex evaluation has a 100 ms limit. |
+| `@include pattern` | Repeatable case-insensitive URL globs or `/expression/` rules from the supported ECMAScript subset. Scheme/host wildcards are bounded; `?` is literal. Evaluation has a 100 ms limit. |
 | `@exclude`, `@exclude-match` | Negative glob/regex rules and negative match patterns respectively. Any exclusion overrides positive matches. Invalid match patterns and malformed regexes are errors. |
 | `@run-at value` | `document-start`, `document-body`, `document-end`, `document-idle` (default), or `context-menu`. See execution rules below. |
 | `@noframes` | Presence suppresses child-frame execution; no value is needed. Otherwise every matching frame may execute. |
@@ -113,13 +113,20 @@ The header begins with `// ==UserScript==` and ends with `// ==/UserScript==`. P
 | `@downloadURL`, `@updateURL` | Update information. The Demo offers manual check/install; the runtime does not schedule automatic updates. `@downloadURL none` disables checking. |
 | `@antifeature type description` | Disclosure information, including localized `@antifeature:locale` declarations. |
 | `@webRequest JSON` | Validated selector/action metadata, exposed in `GM.info.script.webRequest`. It does **not** activate interception. Register with `GM.webRequest`. |
-| `@run-in`, `@inject-into`, `@sandbox`, `@unwrap` | Preserved execution declarations. They do not create extension worlds, private/container selection, or remove the wrapper. Non-raw sandbox modes and unwrap produce diagnostics. |
+| `@run-in selector` | Repeatable `normal-tabs`/`incognito-tabs` conditions, combined with OR. Restricted execution requires a known host privacy context; declaring both covers either supported context. Container selectors are diagnosed and do not match Chromium contexts. |
+| `@inject-into`, `@sandbox`, `@unwrap` | Execution-world declarations; see the documented adapter limits. |
 
 ### Matching and lifecycle
 
 `@match https://example.com/*` covers that host; `@match https://*.example.com/*` covers the bare `example.com` and all its subdomains, following the [Tampermonkey match contract](https://www.tampermonkey.net/documentation.php?q=include). The same host wildcard rule applies to `@exclude-match`. `*://` and `http*://` cover HTTP/HTTPS; explicit ports are checked. URL hosts are IDN-normalized, fragments are ignored, and query strings participate in matching.
 
-MonkeySharp also accepts `file:///*`, `about:blank`, and `<all_urls>` (HTTP, HTTPS, and file, not about:blank), subject to pages the application actually exposes. Tampermonkey's documented match syntax does not support `<all_urls>`. Include/exclude globs match the whole normalized URL case-sensitively, with `*` and `?`; they do not implement Tampermonkey's host-aware include heuristics. Prefer `@match` when selecting a host. Metadata regexes use .NET syntax and `/expression/` delimiters, without JavaScript literal flags such as `/i`.
+`file:///*` and the explicit MonkeySharp `about:blank` pattern remain available for exposed documents. `<all_urls>` is rejected, matching the pinned manager's lack of automatic injection for that declaration. No positive selector means no automatic injection. Include/exclude globs and `/expression/` rules ignore case and fragments; `?` is literal, queries participate, and scheme/host `*` cannot consume separators outside that component. Escaped unreserved path/query characters are preserved from browser hrefs instead of being silently decoded by `System.Uri`.
+
+URL regexes support a bounded ECMAScript-compatible subset: literals, classes, groups/noncapturing groups, lookahead, anchors and ordinary quantifiers. Literal flags, lookbehind/named groups, backreferences, Unicode-property escapes, .NET-only constructs and class subtraction are rejected during installation with `MSM021_INVALID_URL_REGEX`. A timeout rejects that script (including a timed-out exclusion) and reports `MSR214_URL_RULE_TIMEOUT`. Rules are compiled into each prepared revision and reused across frames; cache lifetime follows immutable metadata.
+
+`context-menu` ignores include/exclude rules for explicit selection, while match/exclude-match, noframes, run-in and host trust checks still apply. `@run-in` is checked for automatic and manual execution. Configure `CefSharpHostOptions.IsIncognito` from the request contexts your application actually owns; an unknown context cannot satisfy a single privacy restriction. This filtering does not create private tabs or Firefox containers.
+
+Unicode host text in `@match` is retained but does not match normalized browser hosts in the pinned manager. Use Punycode; installation reports `MSM084_UNSUPPORTED_IDN_MATCH` for this ineffective declaration. Punycode rules match canonical IDN browser URLs.
 
 | Stage | MonkeySharp behavior |
 | --- | --- |
@@ -714,3 +721,4 @@ Defaults: ordinary bridge requests/responses are limited to 1 MiB each, resource
 ## Reference sources
 
 MonkeySharp behavior was checked against the [grant catalog](../Mzying2001.MonkeySharp.Core/Compatibility/UserScriptGrantCatalog.cs), [JavaScript facade](../Mzying2001.MonkeySharp.Core/Js/Init.js), [Core API providers](../Mzying2001.MonkeySharp.Core/Apis/), [metadata parser](../Mzying2001.MonkeySharp.Core/Parsing/UserScriptMetadataParser.cs), [runtime info builder](../Mzying2001.MonkeySharp.Core/Runtime/UserScriptEngine.cs), [CefSharp services](../Mzying2001.MonkeySharp.CefSharp/), and [JavaScript contract tests](../Mzying2001.MonkeySharp.Core.Tests/JavaScript/). The [Demo guide](../Mzying2001.MonkeySharp.Demo/README.md) documents its concrete persistence and interaction services. Use these sources when upgrading the runtime or replacing host services.
+

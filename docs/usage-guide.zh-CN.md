@@ -105,7 +105,7 @@
 | `@description`、`@author`、`@license`、`@copyright` | 描述性字符串。`@name:locale` 和 `@description:locale` 保留本地化版本。 |
 | `@icon`、`@iconURL`、`@icon64`、`@icon64URL` | 图标 URL；带 URL 后缀的字段优先于对应短名称，Demo 优先显示 64 像素图标。 |
 | `@match pattern` | 可重复的 WebExtension 风格正向匹配规则。至少需要一个匹配的 `@match` 或 `@include` 才能执行。 |
-| `@include pattern` | 可重复的 URL 通配符或斜杠包围的 .NET 正则表达式，例如 `/^https:\/\/example\.com\//`。正则执行时间限制为 100 毫秒。 |
+| `@include pattern` | 可重复的忽略大小写 URL glob 或受限 ECMAScript `/expression/`；scheme/host 通配符有边界，? 是普通字符。求值限时 100 ms。 |
 | `@exclude`、`@exclude-match` | 分别使用通配符/正则和 match 模式进行排除。任何排除规则都优先于正向规则。非法 match 模式和正则是元数据错误。 |
 | `@run-at value` | `document-start`、`document-body`、`document-end`、`document-idle`（默认）或 `context-menu`，见后文执行说明。 |
 | `@noframes` | 只要存在就禁止子框架执行，无需值；否则每个匹配的框架都可能执行。 |
@@ -117,13 +117,20 @@
 | `@downloadURL`、`@updateURL` | 更新信息。Demo 提供手动检查并安装，运行时不安排自动更新。`@downloadURL none` 禁止检查。 |
 | `@antifeature type description` | 功能披露信息，支持 `@antifeature:locale` 本地化声明。 |
 | `@webRequest JSON` | 校验后的 selector/action 元数据，可通过 `GM.info.script.webRequest` 查看，**不会**激活拦截；请使用 `GM.webRequest` 注册。 |
-| `@run-in`、`@inject-into`、`@sandbox`、`@unwrap` | 保留执行声明，但不会创建扩展隔离世界、选择隐私/容器环境或移除包装函数。非 raw 沙箱和 unwrap 会产生诊断。 |
+| `@run-in selector` | 可重复 normal-tabs/incognito-tabs，按 OR 合并。单一隐私条件要求宿主明确实际上下文；两者同时声明覆盖支持的两种环境。容器选择会诊断且不匹配 Chromium 上下文。 |
+| `@inject-into`、`@sandbox`、`@unwrap` | 执行世界声明，遵循适配器公布的限制。 |
 
 ### 匹配与生命周期
 
 `@match https://example.com/*` 匹配该主机；`@match https://*.example.com/*` 匹配裸域名 `example.com` 及其所有层级的子域名，与 [Tampermonkey 的 match 约定](https://www.tampermonkey.net/documentation.php?q=include)一致。`@exclude-match` 使用相同的主机通配符规则。`*://` 和 `http*://` 匹配 HTTP/HTTPS；显式端口会被检查。主机名会进行 IDN 规范化，URL 片段被忽略，查询字符串参与匹配。
 
-MonkeySharp 还接受 `file:///*`、`about:blank` 和 `<all_urls>`（HTTP、HTTPS、file，不包含 about:blank），实际取决于应用提供的页面。Tampermonkey 的公开 match 语法不支持 `<all_urls>`。include/exclude 通配符针对规范化后的整个 URL 区分大小写匹配，支持 `*` 和 `?`，没有实现 Tampermonkey 基于主机的 include 特殊处理；选择主机时优先使用 @match。元数据正则使用 .NET 语法及 `/expression/` 分隔形式，不接受 `/i` 等 JavaScript 字面量标志。
+仍支持宿主提供的 `file:///*` 和 MonkeySharp 显式扩展 `about:blank`。`<all_urls>` 会被拒绝；固定管理器对照中此声明不产生自动执行。缺少正向选择器也不自动执行。include/exclude 的 glob 和 `/expression/` 忽略大小写及片段，? 是普通字符，query 参与匹配；scheme/host 中的 * 不能跨越对应边界。浏览器 href 中已转义的非保留 path/query 字符会保留，不交给 System.Uri 静默解码。
+
+URL 正则支持有界的 ECMAScript 子集：字面量、字符类、分组/非捕获分组、前瞻、锚点及普通量词。字面量 flags、后瞻/命名分组、反向引用、Unicode 属性转义、.NET 专属构造及字符类相减会在安装时以 MSM021_INVALID_URL_REGEX 拒绝。超时包括排除规则超时，都会以 MSR214_URL_RULE_TIMEOUT 拒绝该脚本。规则编译到准备版本中并跨 frame 复用，缓存随元数据释放。
+
+显式 context-menu 选择忽略 include/exclude，仍保留 match/exclude-match、noframes、run-in 及宿主信任检查。自动和手动执行都会检查 run-in。宿主必须通过 CefSharpHostOptions.IsIncognito 描述其实际拥有的 RequestContext；未知环境不满足单一隐私限制。筛选不创建私密标签页或 Firefox 容器。
+
+固定管理器中，@match 的 Unicode 主机声明被保留但不匹配规范化后的浏览器主机；应使用 Punycode。安装会以 MSM084_UNSUPPORTED_IDN_MATCH 提示该无效声明。Punycode 规则可匹配 IDN 浏览器 URL。
 
 | 执行阶段 | MonkeySharp 行为 |
 | --- | --- |
@@ -738,3 +745,4 @@ window.addEventListener("urlchange", onRoute);
 ## 参考来源
 
 MonkeySharp 行为依据[授权目录](../Mzying2001.MonkeySharp.Core/Compatibility/UserScriptGrantCatalog.cs)、[JavaScript 门面](../Mzying2001.MonkeySharp.Core/Js/Init.js)、[Core API 提供器](../Mzying2001.MonkeySharp.Core/Apis/)、[元数据解析器](../Mzying2001.MonkeySharp.Core/Parsing/UserScriptMetadataParser.cs)、[运行时信息构建](../Mzying2001.MonkeySharp.Core/Runtime/UserScriptEngine.cs)、[CefSharp 服务](../Mzying2001.MonkeySharp.CefSharp/)及 [JavaScript 行为测试](../Mzying2001.MonkeySharp.Core.Tests/JavaScript/)核对。具体持久化及交互服务见 [Demo 指南](../Mzying2001.MonkeySharp.Demo/README.md)。升级运行时或替换宿主服务时，可据此复核。
+

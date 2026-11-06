@@ -79,7 +79,8 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                         .UseDownloadServiceFactory(http => downloads = new SmokeHttpDownloadService(fixture.Port, http))
                         .Configure(new CefSharpHostOptions
                         {
-                            TrustedPageWorld = true
+                            TrustedPageWorld = true,
+                            IsIncognito = context => context != null && context.IsGlobal ? (bool?)false : null
                         })
                         .LogTo(entry => Console.WriteLine("GM.log: " + entry.JsonValue))
                         .Build())
@@ -409,7 +410,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             _timeoutTimer.Stop();
             await _host.DetachAsync(CancellationToken.None).ConfigureAwait(true);
             var success = _initialFixturePassed && _mainFrameLoads >= 2 && _childFrameLoads >= 1 && _contextReleased >= 1 &&
-                !_host.IsAttached && _compatibilityResults != null && _compatibilityResults.Count == 6 && _compatibilityResults.Values.All(value => value);
+                !_host.IsAttached && _compatibilityResults != null && _compatibilityResults.Count == 7 && _compatibilityResults.Values.All(value => value);
             object fixture = null;
             if (!string.IsNullOrEmpty(_initialFixtureJson))
             {

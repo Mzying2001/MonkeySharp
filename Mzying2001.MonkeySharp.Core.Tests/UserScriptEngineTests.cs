@@ -146,13 +146,13 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Fact]
-        public async Task UnsupportedWorldMetadataProducesWarningsButDoesNotChangePageExecution()
+        public async Task UnsupportedInjectMetadataProducesWarningsButDoesNotChangePageExecution()
         {
             var repository = new InMemoryUserScriptRepository();
             await repository.InstallAsync(
                 MetadataAndMatchingTests.Script(
                     "// @name worlds\n// @match https://example.com/*\n// @grant none\n" +
-                    "// @inject-into content\n// @run-in content\n// @run-at document-end"),
+                    "// @inject-into content\n// @run-at document-end"),
                 "test", true, CancellationToken.None);
             using (var engine = new UserScriptEngine(repository))
             {
@@ -164,7 +164,6 @@ namespace Mzying2001.MonkeySharp.Core.Tests
 
                 Assert.Single(plan.Invocations);
                 Assert.Contains(diagnostics, item => item.Code == "MSR210_UNSUPPORTED_INJECT_WORLD");
-                Assert.Contains(diagnostics, item => item.Code == "MSR211_UNSUPPORTED_RUN_IN");
             }
         }
 

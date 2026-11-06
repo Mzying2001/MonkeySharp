@@ -12,6 +12,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Text.RegularExpressions;
 
 namespace Mzying2001.MonkeySharp.Core.Runtime
 {
@@ -45,7 +46,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
             UserScriptEngineOptions options = null)
         {
             _repository = repository ?? throw new ArgumentNullException(nameof(repository));
-            _matcher = matcher ?? new UserScriptMatcher();
+            _matcher = matcher;
             _options = options ?? new UserScriptEngineOptions();
         }
 
@@ -89,6 +90,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
         {
             if (frame == null)
                 throw new ArgumentNullException(nameof(frame));
+            var diagnostics = new List<UserScriptDiagnostic>();
             await _queue.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
@@ -98,7 +100,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                     .Where(item => item.IsEnabled && item.Definition.Metadata != null &&
                         item.Definition.Metadata.RunAt == UserScriptRunAt.ContextMenu &&
                         (frame.IsMainFrame || !item.Definition.Metadata.NoFrames) &&
-                        _matcher.IsMatch(item.Definition.Metadata, frame.Url))
+                        Matches(item, frame, true, diagnostics))
                     .Select(item => new ContextMenuEntry(item.ScriptKey,
                         string.IsNullOrWhiteSpace(item.Definition.Metadata.Name)
                             ? item.ScriptKey.ToString()
@@ -109,6 +111,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
             finally
             {
                 _queue.Release();
+                foreach (var diagnostic in diagnostics) Diagnostic?.Invoke(this, diagnostic);
             }
         }
 
@@ -132,7 +135,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                 var metadata = installation.Definition.Metadata;
                 if (metadata.RunAt != UserScriptRunAt.ContextMenu ||
                     (!frame.IsMainFrame && metadata.NoFrames) ||
-                    !_matcher.IsMatch(metadata, frame.Url))
+                    !Matches(installation, frame, metadata.RunAt == UserScriptRunAt.ContextMenu, diagnostics))
                     return EmptyPlan(frame, UserScriptRunAt.ContextMenu);
                 if (_options.RequireVerifiedBridge &&
                     frame.BridgeIntegrity == BridgeIntegrityGuarantee.Unverified && RequiresBridge(metadata))
@@ -273,7 +276,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                 var metadata = installation.Definition.Metadata;
                 if (!installation.IsEnabled || metadata.RunAt != runAt ||
                     (!frame.IsMainFrame && metadata.NoFrames) ||
-                    !_matcher.IsMatch(metadata, frame.Url))
+                    !Matches(installation, frame, metadata.RunAt == UserScriptRunAt.ContextMenu, diagnostics))
                     continue;
 
                 var onceKey = installation.ScriptKey + ":" + runAt;
@@ -336,16 +339,6 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                         "MSR210_UNSUPPORTED_INJECT_WORLD",
                         DiagnosticSeverity.Warning,
                         "The requested @inject-into world is not available in the CefSharp page world.",
-                        scriptKey: installation.ScriptKey,
-                        documentId: frame.DocumentId,
-                        frameId: frame.FrameId));
-                }
-                if (!string.IsNullOrEmpty(metadata.RunIn))
-                {
-                    diagnostics.Add(new UserScriptDiagnostic(
-                        "MSR211_UNSUPPORTED_RUN_IN",
-                        DiagnosticSeverity.Warning,
-                        "The requested @run-in environment is preserved but not implemented by this host.",
                         scriptKey: installation.ScriptKey,
                         documentId: frame.DocumentId,
                         frameId: frame.FrameId));
@@ -427,6 +420,25 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                 ExecutionEnded?.Invoke(execution);
         }
 
+        private bool Matches(UserScriptInstallation installation, DocumentFrame frame, bool contextMenu, ICollection<UserScriptDiagnostic> diagnostics)
+        {
+            var rules = installation.PreparedRevision.UrlRules;
+            var context = _options.EnvironmentProvider?.Invoke(frame)?.IsIncognito;
+            if (!rules.AllowsEnvironment(context, out var reason))
+            {
+                diagnostics.Add(new UserScriptDiagnostic("MSR211_RUN_IN_UNAVAILABLE", DiagnosticSeverity.Warning, reason,
+                    scriptKey: installation.ScriptKey, documentId: frame.DocumentId, frameId: frame.FrameId));
+                return false;
+            }
+            try { return _matcher != null ? _matcher.IsMatch(installation.Definition.Metadata, frame.Url) : rules.IsMatch(frame.Url, contextMenu); }
+            catch (RegexMatchTimeoutException exception)
+            {
+                diagnostics.Add(new UserScriptDiagnostic("MSR214_URL_RULE_TIMEOUT", DiagnosticSeverity.Error,
+                    "A URL rule exceeded its time limit; execution was rejected.", exception, installation.ScriptKey, frame.DocumentId, frame.FrameId));
+                return false;
+            }
+        }
+
         private ScriptInvocation CreateInvocation(UserScriptInstallation installation, string source, DocumentFrame frame)
         {
             var metadata = installation.Definition.Metadata;
@@ -505,6 +517,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                 {
                     ["sandbox"] = metadata.Sandbox,
                     ["noframes"] = metadata.NoFrames,
+                    ["run-in"] = metadata.RunIn.ToArray(),
                     ["unwrap"] = metadata.Unwrap,
                     ["run_at"] = ToMetadataRunAt(metadata.RunAt)
                 }
