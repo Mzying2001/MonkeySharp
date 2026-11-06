@@ -285,15 +285,28 @@
                     if (notification.event === "menu-command") {
                         const handler = record.menuHandlers.get(data.commandId);
                         if (!handler) return false;
-                        handler();
+                        invokeHostCallback(record, handler, undefined, typeof MouseEvent === "function" ? new MouseEvent("click") : { type: "click" }, "menu");
                         return true;
                     }
-                    if (notification.event === "notification-click" || notification.event === "notification-done") {
-                        const handler = record.notificationHandlers.get(data.notificationId);
-                        if (!handler) return false;
-                        const callback = notification.event === "notification-click" ? handler.onclick : handler.ondone;
-                        if (callback) callback();
-                        if (notification.event === "notification-done") record.notificationHandlers.delete(data.notificationId);
+                    if (notification.event === "notification-click" || notification.event === "notification-done" || notification.event === "notification-error") {
+                        const state = record.notificationHandlers.get(data.clientId);
+                        if (!state || state.terminal) return false;
+                        if (notification.event === "notification-click") {
+                            if (state.clicked) return false;
+                            state.clicked = true;
+                            const event = typeof Event === "function" ? new Event("click", { cancelable: true }) : { defaultPrevented: false, preventDefault() { this.defaultPrevented = true; } };
+                            invokeHostCallback(record, state.details.onclick, state.details, event, "notification onclick");
+                            call(record, "GM.notification", { operation: "click-result", clientId: data.clientId, preventDefault: event.defaultPrevented })
+                                .catch(error => console.error("[MonkeySharp] notification click acknowledgment failed", error));
+                        } else {
+                            state.terminal = true;
+                            record.notificationHandlers.delete(data.clientId);
+                            if (notification.event === "notification-error") state.reject(new Error(data.details || "Notification failed."));
+                            else {
+                                invokeHostCallback(record, state.details.ondone, state.details, undefined, "notification ondone");
+                                state.resolve(Boolean(data.clicked || state.clicked));
+                            }
+                        }
                         return true;
                     }
                     if (notification.event === "tab-closed") {

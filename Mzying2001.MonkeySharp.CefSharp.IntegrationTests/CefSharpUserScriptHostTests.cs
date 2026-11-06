@@ -980,7 +980,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
                 CancellationToken cancellationToken)
                 => Task.FromResult<IMenuRegistration>(new NoopMenuRegistration());
 
-            public INotificationHandle ShowAsync(UserScriptNotificationRequest request, CancellationToken cancellationToken)
+            public INotificationHandle Create(UserScriptNotificationRequest request, CancellationToken cancellationToken)
                 => new NoopNotificationHandle();
 
             public Task SetTextAsync(string text, string mediaType, CancellationToken cancellationToken)
@@ -1030,6 +1030,8 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
 #pragma warning disable CS0067
         private sealed class NoopNotificationHandle : INotificationHandle
         {
+        public void Start() { }
+        public void ResolveClick(bool preventDefault) { }
             public Task Completion { get; } = Task.CompletedTask;
             public event EventHandler Clicked;
             public event EventHandler Closed;

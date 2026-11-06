@@ -780,7 +780,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
 
     internal sealed class SmokeNotificationService : INotificationService
     {
-        public INotificationHandle ShowAsync(UserScriptNotificationRequest request, CancellationToken cancellationToken)
+        public INotificationHandle Create(UserScriptNotificationRequest request, CancellationToken cancellationToken)
         {
             return new SmokeNotificationHandle();
         }
@@ -788,13 +788,11 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
 
     internal sealed class SmokeNotificationHandle : INotificationHandle
     {
+        public void Start() { _ = CompleteAsync(); }
+        public void ResolveClick(bool preventDefault) { }
         private readonly TaskCompletionSource<bool> _completion = new TaskCompletionSource<bool>();
         private int _disposed;
 
-        public SmokeNotificationHandle()
-        {
-            _ = CompleteAsync();
-        }
 
         public Task Completion => _completion.Task;
         public event EventHandler Clicked;

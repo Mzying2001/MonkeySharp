@@ -90,10 +90,12 @@ test("the shared legacy userscript fixture exercises callback and modern facade 
     });
     assert.deepEqual(webRequestRegistrations[0].rules[0].action, { redirect: { from: "/old", to: "/new" } });
     assert.deepEqual(notificationRequests[0], {
+        clientId: notificationRequests[0].clientId, tag: null, url: null,
         title: "Legacy notification title", text: "Legacy notification text",
-        imageUrl: "https://cdn.example.com/notification.png", highlight: false, silent: false, timeout: null
+        imageUrl: "https://cdn.example.com/notification.png", highlight: false, silent: false
     });
     assert.deepEqual(notificationRequests[1], {
+        clientId: notificationRequests[1].clientId, tag: null, url: null,
         title: "Modern notification title", text: "Modern notification text",
         imageUrl: "https://cdn.example.com/modern-notification.png", highlight: true, silent: true, timeout: 250
     });
@@ -121,9 +123,9 @@ test("the shared legacy userscript fixture exercises callback and modern facade 
     assert.equal(state.downloadTimeout.error, "timeout");
     assert.equal(state.downloadAbortError.error, "not_succeeded");
 
-    assert.equal(receive("notification-click", { notificationId: "notification-1" }), true);
-    assert.equal(receive("notification-click", { notificationId: "notification-2" }), true);
-    assert.equal(receive("notification-done", { notificationId: "notification-2" }), true);
+    assert.equal(receive("notification-click", { clientId: notificationRequests[0].clientId }), true);
+    assert.equal(receive("notification-click", { clientId: notificationRequests[1].clientId }), true);
+    assert.equal(receive("notification-done", { clientId: notificationRequests[1].clientId }), true);
     assert.equal(state.notificationClicked, true);
     assert.equal(state.modernNotificationClicked, true);
     assert.equal(state.modernNotificationDone, true);

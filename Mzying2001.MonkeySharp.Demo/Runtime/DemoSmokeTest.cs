@@ -27,6 +27,10 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                 var installation = await runtime.Repository.InstallAsync(source, "application://demo-smoke", true, CancellationToken.None);
                 await runtime.Repository.InstallAsync("// ==UserScript==\n// @name frame-marker\n// @match " + fixture.BaseUrl +
                     "/frame\n// @grant none\n// ==/UserScript==\nwindow.__demoFrame = true;", "application://frame-smoke", true, CancellationToken.None);
+                await runtime.Repository.InstallAsync("// ==UserScript==\n// @name merged-menu\n// @match " + fixture.BaseUrl +
+                    "/page*\n// @match " + fixture.BaseUrl + "/frame\n// @grant GM_registerMenuCommand\n// @grant GM_unregisterMenuCommand\n// @run-at document-end\n// ==/UserScript==\n" +
+                    "if (top.location.search === '?primary') { window.__mergedClicks = 0; const id = GM_registerMenuCommand('Merged command', () => window.__mergedClicks++, {id:'merged',title:'Merged tooltip',autoClose:false}); window.__removeMerged = () => GM_unregisterMenuCommand(id); window.__updateMerged = () => GM_registerMenuCommand('Updated command', () => window.__mergedClicks += 10, {id,title:'Updated tooltip',autoClose:true}); }",
+                    "application://merged-menu-smoke", true, CancellationToken.None);
                 var primary = runtime.MainWindow.NewTab(fixture.BaseUrl + "/page?primary");
                 await WaitAsync(async () => await EvaluateBoolean(primary, "!!(window.__demo && window.__demo.ready)"));
                 await WaitAsync(() => Task.FromResult(string.Equals(primary.IconUrl, fixture.BaseUrl + "/favicon.ico", StringComparison.OrdinalIgnoreCase)));
@@ -36,10 +40,27 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                 await WaitAsync(async () => await EvaluateBoolean(primary,
                     "document.querySelector('iframe').contentWindow.__demoFrame === true"));
                 checks["iframe"] = true;
-                await WaitAsync(() => Task.FromResult(primary.MenuCommands.Count == 1));
-                primary.MenuCommands[0].InvokeCommand.Execute(null);
+                await WaitAsync(() => Task.FromResult(primary.MenuCommands.Count == 2));
+                primary.MenuCommands.Single(item => item.Label.StartsWith("Demo smoke menu")).InvokeCommand.Execute(null);
                 await WaitAsync(async () => await EvaluateBoolean(primary, "window.__demo.menu === true"));
                 checks["menu"] = true;
+                var merged = primary.MenuCommands.Single(item => item.Label.StartsWith("Merged command"));
+                checks["menuOptions"] = merged.Title == "Merged tooltip" && merged.StaysOpenOnClick;
+                merged.InvokeCommand.Execute(null);
+                await WaitAsync(async () => await EvaluateBoolean(primary, "window.__mergedClicks === 1 && document.querySelector('iframe').contentWindow.__mergedClicks === 1"));
+                await Evaluate(primary, "window.__updateMerged()");
+                await WaitAsync(() => Task.FromResult(primary.MenuCommands.Count == 3));
+                var updatedMenu = primary.MenuCommands.Single(item => item.Label.StartsWith("Updated command"));
+                checks["menuUpdate"] = updatedMenu.Title == "Updated tooltip" && !updatedMenu.StaysOpenOnClick;
+                updatedMenu.InvokeCommand.Execute(null);
+                await WaitAsync(async () => await EvaluateBoolean(primary, "window.__mergedClicks === 11"));
+                await Evaluate(primary, "window.__removeMerged()");
+                await Task.Delay(100);
+                merged.InvokeCommand.Execute(null);
+                await WaitAsync(async () => await EvaluateBoolean(primary, "window.__mergedClicks === 11 && document.querySelector('iframe').contentWindow.__mergedClicks === 2"));
+                await Evaluate(primary, "document.querySelector('iframe').src = '/child'");
+                await WaitAsync(() => Task.FromResult(primary.MenuCommands.Count == 1));
+                checks["multiFrameMenu"] = true;
                 var secondary = runtime.MainWindow.NewTab(fixture.BaseUrl + "/page?secondary", false, primary, true, true);
                 await WaitAsync(async () => await EvaluateBoolean(secondary, "!!(window.__demo && window.__demo.ready)"));
                 checks["backgroundTab"] = runtime.MainWindow.SelectedTab == primary;
@@ -68,10 +89,45 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                     Console.WriteLine(JsonSerializer.Serialize(new { type = "download-file-evidence", sha256 = BitConverter.ToString(hash.ComputeHash(File.ReadAllBytes(downloaded[0]))).Replace("-", "").ToLowerInvariant(), bytes = new FileInfo(downloaded[0]).Length }));
                 await WaitAsync(() => Task.FromResult(Application.Current.Windows.Cast<Window>().Any(window => window.Title == "Demo smoke notification")));
                 var notification = Application.Current.Windows.Cast<Window>().First(window => window.Title == "Demo smoke notification");
+                checks["notificationWaits"] = await EvaluateBoolean(primary, "typeof window.__demo.notificationResolved === 'undefined'");
                 var button = ((StackPanel)notification.Content).Children.OfType<Button>().First();
                 button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-                await WaitAsync(async () => await EvaluateBoolean(primary, "window.__demo.notificationClick && window.__demo.notificationDone"));
+                await WaitAsync(async () => await EvaluateBoolean(primary, "window.__demo.notificationClick && window.__demo.notificationDone && window.__demo.notificationResolved === true"));
                 checks["notification"] = true;
+                var tabCount = runtime.MainWindow.Tabs.Count;
+                await Evaluate(primary, "window.__testTaggedNotification()");
+                await WaitAsync(() => Task.FromResult(Application.Current.Windows.Cast<Window>().Any(window => window.Title == "Tagged replacement")));
+                checks["notificationTag"] = !Application.Current.Windows.Cast<Window>().Any(window => window.Title == "Tagged original");
+                var tagged = Application.Current.Windows.Cast<Window>().Single(window => window.Title == "Tagged replacement");
+                ((StackPanel)tagged.Content).Children.OfType<Button>().First().RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                await WaitAsync(async () => await EvaluateBoolean(primary, "window.__demo.tagged === true && window.__demo.taggedOld === false"));
+                checks["notificationPreventDefault"] = runtime.MainWindow.Tabs.Count == tabCount;
+                await Evaluate(primary, "window.__testUrlNotification()");
+                await WaitAsync(() => Task.FromResult(Application.Current.Windows.Cast<Window>().Any(window => window.Title == "URL notification")));
+                var urlNotification = Application.Current.Windows.Cast<Window>().Single(window => window.Title == "URL notification");
+                ((StackPanel)urlNotification.Content).Children.OfType<Button>().First().RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                await WaitAsync(async () => await EvaluateBoolean(primary, "window.__demo.urlNotification === true"));
+                checks["notificationUrl"] = runtime.MainWindow.Tabs.Count == tabCount + 1;
+                runtime.MainWindow.CloseTab(runtime.MainWindow.Tabs.Last());
+                runtime.MainWindow.SelectedTab = secondary;
+                await Evaluate(primary, "window.__testHighlightNotification()");
+                await WaitAsync(async () => await EvaluateBoolean(primary, "window.__demo.highlightNotification === false"));
+                checks["notificationHighlight"] = runtime.MainWindow.SelectedTab == primary;
+                var savedClipboard = Clipboard.GetDataObject();
+                try
+                {
+                    await Evaluate(primary, "window.__testClipboard()");
+                    await WaitAsync(async () => await EvaluateBoolean(primary, "window.__demo.clipboardWritten === true"));
+                    var html = Clipboard.GetData(DataFormats.Html) as string;
+                    var bytes = System.Text.Encoding.UTF8.GetBytes(html ?? "");
+                    var start = int.Parse(System.Text.RegularExpressions.Regex.Match(html ?? "", "StartFragment:(\\d+)").Groups[1].Value);
+                    var end = int.Parse(System.Text.RegularExpressions.Regex.Match(html ?? "", "EndFragment:(\\d+)").Groups[1].Value);
+                    checks["clipboardHtml"] = System.Text.Encoding.UTF8.GetString(bytes, start, end - start) == "<b>Clipboard \u4f60\u597d</b>";
+                    await Evaluate(primary, "window.__testTextClipboard()");
+                    await WaitAsync(async () => await EvaluateBoolean(primary, "window.__demo.clipboardText === true"));
+                    checks["clipboardText"] = Clipboard.GetText() == "plain clipboard";
+                }
+                finally { if (savedClipboard != null) Clipboard.SetDataObject(savedClipboard, true); else Clipboard.Clear(); }
                 checks["tabState"] = await EvaluateBoolean(primary, "window.__demo.tabState");
                 var mainWindow = Application.Current.MainWindow;
                 var selector = (ListBox)mainWindow.FindName("BrowserTabs");
@@ -244,7 +300,8 @@ sessionStorage.setItem('runs', String(window.__demo.runs));
     window.__demoSetShared = function () { GM.setValue('shared', undefined); };
     if (location.search === '?primary') {
         await GM.registerMenuCommand('Demo smoke menu', function () { result.menu = true; });
-        await GM.notification({ title: 'Demo smoke notification', text: 'Click to complete lifecycle test', onclick: function () { result.notificationClick = true; }, ondone: function () { result.notificationDone = true; } });
+        const notification = GM.notification({ silent: true, title: 'Demo smoke notification', text: 'Click to complete lifecycle test', onclick: function () { result.notificationClick = true; }, ondone: function () { result.notificationDone = true; } });
+        notification.then(function (clicked) { result.notificationResolved = clicked; });
         const child = GM_openInTab('__BASE__/child', { active: false, insert: true, setParent: true });
         setTimeout(function () { child.close(); setTimeout(function () { result.tabClosed = child.closed; }, 500); }, 500);
         const download = GM.download({ url: '__BASE__/download', name: 'demo-smoke.txt' });
@@ -253,6 +310,22 @@ sessionStorage.setItem('runs', String(window.__demo.runs));
         window.__testSaveCancel = function () {
             GM.download({ url: '__BASE__/save-cancel', name: 'canceled.txt', saveAs: true })
                 .then(function () { result.saveCanceled = false; }, function (error) { result.saveCanceled = error.error === 'not_succeeded'; });
+        };
+        window.__testTaggedNotification = function () {
+            GM.notification({text:'old',title:'Tagged original',tag:'replace',silent:true}).then(value => result.taggedOld = value);
+            GM.notification({text:'new',title:'Tagged replacement',tag:'replace',silent:true,url:'__BASE__/child',onclick:event => event.preventDefault()}).then(value => result.tagged = value);
+        };
+        window.__testClipboard = function () {
+            GM.setClipboard('<b>Clipboard \u4f60\u597d</b>', {type:'html',mimetype:'text/html'}, function () { result.clipboardWritten = true; });
+        };
+        window.__testUrlNotification = function () {
+            GM.notification({text:'url',title:'URL notification',silent:true,url:'__BASE__/child'}).then(value => result.urlNotification = value);
+        };
+        window.__testHighlightNotification = function () {
+            GM.notification({highlight:true,silent:true}).then(value => result.highlightNotification = value);
+        };
+        window.__testTextClipboard = function () {
+            GM_setClipboard('plain clipboard', 'text', function () { result.clipboardText = true; });
         };
     }
     result.ready = true;

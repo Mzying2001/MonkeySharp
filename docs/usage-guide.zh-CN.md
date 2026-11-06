@@ -184,9 +184,9 @@ none 按 5.5.1 实测使用独立对象 receiver。生产执行仍在可信页�
 | `GM.getResourceText` | `GM_getResourceText` | `Promise<string>` | 资源提供器 |
 | `GM.getResourceUrl` | `GM_getResourceURL` | `Promise<string>` | 资源提供器 |
 | `GM.xmlHttpRequest` | `GM_xmlhttpRequest` | 可 abort 的 `Promise<Response>` | CefSharp 默认服务 |
-| `GM.registerMenuCommand` | `GM_registerMenuCommand` | `Promise<number>` | 菜单服务 |
-| `GM.unregisterMenuCommand` | `GM_unregisterMenuCommand` | `Promise<boolean>` | 菜单服务 |
-| `GM.notification` | `GM_notification` | `Promise<{id: string}>` | 通知服务 |
+| `GM.registerMenuCommand` | `GM_registerMenuCommand` | `Promise<ID>` | 菜单服务 |
+| `GM.unregisterMenuCommand` | `GM_unregisterMenuCommand` | `Promise<undefined>` | 菜单服务 |
+| `GM.notification` | `GM_notification` | `Promise<boolean>` | 通知服务 |
 | `GM.setClipboard` | `GM_setClipboard` | `Promise<undefined>` | 剪贴板服务 |
 | `GM.openInTab` | `GM_openInTab` | 立即返回标签页句柄 | 标签页服务 |
 | `GM.getTab` | `GM_getTab` | `Promise<object>` | 标签页状态服务 |
@@ -445,67 +445,45 @@ XHR 主体分块传输；默认宿主不设置整体请求/响应字节上限，
 
 ## 菜单、通知与剪贴板
 
-### GM.registerMenuCommand(name, callback, accessKey?)
+### GM.registerMenuCommand(name, callback, options_or_accessKey?)
 
-需要对应授权和菜单服务。name 是非空字符串；callback 在选中时**不带参数**调用；accessKey 是可选字符串。现代返回注册完成后的 `Promise<number>`。GM_registerMenuCommand 立即返回数字命令 ID，之后的失败记录日志。ID 属于当前执行实例，执行结束时释放注册。Demo 在脚本菜单中展示命令，并支持 Alt+accessKey。
+需要菜单授权及服务。第三参数可以是访问键字符串，或 `{id, accessKey, title, autoClose}`。id 是正整数或非空字符串，用于更新当前执行的已有注册，不存在则创建；省略时分配数字 ID。现代返回注册后的 `Promise<number|string>`，旧版立即返回 ID。更新和注销按调用顺序排队。回调收到渲染器创建的 MouseEvent（type 为 click），不包含原生鼠标坐标或键盘修饰键；回调异常单独报告。
+
+Demo 将同一安装、同一标签页中 name/title/accessKey 相同的条目合并，点击时调用所有已订阅 frame 的回调。title 显示为提示，autoClose:false 保持菜单打开；合并项有任一订阅要求保持时即保持。注销或结束一个 frame 仅移除该 frame 的订阅，执行结束清理其命令。固定的 5.5.1 契约不支持后续版本的 clickedFrame 选项，会明确拒绝。
 
 ### GM.unregisterMenuCommand(commandId)
 
-需要自己的授权及同一菜单服务。commandId 是正整数。现代返回 `Promise<boolean>`，表示宿主是否移除；旧版 GM_unregisterMenuCommand 返回本地移除布尔值，并异步请求宿主移除。未知 ID 返回 false。
-
-**与 Tampermonkey 的差异：** 不支持[官方菜单 API](https://www.tampermonkey.net/documentation.php?q=GM_registerMenuCommand)中的 options 对象（id、title、autoClose、clickedFrame 等）、按 ID 更新、跨框架合并，也不会向回调传 MouseEvent/KeyboardEvent。
+接受数字或字符串 ID。现代兑现 undefined，旧版立即返回 undefined；未知 ID 无副作用，不返回自有移除布尔值。现代菜单家族同时提供注册及注销，旧版全局仍按准确声明暴露。
 
 ```javascript
-// @grant GM.registerMenuCommand
-// @grant GM.unregisterMenuCommand
-(async function () {
-    const id = await GM.registerMenuCommand("Remove this command", () => {
-        GM.unregisterMenuCommand(id).catch(console.error);
-    }, "r");
-})().catch(console.error);
+const id = await GM.registerMenuCommand('操作', event => console.log(event.type), {title:'执行操作',autoClose:false});
+await GM.registerMenuCommand('更新操作', () => {}, {id});
+await GM.unregisterMenuCommand(id);
 ```
 
-### GM.notification(details)
+### GM.notification(details, ondone?)
 
-需要对应授权和通知服务。接受对象或文本字符串（等同于 {text}）。现代返回通知注册完成后的 `Promise<{id: string}>`，**不是等待关闭**。回调必须放在对象中。
+两种入口均接受 `(details, ondone?)` 或 `(text, title?, image?, onclick?)`，也支持 `(text, ondone)`。现代返回等待交互结束的 `Promise<boolean>`：点击为 true，关闭、超时、替换或仅高亮完成为 false；旧版返回 undefined。ondone 先于 Promise 结算。宿主显示前已登记回调，重复点击和关闭不能重复结算。
 
-| 字段 | 类型 / 默认值 | 含义 |
-| --- | --- | --- |
-| `text` | 字符串 | 除非 highlight:true，否则必需。 |
-| `title` | 可选字符串 | 默认使用脚本名称。 |
-| `image`、`imageUrl` | 可选 URL 字符串 | imageUrl 优先，显示和获取由服务决定。 |
-| `highlight`、`silent` | 布尔值，false | 将请求转交宿主，实际效果取决于实现。 |
-| `timeout` | 可选整数，毫秒 | 传给通知服务，宿主决定计时支持方式。 |
-| `onclick`、`ondone` | 可选函数 | 在宿主点击/完成事件上无参数调用。 |
+选项包括 text（除非 highlight 否则必需）、title（默认脚本名）、image/imageUrl、tag、url、highlight、silent、timeout（非负整数毫秒）、onclick 和 ondone。相同非空 tag 替换该安装在当前宿主中的通知。onclick 收到可取消的 click Event，同步调用 event.preventDefault() 阻止默认 URL 跳转。回调异常单独报告，仍确认点击；宿主等待确认后再执行默认动作，五秒没有确认时按默认动作处理。URL 必须是经过宿主授权的绝对 HTTP(S) 地址。
 
-旧版重载为 GM_notification(details, ondone?)、GM_notification(text, title?, image?, onclick?) 和 GM_notification(text, ondone)，都返回 undefined；投递失败记录日志。现代方法不实现独立第二参数 ondone 或四参数重载，也不暴露移除/更新方法。
-
-Demo 在正数 timeout 到期或用户关闭/点击后关闭通知。它没有为 highlight 或 silent 提供单独实现，传入这些字段不保证系统高亮或声音策略。
-
-**与 Tampermonkey 的差异：** 不提供 tag 替换、url 跳转或 Tampermonkey 的通知句柄/Promise 完成约定。Demo 使用 WPF 窗口，而非扩展或系统通知界面，参见[官方通知 API](https://www.tampermonkey.net/documentation.php?q=GM_notification)。
+Demo 使用 WPF 所属窗口，highlight 选择并激活来源标签；无 text 的高亮直接完成。silent 禁止声音，正数 timeout 到期关闭。普通 URL 点击在回调后打开标签。无 url/tag 的通知在文档结束时关闭；带 url/tag 的通知保留到完成或宿主释放，旧文档回调停止，默认点击动作仍可执行。tag 限于同一宿主中的脚本安装，不是全局系统通知服务。
 
 ```javascript
-// @grant GM.notification
-(async function () {
-    const registration = await GM.notification({
-        title: "MonkeySharp", text: "Operation finished", timeout: 5000,
-        onclick: () => console.log("clicked"), ondone: () => console.log("closed")
-    });
-    console.log("Registered:", registration.id);
-})().catch(console.error);
+const clicked = await GM.notification({text:'已就绪',tag:'status',silent:true,url:'https://example.com/',
+    onclick:event => event.preventDefault(), ondone:() => console.log('已关闭')});
+console.log('点击:', clicked);
 ```
 
-### GM.setClipboard(text, type?) / GM_setClipboard(text, type?)
+### GM.setClipboard(data, info?, callback?) / GM_setClipboard(data, info?, callback?)
 
-需要对应授权及剪贴板服务。text 必须是字符串，type 是可选 MIME 字符串，默认 text/plain；HTML 使用 text/html。现代返回宿主写入后的 `Promise<undefined>`，旧版返回 undefined，失败记录日志。Demo 在 UI 线程写入 Unicode 文本或 CF_HTML，并在剪贴板被占用时短暂重试。
+data 必须是字符串。info 接受 text、html、text/plain、text/html，或 `{type:'text'|'html', mimetype:'text/plain'|'text/html'}`，mimetype 优先，默认文本；其他格式在写入前拒绝。可选 callback 只在实际写入成功后调用。现代在写入和回调后兑现 undefined，旧版立即返回 undefined。回调异常不会撤销写入或使现代调用拒绝。
 
-**与 Tampermonkey 的差异：** 不支持 info 对象或完成回调重载；使用 MIME 字符串，不依赖官方 API 的 `"text"` 或 `"html"` 短名称。其他字符串仅透传，Core 不规范化，参见[官方剪贴板 API](https://www.tampermonkey.net/documentation.php?q=GM_setClipboard)。
+Demo 在 STA dispatcher 写入 Unicode 文本和 HTML 的 CF_HTML 格式，偏移按 UTF-8 字节计算，保留占用重试。HTML 保持原格式，不静默降为纯文本。真实 E2E 检查两种格式，并在检查后恢复原剪贴板。
 
 ```javascript
-// @grant GM.setClipboard
-(async function () {
-    await GM.setClipboard("Copied by MonkeySharp", "text/plain");
-})().catch(console.error);
+await GM.setClipboard('<b>你好</b>', {type:'html',mimetype:'text/html'});
+GM_setClipboard('已复制', 'text', () => console.log('已写入'));
 ```
 
 <a id="tabs-and-tab-state"></a>
@@ -724,7 +702,7 @@ window.addEventListener("urlchange", onRoute);
 | 存储 | 使用支持的存储值，await 现代写入以观察失败，并考虑镜像限额及提交后通知的时序。 |
 | 资源 | 使用 `GM.getResourceUrl` 或 `GM.getResourceUrl`，声明任一对应 grant，按 data URL 处理，并确认宿主资源提供器可用。 |
 | XHR | 检查代理/分区/Blob URL 等不支持项，适配进度/XML 行为，显式检查 HTTP 状态。 |
-| 菜单 / 剪贴板 | 使用字符串访问键及 MIME 字符串，移除不支持的选项对象/回调重载。 |
+| 菜单 / 剪贴板 | 菜单选项及 ID 更新、通知交互完成、文本/HTML 剪贴板 info 与回调重载。 |
 | 通知 | 只使用支持字段；现代 Promise 在注册后兑现，而非关闭后。 |
 | 标签页 | 两种形式都立即返回句柄；通过 close/onclose 操作，不支持隐私模式和数字插入位置。 |
 | 下载 | 立即返回带 abort 的完成 Promise；Demo 共用浏览器网络上下文，文件提交后才完成。 |

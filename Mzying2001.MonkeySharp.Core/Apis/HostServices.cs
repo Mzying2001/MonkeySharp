@@ -299,13 +299,16 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         /// <param name="scriptKey">The script installation that owns the command.</param>
         /// <param name="name">The command label.</param>
         /// <param name="accessKey">The optional keyboard access key.</param>
-        public MenuCommandRequest(ScriptKey scriptKey, string name, string accessKey)
+        /// <param name="title">The tooltip.</param>
+        /// <param name="autoClose">Whether the popup closes on selection.</param>
+        public MenuCommandRequest(ScriptKey scriptKey, string name, string accessKey, string title = null, bool autoClose = true)
         {
             ScriptKey = scriptKey;
             Name = !string.IsNullOrWhiteSpace(name)
                 ? name
                 : throw new ArgumentException("The menu command name is required.", nameof(name));
             AccessKey = accessKey;
+            Title = title; AutoClose = autoClose;
         }
 
         /// <summary>Gets the script installation that owns the command.</summary>
@@ -316,6 +319,10 @@ namespace Mzying2001.MonkeySharp.Core.Apis
 
         /// <summary>Gets the optional keyboard access key.</summary>
         public string AccessKey { get; }
+        /// <summary>Gets the menu tooltip.</summary>
+        public string Title { get; }
+        /// <summary>Gets whether the popup closes after invocation.</summary>
+        public bool AutoClose { get; }
     }
 
     /// <summary>
@@ -354,6 +361,8 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         /// <param name="highlight">Whether the current tab should be highlighted.</param>
         /// <param name="silent">Whether the notification should avoid sound.</param>
         /// <param name="timeout">Optional timeout in milliseconds.</param>
+        /// <param name="tag">The script-scoped replacement tag.</param>
+        /// <param name="url">The default click navigation URL.</param>
         public UserScriptNotificationRequest(
             ScriptKey scriptKey,
             string title,
@@ -361,7 +370,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             string imageUrl,
             bool highlight,
             bool silent,
-            int? timeout)
+            int? timeout, string tag = null, Uri url = null)
         {
             ScriptKey = scriptKey;
             Title = title;
@@ -370,6 +379,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             Highlight = highlight;
             Silent = silent;
             Timeout = timeout;
+            Tag = tag; Url = url;
         }
 
         /// <summary>Gets the requesting script installation.</summary>
@@ -392,6 +402,10 @@ namespace Mzying2001.MonkeySharp.Core.Apis
 
         /// <summary>Gets the optional timeout in milliseconds.</summary>
         public int? Timeout { get; }
+        /// <summary>Gets the script-scoped notification replacement tag.</summary>
+        public string Tag { get; }
+        /// <summary>Gets the default click navigation URL.</summary>
+        public Uri Url { get; }
     }
 
     /// <summary>
@@ -399,16 +413,20 @@ namespace Mzying2001.MonkeySharp.Core.Apis
     /// </summary>
     public interface INotificationService
     {
-        /// <summary>Displays a notification and returns its lifecycle handle.</summary>
+        /// <summary>Creates an unstarted notification; no UI/events before Start.</summary>
         /// <param name="request">The notification to display.</param>
         /// <param name="cancellationToken">A token that cancels the operation.</param>
         /// <returns>A handle that reports click, close, and completion state.</returns>
-        INotificationHandle ShowAsync(UserScriptNotificationRequest request, CancellationToken cancellationToken);
+        INotificationHandle Create(UserScriptNotificationRequest request, CancellationToken cancellationToken);
     }
 
     /// <summary>Represents a host notification and its lifecycle.</summary>
     public interface INotificationHandle : IDisposable
     {
+        /// <summary>Starts UI after subscriptions are attached. Repeated calls have no effect.</summary>
+        void Start();
+        /// <summary>Resolves a click after the script callback, then closes the notification.</summary>
+        void ResolveClick(bool preventDefault);
         /// <summary>Completes when the notification is closed or otherwise finished.</summary>
         Task Completion { get; }
 

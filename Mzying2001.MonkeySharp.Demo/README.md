@@ -57,7 +57,7 @@ Core's new `IUserScriptRepositoryPersistence`, `UserScriptPersistenceRecord`, an
 | `@require`, `@resource` | Persistent per-installation/revision URL cache. SRI `md5`/`sha256` hashes are checked against original bytes before caching and on cache reads. HTTP(S), at most 10 redirects, 30-second timeout, 10 MiB per fetched item. |
 | XHR, Cookie, webRequest | Existing CefSharp services follow the shared Chromium request context. Custom navigation handlers use the adapter's multiplexer, not a replacement request handler. |
 | Menus | Per-tab command collections, callbacks, access keys and disposal on execution end. |
-| Notifications | Nonmodal owned WPF windows, click/close/completion lifecycle, optional timeout and bounded HTTP(S) image loading. No system toast registration required. |
+| Notifications | Nonmodal owned WPF windows with interaction-completion Promises, tag replacement, cancelable URL clicks, tab highlight, silent mode, timeout and bounded HTTP(S) images. No system toast registration required. |
 | Clipboard | Dispatcher/STA writes, Unicode text and CF_HTML, bounded retry on clipboard contention. |
 | `openInTab` | Captures the originating tab, respects active/insert/setParent, reports user closure and supports explicit close. Releasing an execution's handle does not close an already opened user tab. |
 | Download | Streaming HTTP(S), progress, headers, conflict actions (`uniquify`, `overwrite`, `prompt`), cancellation, timeout and failure callbacks. Default destination is `Downloads`; names are sanitized, existing default files receive suffixes, and partial files are removed. The tab owns the service; navigation cancels execution-owned operations. |
@@ -79,7 +79,7 @@ node --test Mzying2001.MonkeySharp.Core.Tests/JavaScript/*.test.js
 powershell -NoProfile -ExecutionPolicy Bypass -File Mzying2001.MonkeySharp.Demo/Run-E2E.ps1
 ```
 
-The E2E runner starts a real WPF application with loopback fixtures and a separate `SmokeRuns/<id>/Data` profile, never the normal browser profile. It leaves a JSON report under `artifacts/demo-smoke` and logs under the reported profile. It tests background tabs, tab switching, iframe injection, shared values/cookies, undefined persistence across tab creation/navigation, resources, XHR/webRequest, menus, notifications, real downloads, tab state, navigation, script enable/disable and final disposal. The test does not overwrite the system clipboard. Test-project shadow copying is disabled so SQLite's native library resolves from the deployed test output.
+The E2E runner starts a real WPF application with loopback fixtures and a separate `SmokeRuns/<id>/Data` profile, never the normal browser profile. It leaves a JSON report under `artifacts/demo-smoke` and logs under the reported profile. It tests background tabs, tab switching, iframe injection, shared values/cookies, undefined persistence across tab creation/navigation, resources, XHR/webRequest, menus, notifications, real downloads, tab state, navigation, script enable/disable and final disposal. The test verifies Unicode text and HTML on the system clipboard, then restores its previous contents. Test-project shadow copying is disabled so SQLite's native library resolves from the deployed test output.
 
 CI runs the SmokeHost real-Chromium gate for CefSharp `84.4.10`, `121.3.70`, and `151.3.240` on x64 and x86. The WPF Demo smoke remains x64 on the default `121.3.70` version.
 

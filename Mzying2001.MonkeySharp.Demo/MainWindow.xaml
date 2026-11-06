@@ -125,6 +125,8 @@
                                         <Setter Property="Header" Value="{Binding Label}" />
                                         <Setter Property="Command" Value="{Binding InvokeCommand}" />
                                         <Setter Property="InputGestureText" Value="{Binding AccessKey}" />
+                                        <Setter Property="ToolTip" Value="{Binding Title}" />
+                                        <Setter Property="StaysOpenOnClick" Value="{Binding StaysOpenOnClick}" />
                                     </Style>
                                 </MenuItem.ItemContainerStyle>
                             </MenuItem>

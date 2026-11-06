@@ -97,63 +97,85 @@
                 };
             };
 
+            const queueMenu = function (record, task) {
+                const pending = (record.menuQueue || Promise.resolve()).then(task);
+                record.menuQueue = pending.catch(() => {});
+                return pending;
+            };
+            const registerMenu = function (record, name, callback, options) {
+                if (typeof name !== "string" || !name) throw new TypeError("name must be a non-empty string.");
+                if (typeof callback !== "function") throw new TypeError("callback must be a function.");
+                if (typeof options === "string") options = { accessKey: options };
+                if (typeof options === "undefined") options = {};
+                if (!options || typeof options !== "object" || Array.isArray(options)) throw new TypeError("menu options must be an object or access key.");
+                for (const field of ["accessKey", "title"]) if (typeof options[field] !== "undefined" && typeof options[field] !== "string") throw new TypeError(field + " must be a string.");
+                if (typeof options.autoClose !== "undefined" && typeof options.autoClose !== "boolean") throw new TypeError("autoClose must be a boolean.");
+                if (typeof options.clickedFrame !== "undefined") throw notSupported("clickedFrame requires a newer reference contract.");
+                if (typeof options.id === "undefined") while (record.menuHandlers.has(nextListenerId)) nextListenerId++;
+                const id = typeof options.id === "undefined" ? nextListenerId++ : options.id;
+                if (!((Number.isInteger(id) && id > 0) || (typeof id === "string" && id))) throw new TypeError("id must be a positive integer or nonempty string.");
+                const previous = record.menuHandlers.get(id);
+                record.menuHandlers.set(id, callback);
+                const ready = queueMenu(record, () => call(record, "GM.registerMenuCommand", {
+                    commandId: id, name, accessKey: options.accessKey || null, title: options.title || null, autoClose: options.autoClose !== false
+                })).then(() => id, error => {
+                    if (record.menuHandlers.get(id) === callback) {
+                        if (previous) record.menuHandlers.set(id, previous); else record.menuHandlers.delete(id);
+                    }
+                    throw error;
+                });
+                return { id, ready };
+            };
+            const unregisterMenu = function (record, id) {
+                if (!((Number.isInteger(id) && id > 0) || (typeof id === "string" && id))) throw new TypeError("id must be a positive integer or nonempty string.");
+                record.menuHandlers.delete(id);
+                return queueMenu(record, () => call(record, "GM.unregisterMenuCommand", { commandId: id })).then(() => undefined);
+            };
+            const notificationOperation = function (record, input, title, image, onclick) {
+                let details;
+                if (typeof input === "string") details = { text: input, title: typeof title === "string" ? title : undefined, image, onclick, ondone: typeof title === "function" ? title : undefined };
+                else details = Object.assign({}, input);
+                if (typeof input !== "string" && typeof title === "function") details.ondone = title;
+                if (!input || (typeof input !== "string" && (typeof input !== "object" || Array.isArray(input)))) throw new TypeError("notification details must be an object or string.");
+                if (!details.text && !details.highlight) throw new TypeError("text is required unless highlight is true.");
+                for (const field of ["text", "title", "tag", "url", "image", "imageUrl"]) if (typeof details[field] !== "undefined" && typeof details[field] !== "string") throw new TypeError(field + " must be a string.");
+                for (const field of ["highlight", "silent"]) if (typeof details[field] !== "undefined" && typeof details[field] !== "boolean") throw new TypeError(field + " must be a boolean.");
+                for (const field of ["onclick", "ondone"]) if (typeof details[field] !== "undefined" && typeof details[field] !== "function") throw new TypeError(field + " must be a function.");
+                if (typeof details.timeout !== "undefined" && (!Number.isInteger(details.timeout) || details.timeout < 0)) throw new TypeError("timeout must be a nonnegative integer.");
+                const clientId = uuid();
+                let resolve, reject;
+                const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
+                const state = { details, clicked: false, terminal: false, resolve, reject };
+                record.notificationHandlers.set(clientId, state);
+                call(record, "GM.notification", { clientId, title: details.title || null, text: details.text || null,
+                    imageUrl: details.imageUrl || details.image || null, tag: details.tag || null, url: details.url || null,
+                    highlight: Boolean(details.highlight), silent: Boolean(details.silent), timeout: details.timeout
+                }).catch(error => { if (!state.terminal) { state.terminal = true; record.notificationHandlers.delete(clientId); reject(error); } });
+                return promise;
+            };
+            const setClipboard = function (record, text, info, callback) {
+                if (typeof text !== "string") throw new TypeError("clipboard data must be a string.");
+                if (typeof info === "function") { callback = info; info = undefined; }
+                if (typeof callback !== "undefined" && typeof callback !== "function") throw new TypeError("callback must be a function.");
+                let type = info;
+                if (info && typeof info === "object" && !Array.isArray(info)) {
+                    if (typeof info.type !== "undefined" && typeof info.type !== "string") throw new TypeError("info.type must be a string.");
+                    if (typeof info.mimetype !== "undefined" && typeof info.mimetype !== "string") throw new TypeError("info.mimetype must be a string.");
+                    type = info.mimetype || info.type;
+                }
+                if (typeof type === "undefined") type = "text";
+                const mediaType = { text: "text/plain", html: "text/html", "text/plain": "text/plain", "text/html": "text/html" }[type];
+                if (!mediaType) throw notSupported("Only text and HTML clipboard formats are supported.");
+                return call(record, "GM.setClipboard", { text, type: mediaType }).then(() => {
+                    invokeHostCallback(record, callback, undefined, undefined, "clipboard");
+                });
+            };
+
             const addHostApi = function (record, enabled, api) {
-                if (enabled("GM.registerMenuCommand")) {
-                    api.registerMenuCommand = async function (name, callback, accessKey) {
-                        if (typeof name !== "string" || name.length === 0) throw new TypeError("name must be a non-empty string.");
-                        if (typeof callback !== "function") throw new TypeError("callback must be a function.");
-                        if (typeof accessKey !== "undefined" && typeof accessKey !== "string") throw new TypeError("accessKey must be a string.");
-                        const commandId = nextListenerId++;
-                        record.menuHandlers.set(commandId, callback);
-                        try {
-                            await call(record, "GM.registerMenuCommand", {
-                                commandId: commandId,
-                                name: name,
-                                accessKey: accessKey || null
-                            });
-                            return commandId;
-                        } catch (error) {
-                            record.menuHandlers.delete(commandId);
-                            throw error;
-                        }
-                    };
-                }
-                if (enabled("GM.unregisterMenuCommand")) {
-                    api.unregisterMenuCommand = async function (commandId) {
-                        if (!Number.isInteger(commandId) || commandId <= 0) throw new TypeError("commandId must be positive.");
-                        const removed = await call(record, "GM.unregisterMenuCommand", { commandId: commandId });
-                        if (removed) record.menuHandlers.delete(commandId);
-                        return removed;
-                    };
-                }
-                if (enabled("GM.notification")) {
-                    api.notification = async function (details) {
-                        if (typeof details === "string") details = { text: details };
-                        if (!details || typeof details !== "object") throw new TypeError("details must be an object.");
-                        const result = await call(record, "GM.notification", {
-                            title: details.title || null,
-                            text: details.text,
-                            imageUrl: details.imageUrl || details.image || null,
-                            highlight: Boolean(details.highlight),
-                            silent: Boolean(details.silent),
-                            timeout: typeof details.timeout === "number" ? details.timeout : null
-                        });
-                        if (result && result.id) {
-                            record.notificationHandlers.set(result.id, {
-                                onclick: typeof details.onclick === "function" ? details.onclick : null,
-                                ondone: typeof details.ondone === "function" ? details.ondone : null
-                            });
-                        }
-                        return result;
-                    };
-                }
-                if (enabled("GM.setClipboard")) {
-                    api.setClipboard = async function (text, type) {
-                        if (typeof text !== "string") throw new TypeError("text must be a string.");
-                        if (typeof type !== "undefined" && typeof type !== "string") throw new TypeError("type must be a string.");
-                        return call(record, "GM.setClipboard", { text: text, type: type || "text/plain" });
-                    };
-                }
+                if (enabled("GM.registerMenuCommand")) api.registerMenuCommand = async function (name, callback, options) { return registerMenu(record, name, callback, options).ready; };
+                if (enabled("GM.unregisterMenuCommand")) api.unregisterMenuCommand = async id => unregisterMenu(record, id);
+                if (enabled("GM.notification")) api.notification = async function (...args) { return notificationOperation(record, ...args); };
+                if (enabled("GM.setClipboard")) api.setClipboard = async function (...args) { return setClipboard(record, ...args); };
                 if (enabled("GM.openInTab")) {
                     record.openTab = function (url, options) {
                         if (typeof url !== "string") throw new TypeError("url must be a string.");
@@ -242,27 +264,13 @@
             };
 
             const addLegacyHost = function (record, api, facade) {
-                if (api.registerMenuCommand) facade.GM_registerMenuCommand = function (name, callback, accessKey) {
-                    if (typeof name !== "string" || name.length === 0) throw new TypeError("name must be a non-empty string.");
-                    if (typeof callback !== "function") throw new TypeError("callback must be a function.");
-                    if (typeof accessKey !== "undefined" && typeof accessKey !== "string") throw new TypeError("accessKey must be a string.");
-                    const commandId = nextListenerId++;
-                    record.menuHandlers.set(commandId, callback);
-                    call(record, "GM.registerMenuCommand", {
-                        commandId: commandId,
-                        name: name,
-                        accessKey: accessKey || null
-                    }).catch(error => {
-                        record.menuHandlers.delete(commandId);
-                        console.error("[MonkeySharp] legacy menu registration failed", error);
-                    });
-                    return commandId;
+                if (api.registerMenuCommand) facade.GM_registerMenuCommand = function (name, callback, options) {
+                    const operation = registerMenu(record, name, callback, options);
+                    operation.ready.catch(error => console.error("[MonkeySharp] menu registration failed", error));
+                    return operation.id;
                 };
-                if (api.unregisterMenuCommand) facade.GM_unregisterMenuCommand = function (commandId) {
-                    if (!Number.isInteger(commandId) || commandId <= 0) throw new TypeError("commandId must be positive.");
-                    const removed = record.menuHandlers.delete(commandId);
-                    api.unregisterMenuCommand(commandId).catch(error => console.error("[MonkeySharp] legacy menu removal failed", error));
-                    return removed;
+                if (api.unregisterMenuCommand) facade.GM_unregisterMenuCommand = function (id) {
+                    unregisterMenu(record, id).catch(error => console.error("[MonkeySharp] menu removal failed", error));
                 };
                 if (api.saveTab) facade.GM_saveTab = function (value) {
                     api.saveTab(value).catch(error => console.error("[MonkeySharp] legacy saveTab failed", error));
@@ -275,25 +283,11 @@
                     if (typeof callback !== "function") throw new TypeError("callback must be a function.");
                     api.getTabs().then(value => callback(value, null)).catch(error => callback(null, legacyError(error)));
                 };
-                if (api.setClipboard) facade.GM_setClipboard = function (text, type) {
-                    api.setClipboard(text, type).catch(error => console.error("[MonkeySharp] legacy clipboard failed", error));
+                if (api.setClipboard) facade.GM_setClipboard = function (...args) {
+                    setClipboard(record, ...args).catch(error => console.error("[MonkeySharp] clipboard failed", error));
                 };
-                if (api.notification) facade.GM_notification = function (details, title, image, onclick) {
-                    if (typeof details === "string") {
-                        const options = { text: details };
-                        if (typeof title === "function") {
-                            options.ondone = title;
-                        } else if (arguments.length > 1) {
-                            if (typeof title !== "undefined") options.title = title;
-                            if (typeof image !== "undefined") options.image = image;
-                            if (typeof onclick === "function") options.onclick = onclick;
-                        }
-                        details = options;
-                    } else {
-                        details = Object.assign({}, details || {});
-                        if (typeof title === "function") details.ondone = title;
-                    }
-                    api.notification(details).catch(error => console.error("[MonkeySharp] legacy notification failed", error));
+                if (api.notification) facade.GM_notification = function (...args) {
+                    notificationOperation(record, ...args).catch(error => console.error("[MonkeySharp] notification failed", error));
                 };
                 if (api.openInTab) facade.GM_openInTab = function (url, options) {
                     if (typeof options === "boolean") options = { active: !options };

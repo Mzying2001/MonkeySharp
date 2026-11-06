@@ -451,7 +451,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 services, services, services, services, services))
             {
                 ApiNotificationEventArgs notification = null;
-                provider.Notification += (_, item) => notification = item;
+                provider.Notification += (_, item) => { if (item.EventName == "menu-command") notification = item; };
                 var registered = await provider.InvokeAsync(Context(
                     installation,
                     "GM.registerMenuCommand",
@@ -462,7 +462,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                     "GM.notification",
                     new
                     {
-                        title = "Title", text = "Text", imageUrl = "https://example.com/notification.png",
+                        clientId = Guid.NewGuid().ToString(), title = "Title", text = "Text", imageUrl = "https://example.com/notification.png",
                         highlight = true, silent = true, timeout = 300
                     }), CancellationToken.None);
                 await provider.InvokeAsync(Context(
@@ -505,12 +505,12 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 Assert.Equal("Bearer test", services.Download.Headers["Authorization"]);
                 Assert.Equal("overwrite", services.Download.ConflictAction);
                 Assert.Equal(TimeSpan.FromMilliseconds(2500), services.Download.Timeout);
-                Assert.True(Json(removed.Json).GetBoolean());
+                Assert.Equal("undefined", Json(removed.Json).GetProperty("$monkeySharpType").GetString());
                 Assert.True(services.MenuRegistration.Disposed);
 
                 await provider.InvokeAsync(Context(installation, "GM.notification", new
                 {
-                    highlight = true, silent = true, timeout = 0
+                    clientId = Guid.NewGuid().ToString(), highlight = true, silent = true, timeout = 0
                 }), CancellationToken.None);
                 Assert.Null(services.Notification.Text);
                 Assert.True(services.Notification.Highlight);
@@ -555,7 +555,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                     installation,
                     "GM.unregisterMenuCommand",
                     new { commandId = 3 }), CancellationToken.None);
-                Assert.False(Json(removed.Json).GetBoolean());
+                Assert.Equal("undefined", Json(removed.Json).GetProperty("$monkeySharpType").GetString());
             }
         }
 
@@ -771,7 +771,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 return Task.FromResult<IMenuRegistration>(MenuRegistration);
             }
             public void InvokeMenu() => _menuCallback();
-            public INotificationHandle ShowAsync(UserScriptNotificationRequest request, CancellationToken cancellationToken)
+            public INotificationHandle Create(UserScriptNotificationRequest request, CancellationToken cancellationToken)
             {
                 Notification = request;
                 return new FakeNotificationHandle();
@@ -805,6 +805,8 @@ namespace Mzying2001.MonkeySharp.Core.Tests
 
         private sealed class FakeNotificationHandle : INotificationHandle
         {
+        public void Start() { }
+        public void ResolveClick(bool preventDefault) { }
             public Task Completion { get; } = Task.CompletedTask;
             public event EventHandler Clicked { add { } remove { } }
             public event EventHandler Closed { add { } remove { } }

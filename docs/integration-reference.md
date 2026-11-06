@@ -195,7 +195,7 @@ Interaction services have distinct lifecycle contracts:
 
 | Service entry point | Returned handle | Lifecycle members |
 | --- | --- | --- |
-| `INotificationService.ShowAsync` | `INotificationHandle` immediately | `Completion`, `Clicked`, `Closed`, and `Dispose`; there is no separate `Abort` member. |
+| `INotificationService.Create` | `INotificationHandle` immediately | Unstarted handle: subscribe before `Start`; `Clicked` awaits `ResolveClick(preventDefault)`, then `Closed`/`Completion`; `Dispose` closes it. |
 | `ITabService.OpenAsync` | `Task<ITabHandle>` | `TabId`, `Closed`, `OnClose`, `CloseAsync`, and `Dispose`; there is no `Completion` task. |
 | `IDownloadService.CreateAsync` | `Task<IDownloadOperation>` | `Start`, `Result`, `DownloadId`, `Completion`, `Progress`, `Completed`, `Failed`, `Aborted`, `TimedOut`, `Abort`, and `Dispose`. Create must return an unstarted operation; subscribe to every event before Start. |
 

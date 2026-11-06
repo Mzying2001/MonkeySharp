@@ -5,6 +5,8 @@ using Mzying2001.MonkeySharp.Core.Runtime;
 using Mzying2001.MonkeySharp.Demo.ViewModels;
 using System;
 using System.IO;
+using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
@@ -16,51 +18,57 @@ using System.Windows.Threading;
 
 namespace Mzying2001.MonkeySharp.Demo.Services
 {
-    public sealed partial class ScriptMenuCommand : ObservableObject, IMenuRegistration
+    public sealed partial class ScriptMenuCommand : ObservableObject
     {
-        private readonly Action<ScriptMenuCommand> _remove;
-        private readonly Action _invoked;
-        private int _disposed;
-
+        internal readonly Dictionary<Action, bool> Subscribers = new Dictionary<Action, bool>();
         public string Label { get; }
         public string AccessKey { get; }
-
-        public ScriptMenuCommand(string label, string accessKey, Action invoked, Action<ScriptMenuCommand> remove)
+        public string Title { get; }
+        public bool StaysOpenOnClick => Subscribers.Values.Any(autoClose => !autoClose);
+        internal ScriptMenuCommand(MenuCommandRequest request)
         {
-            Label = label;
-            AccessKey = accessKey;
-            _remove = remove;
-            _invoked = invoked;
+            Label = request.Name + " · " + request.ScriptKey.ToString().Substring(0, 8);
+            AccessKey = request.AccessKey; Title = request.Title;
         }
-
+        internal void Changed() => OnPropertyChanged(nameof(StaysOpenOnClick));
         [RelayCommand]
-        private void Invoke() { if (_disposed == 0) _invoked(); }
-
-        public void Dispose() { if (Interlocked.Exchange(ref _disposed, 1) == 0) _remove(this); }
+        private void Invoke()
+        {
+            foreach (var callback in Subscribers.Keys.ToArray())
+                try { callback(); } catch (Exception error) { System.Diagnostics.Trace.TraceError(error.ToString()); }
+        }
     }
 
     public sealed class WpfMenuService : IMenuService
     {
         private readonly BrowserTabViewModel _tab;
         private readonly Dispatcher _dispatcher;
-
-        public WpfMenuService(BrowserTabViewModel tab, Dispatcher dispatcher)
-        {
-            _tab = tab;
-            _dispatcher = dispatcher;
-        }
-
+        private readonly Dictionary<Tuple<string, string, string, string>, ScriptMenuCommand> _groups = new Dictionary<Tuple<string, string, string, string>, ScriptMenuCommand>();
+        public WpfMenuService(BrowserTabViewModel tab, Dispatcher dispatcher) { _tab = tab; _dispatcher = dispatcher; }
         public async Task<IMenuRegistration> RegisterAsync(MenuCommandRequest request, Action invoked, CancellationToken cancellationToken)
         {
             return await _dispatcher.InvokeAsync(() =>
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 if (_tab.IsClosed) throw new OperationCanceledException();
-                var command = new ScriptMenuCommand(request.Name + " · " + request.ScriptKey.ToString().Substring(0, 8),
-                    request.AccessKey, invoked, item => _dispatcher.BeginInvoke(new Action(() => _tab.MenuCommands.Remove(item))));
-                _tab.MenuCommands.Add(command);
-                return (IMenuRegistration)command;
+                var key = Tuple.Create(request.ScriptKey.ToString(), request.Name, request.Title ?? "", request.AccessKey ?? "");
+                if (!_groups.TryGetValue(key, out var command))
+                {
+                    command = new ScriptMenuCommand(request); _groups.Add(key, command); _tab.MenuCommands.Add(command);
+                }
+                command.Subscribers.Add(invoked, request.AutoClose); command.Changed();
+                return (IMenuRegistration)new MenuRegistration(() => _dispatcher.BeginInvoke(new Action(() =>
+                {
+                    command.Subscribers.Remove(invoked); command.Changed();
+                    if (command.Subscribers.Count == 0) { _groups.Remove(key); _tab.MenuCommands.Remove(command); }
+                })));
             });
+        }
+        private sealed class MenuRegistration : IMenuRegistration
+        {
+            private Action _remove;
+            public MenuRegistration(Action remove) { _remove = remove; }
+            public void Dispose() => Interlocked.Exchange(ref _remove, null)?.Invoke();
         }
     }
 
@@ -108,116 +116,104 @@ namespace Mzying2001.MonkeySharp.Demo.Services
     {
         private readonly Dispatcher _dispatcher;
         private readonly HttpContentService _content;
-
-        public WpfNotificationService(Dispatcher dispatcher, HttpContentService content)
-        {
-            _dispatcher = dispatcher;
-            _content = content;
-        }
-
-        public INotificationHandle ShowAsync(UserScriptNotificationRequest request, CancellationToken cancellationToken)
-            => new NotificationHandle(_dispatcher, _content, request, cancellationToken);
+        private readonly MainWindowViewModel _main;
+        private readonly BrowserTabViewModel _origin;
+        public WpfNotificationService(Dispatcher dispatcher, HttpContentService content, MainWindowViewModel main, BrowserTabViewModel origin)
+        { _dispatcher = dispatcher; _content = content; _main = main; _origin = origin; }
+        public INotificationHandle Create(UserScriptNotificationRequest request, CancellationToken cancellationToken)
+            => new NotificationHandle(this, request, cancellationToken);
 
         private sealed class NotificationHandle : INotificationHandle
         {
-            private readonly Dispatcher _dispatcher;
+            private readonly WpfNotificationService _owner;
+            private readonly UserScriptNotificationRequest _request;
+            private readonly CancellationToken _token;
             private readonly TaskCompletionSource<object> _completion = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
             private CancellationTokenRegistration _registration;
             private readonly CancellationTokenSource _images = new CancellationTokenSource();
             private DispatcherTimer _timeout;
             private Window _window;
-            private int _closed;
-
-            public NotificationHandle(Dispatcher dispatcher, HttpContentService content, UserScriptNotificationRequest request, CancellationToken token)
+            private int _closed, _started, _clicked;
+            public NotificationHandle(WpfNotificationService owner, UserScriptNotificationRequest request, CancellationToken token)
+            { _owner = owner; _request = request; _token = token; }
+            public void Start()
             {
-                _dispatcher = dispatcher;
-                _registration = token.Register(Dispose);
-                dispatcher.BeginInvoke(new Action(() =>
+                if (Interlocked.Exchange(ref _started, 1) != 0) return;
+                _registration = _token.Register(Dispose);
+                _owner._dispatcher.BeginInvoke(new Action(() =>
                 {
                     if (_closed != 0) return;
-                    var panel = new StackPanel { Margin = new Thickness(20) };
-                    panel.Children.Add(new TextBlock { Text = request.Text, TextWrapping = TextWrapping.Wrap, MaxWidth = 380 });
-                    var click = new Button { Content = "查看 / 点击通知", Margin = new Thickness(0, 15, 0, 0) };
-                    click.Click += (sender, args) => { Clicked?.Invoke(this, EventArgs.Empty); Dispose(); };
-                    panel.Children.Add(click);
-                    var close = new Button { Content = "关闭" };
-                    close.Click += (sender, args) => Dispose();
-                    panel.Children.Add(close);
-                    _window = new Window
+                    try
                     {
-                        Title = request.Title ?? "MonkeySharp",
-                        Content = panel,
-                        SizeToContent = SizeToContent.WidthAndHeight,
-                        ResizeMode = ResizeMode.NoResize,
-                        ShowInTaskbar = false,
-                        Owner = Application.Current.MainWindow,
-                        WindowStartupLocation = WindowStartupLocation.CenterOwner
-                    };
-                    _window.Closed += (sender, args) => Finish();
-                    _window.Show();
-                    if (request.Timeout.HasValue && request.Timeout.Value > 0)
-                    {
-                        _timeout = new DispatcherTimer(DispatcherPriority.Normal, dispatcher)
+                        if (_request.Highlight && !_owner._origin.IsClosed)
                         {
-                            Interval = TimeSpan.FromMilliseconds(request.Timeout.Value)
-                        };
-                        _timeout.Tick += TimeoutElapsed;
-                        _timeout.Start();
+                            _owner._main.SelectedTab = _owner._origin;
+                            Application.Current.MainWindow.Activate();
+                        }
+                        if (string.IsNullOrEmpty(_request.Text)) { Finish(); return; }
+                        var panel = new StackPanel { Margin = new Thickness(20) };
+                        panel.Children.Add(new TextBlock { Text = _request.Text, TextWrapping = TextWrapping.Wrap, MaxWidth = 380 });
+                        var click = new Button { Content = "查看 / 点击通知", Margin = new Thickness(0, 15, 0, 0) };
+                        click.Click += (_, __) => { if (Interlocked.Exchange(ref _clicked, 1) == 0) Clicked?.Invoke(this, EventArgs.Empty); };
+                        panel.Children.Add(click);
+                        var close = new Button { Content = "关闭" };
+                        close.Click += (_, __) => Dispose(); panel.Children.Add(close);
+                        _window = new Window { Title = _request.Title ?? "MonkeySharp", Content = panel,
+                            SizeToContent = SizeToContent.WidthAndHeight, ResizeMode = ResizeMode.NoResize,
+                            ShowInTaskbar = false, ShowActivated = false, Owner = Application.Current.MainWindow,
+                            WindowStartupLocation = WindowStartupLocation.CenterOwner };
+                        _window.Closed += (_, __) => Finish(); _window.Show();
+                        if (!_request.Silent) System.Media.SystemSounds.Asterisk.Play();
+                        if (_request.Timeout > 0)
+                        {
+                            _timeout = new DispatcherTimer(DispatcherPriority.Normal, _owner._dispatcher) { Interval = TimeSpan.FromMilliseconds(_request.Timeout.Value) };
+                            _timeout.Tick += TimeoutElapsed; _timeout.Start();
+                        }
+                        if (!string.IsNullOrWhiteSpace(_request.ImageUrl)) _ = LoadImageAsync(panel);
                     }
-                    if (!string.IsNullOrWhiteSpace(request.ImageUrl)) _ = LoadImageAsync(content, request.ImageUrl, panel);
+                    catch (Exception error) { _completion.TrySetException(error); Dispose(); }
                 }));
             }
-
-            private void TimeoutElapsed(object sender, EventArgs args)
+            public void ResolveClick(bool preventDefault)
             {
-                _timeout?.Stop();
-                Dispose();
+                if (Volatile.Read(ref _clicked) == 0 || Volatile.Read(ref _closed) != 0) return;
+                _owner._dispatcher.BeginInvoke(new Action(() =>
+                {
+                    if (_closed != 0) return;
+                    if (!preventDefault && _request.Url != null) _owner._main.NewTab(_request.Url.AbsoluteUri);
+                    Dispose();
+                }));
             }
-
-            private async Task LoadImageAsync(HttpContentService content, string url, StackPanel panel)
+            private void TimeoutElapsed(object sender, EventArgs args) => Dispose();
+            private async Task LoadImageAsync(StackPanel panel)
             {
                 try
                 {
-                    var imageContent = await content.FetchAsync(url, _images.Token);
+                    var content = await _owner._content.FetchAsync(_request.ImageUrl, _images.Token);
                     if (_closed != 0) return;
-                    using (var input = new MemoryStream(imageContent.Bytes))
+                    using (var input = new MemoryStream(content.Bytes))
                     {
-                        var image = new BitmapImage();
-                        image.BeginInit(); image.CacheOption = BitmapCacheOption.OnLoad; image.DecodePixelWidth = 80;
-                        image.StreamSource = input; image.EndInit(); image.Freeze();
+                        var image = new BitmapImage(); image.BeginInit(); image.CacheOption = BitmapCacheOption.OnLoad;
+                        image.DecodePixelWidth = 80; image.StreamSource = input; image.EndInit(); image.Freeze();
                         panel.Children.Insert(0, new Image { Source = image, Width = 80, Height = 80, Margin = new Thickness(0, 0, 0, 10) });
                     }
                 }
-                catch (Exception exception) { System.Diagnostics.Trace.TraceWarning("Notification image unavailable: " + exception.Message); }
+                catch (Exception error) { System.Diagnostics.Trace.TraceWarning("Notification image unavailable: " + error.Message); }
             }
-
             public Task Completion => _completion.Task;
-            public event EventHandler Clicked;
-            public event EventHandler Closed;
-
+            public event EventHandler Clicked, Closed;
             private void Finish()
             {
                 if (Interlocked.Exchange(ref _closed, 1) != 0) return;
-                if (_timeout != null)
-                {
-                    _timeout.Stop();
-                    _timeout.Tick -= TimeoutElapsed;
-                    _timeout = null;
-                }
-                _images.Cancel();
-                _registration.Dispose();
-                Closed?.Invoke(this, EventArgs.Empty);
-                _completion.TrySetResult(null);
+                if (_timeout != null) { _timeout.Stop(); _timeout.Tick -= TimeoutElapsed; _timeout = null; }
+                _images.Cancel(); _registration.Dispose();
+                Closed?.Invoke(this, EventArgs.Empty); _completion.TrySetResult(null);
             }
-
             public void Dispose()
             {
-                if (!_dispatcher.HasShutdownStarted) _dispatcher.BeginInvoke(new Action(() =>
-                {
-                    Finish();
-                    _window?.Close();
-                }));
-                else _completion.TrySetResult(null);
+                if (_owner._dispatcher.CheckAccess()) { Finish(); _window?.Close(); }
+                else if (!_owner._dispatcher.HasShutdownStarted) _owner._dispatcher.BeginInvoke(new Action(Dispose));
+                else { Interlocked.Exchange(ref _closed, 1); _completion.TrySetResult(null); }
             }
         }
     }

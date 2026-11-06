@@ -184,7 +184,7 @@ Demo 使用数据库格式 2，拒绝旧开发数据库，不进行迁移或删�
 
 | 服务入口 | 返回句柄 | 生命周期成员 |
 | --- | --- | --- |
-| `INotificationService.ShowAsync` | 立即返回 `INotificationHandle` | `Completion`、`Clicked`、`Closed`、`Dispose`；没有独立的 `Abort` 成员。 |
+| `INotificationService.Create` | 立即返回 `INotificationHandle` | 未启动句柄：先订阅再 Start；Clicked 后等待 ResolveClick(preventDefault)，再关闭并完成；Dispose 关闭通知。 |
 | `ITabService.OpenAsync` | `Task<ITabHandle>` | `TabId`、`Closed`、`OnClose`、`CloseAsync`、`Dispose`；没有 `Completion` 任务。 |
 | `IDownloadService.CreateAsync` | `Task<IDownloadOperation>` | `Start`、`Result`、`DownloadId`、`Completion` 及进度/完成/失败/取消/超时事件、`Abort`、`Dispose`。Create 必须返回未启动操作，先订阅所有事件，再调用 Start。 |
 

@@ -184,9 +184,9 @@ Each row requires its capability family or exact legacy declaration unless state
 | `GM.getResourceText` | `GM_getResourceText` | `Promise<string>` | Resource provider |
 | `GM.getResourceUrl` | `GM_getResourceURL` | `Promise<string>` | Resource provider |
 | `GM.xmlHttpRequest` | `GM_xmlhttpRequest` | Abortable `Promise<Response>` | CefSharp default |
-| `GM.registerMenuCommand` | `GM_registerMenuCommand` | `Promise<number>` | Menu service |
-| `GM.unregisterMenuCommand` | `GM_unregisterMenuCommand` | `Promise<boolean>` | Menu service |
-| `GM.notification` | `GM_notification` | `Promise<{id: string}>` | Notification service |
+| `GM.registerMenuCommand` | `GM_registerMenuCommand` | `Promise<ID>` | Menu service |
+| `GM.unregisterMenuCommand` | `GM_unregisterMenuCommand` | `Promise<undefined>` | Menu service |
+| `GM.notification` | `GM_notification` | `Promise<boolean>` | Notification service |
 | `GM.setClipboard` | `GM_setClipboard` | `Promise<undefined>` | Clipboard service |
 | `GM.openInTab` | `GM_openInTab` | `Promise<TabHandle>` | Tab service |
 | `GM.getTab` | `GM_getTab` | `Promise<object>` | Tab-state service |
@@ -434,68 +434,47 @@ XHR bodies are transferred in chunks; the default host has no overall request/re
 
 ## Menus, notifications, and clipboard
 
-### GM.registerMenuCommand(name, callback, accessKey?)
+### GM.registerMenuCommand(name, callback, options_or_accessKey?)
 
-Requires its grant and a menu service. `name` is a non-empty string; `callback` is a function invoked **without arguments** when selected; optional `accessKey` is a string. Modern result: `Promise<number>` after registration. `GM_registerMenuCommand` returns the numeric command ID immediately, logging later failures. IDs belong to the current execution, and registrations are released when it ends. The Demo exposes commands in its script menu and supports Alt+accessKey.
+Requires a menu grant and service. The third argument is an access-key string or `{id, accessKey, title, autoClose}`. `id` is a positive integer or nonempty string; it updates that execution's existing registration, or creates one. Without an ID, a numeric ID is allocated. Modern returns `Promise<number|string>` after registration; legacy returns the ID immediately. Updates and removals are queued in call order. A click supplies a renderer-created MouseEvent (`type: "click"`), without native pointer coordinates or keyboard modifiers. Callback exceptions are reported independently.
+
+Demo merges commands from the same installation and tab when name, title and accessKey match. Selection invokes each registered frame's callback. `title` becomes the tooltip; `autoClose:false` keeps the popup open (a merged item stays open if any subscriber requests it). Unregistering or ending one frame removes only that frame's subscription. Execution end removes its commands. The later `clickedFrame` option is explicitly unsupported by the pinned 5.5.1 contract.
 
 ### GM.unregisterMenuCommand(commandId)
 
-Requires its own grant and the same service. Positive integer `commandId`. Modern result: `Promise<boolean>` for host removal; legacy `GM_unregisterMenuCommand` returns a local removal boolean and queues host removal asynchronously. Unknown IDs return false.
-
-**Tampermonkey differences:** the options object (`id`, `title`, `autoClose`, `clickedFrame`, etc.), ID-based updates, frame merging, and MouseEvent/KeyboardEvent callback arguments in the [official menu API](https://www.tampermonkey.net/documentation.php?q=GM_registerMenuCommand) are not implemented.
+Accepts the numeric/string ID. Modern resolves `undefined`; legacy returns `undefined` immediately. Unknown IDs are harmless. No removal boolean is exposed. The menu family grant supplies both modern methods; legacy globals still require their exact declarations.
 
 ```javascript
-// @grant GM.registerMenuCommand
-// @grant GM.unregisterMenuCommand
-(async function () {
-    const id = await GM.registerMenuCommand("Remove this command", () => {
-        GM.unregisterMenuCommand(id).catch(console.error);
-    }, "r");
-})().catch(console.error);
+const id = await GM.registerMenuCommand('Action', event => console.log(event.type), {title:'Run action',autoClose:false});
+await GM.registerMenuCommand('Updated action', () => {}, {id});
+await GM.unregisterMenuCommand(id);
 ```
 
-### GM.notification(details)
+### GM.notification(details, ondone?)
 
-Requires its grant and a notification service. Accepts an object or a text string (equivalent to `{text}`). Modern result: `Promise<{id: string}>` once the notification is registered, **not when dismissed**. Callback fields must be provided in the object.
+Both forms accept `(details, ondone?)` or `(text, title?, image?, onclick?)`; `(text, ondone)` also works. Modern returns `Promise<boolean>` and waits for interaction to finish: true after click, false after dismissal, timeout, replacement or highlight-only completion. Legacy returns undefined. `ondone` runs before Promise settlement. Callbacks are registered before host UI starts, and duplicate click/close signals cannot settle twice.
 
-| Field | Type / default | Meaning |
-| --- | --- | --- |
-| `text` | String | Required unless `highlight:true`. |
-| `title` | Optional string | Defaults to the script name. |
-| `image`, `imageUrl` | Optional URL string | `imageUrl` takes precedence; rendering/fetching is service-specific. |
-| `highlight`, `silent` | Booleans, `false` | Requests forwarded to the host; actual effect depends on its implementation. |
-| `timeout` | Optional integer milliseconds | Passed to the notification service; host decides supported timing behavior. |
-| `onclick`, `ondone` | Optional functions | Invoked without arguments on host click/completion events. |
+Options include text (required unless highlight), title (script name by default), image/imageUrl, tag, url, highlight, silent, timeout (nonnegative milliseconds), onclick and ondone. Reusing a nonempty tag replaces that installation's notification in the host. `onclick` receives a cancelable click Event; synchronous `event.preventDefault()` suppresses URL navigation. Callback errors are reported separately and still acknowledge the click. The host waits for this acknowledgment before its default action; after five seconds without acknowledgment it proceeds with the default action. URLs must be absolute HTTP(S) and pass host authorization.
 
-Legacy overloads: `GM_notification(details, ondone?)`, `GM_notification(text, title?, image?, onclick?)`, and `GM_notification(text, ondone)`. They return `undefined`; delivery failures are logged. Modern calls do not implement a separate second `ondone` argument or the four-argument overload. No remove/update method is exposed.
-
-The Demo closes notifications after a positive timeout or the user's close/click action. It does not give `highlight` or `silent` a separate implementation; passing those fields is not a guarantee of a system highlight or sound policy.
-
-**Tampermonkey differences:** no `tag` replacement, `url` navigation, or Tampermonkey notification handle/Promise-completion contract is supplied. The Demo uses WPF windows, not extension/system notification UI. Compare the [official notification API](https://www.tampermonkey.net/documentation.php?q=GM_notification).
+Demo uses owned WPF windows. It selects/activates the originating tab for highlight; highlight without text finishes without a window. Silent suppresses sound; positive timeout closes the window. A normal URL click opens a tab after the callback. Notifications without url/tag close on document end. Those with url/tag remain until completion or host disposal, with old-document callbacks muted; the default click action can still run. Tags are scoped to an installation in one host, rather than a global OS notification service.
 
 ```javascript
-// @grant GM.notification
-(async function () {
-    const registration = await GM.notification({
-        title: "MonkeySharp", text: "Operation finished", timeout: 5000,
-        onclick: () => console.log("clicked"), ondone: () => console.log("closed")
-    });
-    console.log("Registered:", registration.id);
-})().catch(console.error);
+const clicked = await GM.notification({text:'Ready',tag:'status',silent:true,url:'https://example.com/',
+    onclick:event => event.preventDefault(), ondone:() => console.log('Closed')});
+console.log('Clicked:', clicked);
 ```
 
-### GM.setClipboard(text, type?) / GM_setClipboard(text, type?)
+### GM.setClipboard(data, info?, callback?) / GM_setClipboard(data, info?, callback?)
 
-Requires its grant and a clipboard service. `text` must be a string; optional `type` is a MIME string, default `"text/plain"`. Use `"text/html"` for HTML. Modern result: `Promise<undefined>` after the host write. Legacy returns `undefined` and logs failures. The Demo writes Unicode text or CF_HTML on its UI thread and retries clipboard contention briefly.
+Data must be a string. Info accepts `"text"`, `"html"`, `"text/plain"`, `"text/html"`, or `{type:'text'|'html', mimetype:'text/plain'|'text/html'}`; mimetype takes precedence. Default is text. Other formats fail before writing. The optional callback runs only after the host write succeeds. Modern resolves undefined after writing and callback invocation; legacy returns undefined immediately. Callback errors do not undo the successful write or reject the modern call.
 
-**Tampermonkey difference:** no info object or completion callback overload; use MIME strings rather than relying on the official API's `"text"`/`"html"` shorthand. Other strings are passed through, not normalized by Core. See the [official clipboard API](https://www.tampermonkey.net/documentation.php?q=GM_setClipboard).
+Demo writes Unicode text and, for HTML, CF_HTML with UTF-8 byte offsets on its STA dispatcher, retaining the clipboard-contention retry loop. It preserves HTML rather than silently converting it to plain text. Real E2E verifies both formats and restores the previous clipboard afterward.
 
 ```javascript
-// @grant GM.setClipboard
-(async function () {
-    await GM.setClipboard("Copied by MonkeySharp", "text/plain");
-})().catch(console.error);
+await GM.setClipboard('<b>Hello</b>', {type:'html',mimetype:'text/html'});
+GM_setClipboard('Copied', 'text', () => console.log('Written'));
 ```
+
 
 ## Tabs and tab state
 
@@ -703,7 +682,7 @@ window.addEventListener("urlchange", onRoute);
 | Stored values | Use supported storage values; await modern writes for failures; account for bounded mirrors and post-commit notifications. |
 | Resources | Use `GM.getResourceUrl` or `GM.getResourceUrl` with either grant; expect a data URL and host-provided resource availability. |
 | XHR | Check unsupported proxy/partition/Blob-URL controls; adapt progress/XML behavior; inspect HTTP status explicitly. |
-| Menu / clipboard | Use string access keys and MIME strings; remove unsupported options objects/callback overloads. |
+| Menu / clipboard | Options and ID updates, interaction-completion notifications, and text/HTML clipboard info/callback overloads. |
 | Notifications | Use supported detail fields; modern resolution is registration, not dismissal. |
 | Tabs | Modern returns a Promise; legacy returns an immediate handle; use close/onclose; private mode and numeric insertion positions are absent. |
 | Downloads | Immediately returns an abortable completion Promise; Demo uses the shared browser network context and commits the file before completion. |

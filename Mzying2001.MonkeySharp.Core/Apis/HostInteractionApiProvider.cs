@@ -112,9 +112,11 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 case "GM.notification":
                     return ShowNotification(context, cancellationToken);
                 case "GM.setClipboard":
+                    var clipboardType = ProviderParameters.OptionalString(context.Parameters, "type") ?? "text/plain";
+                    if (clipboardType != "text/plain" && clipboardType != "text/html") throw new UnsupportedApiException("Only text and HTML clipboard formats are supported.");
                     await _clipboard.SetTextAsync(
                         ProviderParameters.RequiredString(context.Parameters, "text"),
-                        ProviderParameters.OptionalString(context.Parameters, "type") ?? "text/plain",
+                        clipboardType,
                         cancellationToken).ConfigureAwait(false);
                     return ApiResult.Undefined;
                 case "GM.openInTab":
@@ -228,49 +230,60 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 downloads = _downloadOperations
                     .Where(item => item.Key.StartsWith(prefix, StringComparison.Ordinal))
                     .Select(item => item.Value).ToArray();
-                foreach (var key in _notificationHandles.Keys.Where(item => item.StartsWith(prefix, StringComparison.Ordinal)).ToArray())
-                    _notificationHandles.Remove(key);
                 foreach (var key in _tabHandles.Keys.Where(item => item.StartsWith(prefix, StringComparison.Ordinal)).ToArray())
                     _tabHandles.Remove(key);
             }
             foreach (var registration in registrations)
                 registration.Dispose();
-            foreach (var handle in notifications) handle.Dispose();
+            foreach (var handle in notifications) handle.EndDocument();
             foreach (var handle in tabs) handle.Dispose();
             foreach (var operation in downloads) operation.DetachCallbacks();
         }
 
         private ApiResult ShowNotification(ApiInvocationContext context, CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+            var clientId = ProviderParameters.RequiredString(context.Parameters, "clientId");
+            var key = context.ExecutionId + ":" + clientId;
+            if (ProviderParameters.OptionalString(context.Parameters, "operation") == "click-result")
+            {
+                NotificationRegistration pending;
+                lock (_sync) _notificationHandles.TryGetValue(key, out pending);
+                pending?.ResolveClick(ProviderParameters.OptionalBoolean(context.Parameters, "preventDefault"));
+                return ApiResult.Undefined;
+            }
+            if (!Guid.TryParse(clientId, out _)) throw ProviderParameters.Invalid("clientId must be a UUID.");
             var text = ProviderParameters.OptionalString(context.Parameters, "text");
             var highlight = ProviderParameters.OptionalBoolean(context.Parameters, "highlight");
-            if (string.IsNullOrEmpty(text) && !highlight)
-                throw ProviderParameters.Invalid("text is required unless highlight is true.");
-            var handle = _notifications.ShowAsync(new UserScriptNotificationRequest(
-                context.Installation.ScriptKey,
-                ProviderParameters.OptionalString(context.Parameters, "title") ??
-                    context.Installation.Definition.Metadata.Name,
-                text,
-                ProviderParameters.OptionalString(context.Parameters, "imageUrl"),
-                highlight,
-                ProviderParameters.OptionalBoolean(context.Parameters, "silent"),
-                ProviderParameters.OptionalInt32(context.Parameters, "timeout")), cancellationToken);
-            if (handle == null)
-                throw new InvalidOperationException("The notification service returned no handle.");
-            var notificationId = Guid.NewGuid().ToString("D");
-            var key = context.ExecutionId + ":" + notificationId;
-            var registration = new NotificationRegistration(this, key, handle, context.Installation.ScriptKey, context.ExecutionId, notificationId);
+            if (string.IsNullOrEmpty(text) && !highlight) throw ProviderParameters.Invalid("text is required unless highlight is true.");
+            var timeout = ProviderParameters.OptionalInt32(context.Parameters, "timeout");
+            if (timeout < 0) throw ProviderParameters.Invalid("timeout must not be negative.");
+            var tag = ProviderParameters.OptionalString(context.Parameters, "tag");
+            var url = ProviderParameters.OptionalString(context.Parameters, "url") == null ? null : ReadHttpUrl(context.Parameters, "url");
+            var request = new UserScriptNotificationRequest(context.Installation.ScriptKey,
+                ProviderParameters.OptionalString(context.Parameters, "title") ?? context.Installation.Definition.Metadata.Name,
+                text, ProviderParameters.OptionalString(context.Parameters, "imageUrl"), highlight,
+                ProviderParameters.OptionalBoolean(context.Parameters, "silent"), timeout, tag, url);
+            var handle = _notifications.Create(request, CancellationToken.None);
+            if (handle == null) throw new InvalidOperationException("The notification service returned no handle.");
+            var registration = new NotificationRegistration(this, key, handle, request, context.ExecutionId, clientId);
+            NotificationRegistration[] replaced;
             lock (_sync)
             {
-                if (_disposed)
+                if (cancellationToken.IsCancellationRequested) { handle.Dispose(); cancellationToken.ThrowIfCancellationRequested(); }
+                if (_disposed || _notificationHandles.ContainsKey(key))
                 {
                     handle.Dispose();
-                    throw new ObjectDisposedException(nameof(HostInteractionApiProvider));
+                    throw new InvalidOperationException("Notification cannot be registered.");
                 }
-                _notificationHandles[key] = registration;
+                replaced = string.IsNullOrEmpty(tag) ? new NotificationRegistration[0] : _notificationHandles.Values
+                    .Where(item => item.ScriptKey == request.ScriptKey && item.Tag == tag).ToArray();
+                _notificationHandles.Add(key, registration);
             }
-            registration.Subscribe();
-            return ApiResult.FromValue(new { id = notificationId });
+            foreach (var previous in replaced) previous.Dispose();
+            try { registration.Start(); }
+            catch (Exception error) { registration.StartFailed(error); throw; }
+            return ApiResult.Undefined;
         }
 
         private async Task<ApiResult> CloseTabAsync(
@@ -379,20 +392,66 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         private sealed class NotificationRegistration : Registration
         {
             private readonly INotificationHandle _handle;
-            private readonly ScriptKey _scriptKey;
-            private readonly string _executionId;
-            private readonly string _notificationId;
-            private readonly EventHandler _clicked;
-            private readonly EventHandler _closed;
+            private readonly UserScriptNotificationRequest _request;
+            private readonly string _executionId, _clientId;
+            private readonly EventHandler _clicked, _closed;
+            private volatile bool _callbacksEnabled = true;
+            private int _wasClicked;
+            private int _clickPending;
+            private Timer _clickFallback;
+            private Exception _failure;
+            public ScriptKey ScriptKey => _request.ScriptKey;
+            public string Tag => _request.Tag;
+            public bool Persistent => !string.IsNullOrEmpty(Tag) || _request.Url != null;
             public NotificationRegistration(HostInteractionApiProvider owner, string key, INotificationHandle handle,
-                ScriptKey scriptKey, string executionId, string notificationId) : base(owner, key)
+                UserScriptNotificationRequest request, string executionId, string clientId) : base(owner, key)
             {
-                _handle = handle; _scriptKey = scriptKey; _executionId = executionId; _notificationId = notificationId;
-                _clicked = (_, __) => { if (!IsTerminal) owner.Notification?.Invoke(owner, new ApiNotificationEventArgs(scriptKey, executionId, "notification-click", JsonSerializer.Serialize(new { notificationId }))); };
-                _closed = (_, __) => { if (TryTerminal()) owner.Notification?.Invoke(owner, new ApiNotificationEventArgs(scriptKey, executionId, "notification-done", JsonSerializer.Serialize(new { notificationId }))); };
+                _handle = handle; _request = request; _executionId = executionId; _clientId = clientId;
+                _clicked = (_, __) =>
+                {
+                    if (IsTerminal || Interlocked.Exchange(ref _wasClicked, 1) != 0) return;
+                    Interlocked.Exchange(ref _clickPending, 1);
+                    if (!_callbacksEnabled) { ResolveClick(false); return; }
+                    _clickFallback = new Timer(___ => ResolveClick(false), null, 5000, Timeout.Infinite);
+                    Publish("notification-click", new { clientId });
+                };
+                _closed = (_, __) => Finish();
             }
-            public void Subscribe() { _handle.Clicked += _clicked; _handle.Closed += _closed; }
-            public override void Dispose() { _handle.Clicked -= _clicked; _handle.Closed -= _closed; _handle.Dispose(); }
+            public void Start()
+            {
+                _handle.Clicked += _clicked; _handle.Closed += _closed;
+                _handle.Start();
+                _handle.Completion.ContinueWith(task => { var observed = task.Exception; Finish(); }, TaskScheduler.Default);
+            }
+            public void ResolveClick(bool preventDefault)
+            {
+                if (IsTerminal || Interlocked.Exchange(ref _clickPending, 0) == 0) return;
+                _clickFallback?.Dispose();
+                _handle.ResolveClick(preventDefault);
+            }
+            public void StartFailed(Exception error) { _failure = error; Dispose(); }
+            public void EndDocument()
+            {
+                _callbacksEnabled = false;
+                if (Persistent) ResolveClick(false); else Dispose();
+            }
+            private void Publish(string eventName, object value)
+            {
+                if (_callbacksEnabled) Owner.Notification?.Invoke(Owner,
+                    new ApiNotificationEventArgs(ScriptKey, _executionId, eventName, JsonSerializer.Serialize(value)));
+            }
+            private void Finish()
+            {
+                if (!TryTerminal()) return;
+                try
+                {
+                    var error = _failure ?? (_handle.Completion.IsFaulted ? _handle.Completion.Exception.GetBaseException() : null);
+                    if (error != null) Publish("notification-error", new { clientId = _clientId, details = error.Message });
+                    else Publish("notification-done", new { clientId = _clientId, clicked = _wasClicked != 0 });
+                }
+                finally { _clickFallback?.Dispose(); _handle.Clicked -= _clicked; _handle.Closed -= _closed; _handle.Dispose(); }
+            }
+            public override void Dispose() { _handle.Dispose(); Finish(); }
         }
 
         private sealed class TabRegistration : Registration
@@ -520,13 +579,14 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var commandId = ProviderParameters.RequiredInt32(context.Parameters, "commandId");
-            if (commandId <= 0)
-                throw ProviderParameters.Invalid("commandId must be positive.");
+            var commandId = ReadMenuId(context.Parameters);
+            string invocationJson;
+            using (var idDocument = JsonDocument.Parse(commandId))
+                invocationJson = JsonSerializer.Serialize(new { commandId = idDocument.RootElement });
             var registrationKey = context.ExecutionId + ":" + commandId;
             lock (_sync)
             {
-                if (_menuRegistrations.ContainsKey(registrationKey) || !_pendingMenus.Add(registrationKey))
+                if (!_pendingMenus.Add(registrationKey))
                     throw ProviderParameters.Invalid("The menu command ID is already registered.");
             }
             IMenuRegistration registration = null;
@@ -535,24 +595,30 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 registration = await _menu.RegisterAsync(new MenuCommandRequest(
                     context.Installation.ScriptKey,
                     ProviderParameters.RequiredString(context.Parameters, "name"),
-                    ProviderParameters.OptionalString(context.Parameters, "accessKey")),
+                    ProviderParameters.OptionalString(context.Parameters, "accessKey"),
+                    ProviderParameters.OptionalString(context.Parameters, "title"),
+                    ProviderParameters.OptionalBoolean(context.Parameters, "autoClose", true)),
                     () => Notification?.Invoke(this, new ApiNotificationEventArgs(
                         context.Installation.ScriptKey,
                         context.ExecutionId,
                         "menu-command",
-                        JsonSerializer.Serialize(new { commandId }))),
+                        invocationJson)),
                     cancellationToken).ConfigureAwait(false);
                 if (registration == null)
                     throw new InvalidOperationException("The menu service returned no registration.");
                 var providerDisposed = false;
                 var executionEnded = false;
+                IMenuRegistration previous = null;
                 lock (_sync)
                 {
                     _pendingMenus.Remove(registrationKey);
                     executionEnded = _endedPendingMenus.Remove(registrationKey);
                     providerDisposed = _disposed;
                     if (!providerDisposed && !executionEnded)
-                        _menuRegistrations.Add(registrationKey, registration);
+                    {
+                        _menuRegistrations.TryGetValue(registrationKey, out previous);
+                        _menuRegistrations[registrationKey] = registration;
+                    }
                 }
                 if (providerDisposed || executionEnded)
                 {
@@ -562,7 +628,8 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                         throw new ObjectDisposedException(nameof(HostInteractionApiProvider));
                     throw new OperationCanceledException("The script execution ended while registering the menu command.", cancellationToken);
                 }
-                return ApiResult.FromValue(commandId);
+                previous?.Dispose();
+                return ApiResult.FromJson(commandId);
             }
             catch
             {
@@ -578,17 +645,26 @@ namespace Mzying2001.MonkeySharp.Core.Apis
 
         private ApiResult UnregisterMenu(ApiInvocationContext context)
         {
-            var commandId = ProviderParameters.RequiredInt32(context.Parameters, "commandId");
+            var commandId = ReadMenuId(context.Parameters);
             var registrationKey = context.ExecutionId + ":" + commandId;
             IMenuRegistration registration;
             lock (_sync)
             {
+                if (_pendingMenus.Contains(registrationKey)) _endedPendingMenus.Add(registrationKey);
                 if (!_menuRegistrations.TryGetValue(registrationKey, out registration))
-                    return ApiResult.FromValue(false);
+                    return ApiResult.Undefined;
                 _menuRegistrations.Remove(registrationKey);
             }
             registration.Dispose();
-            return ApiResult.FromValue(true);
+            return ApiResult.Undefined;
+        }
+
+        private static string ReadMenuId(JsonElement parameters)
+        {
+            if (parameters.TryGetProperty("commandId", out var value) &&
+                ((value.ValueKind == JsonValueKind.String && !string.IsNullOrEmpty(value.GetString())) ||
+                (value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var id) && id > 0))) return value.GetRawText();
+            throw ProviderParameters.Invalid("commandId must be a nonempty string or positive integer.");
         }
 
         private static Uri ReadHttpUrl(JsonElement parameters, string name)
