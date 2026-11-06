@@ -125,7 +125,7 @@ registration.remove();
 
 `GM_webRequest(rules, listener)` is the legacy alias of the same registration function. Listener calls use `(info, message, details)` and report only `cancel` or `redirect` results.
 
-Whenever a web request service is available, including the default service, `Attach` requires an uninitialized browser with an empty `RequestHandler` slot or a `CefSharpWebRequestHandlerMultiplexer`. Compose an existing application handler before attaching:
+Whenever a web request service is available, including the default service, `Attach` requires an empty `RequestHandler` slot or a `CefSharpWebRequestHandlerMultiplexer`. Attach before initialization to observe the initial document; later attachment is explicitly marked. Compose an existing application handler before attaching:
 
 ```csharp
 var requestHandlers = new CefSharpWebRequestHandlerMultiplexer();
@@ -203,6 +203,12 @@ The runtime uses handle events to deliver script callbacks; completing a `Comple
 The JavaScript download contract differs from the host operation contract: `GM.download` returns a `Promise<DownloadHandle>` that resolves when the download starts, and currently ignores callback fields in `details`. Use `GM_download` in `LegacyCompatible` for script-facing progress and terminal callbacks. See the [download guide](usage-guide.md#downloads) for return values and limitations.
 
 ## Lifecycle and Diagnostics
+
+`PrepareAsync()` prepares the attachment's shared CDP session;
+`NavigateAsync(url)` waits for it before navigating. Start the browser at
+`about:blank` when using this sequence. `IsLateAttach` and `IsLatePreparation`
+identify initialization that already occurred. These APIs do not upgrade
+userscript timing guarantees. See the [real protocol findings](compatibility/cdp-findings.md).
 
 The adapter creates an identity per frame document and executes each `(document, frame, script, run-at)` once. `@run-at context-menu` scripts are listed by the native CefSharp context menu for the matching frame and execute a fresh invocation only after the user selects an entry. Navigation, context release, detach, and disposal invalidate capabilities and cancel pending work.
 

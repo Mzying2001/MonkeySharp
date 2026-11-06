@@ -204,6 +204,11 @@ JavaScript 下载契约与宿主操作契约不同：`GM.download` 返回的 `Pr
 
 ## 生命周期与诊断
 
+`PrepareAsync()` 准备当前附加会话的共享 CDP；`NavigateAsync(url)` 等待准备后导航。
+使用该顺序时，浏览器应以 `about:blank` 初始化。`IsLateAttach` 与 `IsLatePreparation`
+分别标记附加、准备发生时初始化已完成。这些 API 不提高用户脚本的时序保证。
+参见[真实协议实验结论](compatibility/cdp-findings.md)。
+
 适配器为每个框架文档建立身份，并对每个 `(document, frame, script, run-at)` 组合执行一次。`@run-at context-menu` 脚本会按当前 frame 匹配规则出现在 CefSharp 原生上下文菜单中，只有用户选择菜单项后才创建一次新的执行。导航、上下文释放、分离和宿主释放都会使能力失效并取消待处理工作。
 
 `GM.info` 和 `GM_info` 无需授权，两个兼容模式下都默认可用，且不受 `ExposeLegacyGlobals` 限制。缺少 `@grant` 和显式 `@grant none` 时只提供 info；显式授权列表会在逐项授权的能力之外默认提供 info。授权目录仍支持显式声明 `GM.info` 和 `GM_info`，旧版别名解析仍遵守配置。原始声明状态和授权列表保持不变，不会向元数据添加隐式 info 授权。两个名称引用同一个深度冻结快照，包含元数据、授权、URL 规则、资源、更新状态、handler、sandbox 模式和原始元数据文本。版本化的 `compatibility` 块使用 `contractVersion: 1` 标出固定值、元数据来源、混合来源和扩展字段，并明确 page world 执行边界。

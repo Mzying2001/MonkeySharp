@@ -22,12 +22,14 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
     public sealed class CefSharpUserScriptHostTests
     {
         [Fact]
-        public async Task AttachRequiresAnUninitializedBrowserAndFreeHandlerSlot()
+        public async Task AttachMarksInitializedBrowsersAndRequiresFreeHandlerSlots()
         {
             using (var host = await CreateHostAsync(Script("none", "document-start")))
             {
                 var initialized = new BrowserFixture(initialized: true);
-                Assert.Throws<InvalidOperationException>(() => host.Attach(initialized.Browser.Object));
+                host.Attach(initialized.Browser.Object);
+                Assert.True(host.IsLateAttach);
+                await host.DetachAsync(CancellationToken.None);
 
                 var occupied = new BrowserFixture();
                 occupied.Browser.Object.RenderProcessMessageHandler = Mock.Of<IRenderProcessMessageHandler>();

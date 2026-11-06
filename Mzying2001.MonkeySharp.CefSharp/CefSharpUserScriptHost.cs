@@ -48,6 +48,78 @@ namespace Mzying2001.MonkeySharp.CefSharp
         private string _browserSessionId;
         private bool _disposed;
         private long _attachmentGeneration;
+        private Task<CefSharpCdpSession> _cdpPreparation;
+
+        /// <summary>Gets whether preparation began after the browser was initialized.</summary>
+        public bool IsLatePreparation { get; private set; }
+
+        /// <summary>Gets whether attachment occurred after native browser initialization.</summary>
+        public bool IsLateAttach { get; private set; }
+
+        /// <summary>Prepares the browser-scoped protocol session before business navigation.</summary>
+        public async Task PrepareAsync(CancellationToken cancellationToken = default(CancellationToken))
+        {
+            await GetCdpSessionAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        /// <summary>Waits for preparation, then navigates. This does not guarantee userscript document-start timing.</summary>
+        public async Task NavigateAsync(string url, CancellationToken cancellationToken = default(CancellationToken))
+        {
+            if (!Uri.TryCreate(url, UriKind.Absolute, out _)) throw new ArgumentException("An absolute URL is required.", nameof(url));
+            var session = await GetCdpSessionAsync(cancellationToken).ConfigureAwait(false);
+            var result = await session.ExecuteAsync("Page.navigate", new { url }, cancellationToken).ConfigureAwait(false);
+            if (result.TryGetProperty("errorText", out var error)) throw new InvalidOperationException(error.GetString());
+        }
+
+        internal Task<CefSharpCdpSession> GetCdpSessionAsync(CancellationToken cancellationToken)
+        {
+            Task<CefSharpCdpSession> preparation;
+            lock (_sync)
+            {
+                ThrowIfDisposed();
+                if (_browser == null) throw new InvalidOperationException("No browser is attached.");
+                if (_cdpPreparation != null && (_cdpPreparation.IsFaulted || _cdpPreparation.IsCanceled)) _cdpPreparation = null;
+                if (_cdpPreparation == null)
+                {
+                    IsLatePreparation = _browser.IsBrowserInitialized;
+                    _cdpPreparation = PrepareCdpAsync(_browser, _attachmentCancellation.Token);
+                }
+                preparation = _cdpPreparation;
+            }
+            return AwaitPreparationAsync(preparation, cancellationToken);
+        }
+
+        private static async Task<CefSharpCdpSession> AwaitPreparationAsync(Task<CefSharpCdpSession> preparation, CancellationToken cancellationToken)
+        {
+            var canceled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            using (cancellationToken.Register(() => canceled.TrySetCanceled()))
+            {
+                await await Task.WhenAny(preparation, canceled.Task).ConfigureAwait(false);
+                return await preparation.ConfigureAwait(false);
+            }
+        }
+
+        private static async Task<CefSharpCdpSession> PrepareCdpAsync(IWebBrowser browser, CancellationToken cancellationToken)
+        {
+            using (var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+            {
+                deadline.CancelAfter(TimeSpan.FromSeconds(15));
+                while (!browser.IsBrowserInitialized)
+                {
+                    if (browser.IsDisposed) throw new ObjectDisposedException(nameof(browser));
+                    await Task.Delay(10, deadline.Token).ConfigureAwait(false);
+                }
+                deadline.Token.ThrowIfCancellationRequested();
+                var session = new CefSharpCdpSession(browser.GetBrowser().GetHost());
+                try
+                {
+                    await session.InitializeAsync().ConfigureAwait(false);
+                    await session.ExecuteAsync("Browser.getVersion", cancellationToken: deadline.Token).ConfigureAwait(false);
+                    return session;
+                }
+                catch { session.Dispose(); throw; }
+            }
+        }
 
         internal CefSharpUserScriptHost(
             UserScriptEngine engine,
@@ -100,8 +172,8 @@ namespace Mzying2001.MonkeySharp.CefSharp
             ? BridgeIntegrityGuarantee.TrustedPageWorld
             : BridgeIntegrityGuarantee.Unverified;
 
-        /// <summary>Attaches the host before the CefSharp browser is initialized.</summary>
-        /// <param name="browser">The uninitialized browser to attach.</param>
+        /// <summary>Attaches the host. Attach before initialization to observe the first document.</summary>
+        /// <param name="browser">The browser to attach; initialized browsers are marked as late attachments.</param>
         /// <exception cref="InvalidOperationException">The host is already attached or the browser cannot accept the bridge handlers.</exception>
         public void Attach(IWebBrowser browser)
         {
@@ -116,8 +188,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             if (browser.IsDisposed)
                 throw new ObjectDisposedException(nameof(browser));
             EnsureCompatibleCefSharp();
-            if (browser.IsBrowserInitialized)
-                throw new InvalidOperationException("MonkeySharp must be attached before the CefSharp browser is initialized.");
+            var lateAttach = browser.IsBrowserInitialized;
             if (browser.JavascriptObjectRepository.IsBound(BridgeObjectName))
                 throw new InvalidOperationException("The MonkeySharp bridge name is already registered.");
             var contextMenuProperty = GetContextMenuHandlerProperty(browser);
@@ -182,6 +253,8 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 lock (_sync)
                 {
                     _browser = browser;
+                    IsLateAttach = lateAttach;
+                    IsLatePreparation = false;
                     _multiplexer = multiplexer;
                     _ownsMultiplexer = ownsMultiplexer;
                     _requestMultiplexer = requestMultiplexer;
@@ -235,6 +308,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             CancellationTokenSource attachmentCancellation;
             ContextMenuHandler contextMenuHandler;
             FrameSession[] sessions;
+            Task<CefSharpCdpSession> cdpPreparation;
             long attachmentGeneration;
             lock (_sync)
             {
@@ -250,6 +324,8 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 contextMenuHandler = _contextMenuHandler;
                 attachmentGeneration = _attachmentGeneration;
                 sessions = _sessions.Values.ToArray();
+                cdpPreparation = _cdpPreparation;
+                _cdpPreparation = null;
                 _sessions.Clear();
                 _browser = null;
                 _multiplexer = null;
@@ -264,6 +340,13 @@ namespace Mzying2001.MonkeySharp.CefSharp
 
             webRequestHandler?.Dispose();
             attachmentCancellation.Cancel();
+            if (cdpPreparation != null)
+            {
+                try { (await cdpPreparation.ConfigureAwait(false)).Dispose(); }
+                catch (OperationCanceledException) { }
+                catch (ObjectDisposedException) { }
+                catch (Exception error) { EmitDiagnostic("MSC220_CDP_PREPARATION_FAILED", DiagnosticSeverity.Warning, "CDP preparation failed during detach.", error); }
+            }
             foreach (var session in sessions)
                 session.Cancellation.Cancel();
 

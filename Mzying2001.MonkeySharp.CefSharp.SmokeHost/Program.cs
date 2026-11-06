@@ -23,7 +23,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
     internal static class Program
     {
         [STAThread]
-        private static void Main()
+        private static void Main(string[] args)
         {
             CefSharpSettings.WcfEnabled = false;
             CefSharpSettings.ConcurrentTaskExecution = true;
@@ -37,7 +37,8 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
 
             try
             {
-                RunAsync().GetAwaiter().GetResult();
+                if (args.Contains("--cdp-probe")) CdpProbe.RunAsync().GetAwaiter().GetResult();
+                else RunAsync().GetAwaiter().GetResult();
             }
             finally
             {
@@ -547,6 +548,13 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                     byte[] body;
                     switch (request.Path)
                     {
+                        case "/probe/start":
+                            contentType = "text/html; charset=utf-8";
+                            body = Encoding.UTF8.GetBytes("<!doctype html><html><head><script>" +
+                                "document.dispatchEvent(new Event('probe-first-inline'));" +
+                                "window.__firstInline = {page:window.__pagePrepared === true, isolatedA:document.documentElement.dataset.isolatedA || null, isolatedB:document.documentElement.dataset.isolatedB || null, gm:document.documentElement.dataset.gmStart || null};" +
+                                "</script></head><body>First inline timing probe</body></html>");
+                            break;
                         case "/compat/frames":
                             contentType = "text/html; charset=utf-8";
                             body = Encoding.UTF8.GetBytes("<!doctype html><html><body><iframe id='same' src='/compat/frames/same'></iframe>" +

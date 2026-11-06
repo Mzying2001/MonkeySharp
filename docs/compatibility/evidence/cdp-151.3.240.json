@@ -1,0 +1,176 @@
+[
+  {
+    "type": "cdp-probe",
+    "status": "passed",
+    "cefSharpVersion": "151.3.240.0",
+    "platform": "x64",
+    "browser": {
+      "protocolVersion": "1.3",
+      "product": "Chrome/151.0.7922.174",
+      "revision": "@39c51c70dd5feca6b6aba5bb7997b595011c553d",
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+      "jsVersion": "15.1.206.23"
+    },
+    "checks": {
+      "preparedNavigation": true,
+      "pageBeforeFirstInline": true,
+      "isolatedBeforeFirstInline": true,
+      "realGmEventuallyReady": true,
+      "nativeFrameIdentity": true,
+      "perScriptWorld": true,
+      "contextIdBinding": true,
+      "cookieEngineAccepted": true,
+      "cookieReadback": true,
+      "cookieHttpEffect": true,
+      "cookieDeleted": true,
+      "observerCoexistence": true,
+      "commandTimeout": true,
+      "commandCancellation": true,
+      "contextRevocation": true
+    },
+    "firstInline": {
+      "page": true,
+      "isolatedA": "A",
+      "isolatedB": "B",
+      "gm": null
+    },
+    "strictGm": "blocked",
+    "timingReason": "current-host-bootstrap-asynchronous",
+    "limitation": "Preinjection works; the current asynchronous GM bootstrap does not guarantee readiness before the first inline. No isolated privileged executor is enabled.",
+    "contexts": {
+      "5": {
+        "id": 5,
+        "origin": "http://127.0.0.1:59449",
+        "name": "",
+        "uniqueId": "-847503299454659644.-3269136452051435697",
+        "auxData": {
+          "isDefault": true,
+          "type": "default",
+          "frameId": "424D4F8364EAA681E143A9FB19C51030"
+        }
+      },
+      "6": {
+        "id": 6,
+        "origin": "http://127.0.0.1:59449",
+        "name": "monkeysharp-probe-A",
+        "uniqueId": "-7710640821304383318.1628016183040076867",
+        "auxData": {
+          "isDefault": false,
+          "type": "isolated",
+          "frameId": "424D4F8364EAA681E143A9FB19C51030"
+        }
+      },
+      "7": {
+        "id": 7,
+        "origin": "http://127.0.0.1:59449",
+        "name": "monkeysharp-probe-B",
+        "uniqueId": "-1129174625454412697.3465023136017965863",
+        "auxData": {
+          "isDefault": false,
+          "type": "isolated",
+          "frameId": "424D4F8364EAA681E143A9FB19C51030"
+        }
+      }
+    },
+    "eventCounts": {
+      "Page.domContentEventFired": 2,
+      "Page.frameNavigated": 2,
+      "Page.frameStartedLoading": 2,
+      "Page.frameStartedNavigating": 2,
+      "Page.frameStoppedLoading": 2,
+      "Page.loadEventFired": 2,
+      "Runtime.bindingCalled": 1,
+      "Runtime.executionContextCreated": 7,
+      "Runtime.executionContextsCleared": 4
+    },
+    "evidencePath": "artifacts/smoke/151.3.240-x64/cdp-probe.jsonl",
+    "baselineCommit": "001f578"
+  },
+  {
+    "type": "cdp-probe",
+    "status": "passed",
+    "cefSharpVersion": "151.3.240.0",
+    "platform": "x86",
+    "browser": {
+      "protocolVersion": "1.3",
+      "product": "Chrome/151.0.7922.174",
+      "revision": "@39c51c70dd5feca6b6aba5bb7997b595011c553d",
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+      "jsVersion": "15.1.206.23"
+    },
+    "checks": {
+      "preparedNavigation": true,
+      "pageBeforeFirstInline": true,
+      "isolatedBeforeFirstInline": true,
+      "realGmEventuallyReady": true,
+      "nativeFrameIdentity": true,
+      "perScriptWorld": true,
+      "contextIdBinding": true,
+      "cookieEngineAccepted": true,
+      "cookieReadback": true,
+      "cookieHttpEffect": true,
+      "cookieDeleted": true,
+      "observerCoexistence": true,
+      "commandTimeout": true,
+      "commandCancellation": true,
+      "contextRevocation": true
+    },
+    "firstInline": {
+      "page": true,
+      "isolatedA": "A",
+      "isolatedB": "B",
+      "gm": null
+    },
+    "strictGm": "blocked",
+    "timingReason": "current-host-bootstrap-asynchronous",
+    "limitation": "Preinjection works; the current asynchronous GM bootstrap does not guarantee readiness before the first inline. No isolated privileged executor is enabled.",
+    "contexts": {
+      "5": {
+        "id": 5,
+        "origin": "http://127.0.0.1:59630",
+        "name": "",
+        "uniqueId": "-6767796097200801868.-3505264673472160577",
+        "auxData": {
+          "isDefault": true,
+          "type": "default",
+          "frameId": "77CEA600DC071D19F6D1D547079F3723"
+        }
+      },
+      "6": {
+        "id": 6,
+        "origin": "http://127.0.0.1:59630",
+        "name": "monkeysharp-probe-A",
+        "uniqueId": "5013743447505018494.7739382434900642154",
+        "auxData": {
+          "isDefault": false,
+          "type": "isolated",
+          "frameId": "77CEA600DC071D19F6D1D547079F3723"
+        }
+      },
+      "7": {
+        "id": 7,
+        "origin": "http://127.0.0.1:59630",
+        "name": "monkeysharp-probe-B",
+        "uniqueId": "3000439930662350854.1972886992694145152",
+        "auxData": {
+          "isDefault": false,
+          "type": "isolated",
+          "frameId": "77CEA600DC071D19F6D1D547079F3723"
+        }
+      }
+    },
+    "eventCounts": {
+      "Page.domContentEventFired": 2,
+      "Page.frameNavigated": 2,
+      "Page.frameStartedLoading": 2,
+      "Page.frameStartedNavigating": 2,
+      "Page.frameStoppedLoading": 2,
+      "Page.loadEventFired": 2,
+      "Runtime.bindingCalled": 1,
+      "Runtime.executionContextCreated": 7,
+      "Runtime.executionContextsCleared": 4
+    },
+    "evidencePath": "artifacts/smoke/151.3.240-x86/cdp-probe.jsonl",
+    "baselineCommit": "001f578"
+  }
+]
