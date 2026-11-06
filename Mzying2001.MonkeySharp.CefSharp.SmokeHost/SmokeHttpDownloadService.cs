@@ -12,6 +12,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
     // Deliberately a fixture service: no UI, redirects or non-fixture destinations.
     internal sealed class SmokeHttpDownloadService : IDownloadService, IDisposable
     {
+        public string DownloadMode => "native";
         private readonly HttpClient _client = new HttpClient(new HttpClientHandler
         { AllowAutoRedirect = false, UseCookies = false, UseProxy = false }) { Timeout = Timeout.InfiniteTimeSpan };
         private readonly List<Operation> _operations = new List<Operation>();

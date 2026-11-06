@@ -19,43 +19,33 @@ dotnet build Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csp
 
 CI 仅在目标分支为 `dev` 或 `main` 的 PR 上触发，针对 x64 和 x86 验证 `84.4.10`、`121.3.70`、`151.3.240`。每个矩阵项都会还原、构建并测试 solution，运行 JavaScript 协议测试，再用真实 Chromium 执行 SmokeHost。WPF Demo smoke 保留为默认 `121.3.70` 的 x64 验证。
 
-## 兼容性配置
+## 授权与 API 契约
 
-`CefSharpHostOptions.Compatibility` 默认为 `LegacyCompatible`。默认元数据解析器接受 `GM_getValue` 等旧式授权；执行期配置控制包装器语义、旧式全局对象和同步镜像。旧式回调 API 与 `GM.*` 使用相同的认证桥接操作。
+MonkeySharp 只有一套用户脚本契约，保留两种官方调用形式。
+[固定 5.5.1 实测](compatibility/api-contract.md) 决定暴露规则：旧式全局需要精确声明名；
+现代存储、资源、菜单和标签数据 API 按家族授权。例如 `GM_getValue` 声明会提供该旧式名称，
+以及含 `GM.setValue` 的现代存储家族，但不会提供未声明的 `GM_setValue` 全局。
 
-| Profile | 包装器与 API 暴露行为 |
-| --- | --- |
-| `LegacyCompatible`（默认） | 非严格包装器；顶层 `this` 为 window facade。公开现代 API 和已启用的 `GM_*` 别名，并提供有界的同步存储与资源快照。 |
-| `ModernStrict` | 严格包装器；顶层 `this` 为 `undefined`。公开现代 API 名称和默认可用的 `GM_info` 属性，其他旧式全局绑定被禁用。各 API 仍遵循自身返回契约：`GM.openInTab` 和 `GM.webRequest` 立即返回句柄。 |
-
-宿主选择执行期配置，仓库解析器选择元数据配置，因此两处应使用同一个 profile。下面的示例为可信页面和脚本配置宿主：
+未声明、显式 none、未知授权和 info-only 保留各自元数据状态。固定对照环境在这些情况下
+均提供 `GM_info` 和 `GM.info`。none 不提供 unsafeWindow，其余声明可访问页面 global。
+包装器尊重源码自身的 `"use strict"`，调用风格不选择 strict 或执行世界。
+顶层 this 是 window 门面；none 按实测使用独立对象 receiver。生产执行仍在页面世界。
 
 ```csharp
-using Mzying2001.MonkeySharp.CefSharp;
-using Mzying2001.MonkeySharp.Core.Compatibility;
-using Mzying2001.MonkeySharp.Core.Parsing;
-using Mzying2001.MonkeySharp.Core.Repository;
-
-var profile = UserScriptCompatibilityProfile.ModernStrict;
-var parser = new UserScriptMetadataParser(
-    new UserScriptMetadataParserOptions
-    {
-        Profile = profile,
-        AllowHeaderPreamble = false
-    });
-var repository = new InMemoryUserScriptRepository(parser);
+var repository = new InMemoryUserScriptRepository();
 var host = new CefSharpUserScriptHostBuilder(repository)
-    .Configure(new CefSharpHostOptions
-    {
-        TrustedPageWorld = true, // 仅用于应用程序信任的页面和脚本。
-        Compatibility = new UserScriptCompatibilityOptions { Profile = profile }
-    })
+    .Configure(new CefSharpHostOptions { TrustedPageWorld = true })
     .Build();
 ```
 
-`TrustedPageWorld` 独立于兼容性 profile，默认为 `false`。未显式启用时，声明了 `none` 或 info（`GM.info` / `GM_info`）以外显式授权的脚本会被抑制，并产生 `MSR201_BRIDGE_INTEGRITY_REQUIRED`，`ModernStrict` 也不例外。仅使用 info 的脚本会跳过桥接绑定和 hello 握手。可信模式下，需要桥接的执行会产生 `MSR200_UNVERIFIED_BRIDGE`；严格包装器语义不会创建隔离 JavaScript 世界。详见 [README 安全模型](../README.zh-CN.md#安全模型)。
+TrustedPageWorld 默认关闭；特权执行需要可信桥或宿主显式信任页面。仅 info 的脚本跳过桥接。
+旧式同步存储和资源使用有界准备快照。不再提供 profile、别名解析、旧式全局或快照启用开关。
+任何调用风格下，require 缺少提供器都会以 `MSR401_DEPENDENCY_PROVIDER_UNAVAILABLE` 跳过执行。
 
-宿主可通过 `ExposeLegacyGlobals`、`EnableSynchronousStorageMirror` 和 `EnableSynchronousResourceSnapshot` 分别禁用 `GM_info` 以外的旧式全局绑定、存储镜像或资源快照。快照准备失败、不完整或超限时，对应的同步别名不可用，现代方法仍可使用桥接。快照限制及降级诊断见[生命周期与诊断](#生命周期与诊断)。
+`IDownloadService.DownloadMode` 报告后端实际语义。`IsIncognito` 从实际 context 解析私密状态，
+`AutomaticallyUpdatesScripts` 报告真实更新策略；未知状态不写入 info。Demo 明确报告其共享普通
+context 和仅手动更新策略。`GM.info.version` 是管理器程序集版本，脚本版本位于 `script.version`。
+`GM.info.compatibility.capabilities` 记录 API 是否可用及明确的政策、引擎限制原因。
 
 ## 资源完整性与更新检查
 
@@ -184,7 +174,7 @@ Demo 使用数据库格式 2，拒绝旧开发数据库，不进行迁移或删�
 - 值存储还应实现 `IUserScriptValueSnapshotProvider`，返回按插入顺序排列的不可变 `IReadOnlyList<KeyValuePair<string, UserScriptValue>>`，以提供原子的兼容性快照。否则网关会分别读取键和值，并产生 `MSC411_COMPATIBILITY_SNAPSHOT_DEGRADED`。
 - 批量 GM API 不需要额外的存储接口。写入/删除逐键提交，失败时保留之前的提交，并发出常规逐键事件。全量 `GM.getValues()` 优先使用快照能力，否则分别读取键和值。
 - `IUserScriptDependencyProvider` 负责 `@require` 的可信下载、缓存、HTTPS 策略及可选完整性验证；`ResourceScriptSourceResolver` 保持声明顺序、验证已声明的完整性，并将依赖原始字节总量限制为 `BridgeOptions.MaxResourceBytes`。
-- `LegacyCompatible` 中，缺少依赖提供程序会以 `MSR401_DEPENDENCY_PROVIDER_UNAVAILABLE` 跳过声明了 `@require` 的调用；提供程序失败产生 `MSR400_DEPENDENCY_RESOLUTION_FAILED`。`ModernStrict` 中，缺少提供程序时直接使用已安装的主源码。
+- 缺少依赖提供程序时以 `MSR401_DEPENDENCY_PROVIDER_UNAVAILABLE` 跳过执行；提供器失败产生 `MSR400_DEPENDENCY_RESOLUTION_FAILED`，不区分调用风格。
 - `IResourceProvider` 返回事先授权的已声明资源，内容受 `BridgeOptions.MaxResourceBytes` 限制。
 - `IHttpRequestService` 在工作开始前接收可重复读取的 `IUserScriptHttpBody` 和观察者；它应先报告元数据再报告正文、遵守可选的 `UserScriptHttpRequest.MaxResponseBytes` 正文上限（`null` 表示不受限）、在每次重定向前调用 `RedirectAllowed`，并记录已跟随 URL 供 Core 重新检查 `@connect`。该正文上限独立于桥接消息上限 `BridgeOptions.MaxResponseBytes`。
 - 每个宿主支持的请求都会将安装实例、框架、方法、目标摘要和当前能力传给 `IUserScriptPermissionPolicy`。
@@ -200,7 +190,7 @@ Demo 使用数据库格式 2，拒绝旧开发数据库，不进行迁移或删�
 
 运行时通过句柄事件向脚本发送回调；仅完成 `Completion` 任务不会发送终态回调。提供程序应只发出一次终态事件，并支持执行结束时的幂等清理。释放标签页句柄应解除观察关系；关闭用户标签页是独立的 `CloseAsync` 操作。
 
-JavaScript 下载契约与宿主操作契约不同：`GM.download` 返回的 `Promise<DownloadHandle>` 在下载启动时完成，目前会忽略 `details` 中的回调字段。需要脚本侧进度及终态回调时，应在 `LegacyCompatible` 中使用 `GM_download`。返回值及限制详见[下载使用指南](usage-guide.zh-CN.md#下载)。
+JavaScript 下载契约与宿主操作契约不同：`GM.download` 返回的 `Promise<DownloadHandle>` 在下载启动时完成，目前会忽略 `details` 中的回调字段。需要脚本侧进度及终态回调时，应使用已声明的 `GM_download` 入口。返回值及限制详见[下载使用指南](usage-guide.zh-CN.md#下载)。
 
 ## 生命周期与诊断
 
@@ -211,7 +201,9 @@ JavaScript 下载契约与宿主操作契约不同：`GM.download` 返回的 `Pr
 
 适配器为每个框架文档建立身份，并对每个 `(document, frame, script, run-at)` 组合执行一次。`@run-at context-menu` 脚本会按当前 frame 匹配规则出现在 CefSharp 原生上下文菜单中，只有用户选择菜单项后才创建一次新的执行。导航、上下文释放、分离和宿主释放都会使能力失效并取消待处理工作。
 
-`GM.info` 和 `GM_info` 无需授权，两个兼容模式下都默认可用，且不受 `ExposeLegacyGlobals` 限制。缺少 `@grant` 和显式 `@grant none` 时只提供 info；显式授权列表会在逐项授权的能力之外默认提供 info。授权目录仍支持显式声明 `GM.info` 和 `GM_info`，旧版别名解析仍遵守配置。原始声明状态和授权列表保持不变，不会向元数据添加隐式 info 授权。两个名称引用同一个深度冻结快照，包含元数据、授权、URL 规则、资源、更新状态、handler、sandbox 模式和原始元数据文本。版本化的 `compatibility` 块使用 `contractVersion: 1` 标出固定值、元数据来源、混合来源和扩展字段，并明确 page world 执行边界。
+GM.info 和 GM_info 无需单独授权，始终引用同一个深度冻结快照。声明状态与原始授权列表保持不变。
+compatibility 块的 contractVersion 为 2，记录真实执行世界、可用 API 及字段来源。管理器版本来自程序集；
+下载模式来自服务，私密状态和更新策略未知时省略；不再提供 position/blockers 占位值。
 
 CefSharp 只能提供尽力而为的 document-start 钩子。相应执行产生 `MSR100_DOCUMENT_START_BEST_EFFORT`；设置 `RequireGuaranteedDocumentStart = true` 后会跳过并产生 `MSR101_DOCUMENT_START_UNAVAILABLE`。
 
@@ -238,30 +230,10 @@ CefSharp 只能提供尽力而为的 document-start 钩子。相应执行产生 
 | `MSC411_COMPATIBILITY_SNAPSHOT_DEGRADED` | 值存储不支持原子快照，网关退回分别读取键和值。 |
 | `MSC412_COMPATIBILITY_BOOTSTRAP_LIMIT` | 快照超出字节预算并被标为不完整，对应同步别名不可用。 |
 
-## 迁移说明
+## 桥协议
 
-从 v1 迁移集成代码时，可参考以下对照：
-
-| v1 | 3.0 |
-| --- | --- |
-| `JScript` / 随机 `ScriptId` | 仓库管理的 `UserScriptInstallation` / 稳定 `ScriptKey` |
-| `JScriptMeta` 字典 | 不可变 `UserScriptMetadata` 和解析器诊断 |
-| `InjectorBase` 上的 `IList<JScript>` | `IUserScriptRepository` 快照和变更事件 |
-| `IDataStore` / `MemDataStore` | `IUserScriptValueStore` / `InMemoryUserScriptValueStore` |
-| `Injector.AttachBrowser` | 构建宿主，并在浏览器初始化前调用 `Attach` |
-| 同步 Messenger/WCF | 通过异步字符串绑定传输的版本化 JSON |
-| `GM_*` 全局对象 | 默认 `LegacyCompatible` 配置提供的当前桥接别名 |
-| `IScriptVerifier` 字符扫描器 | 元数据诊断及 Chromium 语法/运行时报告 |
-
-版本 3 的宿主服务契约不兼容旧源码。`IHttpRequestService.SendAsync` 在开始前接收 `IUserScriptHttpObserver` 并返回 `IHttpRequestOperation`；请求体是可重复读取的流，响应数据增量传递，重定向授权为异步操作。现有适配器应把旧 task 包装为操作对象，并转发响应开始、数据、进度、完成和中止事件。
-
-通知、标签页和下载服务分别返回[宿主服务契约](#宿主服务契约)中列出的生命周期句柄。`ITabStateService` 只接受 JSON 对象。`UseCookieService` 和 `UseWebRequestService` 用于替换默认服务；省略调用时仍启用默认实现。设置 `EnableDefaultNetworkServices = false` 可禁用内置网络服务，再显式注入宿主所需能力的服务。存在活动的 web request 服务时，须按前文说明组合请求处理器。
-
-旧版一次性传输的 `GM_xmlhttpRequest` 请求和结果现在改为 `create`、`appendBody`、`execute`、`readBody`、`abort`、`release` 生命周期会话。旧版 `ForceUseStrict`/`with(window)` 执行方式改为带有显式 `GM`、`GM_info`、`unsafeWindow` 和 `window` 参数的 `Function` 作用域。`LegacyCompatible` 使用非严格包装器，顶层 `this` 为 window facade；`ModernStrict` 使用严格包装器，顶层 `this` 为 `undefined`。
-
-默认配置已经内置兼容层，不存在单独的传输或 WCF 包。需要保留 v1 数据时必须显式迁移存储键。选择 `ModernStrict` 的应用应把元数据授权更新为规范 `GM.*` 名称。
-
-仅限浏览器扩展的 Cookie 分区、管理器 UI 状态、下载栏展示、通知持久化，以及需要等待 JavaScript 的请求拦截 API 仍属于宿主实现细节，不在兼容性承诺内。宿主应只公开文档规定的提供程序契约；能力缺失时返回 `MSP006_NOT_SUPPORTED`。
+当前仅支持桥协议 2，旧版本和未知版本均被拒绝，不保留兼容传输。必要的 CEF 版本适配、
+值编码和持久化安装身份保持有效。
 
 ## 构建、打包与验证
 
@@ -298,7 +270,7 @@ dotnet pack Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.cspr
 powershell -NoProfile -ExecutionPolicy Bypass -File Mzying2001.MonkeySharp.Demo/Run-E2E.ps1 -CefSharpVersion 121.3.70
 ```
 
-验证全过程应使用同一版本值：`dotnet restore/build/test/pack` 使用 `-p:CefSharpVersion=<版本>`，PowerShell runner 使用 `-CefSharpVersion <版本>`。SmokeHost 应分别对 x64/x86 和 `84.4.10`、`121.3.70`、`151.3.240` 运行；Demo gate 固定为默认版本 `121.3.70` 的 x64。在已有工作区切换版本前，先执行 `dotnet clean MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=<目标版本>`（位数使用目标平台），避免混用不同 CefSharp 版本的增量构建产物。SmokeHost runner 已使用选定版本执行 restore、clean、build，并核对实际运行的程序集版本和进程位数。两个验证入口都使用隔离 profile 和 `TrustedPageWorld`；它们是集成测试，不是安全沙箱。
+验证全过程应使用同一版本值：`dotnet restore/build/test/pack` 使用 `-p:CefSharpVersion=<版本>`，PowerShell runner 使用 `-CefSharpVersion <版本>`。SmokeHost 应分别对 x64/x86 和 `84.4.10`、`121.3.70`、`151.3.240` 运行；Demo gate 覆盖 x64 的 `84.4.10` 和 `121.3.70`。在已有工作区切换版本前，先执行 `dotnet clean MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=<目标版本>`（位数使用目标平台），避免混用不同 CefSharp 版本的增量构建产物。SmokeHost runner 已使用选定版本执行 restore、clean、build，并核对实际运行的程序集版本和进程位数。两个验证入口都使用隔离 profile 和 `TrustedPageWorld`；它们是集成测试，不是安全沙箱。
 
 ### Chromium 兼容性脚本包
 

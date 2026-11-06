@@ -40,7 +40,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         [InlineData("GM.info")]
         [InlineData("GM_info")]
         [InlineData("GM.getValue")]
-        public async Task HelloAlwaysIncludesInfoWithoutGrantingOtherCapabilities(string grant)
+        public async Task HelloIncludesInfoAndOnlyTheDeclaredModernFamily(string grant)
         {
             var grants = grant == null ? Array.Empty<string>() : new[] { grant };
             using (var fixture = await BridgeFixture.CreateAsync(grants))
@@ -49,10 +49,9 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 var apis = response.GetProperty("apis").EnumerateArray().Select(item => item.GetString()).ToList();
                 Assert.Contains("GM.info", apis);
                 Assert.Equal(grant == "GM.getValue", apis.Contains("GM.getValue"));
-                Assert.DoesNotContain("GM.setValue", apis);
+                Assert.Equal(grant == "GM.getValue", apis.Contains("GM.setValue"));
                 Assert.DoesNotContain("GM.addStyle", apis);
-                AssertError(await fixture.RequestAsync("GM.setValue", new { key = "denied", value = true }),
-                    BridgeErrorCodes.GrantDenied);
+                AssertError(await fixture.RequestAsync("GM.notification", new { }), BridgeErrorCodes.GrantDenied);
             }
         }
 
@@ -97,7 +96,6 @@ namespace Mzying2001.MonkeySharp.Core.Tests
 
         [Theory]
         [InlineData("GM.getResourceUrl")]
-        [InlineData("GM.getResourceURL")]
         [InlineData("GM_getResourceURL")]
         public async Task ResourceUrlGrantsAuthorizeCanonicalBridgeAndBootstrapResources(string grant)
         {
@@ -109,27 +107,25 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 source, new IUserScriptApiProvider[] { provider }))
             {
                 Assert.Equal(new[] { grant }, fixture.Invocation.DeclaredGrants);
-                Assert.Equal(new[] { "GM.getResourceURL" }, fixture.Invocation.Grants);
+                Assert.Equal(new[] { "GM.getResourceText", "GM.getResourceUrl" }, fixture.Invocation.Grants.OrderBy(value => value));
                 var hello = await fixture.HelloAsync();
-                Assert.Contains("GM.getResourceURL", hello.GetProperty("apis").EnumerateArray().Select(item => item.GetString()));
+                Assert.Contains("GM.getResourceUrl", hello.GetProperty("apis").EnumerateArray().Select(item => item.GetString()));
                 var resources = hello.GetProperty("compatibility").GetProperty("resources");
                 Assert.True(resources.GetProperty("complete").GetBoolean());
                 Assert.Equal("data:text/plain;base64,aGVsbG8=",
                     resources.GetProperty("values").GetProperty("template").GetProperty("url").GetString());
 
-                var response = await fixture.RequestAsync("GM.getResourceURL", new { name = "template" });
+                var response = await fixture.RequestAsync("GM.getResourceUrl", new { name = "template" });
                 Assert.True(response.GetProperty("ok").GetBoolean());
                 Assert.Equal("data:text/plain;base64,aGVsbG8=", response.GetProperty("result").GetString());
-                AssertError(await fixture.RequestAsync("GM.getResourceText", new { name = "template" }),
-                    BridgeErrorCodes.GrantDenied);
+                Assert.Equal("hello", (await fixture.RequestAsync("GM.getResourceText", new { name = "template" })).GetProperty("result").GetString());
             }
         }
 
         [Theory]
         [InlineData(null)]
         [InlineData("none")]
-        [InlineData("GM.getResourceText")]
-        public async Task ResourceUrlBridgeRequiresItsOwnGrant(string grant)
+        public async Task ResourceUrlBridgeRequiresAResourceFamilyGrant(string grant)
         {
             var source = MetadataAndMatchingTests.Script(
                 "// @name resource\n// @match https://example.com/*\n// @run-at document-end\n" +
@@ -140,8 +136,8 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 source, new IUserScriptApiProvider[] { provider }))
             {
                 var hello = await fixture.HelloAsync();
-                Assert.DoesNotContain("GM.getResourceURL", hello.GetProperty("apis").EnumerateArray().Select(item => item.GetString()));
-                AssertError(await fixture.RequestAsync("GM.getResourceURL", new { name = "template" }),
+                Assert.DoesNotContain("GM.getResourceUrl", hello.GetProperty("apis").EnumerateArray().Select(item => item.GetString()));
+                AssertError(await fixture.RequestAsync("GM.getResourceUrl", new { name = "template" }),
                     BridgeErrorCodes.GrantDenied);
             }
         }
@@ -168,20 +164,21 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         [InlineData("GM_getValues", "GM.getValues")]
         [InlineData("GM_setValues", "GM.setValues")]
         [InlineData("GM_deleteValues", "GM.deleteValues")]
-        public async Task BulkGrantsEnableOnlyTheirOwnCapabilityAndBootstrapStorage(string alias, string canonical)
+        public async Task BulkGrantsEnableTheModernStorageFamilyAndBootstrap(string alias, string canonical)
         {
             using (var fixture = await BridgeFixture.CreateAsync(alias))
             {
                 var hello = await fixture.HelloAsync();
                 var apis = hello.GetProperty("apis").EnumerateArray().Select(item => item.GetString()).ToList();
-                Assert.Equal(new[] { canonical, "GM.info" }.OrderBy(item => item), apis.OrderBy(item => item));
+                Assert.Contains(canonical, apis);
+                Assert.Contains("GM.setValue", apis);
+                Assert.Contains("GM.getValue", apis);
                 Assert.True(hello.GetProperty("compatibility").GetProperty("storage").GetProperty("complete").GetBoolean());
-                AssertError(await fixture.RequestAsync("GM.setValue", new { key = "x", value = 1 }), BridgeErrorCodes.GrantDenied);
-                AssertError(await fixture.RequestAsync(canonical == "GM.getValues" ? "GM.setValues" : "GM.getValues", new { }),
-                    BridgeErrorCodes.GrantDenied);
+                Assert.True((await fixture.RequestAsync("GM.setValue", new { key = "x", value = "n1" })).GetProperty("ok").GetBoolean());
+                Assert.Equal("n1", (await fixture.RequestAsync("GM.getValue", new { key = "x" })).GetProperty("result").GetProperty("value").GetString());
+                AssertError(await fixture.RequestAsync("GM.notification", new { }), BridgeErrorCodes.GrantDenied);
+                Assert.Equal(new[] { alias }, fixture.Invocation.DeclaredGrants);
             }
-            using (var fixture = await BridgeFixture.CreateAsync("GM.getValue", "GM.setValue", "GM.deleteValue"))
-                AssertError(await fixture.RequestAsync(canonical, new { }), BridgeErrorCodes.GrantDenied);
         }
 
         [Fact]
@@ -305,7 +302,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         {
             using (var fixture = await BridgeFixture.CreateAsync("GM.getValue", "GM.download"))
             {
-                var denied = await fixture.RequestAsync("GM.setValue", new { key = "x", value = 1 });
+                var denied = await fixture.RequestAsync("GM.notification", new { });
                 var unsupported = await fixture.RequestAsync("GM.download", new { url = "https://example.com/a" });
 
                 AssertError(denied, BridgeErrorCodes.GrantDenied);
@@ -489,8 +486,10 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             }
         }
 
-        [Fact]
-        public async Task MalformedVersionAndInvalidParamsUseStableErrors()
+        [Theory]
+        [InlineData(1)]
+        [InlineData(99)]
+        public async Task MalformedVersionAndInvalidParamsUseStableErrors(int unsupportedVersion)
         {
             using (var fixture = await BridgeFixture.CreateAsync("GM.getValue"))
             {
@@ -499,7 +498,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 var versionMessage = new Dictionary<string, object>
                 {
                     ["type"] = "hello",
-                    ["protocol"] = 99,
+                    ["protocol"] = unsupportedVersion,
                     ["documentId"] = fixture.Frame.DocumentId,
                     ["scriptKey"] = fixture.Invocation.ScriptKey.ToString(),
                     ["capability"] = fixture.Invocation.Capability
@@ -1197,7 +1196,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             {
                 return new Dictionary<string, object>
                 {
-                    ["protocol"] = 1,
+                    ["protocol"] = 2,
                     ["documentId"] = frame.DocumentId,
                     ["scriptKey"] = invocation.ScriptKey.ToString(),
                     ["capability"] = invocation.Capability

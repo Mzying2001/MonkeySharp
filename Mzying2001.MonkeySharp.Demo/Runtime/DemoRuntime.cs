@@ -92,7 +92,12 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                 .UseWindowService(new WpfWindowService(MainWindow, tab, _dispatcher))
                 .UseDownloadService(downloads).UseTabStateService(_tabStates.ForTab(tab.TabId))
                 .UseResourceProvider(Content).UseDependencyProvider(Content)
-                .Configure(new CefSharpHostOptions { TrustedPageWorld = true })
+                .Configure(new CefSharpHostOptions
+                {
+                    TrustedPageWorld = true,
+                    IsIncognito = context => context == RequestContext ? (bool?)false : null,
+                    AutomaticallyUpdatesScripts = false
+                })
                 .LogTo(entry => MainWindow.Diagnostics.Report("[" + tab.TabId.Substring(0, 8) + "/" + entry.ScriptKey + "] GM.log " + entry.JsonValue))
                 .Build();
             host.Diagnostic += (sender, diagnostic) => MainWindow.Diagnostics.Report(

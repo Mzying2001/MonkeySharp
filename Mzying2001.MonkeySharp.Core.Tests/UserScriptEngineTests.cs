@@ -276,12 +276,14 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                     var root = document.RootElement;
                     Assert.Equal("MonkeySharp", root.GetProperty("scriptHandler").GetString());
                     Assert.Equal("disabled", root.GetProperty("downloadMode").GetString());
+                    Assert.False(root.TryGetProperty("isIncognito", out _));
+                    Assert.False(root.TryGetProperty("scriptWillUpdate", out _));
                     Assert.Equal("info", root.GetProperty("script").GetProperty("name").GetString());
                     Assert.Equal("document-end", root.GetProperty("script").GetProperty("run-at").GetString());
                     Assert.Equal("icon", root.GetProperty("script").GetProperty("resources")[0].GetProperty("name").GetString());
                     Assert.Equal("raw", root.GetProperty("sandboxMode").GetString());
                     var compatibility = root.GetProperty("compatibility");
-                    Assert.Equal(1, compatibility.GetProperty("contractVersion").GetInt32());
+                    Assert.Equal(2, compatibility.GetProperty("contractVersion").GetInt32());
                     Assert.Equal("page", compatibility.GetProperty("executionWorld").GetString());
                     Assert.False(compatibility.GetProperty("isolatedWorld").GetBoolean());
                     Assert.Equal("metadata", compatibility.GetProperty("fields").GetProperty("scriptUpdateURL").GetString());
@@ -331,16 +333,8 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 MetadataAndMatchingTests.Script(
                     "// @name info policy\n// @match https://example.com/*\n" + grantLines +
                     "// @run-at document-end"), "test", true, CancellationToken.None);
-            foreach (var profile in new[]
             {
-                UserScriptCompatibilityProfile.LegacyCompatible,
-                UserScriptCompatibilityProfile.ModernStrict
-            })
-            {
-                using (var engine = new UserScriptEngine(repository, options: new UserScriptEngineOptions
-                {
-                    Compatibility = new UserScriptCompatibilityOptions { Profile = profile }
-                }))
+                using (var engine = new UserScriptEngine(repository))
                 {
                     var diagnostics = new List<UserScriptDiagnostic>();
                     engine.Diagnostic += (_, item) => diagnostics.Add(item);
@@ -356,10 +350,37 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                     {
                         var invocation = Assert.Single(plan.Invocations);
                         Assert.Equal(installation.Definition.Metadata.DeclaredGrants, invocation.DeclaredGrants);
-                        Assert.Equal(installation.Definition.Metadata.Grants, invocation.Grants);
+                        Assert.Equal(installation.Definition.Metadata.Capabilities, invocation.Grants);
                         Assert.Equal(installation.Definition.Metadata.GrantDeclarationState, invocation.GrantDeclarationState);
                         Assert.DoesNotContain(diagnostics, item => item.Code == "MSR201_BRIDGE_INTEGRITY_REQUIRED");
                     }
+                }
+            }
+        }
+
+        [Theory]
+        [InlineData("native", false, false)]
+        [InlineData("browser", true, true)]
+        public async Task InfoUsesTheManagerVersionAndActualHostEnvironment(string mode, bool privateContext, bool updates)
+        {
+            var repository = new InMemoryUserScriptRepository();
+            await repository.InstallAsync(MetadataAndMatchingTests.Script(
+                "// @name environment\n// @version 1.2.3\n// @match https://example.com/*\n// @run-at document-end"), "test", true, CancellationToken.None);
+            using (var engine = new UserScriptEngine(repository, options: new UserScriptEngineOptions
+            {
+                EnvironmentProvider = frame => new UserScriptExecutionEnvironment(mode, privateContext, updates)
+            }))
+            {
+                var plan = await engine.ProcessLifecycleAsync(new DocumentLifecycleEventArgs(DocumentLifecycleKind.DomContentLoaded, Frame("environment", true)), CancellationToken.None);
+                using (var info = JsonDocument.Parse(Assert.Single(plan.Invocations).SerializedInfo))
+                {
+                    Assert.Equal(typeof(UserScriptEngine).Assembly.GetName().Version.ToString(3), info.RootElement.GetProperty("version").GetString());
+                    Assert.Equal("1.2.3", info.RootElement.GetProperty("script").GetProperty("version").GetString());
+                    Assert.Equal(mode, info.RootElement.GetProperty("downloadMode").GetString());
+                    Assert.Equal(privateContext, info.RootElement.GetProperty("isIncognito").GetBoolean());
+                    Assert.Equal(updates, info.RootElement.GetProperty("scriptWillUpdate").GetBoolean());
+                    Assert.False(info.RootElement.GetProperty("script").TryGetProperty("position", out _));
+                    Assert.False(info.RootElement.GetProperty("script").TryGetProperty("blockers", out _));
                 }
             }
         }

@@ -95,7 +95,7 @@
 
 ## 元数据
 
-元数据头以 `// ==UserScript==` 开始，以 `// ==/UserScript==` 结束。为便于迁移，请放在文件开头。默认解析器允许在前 128 行、64 Ki 个 UTF-16 字符内查找元数据头；`ModernStrict` 要求第一个非空行就是元数据头。元数据错误会阻止安装，警告则保留给宿主查看。已知单值字段使用第一次出现的值，重复声明产生警告；集合字段使用多行重复声明。未知字段会保留，但不会因此获得运行时效果。
+元数据头以 `// ==UserScript==` 开始，以 `// ==/UserScript==` 结束。为便于迁移，请放在文件开头。默认解析器允许在前 128 行、64 Ki 个 UTF-16 字符内查找元数据头；元数据错误会阻止安装，警告则保留给宿主查看。已知单值字段使用第一次出现的值，重复声明产生警告；集合字段使用多行重复声明。未知字段会保留，但不会因此获得运行时效果。
 
 | 字段 | 格式与行为 |
 | --- | --- |
@@ -137,7 +137,7 @@ MonkeySharp 还接受 `file:///*`、`about:blank` 和 `<all_urls>`（HTTP、HTTP
 
 `@require` 和 `@resource` URL 支持 md5/sha256 完整性片段：`#sha256=<digest>` 或 `#sha256-<digest>`，摘要可以是十六进制或标准 Base64。以逗号/分号分隔的多个声明选取最后一个受支持的哈希。请求和缓存前移除 URL 片段；使用前及读取缓存时都检查原始字节。声明格式错误、没有可用受支持哈希或摘要不一致都会阻止加载。
 
-获取及缓存由宿主负责。`LegacyCompatible` 中缺少依赖提供器会跳过声明 `@require` 的脚本；`ModernStrict` 中缺少提供器时主源码保持原样，依赖不会被补入。不要依赖未声明的全局变量，也不要假定内置 CDN 库。资源 API 还需要各自的授权和资源提供器。
+获取及缓存由宿主负责。缺少依赖提供器时会跳过声明 require 的脚本，不区分调用风格。不要依赖未声明的全局变量，也不要假定内置 CDN 库。资源 API 还需要各自的授权和资源提供器。
 
 Demo 手动更新时优先从 `@updateURL` 检查，其次使用 `@downloadURL`；安装源码优先取自 `@downloadURL`，其次使用检查来源。候选脚本必须具有相同且非空的名称/命名空间，下载版本必须更高。更新保留安装身份、启用状态及存储值。该下载器不带浏览器登录 Cookie，详见[更新与完整性参考](integration-reference.zh-CN.md#资源完整性与更新检查)。
 
@@ -145,30 +145,26 @@ Demo 手动更新时优先从 `@updateURL` 检查，其次使用 `@downloadURL`�
 
 ## 执行、授权与兼容模式
 
-MonkeySharp 在**页面世界**中，通过函数包装执行可信脚本。CefSharp 桥接的完整性被标记为未验证。默认宿主会抑制带显式特权授权的脚本，除非应用启用 `TrustedPageWorld`；Demo 已显式启用。授权限制可暴露的能力，但不能防御同一页面世界中的恶意 JavaScript。
+现在只有一套契约。[固定 Tampermonkey 5.5.1 证据](compatibility/api-contract.md) 确认：
+未声明、none、未知授权和 info-only 均提供 GM_info 与 GM.info，但保留不同元数据状态。
+none 不提供 unsafeWindow；其他情况指向页面 global。
 
-| 授权声明 | 可见内容 |
-| --- | --- |
-| 没有 `@grant` | 提供 GM.info 和 GM_info，仍可进行普通页面操作。 |
-| 只有 `@grant none` | 提供 GM.info 和 GM_info。 |
-| 显式授权列表 | 默认提供 GM.info 和 GM_info，其他能力需要逐项授权且有可用实现。 |
+旧式 GM_* 名称需要精确声明。现代存储、资源、菜单和标签数据 API 按家族开放：
+GM_getValue 还允许现代存储写入，但不会暴露未声明的 GM_setValue 全局，也不授权其他家族。
+宿主服务和权限政策仍决定操作是否可用、是否获准。
 
-旧版别名通常会授权对应的规范能力，两个调用形式都可能可用。例如 `@grant GM_getValue` 会规范化为 GM.getValue，但不会授予 GM.setValue。宿主可以单独禁用授权别名解析。
+调用风格不强制 strict，也不选择世界；strict 由源码指令决定。顶层 this 为 window 门面，
+none 按 5.5.1 实测使用独立对象 receiver。生产执行仍在可信页面世界，CDP 隔离世界实验
+尚不是生产特权沙箱。document-start 保持 best effort，显式要求保证时拒绝执行。
 
-| 兼容模式 | 行为 |
-| --- | --- |
-| `LegacyCompatible`（默认） | 非严格包装，顶层 this 是 window 门面；提供现代 API 及启用的 GM_* 别名。旧版存储/资源别名依赖完整的启动快照。 |
-| `ModernStrict` | 严格包装，顶层 this 为 undefined；旧版全局绑定中仅保留 GM_info。现代 API 仍各自遵循实际返回约定，包括同步返回 ID/句柄的方法。 |
-
-宿主可以独立禁用 GM_info 以外的旧版全局绑定或快照。启动快照默认限制为 1 MiB，准备超时为 5 秒；失败、不完整或超限会使同步存储/资源别名不可用，现代方法仍可走桥接。存储不支持原子快照时会产生降级诊断。需要观察完成和失败时优先使用现代 API，同时注意默认模式中的现代读取也可能来自本地镜像。
-
-菜单、通知、剪贴板、标签页、下载、标签页状态和窗口控制 API 在缺少对应宿主服务时不会出现。CefSharp 默认提供 XHR、Cookie 和 webRequest 服务，除非被禁用或替换。可用 `typeof GM !== "undefined" && typeof GM.download === "function"` 检查；声明授权不会安装缺失的服务。参阅[宿主服务契约](integration-reference.zh-CN.md#宿主服务契约)。
+旧式同步存储和资源依赖完整快照，默认预算 1 MiB、准备超时 5 秒。宿主交互需要对应服务。
+[集成说明](integration-reference.zh-CN.md#授权与-api-契约) 说明信任、服务和真实环境信息。
 
 <a id="api-index"></a>
 
 ## API 索引
 
-除非另有说明，每行需要第一列中的能力授权。`Promise<T>` 表示使用 await；立即取得 ID/句柄并不意味着后台注册已完成。旧版名称需要旧版兼容模式。后文逐项说明详细行为、错误和示例。
+除非另有说明，每行需要第一列中的能力授权。`Promise<T>` 表示使用 await；立即取得 ID/句柄并不意味着后台注册已完成。旧版名称需要精确声明。后文逐项说明详细行为、错误和示例。
 
 | 能力 / 现代成员 | 旧版名称 | 现代返回值 | 实现来源 |
 | --- | --- | --- | --- |
@@ -186,7 +182,7 @@ MonkeySharp 在**页面世界**中，通过函数包装执行可信脚本。CefS
 | `GM.addStyle` | `GM_addStyle` | `Promise<HTMLStyleElement>` | 页面 DOM |
 | `GM.addElement` | `GM_addElement` | `Promise<Element>` | 页面 DOM |
 | `GM.getResourceText` | `GM_getResourceText` | `Promise<string>` | 资源提供器 |
-| `GM.getResourceURL` / `GM.getResourceUrl` | `GM_getResourceURL` | `Promise<string>` | 资源提供器 |
+| `GM.getResourceUrl` | `GM_getResourceURL` | `Promise<string>` | 资源提供器 |
 | `GM.xmlHttpRequest` | `GM_xmlhttpRequest` | 可 abort 的 `Promise<Response>` | CefSharp 默认服务 |
 | `GM.registerMenuCommand` | `GM_registerMenuCommand` | `Promise<number>` | 菜单服务 |
 | `GM.unregisterMenuCommand` | `GM_unregisterMenuCommand` | `Promise<boolean>` | 菜单服务 |
@@ -209,22 +205,22 @@ MonkeySharp 在**页面世界**中，通过函数包装执行可信脚本。CefS
 
 ### GM.info / GM_info
 
-只读、递归冻结的安装信息快照，`GM_info === GM.info`。两种名称都默认可用，无需授权，包括 ModernStrict 模式和关闭旧版全局绑定时。无授权、@grant none 或仅声明 info 授权的脚本无需桥接绑定和握手。仍支持显式声明 info 授权，元数据保留原始声明。没有参数，不返回 Promise。未填写的可选元数据通常为 null。
+只读、递归冻结的安装信息快照，`GM_info === GM.info`。单一契约下两种名称都默认可用，无需授权。无授权、@grant none 或仅声明 info 授权的脚本无需桥接绑定和握手。元数据保留原始声明；没有参数，不返回 Promise。
 
 | 字段 | 含义 |
 | --- | --- |
 | `scriptKey` | 稳定的安装标识。 |
-| `name`、`namespace`、`version`、`description` | 便于读取的顶层元数据。 |
+| `name`、`namespace`、`description` | 顶层元数据便利字段。version 是管理器实际版本，脚本版本位于 script.version。 |
 | `grants`、`grantDeclarationState` | 原始授权名称，以及 Missing、ExplicitNone 或 ExplicitList。授权别名在内部规范化，这些列表保留原始写法。 |
 | `scriptHandler`、`sandboxMode` | 固定为 "MonkeySharp" 和 "raw"。 |
-| `downloadMode`、`isIncognito`、`scriptWillUpdate` | 固定为 "disabled"、false、false，属于兼容占位值，**不能用于能力检测**。即使 downloadMode 为 disabled，也可能存在下载服务。 |
+| `downloadMode`、`isIncognito`、`scriptWillUpdate` | 下载服务实际模式及宿主 context/更新策略；未知字段省略。 |
 | `scriptMetaStr`、`scriptUpdateURL` | 原始元数据头和声明的更新 URL。 |
-| `compatibility` | contractVersion: 1、handler: "MonkeySharp"、executionWorld: "page"、isolatedWorld: false；fields 记录字段来源。 |
+| `compatibility` | contractVersion: 2，包含实际世界、能力状态及字段来源。 |
 | `script` | 下述脚本元数据对象。 |
 
-script 包含 name、namespace、version、description、author、copyright、name_i18n、description_i18n、icon、icon64、homepage、supportURL、downloadURL、updateURL、fileURL（安装来源）、header、grant、connects、matches、includes、excludes（含 exclude-match）、resources、antifeatures、webRequest、run-at 和 unwrap。lastModified 是安装更新时间的 Unix **毫秒数**；position 固定为 0，blockers 是空数组。resources 项为 `{name, url, integrity: [{algorithm, digest}]}`；antifeatures 先按类型、再按语言分组（无语言时为 default）。未声明 webRequest 时为 null。options 包含 sandbox、noframes、unwrap 和 run_at。
+script 包含 name、namespace、version、description、author、copyright、name_i18n、description_i18n、icon、icon64、homepage、supportURL、downloadURL、updateURL、fileURL（安装来源）、header、grant、connects、matches、includes、excludes（含 exclude-match）、resources、antifeatures、webRequest、run-at 和 unwrap。lastModified 是安装更新时间的 Unix **毫秒数**；不提供没有管理器状态来源的 position/blockers 字段。resources 项为 `{name, url, integrity: [{algorithm, digest}]}`；antifeatures 先按类型、再按语言分组（无语言时为 default）。未声明 webRequest 时为 null。options 包含 sandbox、noframes、unwrap 和 run_at。
 
-**与 Tampermonkey 的差异：** 这是 MonkeySharp 自身的快照，包含来源标记及占位值，不保证提供全部 [Tampermonkey GM_info 字段](https://www.tampermonkey.net/documentation.php?q=GM_info)、实时浏览器设置或扩展更新状态。
+**与 Tampermonkey 的差异：** 这是 MonkeySharp 自身的快照，包含来源标记和真实环境事实，不保证提供全部 [Tampermonkey GM_info 字段](https://www.tampermonkey.net/documentation.php?q=GM_info)、实时浏览器设置或扩展更新状态。
 
 ### GM.log(value) / GM_log(value)
 
@@ -261,7 +257,7 @@ value 使用 JSON.stringify/JSON.parse 克隆：顶层 undefined、函数、symb
 | `GM.addValueChangeListener(key, callback)` | 注册 callback(key, oldValue, newValue, remote)；缺失或已删除值为 undefined。宿主注册失败时拒绝 Promise。 | `Promise<number>` |
 | `GM.removeValueChangeListener(listenerId)` | 移除当前执行实例的正整数监听器 ID；未知 ID 无操作。 | `Promise<undefined>` |
 
-每个方法均需单独授权，批量与单键授权互不包含。监听范围为同一安装实例的活动执行。每个已提交变更向每个监听器通知一次：来源执行实例收到 remote: false，其他执行实例或宿主直接修改时为 true。该行为适用于有镜像、无镜像及 ModernStrict 模式。重复写入相同编码值、删除不存在的键不通知。创建或删除已存储的 undefined 会通知，即使回调的旧值和新值均为 undefined。回调在提交后执行，也可能晚于写入 Promise 兑现。执行实例释放时清理监听器。
+现代存储按家族授权，旧式全局需要精确声明。监听范围为同一安装实例的活动执行。每个已提交变更通知一次：来源执行收到 remote: false，其他执行或宿主修改时为 true。该行为适用于有镜像、无镜像。相同编码写入和删除不存在键不通知；创建或删除已存储 undefined 会通知。回调在提交后执行，也可能晚于写入 Promise；执行释放时清理监听器。
 
 旧式签名使用相同参数：GM_getValue/GM_getValues/GM_listValues 同步返回值；GM_setValue/GM_deleteValue/GM_setValues/GM_deleteValues/GM_removeValueChangeListener 返回 undefined；GM_addValueChangeListener 立即返回数字 ID。同步值读写需要完整存储镜像，监听别名不依赖镜像。写入立即修改镜像，再串行异步提交；失败时回滚并重新同步，产生 MSC413_COMPATIBILITY_MUTATION_FAILED。同步返回成功不代表持久化完成。旧式监听注册失败时会移除本地处理器，并异步报告失败。
 
@@ -337,11 +333,11 @@ attributes 是可选对象：textContent/innerHTML 设置内容，字符串 styl
 
 需要对应授权、资源提供器和 @resource name url。name 是非空、区分大小写的字符串。现代返回 `Promise<string>`，使用提供器给出的文本，否则将字节按 UTF-8 解码。旧版从完整启动资源快照立即返回字符串。未声明的资源导致拒绝；缺少旧版快照时不暴露别名，在可用快照中找不到名称时抛出错误。
 
-### GM.getResourceURL(name) / GM.getResourceUrl(name) / GM_getResourceURL(name)
+### GM.getResourceUrl(name) / GM.getResourceUrl(name) / GM_getResourceURL(name)
 
 前提和名称规则相同，但需要自己的授权。现代返回 `Promise<string>`，内容为 **data URL**：`data:<media-type>;base64,<bytes>`；旧版从快照立即返回该 URL。它不是原始下载地址，也不是需要 revoke 的对象 URL。不支持 isBlobUrl 参数。两种资源 API 均应用完整性检查和大小限制。
 
-`GM.getResourceUrl` 与 `GM.getResourceURL` 引用同一个函数。声明任一现代拼写的 grant，即授权两个名称；所有兼容模式均支持，包括 `AcceptLegacyGrantAliases` 为 false 时。接受旧版 grant 别名时，`GM_getResourceURL` 也授权两个现代名称；其同步全局函数仍需要启用旧版全局及完整资源快照。原始 grant 声明保留，运行时能力和桥接方法仍为 `GM.getResourceURL`。
+现代名称仅为 `GM.getResourceUrl`，官方旧式名称为 `GM_getResourceURL`。资源按现代家族授权；旧式全局需精确声明和完整快照。不提供 `GM.getResourceURL`。
 
 请按 data URL 处理，不应假定其他管理器的扩展 URL、对象 URL 或附加选项，参见[官方资源参考](https://www.tampermonkey.net/documentation.php?q=GM_getResource)。
 
@@ -584,7 +580,7 @@ Demo 在正数 timeout 到期或用户关闭/点击后关闭通知。它没有�
 
 现代返回普通 **`Promise<DownloadHandle>`，在启动后兑现**，不是完成时兑现。await 后得到 {id, abort()}；Promise 自身没有 .abort()。旧版立即返回本地句柄，id 异步可用。句柄 abort() 返回 `Promise<boolean>`，表示是否已向宿主请求/接受中止，而非下载完成结果。旧版句柄没有 ID 时可能返回 false，实际结果应通过终态回调观察。
 
-**当前现代门面的限制：** GM.download 不会注册 details 中的回调字段，它们会被忽略。现代方法只暴露启动成功/失败和中止句柄，没有供脚本使用的完成/进度通知。需要这些回调时，在 LegacyCompatible 中使用 GM_download；目前 ModernStrict 没有可观察下载完成的下载门面。
+**当前下载限制：** 现代回调及完成时机将在 P0 下载步骤替换；该步骤完成前，通过已声明的 GM_download 观察终态。
 
 错误类别包括 not_enabled（会话失效）、not_permitted（授权）、not_whitelisted（宿主权限）、not_supported、not_succeeded 和 timeout。名称与 Tampermonkey 相似，但 not_whitelisted 不一定代表文件扩展名白名单。现代宿主/启动失败会以普通 {error, details, code} 对象拒绝，而不是带 .message 的 Error；本地校验仍可能拒绝 TypeError。旧版的启动及后续失败通过回调报告。完成/中止/失败均为终态；导航或宿主释放会取消执行实例拥有的下载。
 
@@ -709,13 +705,13 @@ const registration = GM.webRequest([
 | 能力 | 参数与行为 | 返回值 |
 | --- | --- | --- |
 | `unsafeWindow` | 精确授权，暴露页面全局对象；是值而非函数。 | 页面全局对象。 |
-| `window.close()` | 精确 window.close 授权及窗口服务，请求宿主关闭来源标签页/窗口。 | `Promise<boolean>`；false 可能表示宿主拒绝，例如保留最后一个标签页。 |
-| `window.focus()` | 精确 window.focus 授权及窗口服务，请求宿主聚焦来源标签页/窗口。 | `Promise<boolean>`，表示宿主是否成功处理。 |
+| `window.close()` | 精确 window.close 授权及窗口服务，请求宿主关闭来源标签页/窗口。 | `undefined`，宿主政策可能拒绝操作。 |
+| `window.focus()` | 精确 window.focus 授权及窗口服务，请求宿主聚焦来源标签页/窗口。 | `undefined`，宿主政策可能拒绝操作。 |
 | `window.onurlchange` | 精确授权，可赋值函数/null，或 window.addEventListener("urlchange", handler)。 | 属性/事件注册，回调接收 {url, oldURL}。 |
 
 URL 变化时会观察 pushState、replaceState、popstate 和 hashchange。使用 window.removeEventListener("urlchange", handler) 移除同一函数。回调的 this 为 window 门面；参数是普通对象，不是原生 Event，once/capture 等选项不会改变这套自定义注册行为。没有授权就不会建立 MonkeySharp URL 变更订阅。close/focus 缺少授权或服务时不可用。
 
-脚本中的 window 是将普通原生函数绑定到页面窗口的门面，不是隔离沙箱。现代门面在对应 window.close/window.focus 能力启用时还暴露 GM.windowClose()/GM.windowFocus() 辅助名称；同样不接收参数，返回 `Promise<boolean>`。它们**不是单独的授权名称**。
+脚本中的 window 是绑定原生函数到页面窗口的门面。close/focus 返回 undefined，不提供 GM.windowClose/GM.windowFocus 别名。
 
 **与 Tampermonkey 的差异：** 这里的 unsafeWindow 不跨越扩展隔离世界；close/focus 是异步宿主决定。不应从[官方 window API](https://www.tampermonkey.net/documentation.php?q=window)推断存在原生 Event 或扩展隔离。
 
@@ -734,11 +730,11 @@ window.addEventListener("urlchange", onRoute);
 | 方面 | 迁移时的处理 |
 | --- | --- |
 | 执行边界 | 将脚本和页面视为可信的页面世界代码，不具有扩展沙箱或保证的 CSP 绕过。 |
-| 授权及模式 | GM.info 和 GM_info 无需授权，默认可用；其他 API 需要声明授权；ModernStrict 使用规范名称。 |
+| 授权 | info 默认可用，旧式全局需要精确声明；现代 API 家族按固定 5.5.1 实测开放。 |
 | 时机 / SPA | 不依赖保证的 document-start 或历史导航后的自动重跑。 |
 | 子域名匹配 | `*.domain` 的 match 模式包含裸域名及其所有层级的子域名。 |
 | 存储 | 使用支持的存储值，await 现代写入以观察失败，并考虑镜像限额及提交后通知的时序。 |
-| 资源 | 使用 `GM.getResourceUrl` 或 `GM.getResourceURL`，声明任一对应 grant，按 data URL 处理，并确认宿主资源提供器可用。 |
+| 资源 | 使用 `GM.getResourceUrl` 或 `GM.getResourceUrl`，声明任一对应 grant，按 data URL 处理，并确认宿主资源提供器可用。 |
 | XHR | 检查代理/分区/Blob URL 等不支持项，适配进度/XML 行为，显式检查 HTTP 状态。 |
 | 菜单 / 剪贴板 | 使用字符串访问键及 MIME 字符串，移除不支持的选项对象/回调重载。 |
 | 通知 | 只使用支持字段；现代 Promise 在注册后兑现，而非关闭后。 |

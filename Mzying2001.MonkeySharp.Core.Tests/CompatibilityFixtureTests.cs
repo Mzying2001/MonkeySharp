@@ -30,15 +30,12 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Fact]
-        public void StrictBaselineRejectsHeaderPreamble()
+        public void BoundedParserAcceptsHeaderPreamble()
         {
-            var result = new UserScriptMetadataParser(new UserScriptMetadataParserOptions
-            {
-                Profile = UserScriptCompatibilityProfile.ModernStrict
-            }).Parse(CompatibilityFixtures.LegacyHeaderPreamble);
+            var result = new UserScriptMetadataParser().Parse(CompatibilityFixtures.LegacyHeaderPreamble);
 
-            Assert.False(result.CanEnable);
-            Assert.Contains(result.Diagnostics, item => item.Code == "MSM000_HEADER_MISSING");
+            Assert.True(result.CanEnable);
+            Assert.DoesNotContain(result.Diagnostics, item => item.Code == "MSM000_HEADER_MISSING");
         }
 
         [Fact]

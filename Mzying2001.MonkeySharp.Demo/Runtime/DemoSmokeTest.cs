@@ -220,7 +220,7 @@ sessionStorage.setItem('runs', String(window.__demo.runs));
     result.storage = (await GM.getValue('demo')) === 42 && GM_getValue('demo') === 42 &&
         GM_getValue('demo-undefined', 'fallback') === undefined && (await GM.listValues()).includes('demo-undefined') &&
         !Object.prototype.hasOwnProperty.call(GM_getValue('demo-nested'), 'absent') && GM_getValue('demo-nested').items.every(value => value === null);
-    result.resources = window.__demoDependency && GM_getResourceText('text') === 'demo-resource' && (await GM.getResourceURL('text')).startsWith('data:');
+    result.resources = window.__demoDependency && GM_getResourceText('text') === 'demo-resource' && (await GM.getResourceUrl('text')).startsWith('data:');
     await GM.addStyle('body { color: rgb(20, 40, 60); }');
     await GM.addElement('div', { id: 'demo-marker', textContent: 'ready' });
     result.dom = !!document.getElementById('demo-marker');

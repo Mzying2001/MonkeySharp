@@ -1,11 +1,11 @@
+const completePlan = require("./test-plan");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 
-const template = fs.readFileSync(
-    path.resolve(__dirname, "../../Mzying2001.MonkeySharp.Core/Js/Init.js"), "utf8");
+const template = require("./bootstrap-template");
 
 function waitFor(predicate) {
     return new Promise((resolve, reject) => {
@@ -29,10 +29,9 @@ test("legacy resource and XHR facades use snapshots and abort handles", async ()
             const request = JSON.parse(requestJson);
             if (request.type === "hello") {
                 return JSON.stringify({
-                    type: "hello-result", protocol: 1, ok: true,
-                    limits: {}, apis: ["GM.getResourceText", "GM.getResourceURL", "GM.xmlHttpRequest"],
+                    type: "hello-result", protocol: 2, ok: true,
+                    limits: {}, apis: ["GM.getResourceText", "GM.getResourceUrl", "GM.xmlHttpRequest"],
                     compatibility: {
-                        profile: "LegacyCompatible", strict: false, legacyGlobals: true,
                         resources: {
                             complete: true,
                             values: { template: { text: "fixture text", url: "data:text/plain;base64,ZA==" } }
@@ -47,7 +46,7 @@ test("legacy resource and XHR facades use snapshots and abort handles", async ()
                     result = { sessionId: "callback-xhr" };
                 } else if (request.params.operation === "execute") {
                     globalThis.__MonkeySharpRuntime.receive({
-                        type: "notification", protocol: 1,
+                        type: "notification", protocol: 2,
                         executionId: "callback-execution", deliveryToken: "callback-delivery",
                         event: "xhr-progress",
                         data: { xhrId, loaded: 4, total: 8 }
@@ -57,18 +56,18 @@ test("legacy resource and XHR facades use snapshots and abort handles", async ()
                     result = { chunk: Buffer.from("done").toString("base64"), done: true };
                 }
                 return JSON.stringify({
-                    type: "response", protocol: 1, requestId: request.requestId, ok: true, result
+                    type: "response", protocol: 2, requestId: request.requestId, ok: true, result
                 });
             }
             return JSON.stringify({
-                type: "response", protocol: 1, requestId: request.requestId, ok: true,
+                type: "response", protocol: 2, requestId: request.requestId, ok: true,
                 result: { $monkeySharpType: "undefined" }
             });
         }
     };
 
     const payload = {
-        protocol: 1, documentId: "callback-document", frameId: "main", runAt: "DocumentEnd",
+        protocol: 2, documentId: "callback-document", frameId: "main", runAt: "DocumentEnd",
         invocations: [{
             executionId: "callback-execution",
             scriptKey: "55555555-5555-5555-5555-555555555555",
@@ -84,12 +83,11 @@ test("legacy resource and XHR facades use snapshots and abort handles", async ()
                 "globalThis.__handleType = typeof __xhrHandle.abort;"
             ].join("\n"),
             declaredGrants: ["GM_getResourceText", "GM_getResourceURL", "GM_xmlhttpRequest"],
-            grants: ["GM.getResourceText", "GM.getResourceURL", "GM.xmlHttpRequest"],
+            grants: ["GM.getResourceText", "GM.getResourceUrl", "GM.xmlHttpRequest"],
             info: {}, capability: "callback-capability", deliveryToken: "callback-delivery",
-            compatibility: { profile: "LegacyCompatible", strict: false, legacyGlobals: true }
         }]
     };
-    const encoded = Buffer.from(JSON.stringify(payload), "utf8").toString("base64");
+    const encoded = Buffer.from(JSON.stringify(completePlan(payload)), "utf8").toString("base64");
     vm.runInThisContext(template.replace("__MONKEYSHARP_PAYLOAD_BASE64__", encoded));
 
     await waitFor(() => globalThis.__callbackLoaded);
@@ -109,19 +107,19 @@ test("legacy menu and tab facades preserve synchronous registration and callback
             const request = JSON.parse(requestJson);
             if (request.type === "hello") {
                 return JSON.stringify({
-                    type: "hello-result", protocol: 1, ok: true, limits: {},
+                    type: "hello-result", protocol: 2, ok: true, limits: {},
                     apis: ["GM.registerMenuCommand", "GM.getTab"]
                 });
             }
             if (request.method === "GM.registerMenuCommand") commandId = request.params.commandId;
             return JSON.stringify({
-                type: "response", protocol: 1, requestId: request.requestId, ok: true,
+                type: "response", protocol: 2, requestId: request.requestId, ok: true,
                 result: request.method === "GM.getTab" ? { saved: true } : commandId
             });
         }
     };
     const payload = {
-        protocol: 1, documentId: "menu-document", frameId: "main", runAt: "DocumentEnd",
+        protocol: 2, documentId: "menu-document", frameId: "main", runAt: "DocumentEnd",
         invocations: [{
             executionId: "menu-execution", scriptKey: "66666666-6666-6666-6666-666666666666",
             source: [
@@ -131,16 +129,15 @@ test("legacy menu and tab facades preserve synchronous registration and callback
             declaredGrants: ["GM_registerMenuCommand", "GM_getTab"],
             grants: ["GM.registerMenuCommand", "GM.getTab"], info: {},
             capability: "menu-capability", deliveryToken: "menu-delivery",
-            compatibility: { profile: "LegacyCompatible", strict: false, legacyGlobals: true }
         }]
     };
-    const encoded = Buffer.from(JSON.stringify(payload), "utf8").toString("base64");
+    const encoded = Buffer.from(JSON.stringify(completePlan(payload)), "utf8").toString("base64");
     vm.runInThisContext(template.replace("__MONKEYSHARP_PAYLOAD_BASE64__", encoded));
     await waitFor(() => globalThis.__tabState);
     assert.equal(typeof globalThis.__menuId, "number");
     assert.deepEqual(globalThis.__tabState, { saved: true });
     assert.equal(globalThis.__MonkeySharpRuntime.receive({
-        type: "notification", protocol: 1, executionId: "menu-execution",
+        type: "notification", protocol: 2, executionId: "menu-execution",
         deliveryToken: "menu-delivery", event: "menu-command", data: { commandId }
     }), true);
     assert.equal(globalThis.__menuCalled, true);
@@ -158,33 +155,32 @@ test("menu callbacks can invoke native window methods", async () => {
             const request = JSON.parse(requestJson);
             if (request.type === "hello") {
                 return JSON.stringify({
-                    type: "hello-result", protocol: 1, ok: true, limits: {},
+                    type: "hello-result", protocol: 2, ok: true, limits: {},
                     apis: ["GM.registerMenuCommand"]
                 });
             }
             if (request.method === "GM.registerMenuCommand") commandId = request.params.commandId;
             return JSON.stringify({
-                type: "response", protocol: 1, requestId: request.requestId, ok: true,
+                type: "response", protocol: 2, requestId: request.requestId, ok: true,
                 result: commandId
             });
         }
     };
     const payload = {
-        protocol: 1, documentId: "native-menu-document", frameId: "main", runAt: "DocumentEnd",
+        protocol: 2, documentId: "native-menu-document", frameId: "main", runAt: "DocumentEnd",
         invocations: [{
             executionId: "native-menu-execution", scriptKey: "88888888-8888-8888-8888-888888888888",
             source: "globalThis.__menuCommandId = GM_registerMenuCommand('Open', () => window.open('https://example.test'));",
             declaredGrants: ["GM_registerMenuCommand"], grants: ["GM.registerMenuCommand"], info: {},
             capability: "native-menu-capability", deliveryToken: "native-menu-delivery",
-            compatibility: { profile: "LegacyCompatible", strict: false, legacyGlobals: true }
         }]
     };
     try {
-        const encoded = Buffer.from(JSON.stringify(payload), "utf8").toString("base64");
+        const encoded = Buffer.from(JSON.stringify(completePlan(payload)), "utf8").toString("base64");
         vm.runInThisContext(template.replace("__MONKEYSHARP_PAYLOAD_BASE64__", encoded));
         await waitFor(() => typeof globalThis.__menuCommandId === "number");
         assert.equal(globalThis.__MonkeySharpRuntime.receive({
-            type: "notification", protocol: 1, executionId: "native-menu-execution",
+            type: "notification", protocol: 2, executionId: "native-menu-execution",
             deliveryToken: "native-menu-delivery", event: "menu-command", data: { commandId }
         }), true);
         assert.equal(globalThis.__menuOpened, "https://example.test");

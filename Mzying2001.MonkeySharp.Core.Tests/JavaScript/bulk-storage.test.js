@@ -34,11 +34,11 @@ for (const mirror of [true, false]) {
         assert.deepEqual({ ...await api.getValues(["$monkeySharpType"]) }, { $monkeySharpType: "undefined" });
     });
 
-    test(`modern bulk mutations use their own grants and one request per batch (mirror=${mirror})`, async () => {
+    test(`modern bulk mutations share the storage family and use one request per batch (mirror=${mirror})`, async () => {
         const { api, requests, values } = await install({ mirror,
             grants: ["GM.getValues", "GM.setValues", "GM.deleteValues"] });
-        assert.equal(api.getValue, undefined);
-        assert.equal(api.setValue, undefined);
+        assert.equal(typeof api.getValue, "function");
+        assert.equal(typeof api.setValue, "function");
         const input = JSON.parse('{"first":{"count":1},"__proto__":"ordinary","constructor":null}');
         const writing = api.setValues(input);
         assert.equal(typeof writing.then, "function");
@@ -136,7 +136,7 @@ test("remote bulk changes update the mirror and notify each listener once", asyn
     const { api, get, deliver, executionId } = await install();
     const changes = [];
     const listenerId = await api.addValueChangeListener("key", (...args) => changes.push(args));
-    const notification = { type: "notification", protocol: 1, executionId, deliveryToken: executionId,
+    const notification = { type: "notification", protocol: 2, executionId, deliveryToken: executionId,
         event: "storage-sync", data: { key: "key", oldValue: null, oldValueExists: false, newValue: fixtureValue({ enabled: true }), newValueExists: true,
             sequence: 1, originExecutionId: "another-execution", mutationMethod: "GM.setValues" } };
     deliver(notification);
@@ -145,18 +145,18 @@ test("remote bulk changes update the mirror and notify each listener once", asyn
     assert.deepEqual(changes, [["key", undefined, { enabled: true }, true]]);
 });
 
-test("bulk aliases follow grant, profile, legacy-global, and snapshot switches", async () => {
+test("bulk legacy aliases require explicit names and a ready snapshot", async () => {
     globalThis.GM_getValues = () => "page";
     globalThis.GM_setValues = () => "page";
     globalThis.GM_deleteValues = () => "page";
-    for (const options of [{ strict: true, mirror: false }, { mirror: false }, { legacyGlobals: false },
+    for (const options of [{ mirror: false }, { declaredGrants: ["GM.getValue"] },
         { grants: ["GM.getValue", "GM.setValue", "GM.deleteValue"] }]) {
         const harness = await install(options);
         assert.equal(harness.get, undefined);
         assert.equal(harness.set, undefined);
         assert.equal(harness.delete, undefined);
     }
-    const { api } = await install({ strict: true, mirror: false });
+    const { api } = await install({ mirror: false });
     assert.equal(await api.setValues({ key: 1 }), undefined);
     assert.deepEqual({ ...await api.getValues(["key"]) }, { key: 1 });
 });

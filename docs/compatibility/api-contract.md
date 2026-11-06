@@ -13,16 +13,19 @@ means evidence is still required; existing MonkeySharp tests cannot supply it.
 
 ## API inventory
 
-Each entry requires its exact `@grant` spelling (the two names in a row are
-separate grants). `GM_info` is implicit. Missing grants and `none` have separate
-exposure fixtures; `none` supplies `GM_info` without the privileged `GM` object.
+The names in each row are separate declaration spellings. Legacy globals
+require their exact name. `GM_info` and `GM.info` are implicit in the pinned runtime. Missing grants and
+`none` retain separate exposure fixtures; both expose an info-only GM object.
+Modern storage, resources, menus and tab-data operations are authorized by
+family; legacy globals retain exact declaration names. This differs from the
+original plan assumptions and is backed by the committed 5.5.1 probes.
 Resource URL spellings are intentionally different. No `GM.getResourceURL`,
 `GM.windowClose`, Cookie listener, or webRequest removal handle is a TM target.
 
 | Names / grants | Inputs / overloads | Immediate result (legacy; modern) | Callback / settlement | Backend / conditions |
 | --- | --- | --- | --- | --- |
 | `GM_info`, `GM.info` | property | metadata snapshot; snapshot | none | Actual manager, installation and execution environment; [info](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_info) |
-| `GM_log`, `GM.log` | console arguments | void; pending probe | none | Renderer console; preserve objects |
+| `GM_log`, `GM.log` | console arguments | void; Promise<void> | none | Renderer console; preserve objects |
 | `GM_getValue`, `GM.getValue` | key, default | value; Promise | value / rejection | Value store and prepared mirror |
 | `GM_setValue`, `GM.setValue` | key, value | void; Promise | void / rejection | Value store; preserve typed undefined |
 | `GM_deleteValue`, `GM.deleteValue` | key | void; Promise | void / rejection | Value store |
@@ -34,15 +37,15 @@ Resource URL spellings are intentionally different. No `GM.getResourceURL`,
 | `GM_removeValueChangeListener`, `GM.removeValueChangeListener` | ID | void; Promise | void / rejection | Value store |
 | `GM_getResourceText`, `GM.getResourceText` | declared name | text; Promise | text / rejection | Prepared resources |
 | `GM_getResourceURL`, `GM.getResourceUrl` | declared name | URL; Promise | URL / rejection | Prepared resources; valid data URL |
-| `GM_addStyle`, `GM.addStyle` | CSS | node; pending probe | preserve live node | Renderer; CSP effect separately verified |
-| `GM_addElement`, `GM.addElement` | tag, attributes; parent, tag, attributes | node/null; pending probe | preserve live node | Renderer; CSP effect separately verified |
+| `GM_addStyle`, `GM.addStyle` | CSS | node; Promise<node> | preserve live node | Renderer; CSP effect separately verified |
+| `GM_addElement`, `GM.addElement` | tag, attributes; parent, tag, attributes | node/null; Promise<node> | preserve live node | Renderer; CSP effect separately verified |
 | `GM_xmlhttpRequest`, `GM.xmlHttpRequest` | details | abort handle; abortable Promise | ordered lifecycle, final response / error | CEF network / actual RequestContext; [XHR](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_xmlhttpRequest) |
 | `GM_download`, `GM.download` | details; URL, name | abort handle; abortable Promise | progress; committed-file details / error | CEF network + host saving; anonymous TM 5.5+, Blob/File TM 5.4.6226+ deferred; [download](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_download) |
-| `GM_notification`, `GM.notification` | details, ondone; text, title, image, onclick | void; Promise | click/default prevention, done; clicked result shape pending | Notification service; tag/url TM 5.0+; [notification](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_notification) |
-| `GM_registerMenuCommand`, `GM.registerMenuCommand` | name, callback, accessKey/options | ID; pending probe | mouse/keyboard event | Menu service; options 4.20+, id/title 5.0+, clickedFrame 5.6.6242+; [menu](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_registerMenuCommand) |
-| `GM_unregisterMenuCommand`, `GM.unregisterMenuCommand` | ID | void; pending probe | never public boolean | Menu service |
+| `GM_notification`, `GM.notification` | details, ondone; text, title, image, onclick | void; Promise | click/default prevention, done; boolean clicked result (false on timeout verified) | Notification service; tag/url TM 5.0+; [notification](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_notification) |
+| `GM_registerMenuCommand`, `GM.registerMenuCommand` | name, callback, accessKey/options | ID; Promise<ID> | mouse/keyboard event | Menu service; options 4.20+, id/title 5.0+, clickedFrame 5.6.6242+; [menu](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_registerMenuCommand) |
+| `GM_unregisterMenuCommand`, `GM.unregisterMenuCommand` | ID | void; Promise<void> | never public boolean | Menu service |
 | `GM_setClipboard`, `GM.setClipboard` | data, text/html/info, callback | void; Promise | after actual write; void / error | STA clipboard service; [clipboard](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_setClipboard) |
-| `GM_openInTab`, `GM.openInTab` | URL, options/background boolean | close/onclose/closed handle; pending probe | close once | Host tabs; [openInTab](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_openInTab) |
+| `GM_openInTab`, `GM.openInTab` | URL, options/background boolean | close/onclose/closed handle; Promise<handle> | close once | Host tabs; [openInTab](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_openInTab) |
 | `GM_getTab`, `GM.getTab` | legacy callback | void; Promise | script-owned tab data | Stable host tab identity |
 | `GM_saveTab`, `GM.saveTab` | object, callback | void; Promise | saved / error | Stable host tab identity |
 | `GM_getTabs`, `GM.getTabs` | legacy callback | void; Promise | saved tab data by ID | Stable host tab identity |
@@ -115,3 +118,20 @@ immutable upstream URL, license, version, SHA-256, unmodified source and local
 fixture prerequisites before it can be marked runnable. Do not fetch mutable
 latest scripts and describe them as a pinned corpus. Classify failures as
 syntax, GM contract, matching, authorization or world/CSP.
+
+## P0 contract implementation
+
+Step 3 uses bridge protocol 2 only. ApiCatalog.json is shared by host metadata
+normalization and the composed renderer. Legacy spelling, authorized operations
+and exposed names are independent. The source chooses strictness; none uses
+the separate object receiver observed in the raw receiver probe.
+
+GM.info reports actual manager version, download service mode and execution
+world. Host private/update policy fields are omitted when unknown. The Demo
+reports its known normal shared context and manual-only update policy. Capability
+reasons distinguish missing services, explicit policy disabling and host-reported
+engine restrictions. Position and blockers placeholders have been removed.
+
+The grant experiments and ungranted-modern-storage write probe supersede the
+plan's assumptions about exact modern per-method grants and GM absence under
+none. This is an evidence-based contract change, not a compatibility switch.

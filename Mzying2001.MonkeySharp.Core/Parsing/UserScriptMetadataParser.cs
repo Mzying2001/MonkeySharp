@@ -41,7 +41,7 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
             "supporturl", "noframes", "run-at", "run-in", "inject-into", "sandbox", "unwrap"
         };
 
-        /// <summary>Initializes a parser with the default legacy-compatible rules.</summary>
+        /// <summary>Initializes a parser with bounded metadata scanning.</summary>
         public UserScriptMetadataParser()
             : this(null)
         {
@@ -124,7 +124,7 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
             foreach (var declaredGrant in declaredGrants)
             {
                 if (UserScriptGrantCatalog.TryNormalize(
-                    declaredGrant, _options.AcceptLegacyGrantAliases, out var canonicalGrant))
+                    declaredGrant, out var canonicalGrant))
                 {
                     if (!grants.Contains(canonicalGrant, StringComparer.Ordinal))
                         grants.Add(canonicalGrant);
@@ -137,8 +137,6 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
                         "Unknown grant '" + declaredGrant + "' will not be exposed."));
                 }
             }
-            if (grants.Count == 0 && grantDeclarationState != GrantDeclarationState.Missing)
-                grants.Add("none");
 
             var runAt = ParseRunAt(First(values, "run-at"), diagnostics);
             var resources = ParseResources(values, diagnostics);
@@ -235,8 +233,7 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
                     }
                     if (trimmed != "// ==UserScript==")
                     {
-                        var preamble = options.AllowHeaderPreamble &&
-                            index < options.MaxHeaderScanLines &&
+                        var preamble = index < options.MaxHeaderScanLines &&
                             scannedCharacters + lines[index].Length <= options.MaxHeaderScanCharacters &&
                             (trimmed.StartsWith("//", StringComparison.Ordinal) ||
                              trimmed.StartsWith("/*", StringComparison.Ordinal) ||

@@ -1,11 +1,11 @@
+const completePlan = require("./test-plan");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 
-const template = fs.readFileSync(
-    path.resolve(__dirname, "../../Mzying2001.MonkeySharp.Core/Js/Init.js"), "utf8");
+const template = require("./bootstrap-template");
 const fixture = fs.readFileSync(path.resolve(__dirname, "fixtures/legacy-userscript.user.js"), "utf8");
 
 function waitFor(predicate) {
@@ -33,8 +33,8 @@ test("the shared legacy userscript fixture exercises callback and modern facade 
         dispatch: async requestJson => {
             const request = JSON.parse(requestJson);
             if (request.type === "hello") return JSON.stringify({
-                type: "hello-result", protocol: 1, ok: true, limits: {},
-                apis: ["GM.cookie", "GM.download", "GM.getResourceText", "GM.getResourceURL",
+                type: "hello-result", protocol: 2, ok: true, limits: {},
+                apis: ["GM.cookie", "GM.download", "GM.getResourceText", "GM.getResourceUrl",
                     "GM.notification", "GM.webRequest", "window.close", "window.focus"],
                 compatibility: { resources: { complete: true, values: {
                     "fixture-template": { text: "fixture resource", url: "data:text/plain;base64,ZA==" }
@@ -57,26 +57,24 @@ test("the shared legacy userscript fixture exercises callback and modern facade 
                 result = { id: "webrequest-1", listenerId: request.params.listenerId };
             } else if (request.method === "GM.webRequest") result = true;
             else if (request.method === "window.close" || request.method === "window.focus") result = true;
-            return JSON.stringify({ type: "response", protocol: 1, requestId: request.requestId, ok: true, result });
+            return JSON.stringify({ type: "response", protocol: 2, requestId: request.requestId, ok: true, result });
         }
     };
 
     const payload = {
-        protocol: 1, documentId: "legacy-fixture-document", frameId: "main", runAt: "DocumentEnd",
+        protocol: 2, documentId: "legacy-fixture-document", frameId: "main", runAt: "DocumentEnd",
         invocations: [{
             executionId: "legacy-fixture-execution", scriptKey: "88888888-8888-8888-8888-888888888888",
             source: fixture.slice(fixture.indexOf("// ==/UserScript==") + "// ==/UserScript==".length),
             declaredGrants: ["GM_cookie", "GM_download", "GM_getResourceText", "GM_getResourceURL",
                 "GM_notification", "GM_webRequest", "window.close", "window.focus", "window.onurlchange"],
-            grants: ["GM.cookie", "GM.download", "GM.getResourceText", "GM.getResourceURL", "GM.notification",
+            grants: ["GM.cookie", "GM.download", "GM.getResourceText", "GM.getResourceUrl", "GM.notification",
                 "GM.webRequest", "window.close", "window.focus", "window.onurlchange"],
             grantDeclarationState: "ExplicitList", info: {}, capability: "legacy-fixture-capability",
             deliveryToken: "legacy-fixture-delivery",
-            compatibility: { profile: "LegacyCompatible", strict: false, legacyGlobals: true,
-                synchronousResourceSnapshot: true }
         }]
     };
-    const encoded = Buffer.from(JSON.stringify(payload), "utf8").toString("base64");
+    const encoded = Buffer.from(JSON.stringify(completePlan(payload)), "utf8").toString("base64");
     vm.runInThisContext(template.replace("__MONKEYSHARP_PAYLOAD_BASE64__", encoded));
     await waitFor(() => globalThis.__legacyFixtureState && globalThis.__legacyFixtureState.cookie &&
         downloadStarts.length === 3 && notificationRequests.length === 2 && webRequestRegistrations.length === 1);
@@ -102,7 +100,7 @@ test("the shared legacy userscript fixture exercises callback and modern facade 
     });
 
     const receive = (event, data) => globalThis.__MonkeySharpRuntime.receive({
-        type: "notification", protocol: 1, executionId: "legacy-fixture-execution",
+        type: "notification", protocol: 2, executionId: "legacy-fixture-execution",
         deliveryToken: "legacy-fixture-delivery", event, data
     });
     assert.equal(receive("download-progress", {

@@ -2,7 +2,7 @@
 
 **English** | [简体中文](usage-guide.zh-CN.md)
 
-This guide describes the JavaScript userscript surface in the current MonkeySharp 3 source tree. It covers writing scripts, every built-in script API, and differences from Tampermonkey. Applications can change services, permissions, limits, and compatibility profiles. For .NET integration, see the [integration reference](integration-reference.md); for installation and UI operations, see the [Demo guide](../Mzying2001.MonkeySharp.Demo/README.md).
+This guide describes the JavaScript userscript surface in the current MonkeySharp 3 source tree. It covers writing scripts, every built-in script API, and differences from Tampermonkey. Applications can change services, permissions, and limits. For .NET integration, see the [integration reference](integration-reference.md); for installation and UI operations, see the [Demo guide](../Mzying2001.MonkeySharp.Demo/README.md).
 
 Tampermonkey comparisons were checked against its [official documentation](https://www.tampermonkey.net/documentation.php) on **2026-11-01**. They describe documented contracts, not a differential test against every Tampermonkey/browser version.
 
@@ -91,7 +91,7 @@ Use F12 in the Demo to open DevTools. `GM` and `GM_*` are wrapper-local bindings
 
 ## Metadata
 
-The header begins with `// ==UserScript==` and ends with `// ==/UserScript==`. Put it first for portability. The default parser allows a preamble within 128 lines/64 Ki UTF-16 characters; `ModernStrict` requires the first non-empty line to be the header. Metadata errors prevent installation; warnings remain available to the host. For known single-valued keys, the first occurrence wins and duplicates produce a warning; repeat collection fields on separate lines. Unknown entries are preserved but do not acquire runtime behavior.
+The header begins with `// ==UserScript==` and ends with `// ==/UserScript==`. Put it first for portability. The default parser allows a preamble within 128 lines/64 Ki UTF-16 characters; Metadata errors prevent installation; warnings remain available to the host. For known single-valued keys, the first occurrence wins and duplicates produce a warning; repeat collection fields on separate lines. Unknown entries are preserved but do not acquire runtime behavior.
 
 | Fields | Syntax and behavior |
 | --- | --- |
@@ -133,34 +133,38 @@ Each `(document, frame, script, run-at)` executes once. Same-document navigation
 
 `@require` and `@resource` URLs accept `md5`/`sha256` integrity fragments: `#sha256=<digest>` or `#sha256-<digest>`, with hexadecimal or standard Base64 digests. Comma/semicolon-separated declarations select the last supported hash. Fragments are stripped before fetching/caching. Original bytes are checked before use and on cache reads. Malformed declarations, unusable unsupported hashes, and mismatches prevent loading.
 
-The host controls fetching and caching. In `LegacyCompatible`, a missing dependency provider skips scripts declaring `@require`; in `ModernStrict`, the main source is left unchanged when that provider is missing, so dependencies are not supplied. Do not rely on undeclared globals or assume CDN libraries are built in. Resource APIs require their own grants and a resource provider.
+The host fetches and caches dependencies. A script declaring `@require` is skipped if its provider is absent; dependency failure never silently executes the main source alone. Resource APIs require a resource provider.
 
 The Demo's manual updater checks `@updateURL` before `@downloadURL`, and installs from `@downloadURL` before the check source. Candidates require the same non-empty name/namespace and a newer downloaded version. Applying an update preserves installation identity, enabled state, and stored values. Its downloader has no browser login cookies. See the [update and integrity reference](integration-reference.md#resource-integrity-and-update-checks).
 
 ## Execution, grants, and compatibility
 
-MonkeySharp executes trusted source in the **page world**, inside a function wrapper. Its CefSharp bridge reports unverified integrity. The default host suppresses scripts with explicit privileged grants unless the application opts into `TrustedPageWorld`. The Demo makes this opt-in. Grants constrain exposed capabilities but are not protection against hostile page-world JavaScript.
+There is one contract. [Pinned Tampermonkey 5.5.1 evidence](compatibility/api-contract.md)
+confirms that missing grants, `none`, unknown grants and info-only declarations
+expose `GM_info` and `GM.info`. These declarations remain distinct in metadata.
+`unsafeWindow` is absent with `none`; otherwise it refers to the page global.
 
-| Declaration | Exposed surface |
-| --- | --- |
-| No `@grant` | `GM.info` and `GM_info`; ordinary page operations remain possible. |
-| Only `@grant none` | `GM.info` and `GM_info`. |
-| Explicit grant list | `GM.info` and `GM_info`, plus individually granted capabilities with an available implementation. |
+Legacy `GM_*` names require their exact declarations. Modern storage, resource,
+menu and tab-data APIs are granted as families, matching the pinned runtime:
+`GM_getValue` also enables modern storage writes, but does not expose the
+undeclared `GM_setValue` global. Other families remain ungranted. Providers and
+host policy still determine whether operations are available and permitted.
 
-Declaring a legacy alias normally authorizes its canonical capability and both facades may be available. For example, `@grant GM_getValue` normalizes to `GM.getValue`. This does not grant `GM.setValue`. Hosts can disable alias parsing separately.
+Calling style does not force strictness or select a world. Source directives
+control strictness. Top-level this is the window facade, except `none` uses a
+separate object receiver as observed in 5.5.1. All production execution remains
+in the trusted page world; the CDP isolated-world experiment is not a privileged
+production sandbox. Document-start remains best effort, and guaranteed timing
+requirements fail explicitly.
 
-| Profile | Behavior |
-| --- | --- |
-| `LegacyCompatible` (default) | Non-strict wrapper; top-level `this` is the window facade; modern APIs and enabled `GM_*` aliases. Storage/resource aliases depend on complete bootstrap snapshots. |
-| `ModernStrict` | Strict wrapper; top-level `this` is `undefined`; only `GM_info` remains available among legacy globals. Modern APIs retain their individual return contracts, including synchronous IDs/handles. |
-
-The host can independently disable legacy globals other than `GM_info`, or snapshots. Bootstrap snapshots default to a 1 MiB budget and a five-second preparation timeout; failed, incomplete, or oversized snapshots leave synchronous storage/resource aliases unavailable. Modern methods can still use the bridge. A store without atomic snapshot support emits a degradation diagnostic. Prefer modern APIs when you need observable completion/failure, while recognizing that reads in the default profile can also use the local mirror.
-
-APIs needing menus, notifications, clipboard, tabs, downloads, tab state, or window control are absent without their corresponding host service. CefSharp supplies XHR, Cookie, and webRequest services by default unless disabled/replaced. Check capabilities with `typeof GM !== "undefined" && typeof GM.download === "function"`; adding a grant cannot install a missing service. See the [host service contracts](integration-reference.md#host-service-contracts).
+Legacy synchronous storage/resource reads require complete snapshots. Preparation
+has a 1 MiB default budget and a five-second timeout. Host-backed UI APIs require
+their services. [Integration details](integration-reference.md#api-contract-and-grants)
+describe trust, providers and actual environment facts.
 
 ## API index
 
-Each row requires the capability in its first column unless stated otherwise. `Promise<T>` means use `await`; an immediate ID/handle is not a readiness guarantee for its background registration. Legacy names require the legacy profile. Details, errors, and examples follow.
+Each row requires its capability family or exact legacy declaration unless stated otherwise. `Promise<T>` means use `await`; an immediate ID/handle is not a readiness guarantee for its background registration. Legacy names require their exact declarations. Details, errors, and examples follow.
 
 | Capability / modern member | Legacy name | Modern result | Implementation |
 | --- | --- | --- | --- |
@@ -178,13 +182,13 @@ Each row requires the capability in its first column unless stated otherwise. `P
 | `GM.addStyle` | `GM_addStyle` | `Promise<HTMLStyleElement>` | Page DOM |
 | `GM.addElement` | `GM_addElement` | `Promise<Element>` | Page DOM |
 | `GM.getResourceText` | `GM_getResourceText` | `Promise<string>` | Resource provider |
-| `GM.getResourceURL` / `GM.getResourceUrl` | `GM_getResourceURL` | `Promise<string>` | Resource provider |
+| `GM.getResourceUrl` | `GM_getResourceURL` | `Promise<string>` | Resource provider |
 | `GM.xmlHttpRequest` | `GM_xmlhttpRequest` | Abortable `Promise<Response>` | CefSharp default |
 | `GM.registerMenuCommand` | `GM_registerMenuCommand` | `Promise<number>` | Menu service |
 | `GM.unregisterMenuCommand` | `GM_unregisterMenuCommand` | `Promise<boolean>` | Menu service |
 | `GM.notification` | `GM_notification` | `Promise<{id: string}>` | Notification service |
 | `GM.setClipboard` | `GM_setClipboard` | `Promise<undefined>` | Clipboard service |
-| `GM.openInTab` | `GM_openInTab` | Tab handle immediately | Tab service |
+| `GM.openInTab` | `GM_openInTab` | `Promise<TabHandle>` | Tab service |
 | `GM.getTab` | `GM_getTab` | `Promise<object>` | Tab-state service |
 | `GM.saveTab` | `GM_saveTab` | `Promise<undefined>` | Tab-state service |
 | `GM.getTabs` | `GM_getTabs` | `Promise<object>` | Tab-state service |
@@ -192,29 +196,30 @@ Each row requires the capability in its first column unless stated otherwise. `P
 | `GM.cookie` | `GM_cookie` | Object with CRUD/listener methods | CefSharp default |
 | `GM.webRequest` | `GM_webRequest` | Removable handle immediately | CefSharp default |
 | `unsafeWindow` | Same name | Page global object | Exact grant |
-| `window.close`, `window.focus` | Same names | `Promise<boolean>` each | Window service |
+| `window.close`, `window.focus` | Same names | `undefined` | Window service |
 | `window.onurlchange` | Same name | Property/event registration | Core |
 
 ## Information and logging
 
 ### GM.info / GM_info
 
-Read-only, recursively frozen installation snapshot. `GM_info === GM.info`. Both names are always available without a grant, including in `ModernStrict` and when legacy globals are disabled. Scripts with no grants, `@grant none`, or only info grants need no bridge binding or handshake. Explicit info grants remain supported; metadata retains the original declarations. There are no parameters and no Promise. Missing optional metadata is generally `null`.
+Read-only, recursively frozen installation snapshot. `GM_info === GM.info`. Both names are always available without a grant, under the single contract. Scripts with no grants, `@grant none`, or only info grants need no bridge binding or handshake. Explicit info grants remain supported; metadata retains the original declarations. There are no parameters and no Promise. Missing optional metadata is generally `null`.
 
 | Fields | Meaning |
 | --- | --- |
 | `scriptKey` | Stable installation identifier. |
-| `name`, `namespace`, `version`, `description` | Top-level metadata conveniences. |
+| `name`, `namespace`, `description` | Top-level metadata conveniences. |
+| `version` | Actual MonkeySharp manager version; script version is `script.version`. |
 | `grants`, `grantDeclarationState` | Original declared names and `Missing`, `ExplicitNone`, or `ExplicitList`. Grant aliases are normalized internally; these lists retain declaration spelling. |
-| `scriptHandler`, `sandboxMode` | Fixed `"MonkeySharp"` and `"raw"`. |
-| `downloadMode`, `isIncognito`, `scriptWillUpdate` | Fixed `"disabled"`, `false`, `false`; these are compatibility placeholders, **not capability detection**. A download service can still exist. |
+| `scriptHandler`, `sandboxMode` | MonkeySharp identity and actual execution mode. |
+| `downloadMode`, `isIncognito`, `scriptWillUpdate` | Actual download backend and host context/update policy. Unknown context/policy fields are omitted. |
 | `scriptMetaStr`, `scriptUpdateURL` | Raw metadata header and declared update URL. |
-| `compatibility` | `contractVersion: 1`, `handler: "MonkeySharp"`, `executionWorld: "page"`, `isolatedWorld: false`; `fields` records field provenance. |
+| `compatibility` | `contractVersion: 2`, `handler: "MonkeySharp"`, `executionWorld: "page"`, `isolatedWorld: false`; `fields` records field provenance. |
 | `script` | Metadata object detailed below. |
 
-`script` contains `name`, `namespace`, `version`, `description`, `author`, `copyright`, `name_i18n`, `description_i18n`, `icon`, `icon64`, `homepage`, `supportURL`, `downloadURL`, `updateURL`, `fileURL` (installation source), `header`, `grant`, `connects`, `matches`, `includes`, `excludes` (including exclude-match entries), `resources`, `antifeatures`, `webRequest`, `run-at`, and `unwrap`. `lastModified` is installation-update Unix **milliseconds**; `position` is fixed `0`, and `blockers` is an empty array. `resources` entries are `{name, url, integrity: [{algorithm, digest}]}`; antifeatures are grouped by type, then locale (`default` for unlocalized). `webRequest` is `null` when absent. `options` contains `sandbox`, `noframes`, `unwrap`, and `run_at`.
+`script` contains `name`, `namespace`, `version`, `description`, `author`, `copyright`, `name_i18n`, `description_i18n`, `icon`, `icon64`, `homepage`, `supportURL`, `downloadURL`, `updateURL`, `fileURL` (installation source), `header`, `grant`, `connects`, `matches`, `includes`, `excludes` (including exclude-match entries), `resources`, `antifeatures`, `webRequest`, `run-at`, and `unwrap`. `lastModified` is installation-update Unix **milliseconds**; unsupported manager-only `position` and `blockers` fields are omitted. `resources` entries are `{name, url, integrity: [{algorithm, digest}]}`; antifeatures are grouped by type, then locale (`default` for unlocalized). `webRequest` is `null` when absent. `options` contains `sandbox`, `noframes`, `unwrap`, and `run_at`.
 
-**Tampermonkey difference:** this is MonkeySharp's snapshot, with explicit provenance and placeholders; it does not promise every [Tampermonkey GM_info field](https://www.tampermonkey.net/documentation.php?q=GM_info), live browser settings, or extension update state.
+**Tampermonkey difference:** this is MonkeySharp's snapshot, with explicit provenance and actual environment facts; it does not promise every [Tampermonkey GM_info field](https://www.tampermonkey.net/documentation.php?q=GM_info), live browser settings, or extension update state.
 
 ### GM.log(value) / GM_log(value)
 
@@ -249,7 +254,7 @@ Defaults stay in JavaScript and are returned only for absent keys. They may be a
 | `GM.addValueChangeListener(key, callback)` | Register `callback(key, oldValue, newValue, remote)`; absent/deleted values are `undefined`. Host registration failures reject. | `Promise<number>` |
 | `GM.removeValueChangeListener(listenerId)` | Remove this execution's positive-integer listener ID; unknown IDs are a no-op. | `Promise<undefined>` |
 
-Grant each method separately; bulk and single-key grants do not imply one another. Listeners cover active executions of the same installation. Every committed change notifies each registered listener once, with `remote: false` for the originating execution and `true` for other executions or host-originated changes. This applies with or without a mirror, including `ModernStrict`. Identical encoded writes and deletion of absent keys do not notify. Creating or deleting a stored `undefined` does notify, even though both callback values can be `undefined`. Callbacks run after commit; they may arrive after the write Promise resolves. Listeners end with the execution.
+Modern storage belongs to one authorized family; each legacy global requires its exact declaration. Listeners cover active executions of the same installation. Every committed change notifies each registered listener once, with `remote: false` for the originating execution and `true` for other executions or host-originated changes. This applies with or without a mirror. Identical encoded writes and deletion of absent keys do not notify. Creating or deleting a stored `undefined` does notify, even though both callback values can be `undefined`. Callbacks run after commit; they may arrive after the write Promise resolves. Listeners end with the execution.
 
 Legacy signatures use the same parameters: `GM_getValue`/`GM_getValues`/`GM_listValues` return values immediately; `GM_setValue`/`GM_deleteValue`/`GM_setValues`/`GM_deleteValues`/`GM_removeValueChangeListener` return `undefined`; `GM_addValueChangeListener` returns a numeric ID immediately. Synchronous value reads/writes require a complete storage mirror. Listener aliases do not require a mirror. Writes update the mirror immediately and queue asynchronous commits. Failed commits roll back/reconcile and emit `MSC413_COMPATIBILITY_MUTATION_FAILED`; a successful synchronous return does not mean persistence. Legacy listener registration failures remove the local handler and report the failure asynchronously.
 
@@ -321,11 +326,11 @@ Legacy: `GM_addElement` with the same overloads; grant `GM.addElement` or its al
 
 Requires its grant, a resource provider, and `@resource name url`. `name` is a non-empty, case-sensitive string. Modern result: `Promise<string>`, using provider text or UTF-8 decoding of bytes. Legacy returns a string immediately from the complete bootstrap resource snapshot. An undeclared resource rejects; a missing legacy snapshot makes the alias unavailable, and an absent name in an available snapshot throws.
 
-### GM.getResourceURL(name) / GM.getResourceUrl(name) / GM_getResourceURL(name)
+### GM.getResourceUrl(name) / GM.getResourceUrl(name) / GM_getResourceURL(name)
 
 Same prerequisites and name rules, with its own grant. Modern result: `Promise<string>` containing a **data URL**, `data:<media-type>;base64,<bytes>`; legacy returns that URL immediately from its snapshot. It is not the download URL and is not a revocable object URL. There is no supported `isBlobUrl` parameter. Integrity and size limits apply to both resource APIs.
 
-`GM.getResourceUrl` and `GM.getResourceURL` reference the same function. Declaring either modern grant authorizes both names in every compatibility profile, including when `AcceptLegacyGrantAliases` is false. When legacy grant aliases are accepted, `GM_getResourceURL` also authorizes both modern names; its synchronous global still requires legacy globals and a complete resource snapshot. Original grant declarations are preserved, while the runtime capability and bridge method remain `GM.getResourceURL`.
+The modern spelling is `GM.getResourceUrl`; the official legacy spelling is `GM_getResourceURL`. Either resource capability enables the modern resource family. Legacy globals require their exact declaration and complete snapshots; `GM.getResourceURL` is absent.
 
 Use the data-URL contract; do not assume browser-extension/object-URL behavior or additional options from other managers. See the [official resource reference](https://www.tampermonkey.net/documentation.php?q=GM_getResource).
 
@@ -498,7 +503,7 @@ Requires its grant and a clipboard service. `text` must be a string; optional `t
 
 Requires its grant and a tab service. `url` is an absolute HTTP(S) string. Modern `options` supports booleans `active` (default **false**), `insert` (false), `setParent` (false). `insert:true` requests insertion beside the originating tab; layout is host-specific.
 
-Returns a local handle immediately in **both** facades:
+Modern returns `Promise<TabHandle>` after opening; legacy returns a local handle immediately:
 
 | Handle member | Behavior |
 | --- | --- |
@@ -560,7 +565,7 @@ Requires its grant and a download service. The modern call accepts an options ob
 
 Modern result is a plain **`Promise<DownloadHandle>` resolving when started**, not when completed. Await it to obtain `{id, abort()}`. The Promise itself has no `.abort()`. Legacy returns a local handle immediately; `id` becomes available asynchronously. Handle `abort()` returns `Promise<boolean>` indicating whether a host abort was requested/accepted, not a completion result. Before a legacy handle has an ID it may return false; use terminal callbacks to observe actual outcome.
 
-**Current modern-facade limitation:** `GM.download` does not register callback fields from `details`; they are ignored. It exposes start success/failure and the abort handle, but no script-facing completion/progress notification. Use `GM_download` in `LegacyCompatible` when you need those callbacks. There is currently no completion-observing download facade in `ModernStrict`.
+**Current download limitation:** modern callbacks and completion settlement are being replaced in the P0 download step. Until that step, use the declared `GM_download` entry point for terminal callbacks.
 
 Error categories include `not_enabled` (expired session), `not_permitted` (grant), `not_whitelisted` (host permission), `not_supported`, `not_succeeded`, and `timeout`. Names resemble Tampermonkey's categories, but `not_whitelisted` does not necessarily mean a filename-extension whitelist. Modern host/start failures reject with a plain `{error, details, code}` object, not an Error with `.message`; local validation can still reject a TypeError. Legacy start and later failures arrive through callbacks. A completed/aborted/failed operation is terminal. Navigation or host disposal cancels execution-owned downloads.
 
@@ -679,13 +684,13 @@ const registration = GM.webRequest([
 | Capability | Parameters and behavior | Result |
 | --- | --- | --- |
 | `unsafeWindow` | Exact grant; exposes the page's global object. It is a value, not a function. | Page global object. |
-| `window.close()` | Exact `window.close` grant plus window service; asks the host to close the originating tab/window. | `Promise<boolean>`; false can mean host refusal, such as keeping the last tab. |
-| `window.focus()` | Exact `window.focus` grant plus window service; asks the host to focus the originating tab/window. | `Promise<boolean>` for host success. |
+| `window.close()` | Exact `window.close` grant plus window service; asks the host to close the originating tab/window. | `undefined`; host policy may refuse the action. |
+| `window.focus()` | Exact `window.focus` grant plus window service; asks the host to focus the originating tab/window. | `undefined`; host policy may refuse the action. |
 | `window.onurlchange` | Exact grant; assign a function or null, or use `window.addEventListener("urlchange", handler)`. | Assignment/event registration; callbacks receive `{url, oldURL}`. |
 
 For URL changes, `pushState`, `replaceState`, `popstate`, and `hashchange` are observed when the URL changes. Use `window.removeEventListener("urlchange", handler)` to remove the same function. URL callbacks run with `this` set to the window facade. The event payload is a plain object, not a native Event; listener options such as `once`/`capture` do not change this custom registration. No grant means no MonkeySharp URL-change subscription. Window close/focus properties are unavailable without their grants and service.
 
-The script's `window` is a facade that binds ordinary native window functions to the page window; it is not an isolated sandbox. The modern facade also exposes `GM.windowClose()`/`GM.windowFocus()` as helper names when the respective `window.close`/`window.focus` capability is enabled. These helpers have the same no-argument `Promise<boolean>` contracts; they are **not separate grant names**.
+The script window is a facade that binds native functions to the page window. Grant-gated close/focus return undefined; no GM.windowClose/GM.windowFocus aliases are exposed.
 
 **Tampermonkey differences:** `unsafeWindow` does not cross an extension-world boundary here; close/focus are asynchronous host decisions. Do not assume native Event payloads or extension isolation from the [official window APIs](https://www.tampermonkey.net/documentation.php?q=window).
 
@@ -702,15 +707,15 @@ window.addEventListener("urlchange", onRoute);
 | Area | Porting action |
 | --- | --- |
 | Runtime boundary | Treat source and page as trusted page-world code; no extension sandbox or guaranteed CSP bypass. |
-| Grants and profiles | `GM.info` and `GM_info` are always available without grants. Declare other used APIs; choose canonical modern names for ModernStrict. |
+| Grants | Info is implicit; legacy globals require exact declarations, while modern API families follow the pinned 5.5.1 evidence. |
 | Timing / SPA | Do not require guaranteed document-start or automatic reruns on history changes. |
 | Match subdomains | `*.domain` match patterns include the bare domain and all its subdomains. |
 | Stored values | Use supported storage values; await modern writes for failures; account for bounded mirrors and post-commit notifications. |
-| Resources | Use `GM.getResourceUrl` or `GM.getResourceURL` with either grant; expect a data URL and host-provided resource availability. |
+| Resources | Use `GM.getResourceUrl` or `GM.getResourceUrl` with either grant; expect a data URL and host-provided resource availability. |
 | XHR | Check unsupported proxy/partition/Blob-URL controls; adapt progress/XML behavior; inspect HTTP status explicitly. |
 | Menu / clipboard | Use string access keys and MIME strings; remove unsupported options objects/callback overloads. |
 | Notifications | Use supported detail fields; modern resolution is registration, not dismissal. |
-| Tabs | Both facades return immediate handles; use close/onclose; private mode and numeric insertion positions are absent. |
+| Tabs | Modern returns a Promise; legacy returns an immediate handle; use close/onclose; private mode and numeric insertion positions are absent. |
 | Downloads | Await the start handle, then call its abort; completion callbacks require legacy GM_download; Demo downloads lack browser credentials. |
 | Cookies | No partitionKey semantics; default SameSite/first-party writes and change feeds are limited. |
 | webRequest | Rewrite action objects and callbacks; explicitly register runtime rules and retain the removal handle. |

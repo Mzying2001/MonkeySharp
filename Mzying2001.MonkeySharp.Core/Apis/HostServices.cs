@@ -583,6 +583,9 @@ namespace Mzying2001.MonkeySharp.Core.Apis
     /// </summary>
     public interface IDownloadService
     {
+        /// <summary>Gets the implemented Tampermonkey download mode: native, browser, or disabled.</summary>
+        string DownloadMode { get; }
+
         /// <summary>Starts a file download and returns its lifecycle operation.</summary>
         /// <param name="request">The download request.</param>
         /// <param name="cancellationToken">A token that cancels the operation.</param>

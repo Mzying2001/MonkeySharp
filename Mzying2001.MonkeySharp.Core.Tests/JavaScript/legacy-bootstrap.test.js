@@ -1,11 +1,11 @@
+const completePlan = require("./test-plan");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 
-const template = fs.readFileSync(
-    path.resolve(__dirname, "../../Mzying2001.MonkeySharp.Core/Js/Init.js"), "utf8");
+const template = require("./bootstrap-template");
 
 function waitFor(predicate) {
     return new Promise((resolve, reject) => {
@@ -22,24 +22,24 @@ function waitFor(predicate) {
     });
 }
 
-test("legacy profile exposes lexical globals and window-like top-level this", async () => {
+test("legacy declarations expose lexical globals and window-like top-level this", async () => {
     globalThis.__MonkeySharpBridge = {
         dispatch: async requestJson => {
             const request = JSON.parse(requestJson);
             if (request.type === "hello") {
                 return JSON.stringify({
-                    type: "hello-result", protocol: 1, ok: true, limits: {}, apis: ["GM.log"]
+                    type: "hello-result", protocol: 2, ok: true, limits: {}, apis: ["GM.log"]
                 });
             }
             return JSON.stringify({
-                type: "response", protocol: 1, requestId: request.requestId, ok: true,
+                type: "response", protocol: 2, requestId: request.requestId, ok: true,
                 result: { $monkeySharpType: "undefined" }
             });
         }
     };
 
     const payload = {
-        protocol: 1,
+        protocol: 2,
         documentId: "legacy-document",
         frameId: "main",
         runAt: "DocumentEnd",
@@ -57,17 +57,10 @@ test("legacy profile exposes lexical globals and window-like top-level this", as
             info: { grants: ["GM_log"] },
             capability: "legacy-capability",
             deliveryToken: "legacy-delivery",
-            compatibility: {
-                profile: "LegacyCompatible",
-                strict: false,
-                legacyGlobals: true,
-                synchronousStorageMirror: true,
-                synchronousResourceSnapshot: true
-            }
         }]
     };
 
-    const encoded = Buffer.from(JSON.stringify(payload), "utf8").toString("base64");
+    const encoded = Buffer.from(JSON.stringify(completePlan(payload)), "utf8").toString("base64");
     vm.runInThisContext(template.replace("__MONKEYSHARP_PAYLOAD_BASE64__", encoded));
     await waitFor(() => globalThis.__legacyType);
 

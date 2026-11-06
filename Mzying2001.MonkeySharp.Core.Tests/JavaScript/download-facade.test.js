@@ -1,15 +1,15 @@
+const completePlan = require("./test-plan");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 
-const template = fs.readFileSync(
-    path.resolve(__dirname, "../../Mzying2001.MonkeySharp.Core/Js/Init.js"), "utf8");
+const template = require("./bootstrap-template");
 
 test("download callbacks are registered before early terminal notifications", async () => {
     const payload = {
-        protocol: 1,
+        protocol: 2,
         documentId: "download-document",
         frameId: "main",
         runAt: "DocumentEnd",
@@ -24,7 +24,6 @@ test("download callbacks are registered before early terminal notifications", as
             ].join("\n"),
             grants: ["GM.download"],
             info: {},
-            compatibility: { legacyGlobals: true },
             capability: "download-capability",
             deliveryToken: "download-delivery"
         }]
@@ -36,14 +35,14 @@ test("download callbacks are registered before early terminal notifications", as
             const request = JSON.parse(requestJson);
             if (request.type === "hello") {
                 return JSON.stringify({
-                    type: "hello-result", protocol: 1, ok: true, limits: {}, apis: ["GM.download"]
+                    type: "hello-result", protocol: 2, ok: true, limits: {}, apis: ["GM.download"]
                 });
             }
             if (request.method === "GM.download" && request.params.operation === "start") {
                 starts.push(request.params);
                 const event = request.params.clientId === starts[0].clientId ? "download-complete" : "download-progress";
                 globalThis.__MonkeySharpRuntime.receive({
-                    type: "notification", protocol: 1, executionId: "download-execution",
+                    type: "notification", protocol: 2, executionId: "download-execution",
                     deliveryToken: "download-delivery", event,
                     data: event === "download-complete"
                         ? { clientId: request.params.clientId, downloadId: "host-" + starts.length }
@@ -51,24 +50,24 @@ test("download callbacks are registered before early terminal notifications", as
                 });
                 if (starts.length > 1) {
                     globalThis.__MonkeySharpRuntime.receive({
-                        type: "notification", protocol: 1, executionId: "download-execution",
+                        type: "notification", protocol: 2, executionId: "download-execution",
                         deliveryToken: "download-delivery", event: "download-complete",
                         data: { clientId: request.params.clientId, downloadId: "host-" + starts.length }
                     });
                 }
-                return JSON.stringify({ type: "response", protocol: 1, requestId: request.requestId, ok: true,
+                return JSON.stringify({ type: "response", protocol: 2, requestId: request.requestId, ok: true,
                     result: { id: "host-" + starts.length, clientId: request.params.clientId } });
             }
             if (request.method === "GM.download" && request.params.operation === "abort") {
                 aborts += 1;
-                return JSON.stringify({ type: "response", protocol: 1, requestId: request.requestId, ok: true, result: true });
+                return JSON.stringify({ type: "response", protocol: 2, requestId: request.requestId, ok: true, result: true });
             }
-            return JSON.stringify({ type: "response", protocol: 1, requestId: request.requestId, ok: true,
+            return JSON.stringify({ type: "response", protocol: 2, requestId: request.requestId, ok: true,
                 result: { $monkeySharpType: "undefined" } });
         }
     };
 
-    const encoded = Buffer.from(JSON.stringify(payload), "utf8").toString("base64");
+    const encoded = Buffer.from(JSON.stringify(completePlan(payload)), "utf8").toString("base64");
     vm.runInThisContext(template.replace("__MONKEYSHARP_PAYLOAD_BASE64__", encoded));
     await globalThis.__downloadPromise;
     await new Promise(resolve => setTimeout(resolve, 10));

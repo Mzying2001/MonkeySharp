@@ -4,6 +4,7 @@
 // @match http://127.0.0.1:__PORT__/compat/net/*
 // @grant GM.webRequest
 // @run-at document-end
+// @grant GM_webRequest
 // ==/UserScript==
 (async function () {
     if (location.pathname !== '/compat/webrequest') return;

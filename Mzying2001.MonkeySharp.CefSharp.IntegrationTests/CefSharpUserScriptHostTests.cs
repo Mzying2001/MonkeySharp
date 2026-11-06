@@ -384,7 +384,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
             var repository = new InMemoryUserScriptRepository();
             var grants = new[]
             {
-                "GM.getResourceText", "GM.getResourceURL", "GM.xmlHttpRequest",
+                "GM.getResourceText", "GM.getResourceUrl", "GM.xmlHttpRequest",
                 "GM.registerMenuCommand", "GM.unregisterMenuCommand", "GM.notification",
                 "GM.setClipboard", "GM.openInTab", "GM.download", "GM.getTab", "GM.saveTab", "GM.getTabs"
             };
@@ -420,7 +420,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
                 var responseJson = await host.Gateway.DispatchAsync(JsonSerializer.Serialize(new
                 {
                     type = "hello",
-                    protocol = 1,
+                    protocol = 2,
                     documentId = frame.DocumentId,
                     scriptKey = invocation.ScriptKey.ToString(),
                     capability = invocation.Capability
@@ -459,7 +459,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
                     var invocation = Assert.Single(plan.Invocations);
                     var json = await host.Gateway.DispatchAsync(JsonSerializer.Serialize(new
                     {
-                        type = "hello", protocol = 1, documentId = frame.DocumentId,
+                        type = "hello", protocol = 2, documentId = frame.DocumentId,
                         scriptKey = invocation.ScriptKey.ToString(), capability = invocation.Capability
                     }), CancellationToken.None);
                     using (var response = JsonDocument.Parse(json))
@@ -947,6 +947,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
             IDownloadService,
             ITabStateService
         {
+            public string DownloadMode => "native";
             public Task<ResourceContent> GetScriptAsync(
                 UserScriptInstallation installation,
                 UserScriptDependencyDeclaration dependency,

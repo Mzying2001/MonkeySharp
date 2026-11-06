@@ -744,7 +744,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     if (root.ValueKind != JsonValueKind.Object ||
                         !root.TryGetProperty("protocol", out var protocol) ||
                         protocol.ValueKind != JsonValueKind.Number ||
-                        !protocol.TryGetInt32(out var protocolVersion) || protocolVersion != 1 ||
+                        !protocol.TryGetInt32(out var protocolVersion) || protocolVersion != InjectionPlan.CurrentProtocolVersion ||
                         !root.TryGetProperty("documentId", out var documentIdValue) || documentIdValue.ValueKind != JsonValueKind.String ||
                         !root.TryGetProperty("frameId", out var frameIdValue) || frameIdValue.ValueKind != JsonValueKind.String ||
                         !root.TryGetProperty("token", out var tokenValue) || tokenValue.ValueKind != JsonValueKind.String ||

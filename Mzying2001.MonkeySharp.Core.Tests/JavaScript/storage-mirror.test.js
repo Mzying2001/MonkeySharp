@@ -48,7 +48,7 @@ test("remote empty-key updates preserve undefined and ignore stale mirror notifi
     const { single, api, deliver, executionId } = await install();
     const changes = [];
     const listenerId = await api.addValueChangeListener("", (...args) => changes.push(args));
-    const notification = { type: "notification", protocol: 1, executionId, deliveryToken: executionId,
+    const notification = { type: "notification", protocol: 2, executionId, deliveryToken: executionId,
         event: "storage-sync", data: { key: "", oldValue: null, oldValueExists: false,
             newValue: "u", newValueExists: true, sequence: 2, originExecutionId: "remote" } };
     deliver(notification);

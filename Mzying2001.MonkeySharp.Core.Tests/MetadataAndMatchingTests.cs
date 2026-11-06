@@ -50,7 +50,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         [InlineData("GM_getValues", "GM.getValues")]
         [InlineData("GM_setValues", "GM.setValues")]
         [InlineData("GM_deleteValues", "GM.deleteValues")]
-        [InlineData("GM_getResourceURL", "GM.getResourceURL")]
+        [InlineData("GM_getResourceURL", "GM.getResourceUrl")]
         public void LegacyGrantAliasesNormalizeWhilePreservingDeclarations(string alias, string canonical)
         {
             var result = new UserScriptMetadataParser().Parse(
@@ -74,56 +74,26 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Theory]
-        [InlineData("GM.getResourceUrl", UserScriptCompatibilityProfile.LegacyCompatible, true)]
-        [InlineData("GM.getResourceURL", UserScriptCompatibilityProfile.LegacyCompatible, true)]
-        [InlineData("GM.getResourceUrl", UserScriptCompatibilityProfile.LegacyCompatible, false)]
-        [InlineData("GM.getResourceURL", UserScriptCompatibilityProfile.LegacyCompatible, false)]
-        [InlineData("GM.getResourceUrl", UserScriptCompatibilityProfile.ModernStrict, true)]
-        [InlineData("GM.getResourceURL", UserScriptCompatibilityProfile.ModernStrict, true)]
-        [InlineData("GM.getResourceUrl", UserScriptCompatibilityProfile.ModernStrict, false)]
-        [InlineData("GM.getResourceURL", UserScriptCompatibilityProfile.ModernStrict, false)]
-        public void ModernResourceUrlGrantsNormalizeRegardlessOfLegacyAliasOptions(
-            string grant, UserScriptCompatibilityProfile profile, bool acceptLegacyAliases)
+        [InlineData("GM.getResourceUrl")]
+        [InlineData("GM_getResourceURL")]
+        public void OfficialResourceUrlNamesShareOneCapability(string grant)
         {
-            var result = new UserScriptMetadataParser(new UserScriptMetadataParserOptions
-            {
-                Profile = profile,
-                AcceptLegacyGrantAliases = acceptLegacyAliases
-            }).Parse(Script("// @name resource\n// @match https://example.com/*\n// @grant " + grant));
-
+            var result = _parser.Parse(Script("// @name resource\n// @match https://example.com/*\n// @grant " + grant));
             Assert.True(result.CanEnable);
             Assert.Equal(new[] { grant }, result.Metadata.DeclaredGrants);
-            Assert.Equal(new[] { "GM.getResourceURL" }, result.Metadata.Grants);
+            Assert.Equal(new[] { "GM.getResourceUrl" }, result.Metadata.Grants);
             Assert.DoesNotContain(result.Diagnostics, item => item.Code == "MSM031_UNKNOWN_GRANT");
         }
 
-        [Fact]
-        public void ResourceUrlGrantsDeduplicateWithoutChangingDeclarationsOrLegacyAliases()
-        {
-            var result = _parser.Parse(Script(
-                "// @name resource\n// @match https://example.com/*\n" +
-                "// @grant GM.getResourceUrl\n// @grant GM.getResourceURL\n// @grant GM_getResourceURL"));
-
-            Assert.True(result.CanEnable);
-            Assert.Equal(new[] { "GM.getResourceUrl", "GM.getResourceURL", "GM_getResourceURL" },
-                result.Metadata.DeclaredGrants);
-            Assert.Equal(new[] { "GM.getResourceURL" }, result.Metadata.Grants);
-            Assert.DoesNotContain("GM.getResourceUrl", UserScriptGrantCatalog.LegacyAliases);
-            Assert.Equal("GM_getResourceURL", UserScriptGrantCatalog.GetLegacyAlias("GM.getResourceURL"));
-        }
-
         [Theory]
-        [InlineData("GM_getValue")]
-        [InlineData("GM_getResourceURL")]
-        public void StrictParserCanRejectLegacyAliases(string grant)
+        [InlineData("GM.getResourceURL")]
+        [InlineData("GM.windowClose")]
+        public void UnofficialNamesDoNotAuthorizeAnyCapability(string grant)
         {
-            var result = new UserScriptMetadataParser(new UserScriptMetadataParserOptions
-            {
-                Profile = UserScriptCompatibilityProfile.ModernStrict,
-                AcceptLegacyGrantAliases = false
-            }).Parse(Script("// @name strict\n// @match https://example.com/*\n// @grant " + grant));
-
-            Assert.Equal(new[] { "none" }, result.Metadata.Grants);
+            var result = _parser.Parse(Script("// @name unknown\n// @match https://example.com/*\n// @grant " + grant));
+            Assert.Empty(result.Metadata.Grants);
+            Assert.Equal(new[] { grant }, result.Metadata.DeclaredGrants);
+            Assert.Equal(GrantDeclarationState.ExplicitList, result.Metadata.GrantDeclarationState);
             Assert.Contains(result.Diagnostics, item => item.Code == "MSM031_UNKNOWN_GRANT");
         }
 

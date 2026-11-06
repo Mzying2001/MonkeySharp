@@ -1,7 +1,6 @@
 using CefSharp;
 using Mzying2001.MonkeySharp.Core.Apis;
 using Mzying2001.MonkeySharp.Core.Bridge;
-using Mzying2001.MonkeySharp.Core.Compatibility;
 using Mzying2001.MonkeySharp.Core.Permissions;
 using Mzying2001.MonkeySharp.Core.Repository;
 using Mzying2001.MonkeySharp.Core.Runtime;
@@ -189,8 +188,6 @@ namespace Mzying2001.MonkeySharp.CefSharp
         public CefSharpUserScriptHostBuilder Configure(CefSharpHostOptions options)
         {
             _options = options ?? throw new ArgumentNullException(nameof(options));
-            if (_options.Compatibility == null)
-                _options.Compatibility = new UserScriptCompatibilityOptions();
             return this;
         }
 
@@ -204,13 +201,21 @@ namespace Mzying2001.MonkeySharp.CefSharp
             _built = true;
             var ownsStore = _store == null;
             var store = _store ?? new InMemoryUserScriptValueStore();
+            var contextAccessor = new CefSharpRequestContextAccessor();
             var engine = new UserScriptEngine(
                 _repository,
                 options: new UserScriptEngineOptions
                 {
                     RequireGuaranteedDocumentStart = _options.RequireGuaranteedDocumentStart,
                     RequireVerifiedBridge = true,
-                    Compatibility = _options.Compatibility
+                    EnvironmentProvider = frame => new UserScriptExecutionEnvironment(
+                        _downloads?.DownloadMode ?? "disabled",
+                        _options.IsIncognito?.Invoke(contextAccessor.Current),
+                        _options.AutomaticallyUpdatesScripts,
+                        unavailableCapabilities: _options.EnableDefaultNetworkServices ? null : new Dictionary<string, string>
+                        {
+                            ["GM.xmlHttpRequest"] = "policy-disabled", ["GM.cookie"] = "policy-disabled", ["GM.webRequest"] = "policy-disabled"
+                        })
                 },
                 sourceResolver: _dependencies == null
                     ? null
@@ -220,7 +225,6 @@ namespace Mzying2001.MonkeySharp.CefSharp
             var ownedServices = new List<IDisposable>();
             try
             {
-                var contextAccessor = new CefSharpRequestContextAccessor();
                 var effectiveWebRequests = _webRequests;
                 if (effectiveWebRequests == null && _options.EnableDefaultNetworkServices)
                 {

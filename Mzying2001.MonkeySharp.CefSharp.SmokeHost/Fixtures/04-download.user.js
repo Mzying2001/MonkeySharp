@@ -3,6 +3,7 @@
 // @match http://127.0.0.1:__PORT__/compat/download
 // @grant GM.download
 // @run-at document-end
+// @grant GM_download
 // ==/UserScript==
 (async function () {
     const result = globalThis.__compatCase = { checks: {}, terminals: {} };

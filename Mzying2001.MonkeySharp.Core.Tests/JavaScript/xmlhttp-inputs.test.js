@@ -1,11 +1,11 @@
+const completePlan = require("./test-plan");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 
-const template = fs.readFileSync(
-    path.resolve(__dirname, "../../Mzying2001.MonkeySharp.Core/Js/Init.js"), "utf8");
+const template = require("./bootstrap-template");
 
 test("XHR serializes Tampermonkey request inputs and exposes abort", async () => {
     const requests = [];
@@ -15,18 +15,18 @@ test("XHR serializes Tampermonkey request inputs and exposes abort", async () =>
             const request = JSON.parse(requestJson);
             requests.push(request);
             if (request.type === "hello") return JSON.stringify({
-                type: "hello-result", protocol: 1, ok: true, limits: {}, apis: ["GM.xmlHttpRequest"]
+                type: "hello-result", protocol: 2, ok: true, limits: {}, apis: ["GM.xmlHttpRequest"]
             });
             let result = true;
             if (request.params.operation === "create") result = { sessionId: "xhr-" + (++session) };
             else if (request.params.operation === "execute") result = { status: 200, bodyLength: 0 };
             return JSON.stringify({
-                type: "response", protocol: 1, requestId: request.requestId, ok: true, result
+                type: "response", protocol: 2, requestId: request.requestId, ok: true, result
             });
         }
     };
     const payload = {
-        protocol: 1, documentId: "inputs-document", frameId: "main", runAt: "DocumentEnd",
+        protocol: 2, documentId: "inputs-document", frameId: "main", runAt: "DocumentEnd",
         invocations: [{
             executionId: "inputs-execution", scriptKey: "77777777-7777-7777-7777-777777777777",
             source: [
@@ -61,7 +61,7 @@ test("XHR serializes Tampermonkey request inputs and exposes abort", async () =>
         }]
     };
     vm.runInThisContext(template.replace(
-        "__MONKEYSHARP_PAYLOAD_BASE64__", Buffer.from(JSON.stringify(payload)).toString("base64")));
+        "__MONKEYSHARP_PAYLOAD_BASE64__", Buffer.from(JSON.stringify(completePlan(payload))).toString("base64")));
     while (!globalThis.__inputsPromise) await new Promise(resolve => setTimeout(resolve, 5));
     await globalThis.__inputsPromise;
 
@@ -101,28 +101,28 @@ test("XHR accepts binary request bodies and parses responseXML", async () => {
             const request = JSON.parse(requestJson);
             requests.push(request);
             if (request.type === "hello") return JSON.stringify({
-                type: "hello-result", protocol: 1, ok: true, limits: {}, apis: ["GM.xmlHttpRequest"]
+                type: "hello-result", protocol: 2, ok: true, limits: {}, apis: ["GM.xmlHttpRequest"]
             });
             if (request.params.operation === "create") return JSON.stringify({
-                type: "response", protocol: 1, requestId: request.requestId, ok: true,
+                type: "response", protocol: 2, requestId: request.requestId, ok: true,
                 result: { sessionId: "xml-session" }
             });
             if (request.params.operation === "execute") return JSON.stringify({
-                type: "response", protocol: 1, requestId: request.requestId, ok: true,
+                type: "response", protocol: 2, requestId: request.requestId, ok: true,
                 result: { status: 200, statusText: "OK", finalUrl: "https://api.example.com/xml",
                     responseHeaders: "Content-Type: application/xml", mimeType: "application/xml",
                     charset: "utf-8", bodyLength: Buffer.byteLength(xml), streaming: false }
             });
             if (request.params.operation === "readBody") return JSON.stringify({
-                type: "response", protocol: 1, requestId: request.requestId, ok: true,
+                type: "response", protocol: 2, requestId: request.requestId, ok: true,
                 result: { chunk: Buffer.from(xml).toString("base64"), done: true }
             });
-            return JSON.stringify({ type: "response", protocol: 1, requestId: request.requestId, ok: true,
+            return JSON.stringify({ type: "response", protocol: 2, requestId: request.requestId, ok: true,
                 result: true });
         }
     };
     const payload = {
-        protocol: 1, documentId: "legacy-input-document", frameId: "main", runAt: "DocumentEnd",
+        protocol: 2, documentId: "legacy-input-document", frameId: "main", runAt: "DocumentEnd",
         invocations: [{
             executionId: "legacy-input-execution", scriptKey: "12121212-1212-1212-1212-121212121212",
             source: "globalThis.__xmlPromise = (async () => { try { return await GM.xmlHttpRequest({ url: 'https://api.example.com/xml', data: '\\u0100A', binary: true, responseXML: true }); } catch (error) { globalThis.__xmlErr = error.message; } })();",
@@ -131,7 +131,7 @@ test("XHR accepts binary request bodies and parses responseXML", async () => {
         }]
     };
     vm.runInThisContext(template.replace(
-        "__MONKEYSHARP_PAYLOAD_BASE64__", Buffer.from(JSON.stringify(payload)).toString("base64")));
+        "__MONKEYSHARP_PAYLOAD_BASE64__", Buffer.from(JSON.stringify(completePlan(payload))).toString("base64")));
     while (!globalThis.__xmlPromise && !globalThis.__xmlErr) await new Promise(resolve => setTimeout(resolve, 5));
     assert.equal(globalThis.__xmlErr, undefined);
     await globalThis.__xmlPromise;
@@ -147,21 +147,20 @@ test("legacy XHR delivers immediate validation errors once", async () => {
     globalThis.__legacyXhrErrorCount = 0;
     globalThis.__legacyXhrError = null;
     const payload = {
-        protocol: 1, documentId: "legacy-xhr-error-document", frameId: "main", runAt: "DocumentEnd",
+        protocol: 2, documentId: "legacy-xhr-error-document", frameId: "main", runAt: "DocumentEnd",
         invocations: [{
             executionId: "legacy-xhr-error-execution", scriptKey: "13131313-1313-1313-1313-131313131313",
             source: "globalThis.__legacyXhrPromise = new Promise(resolve => GM_xmlhttpRequest({ url: 'https://api.example.com/', binary: true, data: {}, onerror: error => { globalThis.__legacyXhrErrorCount++; globalThis.__legacyXhrError = error; resolve(); } }));",
             declaredGrants: ["GM_xmlhttpRequest"], grants: ["GM.xmlHttpRequest"], info: {},
             capability: "legacy-xhr-error-capability", deliveryToken: "legacy-xhr-error-delivery",
-            compatibility: { profile: "LegacyCompatible", strict: false, legacyGlobals: true }
         }]
     };
     globalThis.__MonkeySharpBridge = { dispatch: async requestJson => {
         const request = JSON.parse(requestJson);
-        if (request.type === "hello") return JSON.stringify({ type: "hello-result", protocol: 1, ok: true, limits: {}, apis: ["GM.xmlHttpRequest"] });
-        return JSON.stringify({ type: "response", protocol: 1, requestId: request.requestId, ok: true, result: { sessionId: "unused" } });
+        if (request.type === "hello") return JSON.stringify({ type: "hello-result", protocol: 2, ok: true, limits: {}, apis: ["GM.xmlHttpRequest"] });
+        return JSON.stringify({ type: "response", protocol: 2, requestId: request.requestId, ok: true, result: { sessionId: "unused" } });
     }};
-    vm.runInThisContext(template.replace("__MONKEYSHARP_PAYLOAD_BASE64__", Buffer.from(JSON.stringify(payload)).toString("base64")));
+    vm.runInThisContext(template.replace("__MONKEYSHARP_PAYLOAD_BASE64__", Buffer.from(JSON.stringify(completePlan(payload))).toString("base64")));
     while (!globalThis.__legacyXhrPromise) await new Promise(resolve => setTimeout(resolve, 5));
     await globalThis.__legacyXhrPromise;
     assert.equal(globalThis.__legacyXhrErrorCount, 1);

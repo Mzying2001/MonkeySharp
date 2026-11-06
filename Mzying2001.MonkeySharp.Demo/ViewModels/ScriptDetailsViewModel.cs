@@ -106,7 +106,7 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
 
             var hostCapabilities = new[]
             {
-                "GM.getResourceText", "GM.getResourceURL", "GM.xmlHttpRequest", "GM.registerMenuCommand",
+                "GM.getResourceText", "GM.getResourceUrl", "GM.xmlHttpRequest", "GM.registerMenuCommand",
                 "GM.unregisterMenuCommand", "GM.notification", "GM.setClipboard", "GM.openInTab", "GM.download",
                 "GM.getTab", "GM.saveTab", "GM.getTabs", "GM.cookie", "GM.webRequest", "window.close", "window.focus"
             };

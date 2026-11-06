@@ -36,6 +36,7 @@ namespace Mzying2001.MonkeySharp.Demo.Services
 
     public sealed class DownloadService : IDownloadService, IDisposable
     {
+        public string DownloadMode => "native";
         private readonly HttpClient _client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false })
         { Timeout = Timeout.InfiniteTimeSpan };
         private readonly string _directory;

@@ -1,5 +1,5 @@
 using Mzying2001.MonkeySharp.Core.Bridge;
-using Mzying2001.MonkeySharp.Core.Compatibility;
+using System;
 
 namespace Mzying2001.MonkeySharp.CefSharp
 {
@@ -25,8 +25,10 @@ namespace Mzying2001.MonkeySharp.CefSharp
         /// <summary>Gets or sets bridge payload, resource, concurrency, and timeout limits.</summary>
         public BridgeOptions Bridge { get; set; } = new BridgeOptions();
 
-        /// <summary>Gets or sets userscript compatibility behavior.</summary>
-        public UserScriptCompatibilityOptions Compatibility { get; set; } =
-            new UserScriptCompatibilityOptions();
+        /// <summary>Gets or sets a resolver for actual private-context state; null leaves it unknown.</summary>
+        public Func<global::CefSharp.IRequestContext, bool?> IsIncognito { get; set; }
+
+        /// <summary>Gets or sets whether scripts update automatically; null leaves policy unknown.</summary>
+        public bool? AutomaticallyUpdatesScripts { get; set; }
     }
 }

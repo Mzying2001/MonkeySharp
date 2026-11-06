@@ -4,7 +4,7 @@
 
 MonkeySharp 3 is a userscript runtime for applications that embed CefSharp. Browser-independent parsing, URL matching, repositories, storage, permissions, and API dispatch live in Core; browser lifecycle integration lives in the CefSharp adapter.
 
-The default `LegacyCompatible` profile provides modern `GM.*` APIs and legacy `GM_*` aliases over an asynchronous bridge. Available capabilities depend on script grants and host services.
+One userscript contract provides both official calling forms over an asynchronous bridge. Legacy names follow exact declarations; modern API families follow the pinned reference evidence and actual host services.
 
 | To… | Start here |
 | --- | --- |
@@ -133,7 +133,7 @@ Static `@webRequest` metadata is validated and included in `GM.info`, but does n
 
 ## GM API Support
 
-`GM.info` and `GM_info` are always available without a grant or bridge, in both compatibility profiles and even when legacy globals are disabled. Missing `@grant` and explicit `@grant none` expose only info; other APIs require their individual grants and any corresponding host providers.
+`GM.info` and `GM_info` are always available without a grant or bridge, under the single contract. Missing `@grant` and explicit `@grant none` expose only info; other APIs require their declared capability families and any corresponding host providers.
 
 This table summarizes availability. Parameters, return values, callbacks, and [Tampermonkey differences](docs/usage-guide.md#tampermonkey-compatibility-checklist) are covered in the [userscript guide](docs/usage-guide.md#api-index).
 
@@ -155,7 +155,7 @@ This table summarizes availability. Parameters, return values, callbacks, and [T
 | `window.onurlchange` | Core | Requires the exact grant; observes `pushState`, `replaceState`, `popstate`, and `hashchange` URL changes. |
 | `unsafeWindow` | Trusted page world only | Exposed only for its exact grant. |
 
-Legacy aliases other than `GM_info` require `LegacyCompatible` and enabled legacy globals. Synchronous storage/resource aliases also need complete bootstrap snapshots. Return values and error-reporting channels vary by API; some legacy failures are logged to the page console. See [compatibility profiles](docs/integration-reference.md#compatibility-profiles) and [error handling](docs/usage-guide.md#errors-and-troubleshooting).
+Legacy globals other than `GM_info` require exact declared names. Synchronous storage/resource aliases also need complete bootstrap snapshots. Return values and error-reporting channels vary by API; some legacy failures are logged to the page console. See [API contract](docs/integration-reference.md#api-contract-and-grants) and [error handling](docs/usage-guide.md#errors-and-troubleshooting).
 
 If a declared API has no provider, it is normally absent and direct bridge calls return `MSP006_NOT_SUPPORTED`. Undeclared methods return `MSP004_GRANT_DENIED`.
 

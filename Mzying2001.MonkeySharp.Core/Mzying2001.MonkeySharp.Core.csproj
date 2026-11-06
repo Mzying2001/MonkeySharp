@@ -22,8 +22,8 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
   <ItemGroup>
-    <EmbeddedResource Include="Js\Init.js" />
-    <EmbeddedResource Include="Js\Inject.js" />
+    <EmbeddedResource Include="Js\*.js" />
+    <EmbeddedResource Include="Js\ApiCatalog.json" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\README.md">

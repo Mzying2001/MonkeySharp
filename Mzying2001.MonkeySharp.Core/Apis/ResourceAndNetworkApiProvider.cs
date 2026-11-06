@@ -63,7 +63,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             if (resources != null)
             {
                 methods.Add("GM.getResourceText");
-                methods.Add("GM.getResourceURL");
+                methods.Add("GM.getResourceUrl");
             }
             if (http != null)
                 methods.Add("GM.xmlHttpRequest");
@@ -87,7 +87,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             CancellationToken cancellationToken)
         {
             if (_resources == null || !capabilities.Contains("GM.getResourceText") &&
-                !capabilities.Contains("GM.getResourceURL"))
+                !capabilities.Contains("GM.getResourceUrl"))
                 return new ReadOnlyDictionary<string, CompatibilityResourceSnapshot>(
                     new Dictionary<string, CompatibilityResourceSnapshot>(StringComparer.Ordinal));
 
@@ -115,7 +115,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             switch (context.Method)
             {
                 case "GM.getResourceText":
-                case "GM.getResourceURL":
+                case "GM.getResourceUrl":
                     return await InvokeResourceAsync(context, cancellationToken).ConfigureAwait(false);
                 case "GM.xmlHttpRequest":
                     return await InvokeHttpAsync(context, cancellationToken).ConfigureAwait(false);

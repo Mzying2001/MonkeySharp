@@ -31,6 +31,10 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
         private readonly Dictionary<string, ExecutionRecord> _executions =
             new Dictionary<string, ExecutionRecord>(StringComparer.Ordinal);
         private bool _disposed;
+        private IReadOnlyCollection<string> _hostCapabilities = new[] { "GM.info", "GM.addStyle", "GM.addElement" };
+
+        internal void SetHostCapabilities(IEnumerable<string> capabilities)
+            => _hostCapabilities = new ReadOnlyCollection<string>(capabilities.Distinct(StringComparer.Ordinal).ToArray());
 
         /// <summary>Initializes a userscript execution engine.</summary>
         /// <param name="repository">The repository containing installed userscripts.</param>
@@ -46,8 +50,6 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
             _repository = repository ?? throw new ArgumentNullException(nameof(repository));
             _matcher = matcher ?? new UserScriptMatcher();
             _options = options ?? new UserScriptEngineOptions();
-            if (_options.Compatibility == null)
-                _options.Compatibility = new UserScriptCompatibilityOptions();
             _sourceResolver = sourceResolver;
         }
 
@@ -145,8 +147,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                         documentId: frame.DocumentId, frameId: frame.FrameId));
                     return EmptyPlan(frame, UserScriptRunAt.ContextMenu);
                 }
-                if (_options.Compatibility.Profile == UserScriptCompatibilityProfile.LegacyCompatible &&
-                    metadata.Requires.Count != 0 && _sourceResolver == null)
+                if (metadata.Requires.Count != 0 && _sourceResolver == null)
                 {
                     diagnostics.Add(new UserScriptDiagnostic(
                         "MSR401_DEPENDENCY_PROVIDER_UNAVAILABLE", DiagnosticSeverity.Error,
@@ -176,7 +177,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                         installation.ScriptKey, frame.DocumentId, frame.FrameId));
                     return EmptyPlan(frame, UserScriptRunAt.ContextMenu);
                 }
-                var invocation = CreateInvocation(installation, source);
+                var invocation = CreateInvocation(installation, source, frame);
                 var execution = new ExecutionRecord(frame, installation, invocation, new CancellationTokenSource());
                 lock (_stateLock)
                 {
@@ -403,8 +404,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                         documentId: frame.DocumentId,
                         frameId: frame.FrameId));
                 }
-                if (_options.Compatibility.Profile == UserScriptCompatibilityProfile.LegacyCompatible &&
-                    metadata.Requires.Count != 0 && _sourceResolver == null)
+                if (metadata.Requires.Count != 0 && _sourceResolver == null)
                 {
                     diagnostics.Add(new UserScriptDiagnostic(
                         "MSR401_DEPENDENCY_PROVIDER_UNAVAILABLE",
@@ -443,7 +443,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                         frame.FrameId));
                     continue;
                 }
-                var invocation = CreateInvocation(installation, source);
+                var invocation = CreateInvocation(installation, source, frame);
                 var execution = new ExecutionRecord(frame, installation, invocation, new CancellationTokenSource());
                 lock (_stateLock)
                     _executions.Add(invocation.ExecutionId, execution);
@@ -498,24 +498,24 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                 ExecutionEnded?.Invoke(execution);
         }
 
-        private ScriptInvocation CreateInvocation(UserScriptInstallation installation, string source)
+        private ScriptInvocation CreateInvocation(UserScriptInstallation installation, string source, DocumentFrame frame)
         {
             var metadata = installation.Definition.Metadata;
-            var info = JsonSerializer.Serialize(BuildInfo(installation));
+            var environment = _options.EnvironmentProvider?.Invoke(frame) ?? new UserScriptExecutionEnvironment();
+            var info = JsonSerializer.Serialize(BuildInfo(installation, environment));
             return new ScriptInvocation(
                 Guid.NewGuid().ToString("D"),
                 installation.ScriptKey,
                 source,
                 metadata.DeclaredGrants,
-                metadata.Grants,
+                metadata.Capabilities,
                 metadata.GrantDeclarationState,
                 info,
                 CreateToken(),
-                CreateToken(),
-                new ScriptCompatibilityDescriptor(_options.Compatibility));
+                CreateToken());
         }
 
-        private static object BuildInfo(UserScriptInstallation installation)
+        private object BuildInfo(UserScriptInstallation installation, UserScriptExecutionEnvironment environment)
         {
             var metadata = installation.Definition.Metadata;
             var header = ExtractMetadataHeader(installation.Definition.Source);
@@ -547,7 +547,6 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
             {
                 ["antifeatures"] = antifeatures,
                 ["author"] = metadata.Author,
-                ["blockers"] = new string[0],
                 ["connects"] = metadata.Connects,
                 ["copyright"] = metadata.Copyright,
                 ["description_i18n"] = metadata.LocalizedDescriptions.Count == 0 ? null : metadata.LocalizedDescriptions,
@@ -566,7 +565,6 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                 ["name_i18n"] = metadata.LocalizedNames.Count == 0 ? null : metadata.LocalizedNames,
                 ["name"] = metadata.Name,
                 ["namespace"] = metadata.Namespace,
-                ["position"] = 0,
                 ["resources"] = resources,
                 ["supportURL"] = metadata.SupportUrl,
                 ["run-at"] = ToMetadataRunAt(metadata.RunAt),
@@ -582,35 +580,37 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                     ["run_at"] = ToMetadataRunAt(metadata.RunAt)
                 }
             };
-            return new Dictionary<string, object>
+            var result = new Dictionary<string, object>
             {
                 ["scriptKey"] = installation.ScriptKey.ToString(),
                 ["name"] = metadata.Name,
                 ["namespace"] = metadata.Namespace,
-                ["version"] = metadata.Version,
+                ["version"] = typeof(UserScriptEngine).Assembly.GetName().Version.ToString(3),
                 ["description"] = metadata.Description,
                 ["grants"] = metadata.DeclaredGrants,
                 ["grantDeclarationState"] = metadata.GrantDeclarationState.ToString(),
-                ["downloadMode"] = "disabled",
-                ["isIncognito"] = false,
-                ["sandboxMode"] = "raw",
+                ["downloadMode"] = environment.DownloadMode,
+                ["sandboxMode"] = environment.SandboxMode,
                 ["scriptHandler"] = "MonkeySharp",
                 ["scriptMetaStr"] = header,
                 ["scriptUpdateURL"] = metadata.UpdateUrl,
-                ["scriptWillUpdate"] = false,
                 ["compatibility"] = new Dictionary<string, object>
                 {
-                    ["contractVersion"] = 1,
+                    ["contractVersion"] = 2,
                     ["handler"] = "MonkeySharp",
-                    ["executionWorld"] = "page",
-                    ["isolatedWorld"] = false,
+                    ["executionWorld"] = environment.ExecutionWorld,
+                    ["isolatedWorld"] = environment.ExecutionWorld == "isolated",
+                    ["capabilities"] = UserScriptGrantCatalog.KnownCanonicalGrants
+                        .Where(name => name.StartsWith("GM.", StringComparison.Ordinal))
+                        .ToDictionary(name => name, name => _hostCapabilities.Contains(name) ? "available" :
+                            environment.UnavailableCapabilities.TryGetValue(name, out var reason) ? reason : "service-unavailable"),
                     ["fields"] = new Dictionary<string, object>
                     {
                         ["scriptHandler"] = "fixed",
-                        ["sandboxMode"] = "fixed",
-                        ["downloadMode"] = "fixed",
-                        ["isIncognito"] = "fixed",
-                        ["scriptWillUpdate"] = "fixed",
+                        ["sandboxMode"] = "execution",
+                        ["downloadMode"] = "host",
+                        ["isIncognito"] = "host-when-known",
+                        ["scriptWillUpdate"] = "host-when-known",
                         ["scriptUpdateURL"] = "metadata",
                         ["script"] = "mixed",
                         ["scriptKey"] = "extension",
@@ -619,6 +619,9 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                 },
                 ["script"] = script
             };
+            if (environment.IsIncognito.HasValue) result["isIncognito"] = environment.IsIncognito.Value;
+            if (environment.ScriptWillUpdate.HasValue) result["scriptWillUpdate"] = environment.ScriptWillUpdate.Value;
+            return result;
         }
 
         private static string ToMetadataRunAt(UserScriptRunAt runAt)

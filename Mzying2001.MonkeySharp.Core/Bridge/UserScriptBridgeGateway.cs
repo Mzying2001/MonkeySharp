@@ -73,6 +73,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                     RegisterProvider(provider);
             }
             _store.ValueChanged += StoreValueChanged;
+            _engine.SetHostCapabilities(SupportedApis());
             _engine.ExecutionEnded += EngineExecutionEnded;
         }
 
@@ -136,7 +137,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                         return Limit(ProtocolJson.Error(
                             ReadOptionalString(root, "requestId"),
                             BridgeErrorCodes.ProtocolVersion,
-                            "Only bridge protocol 1 is supported.",
+                            "Only bridge protocol " + InjectionPlan.CurrentProtocolVersion + " is supported.",
                             type == "hello"));
                     }
 
@@ -251,15 +252,10 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                     true));
             }
 
-            var grants = execution.Installation.Definition.Metadata.Grants;
+            var grants = execution.Installation.Definition.Metadata.Capabilities;
             var supported = SupportedApis().Where(api => api == "GM.info" || grants.Contains(api));
-            var compatibility = new Dictionary<string, object>
-            {
-                ["profile"] = execution.Invocation.Compatibility.Profile.ToString(),
-                ["strict"] = execution.Invocation.Compatibility.Strict,
-                ["legacyGlobals"] = execution.Invocation.Compatibility.LegacyGlobals
-            };
-            if (execution.Invocation.Compatibility.SynchronousStorageMirror && HasStorageCapability(grants))
+            var compatibility = new Dictionary<string, object>();
+            if (HasStorageCapability(grants))
             {
                 try
                 {
@@ -289,7 +285,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                         execution);
                 }
             }
-            if (execution.Invocation.Compatibility.SynchronousResourceSnapshot && HasResourceCapability(grants))
+            if (HasResourceCapability(grants))
             {
                 try
                 {
@@ -377,7 +373,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
 
         private static bool HasResourceCapability(IReadOnlyList<string> grants)
         {
-            return grants.Contains("GM.getResourceText") || grants.Contains("GM.getResourceURL");
+            return grants.Contains("GM.getResourceText") || grants.Contains("GM.getResourceUrl");
         }
 
         private async Task<object> BuildResourceBootstrapAsync(
@@ -390,7 +386,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                 var contribution = await provider.PrepareAsync(
                     execution.Installation,
                     execution.Frame,
-                    execution.Installation.Definition.Metadata.Grants,
+                    execution.Installation.Definition.Metadata.Capabilities,
                     cancellationToken).ConfigureAwait(false);
                 if (contribution == null)
                     continue;
@@ -455,7 +451,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                         return Limit(ProtocolJson.Success(requestId, JsonSerializer.Serialize(snapshot)));
                     }
 
-                    if (!execution.Installation.Definition.Metadata.Grants.Contains(method))
+                    if (!execution.Installation.Definition.Metadata.Capabilities.Contains(method))
                         return Limit(ProtocolJson.Error(requestId, BridgeErrorCodes.GrantDenied, "The script did not declare '" + method + "'."));
 
                     var authorization = new ApiAuthorizationRequest(
@@ -561,7 +557,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             CancellationToken cancellationToken)
         {
             if (execution.Cancellation.IsCancellationRequested ||
-                !execution.Installation.Definition.Metadata.Grants.Contains(method))
+                !execution.Installation.Definition.Metadata.Capabilities.Contains(method))
                 return false;
             var authorization = new ApiAuthorizationRequest(
                 execution.Installation,

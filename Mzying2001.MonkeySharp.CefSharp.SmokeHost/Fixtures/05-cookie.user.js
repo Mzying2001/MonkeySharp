@@ -5,6 +5,7 @@
 // @grant GM.xmlHttpRequest
 // @connect 127.0.0.1
 // @run-at document-end
+// @grant GM_cookie
 // ==/UserScript==
 (async function () {
     const result = globalThis.__compatCase = { checks: {} };

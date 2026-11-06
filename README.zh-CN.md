@@ -4,7 +4,7 @@
 
 MonkeySharp 3 是面向 CefSharp 嵌入式应用的用户脚本运行时。Core 包含与浏览器无关的解析、URL 匹配、仓库、存储、权限和 API 分发；CefSharp 适配器负责浏览器生命周期集成。
 
-默认 `LegacyCompatible` 配置通过异步桥接提供现代 `GM.*` API 和旧式 `GM_*` 别名。可用能力取决于脚本授权和宿主服务。
+单一契约通过异步桥接提供两种官方调用形式；旧式名称遵循精确声明，现代 API 家族按固定版本实测和真实宿主服务开放。
 
 | 目标 | 阅读入口 |
 | --- | --- |
@@ -133,7 +133,7 @@ var host = new CefSharpUserScriptHostBuilder(repository)
 
 ## GM API 支持
 
-`GM.info` 和 `GM_info` 无需授权或桥接，在两个兼容模式下始终可用，关闭旧版全局绑定时也不例外。缺少 `@grant` 或显式声明 `@grant none` 时只提供 info；其他 API 需要逐项授权及对应宿主提供程序。
+`GM.info` 和 `GM_info` 无需授权或桥接，在单一契约下始终可用。缺少 `@grant` 或显式声明 `@grant none` 时只提供 info；其他 API 需要所属家族授权及对应宿主提供程序。
 
 下表概述可用能力。参数、返回值、回调及 [Tampermonkey 差异](docs/usage-guide.zh-CN.md#tampermonkey-兼容性检查表)详见[用户脚本使用指南](docs/usage-guide.zh-CN.md#api-索引)。
 
@@ -155,7 +155,7 @@ var host = new CefSharpUserScriptHostBuilder(repository)
 | `window.onurlchange` | Core | 需要精确授权；监听 `pushState`、`replaceState`、`popstate` 和 `hashchange` URL 变化。 |
 | `unsafeWindow` | 仅可信页面世界 | 仅在精确授权时公开。 |
 
-除 `GM_info` 外，旧式别名需要 `LegacyCompatible` 且已启用旧版全局绑定；同步存储/资源别名还需要完整的引导快照。返回值及错误报告方式因 API 而异，部分旧式调用的失败会写入页面控制台。详见[兼容性配置](docs/integration-reference.zh-CN.md#兼容性配置)及[错误处理](docs/usage-guide.zh-CN.md#错误与排查)。
+除 `GM_info` 外，旧式名称需要精确声明；同步存储/资源别名还需要完整的引导快照。返回值及错误报告方式因 API 而异，部分旧式调用的失败会写入页面控制台。详见[API 契约](docs/integration-reference.zh-CN.md#授权与-api-契约)及[错误处理](docs/usage-guide.zh-CN.md#错误与排查)。
 
 缺少提供程序时，已声明 API 通常不会公开，直接桥接调用返回 `MSP006_NOT_SUPPORTED`；未声明的方法返回 `MSP004_GRANT_DENIED`。
 

@@ -284,6 +284,7 @@ namespace Mzying2001.MonkeySharp.Core.Domain
             ExcludeMatches = ReadOnlyList(excludeMatches);
             DeclaredGrants = ReadOnlyList(declaredGrants);
             Grants = ReadOnlyList(grants);
+            Capabilities = Compatibility.UserScriptGrantCatalog.GetCapabilities(Grants);
             Connects = ReadOnlyList(connects);
             Requires = new ReadOnlyCollection<UserScriptDependencyDeclaration>(requires.ToList());
             Resources = new ReadOnlyCollection<ResourceDeclaration>(resources.ToList());
@@ -382,6 +383,9 @@ namespace Mzying2001.MonkeySharp.Core.Domain
 
         /// <summary>Gets the normalized canonical capabilities granted to the script.</summary>
         public IReadOnlyList<string> Grants { get; }
+
+        /// <summary>Gets authorized operations after expanding the target's modern API families.</summary>
+        public IReadOnlyList<string> Capabilities { get; }
 
         /// <summary>Gets the network targets declared with <c>@connect</c>.</summary>
         public IReadOnlyList<string> Connects { get; }

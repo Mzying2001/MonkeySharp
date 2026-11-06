@@ -15,7 +15,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
         {
             var json = JsonSerializer.Serialize(new
             {
-                protocol = 1,
+                protocol = Core.Runtime.InjectionPlan.CurrentProtocolVersion,
                 documentId,
                 frameId,
                 token

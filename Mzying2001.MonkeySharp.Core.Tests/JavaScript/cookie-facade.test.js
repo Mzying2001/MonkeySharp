@@ -1,11 +1,11 @@
+const completePlan = require("./test-plan");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 
-const template = fs.readFileSync(
-    path.resolve(__dirname, "../../Mzying2001.MonkeySharp.Core/Js/Init.js"), "utf8");
+const template = require("./bootstrap-template");
 
 function waitFor(predicate) {
     return new Promise((resolve, reject) => {
@@ -23,11 +23,11 @@ test("modern GM.cookie and legacy GM_cookie share CRUD and listener bridge", asy
         dispatch: async requestJson => {
             const request = JSON.parse(requestJson);
             if (request.type === "hello") return JSON.stringify({
-                type: "hello-result", protocol: 1, ok: true, limits: {}, apis: ["GM.cookie"]
+                type: "hello-result", protocol: 2, ok: true, limits: {}, apis: ["GM.cookie"]
             });
             const details = request.params.details || {};
             if (request.method !== "GM.cookie") return JSON.stringify({
-                type: "response", protocol: 1, requestId: request.requestId, ok: true,
+                type: "response", protocol: 2, requestId: request.requestId, ok: true,
                 result: { $monkeySharpType: "undefined" }
             });
             let result = { $monkeySharpType: "undefined" };
@@ -38,11 +38,11 @@ test("modern GM.cookie and legacy GM_cookie share CRUD and listener bridge", asy
             else if (request.params.operation === "delete") { cookies.length = 0; result = true; }
             else if (request.params.operation === "addListener") result = request.params.listenerId;
             else if (request.params.operation === "removeListener") result = true;
-            return JSON.stringify({ type: "response", protocol: 1, requestId: request.requestId, ok: true, result });
+            return JSON.stringify({ type: "response", protocol: 2, requestId: request.requestId, ok: true, result });
         }
     };
     const payload = {
-        protocol: 1, documentId: "cookie-document", frameId: "main", runAt: "DocumentEnd", invocations: [{
+        protocol: 2, documentId: "cookie-document", frameId: "main", runAt: "DocumentEnd", invocations: [{
             executionId: "cookie-execution", scriptKey: "66666666-6666-6666-6666-666666666666",
             source: [
                 "globalThis.__cookiePromise = (async function () {",
@@ -53,17 +53,17 @@ test("modern GM.cookie and legacy GM_cookie share CRUD and listener bridge", asy
                 "})();"
             ].join("\n"),
             grants: ["GM.cookie"], declaredGrants: ["GM_cookie"], info: {}, capability: "cookie-capability",
-            deliveryToken: "cookie-delivery", compatibility: { profile: "LegacyCompatible", strict: false, legacyGlobals: true }
+            deliveryToken: "cookie-delivery",
         }]
     };
-    const encoded = Buffer.from(JSON.stringify(payload), "utf8").toString("base64");
+    const encoded = Buffer.from(JSON.stringify(completePlan(payload)), "utf8").toString("base64");
     vm.runInThisContext(template.replace("__MONKEYSHARP_PAYLOAD_BASE64__", encoded));
     await waitFor(() => globalThis.__modernCookies && globalThis.__legacyCookies);
     assert.equal(globalThis.__modernCookies[0].value, "abc");
     assert.equal(globalThis.__legacyCookies[0].name, "sid");
     assert.equal(globalThis.__legacyCookieError, null);
     assert.equal(globalThis.__MonkeySharpRuntime.receive({
-        type: "notification", protocol: 1, executionId: "cookie-execution", deliveryToken: "cookie-delivery",
+        type: "notification", protocol: 2, executionId: "cookie-execution", deliveryToken: "cookie-delivery",
         event: "cookie-change", data: { listenerId: globalThis.__cookieListener,
             cookie: { name: "sid", value: "next" }, cause: "explicit", removed: false, sequence: 1 }
     }), true);

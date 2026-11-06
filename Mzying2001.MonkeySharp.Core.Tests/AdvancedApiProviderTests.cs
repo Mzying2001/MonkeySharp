@@ -24,14 +24,14 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         public async Task ResourceApisRequireDeclaredNameAndEnforceSize()
         {
             var installation = await InstallAsync(
-                "// @grant GM.getResourceText\n// @grant GM.getResourceURL\n" +
+                "// @grant GM.getResourceText\n// @grant GM.getResourceUrl\n" +
                 "// @resource logo https://cdn.example/logo.txt");
             var resources = new FakeResourceProvider(new ResourceContent(
                 Encoding.UTF8.GetBytes("hello"), "text/plain", "hello"));
             var provider = new ResourceAndNetworkApiProvider(resources, options: new BridgeOptions(maxResourceBytes: 8));
 
             var text = await provider.InvokeAsync(Context(installation, "GM.getResourceText", new { name = "logo" }), CancellationToken.None);
-            var url = await provider.InvokeAsync(Context(installation, "GM.getResourceURL", new { name = "logo" }), CancellationToken.None);
+            var url = await provider.InvokeAsync(Context(installation, "GM.getResourceUrl", new { name = "logo" }), CancellationToken.None);
 
             Assert.Equal("hello", Json(text.Json).GetString());
             Assert.StartsWith("data:text/plain;base64,", Json(url.Json).GetString());
@@ -42,7 +42,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 new FakeResourceProvider(new ResourceContent(new byte[9])),
                 options: new BridgeOptions(maxResourceBytes: 8));
             var exception = await Assert.ThrowsAsync<BridgeProtocolException>(() => oversized.InvokeAsync(
-                Context(installation, "GM.getResourceURL", new { name = "logo" }), CancellationToken.None));
+                Context(installation, "GM.getResourceUrl", new { name = "logo" }), CancellationToken.None));
             Assert.Equal(BridgeErrorCodes.PayloadTooLarge, exception.Code);
 
             var oversizedText = new ResourceAndNetworkApiProvider(
@@ -702,6 +702,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         private sealed class FakeHostServices :
             IMenuService, INotificationService, IClipboardService, ITabService, IDownloadService, IUserScriptWindowService
         {
+            public string DownloadMode => "native";
             private Action _menuCallback;
             public FakeMenuRegistration MenuRegistration { get; } = new FakeMenuRegistration();
             public string ClipboardText { get; private set; }

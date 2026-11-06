@@ -8,13 +8,13 @@ const { execFileSync } = require("node:child_process");
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
 
 async function main() {
-    const [browserPath, extensionPath, output = "artifacts/compatibility/reference-returns.json"] = process.argv.slice(2);
+    const [browserPath, extensionPath, output = "artifacts/compatibility/reference-returns.json", fixturePath = "docs/compatibility/fixtures/returns.user.js"] = process.argv.slice(2);
     if (!browserPath || !extensionPath) throw new Error("Usage: node Run-Reference.cjs <Edge executable> <Tampermonkey directory> [output.json]");
     const manifest = JSON.parse(fs.readFileSync(path.join(extensionPath, "manifest.json"), "utf8"));
     if (manifest.version !== "5.5.1" || manifest.manifest_version !== 3) throw new Error("Reference requires Tampermonkey 5.5.1/MV3; record a new environment before changing this pin.");
     const extensionId = "iikmkjmpaadaobahmlepeloendndfphd";
     const root = path.resolve(__dirname, "../..");
-    const fixture = path.join(root, "docs/compatibility/fixtures/returns.user.js");
+    const fixture = path.resolve(root, fixturePath);
     const fixtureHash = crypto.createHash("sha256").update(fs.readFileSync(fixture)).digest("hex");
     const artifacts = path.join(root, "artifacts/compatibility");
     fs.mkdirSync(artifacts, { recursive: true });
@@ -65,13 +65,13 @@ async function main() {
         const result = await Promise.race([evidence, new Promise((_, reject) => { deadline = setTimeout(() => reject(new Error("No userscript evidence within 20 seconds.")), 20000); })]).finally(() => clearTimeout(deadline));
         result.effects.tabsBefore = tabsBefore;
         result.effects.tabsAfter = await worker.evaluate(() => chrome.tabs.query({}).then(tabs => tabs.length));
-        const checks = {
+        const checks = result.caseId === "returns" ? {
             noInvocationErrors: !result.events.some(event => event.name.endsWith(":throw") || event.name.endsWith(":rejected")),
             domNodes: result.effects.nodes.every(Boolean),
             stylesApplied: JSON.stringify(result.effects.styles) === JSON.stringify(["17", "23"]),
             promisesSettled: Object.values(result.promise).every(value => value.state === "fulfilled"),
             openedTabsClosed: result.effects.tabsBefore === result.effects.tabsAfter
-        };
+        } : { exposureRecorded: Object.keys(result.immediateReturn).length > 0 };
         const record = {
             ...result, fixtureHash,
             contractSource: ["https://www.tampermonkey.net/documentation.php?locale=en", "Tampermonkey 5.5.1/MV3 runtime"],

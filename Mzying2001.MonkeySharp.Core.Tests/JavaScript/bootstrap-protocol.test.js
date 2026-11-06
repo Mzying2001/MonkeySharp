@@ -1,3 +1,4 @@
+const completePlan = require("./test-plan");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -5,7 +6,7 @@ const path = require("node:path");
 const vm = require("node:vm");
 
 const templatePath = path.resolve(__dirname, "../../Mzying2001.MonkeySharp.Core/Js/Init.js");
-const template = fs.readFileSync(templatePath, "utf8");
+const template = require("./bootstrap-template");
 
 function waitFor(predicate) {
     return new Promise((resolve, reject) => {
@@ -23,7 +24,7 @@ function waitFor(predicate) {
 }
 
 function executePayload(payload) {
-    const encoded = Buffer.from(JSON.stringify(payload), "utf8").toString("base64");
+    const encoded = Buffer.from(JSON.stringify(completePlan(payload)), "utf8").toString("base64");
     vm.runInThisContext(template.replace("__MONKEYSHARP_PAYLOAD_BASE64__", encoded));
 }
 
@@ -34,14 +35,14 @@ test("bootstrap exposes only granted Promise APIs and authenticates notification
     globalThis.__MonkeySharpBridge = {
         dispatch: async requestJson => {
             const request = JSON.parse(requestJson);
-            assert.equal(request.protocol, 1);
+            assert.equal(request.protocol, 2);
             assert.equal(request.documentId, "document");
             assert.equal(request.scriptKey, "11111111-1111-1111-1111-111111111111");
             assert.equal(request.capability, capability);
             if (request.type === "hello") {
                 return JSON.stringify({
                     type: "hello-result",
-                    protocol: 1,
+                    protocol: 2,
                     ok: true,
                     limits: {},
                     apis: ["GM.getValue", "GM.setValue", "GM.addValueChangeListener"]
@@ -56,7 +57,7 @@ test("bootstrap exposes only granted Promise APIs and authenticates notification
             if (request.method === "GM.addValueChangeListener") result = true;
             return JSON.stringify({
                 type: "response",
-                protocol: 1,
+                protocol: 2,
                 requestId: request.requestId,
                 ok: true,
                 result
@@ -65,7 +66,7 @@ test("bootstrap exposes only granted Promise APIs and authenticates notification
     };
 
     executePayload({
-        protocol: 1,
+        protocol: 2,
         documentId: "document",
         frameId: "main",
         runAt: "DocumentEnd",
@@ -96,7 +97,7 @@ test("bootstrap exposes only granted Promise APIs and authenticates notification
 
     assert.equal(globalThis.__MonkeySharpRuntime.receive({
         type: "notification",
-        protocol: 1,
+        protocol: 2,
         executionId: "execution",
         deliveryToken: "forged",
         event: "value-change",
@@ -104,7 +105,7 @@ test("bootstrap exposes only granted Promise APIs and authenticates notification
     }), false);
     assert.equal(globalThis.__MonkeySharpRuntime.receive({
         type: "notification",
-        protocol: 1,
+        protocol: 2,
         executionId: "execution",
         deliveryToken: "delivery-token",
         event: "value-change",
@@ -119,7 +120,7 @@ test("bootstrap exposes only granted Promise APIs and authenticates notification
     assert.deepEqual(globalThis.__change, ["theme", undefined, "dark", true]);
 
     executePayload({
-        protocol: 1,
+        protocol: 2,
         documentId: "document",
         frameId: "main",
         runAt: "DocumentEnd",

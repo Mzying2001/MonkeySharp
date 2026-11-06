@@ -4,7 +4,7 @@ const { install, waitFor } = require("./storage-harness");
 
 // Observable expectations checked against the published Chromium Tampermonkey 5.5.1
 // storage facade on 2026-11-01. Host commit acknowledgement remains MonkeySharp-specific.
-for (const options of [{ mirror: true }, { mirror: false }, { strict: true, mirror: false }]) {
+for (const options of [{ mirror: true }, { mirror: false }]) {
     const mode = JSON.stringify(options);
     test(`stored undefined is distinct from absence and null (${mode})`, async () => {
         const { api, single } = await install(options);

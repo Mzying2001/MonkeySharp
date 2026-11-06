@@ -111,7 +111,9 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             "// @grant GM_xmlhttpRequest\n" +
             "// @grant GM.notification\n" +
             "// @grant GM.openInTab\n" +
+            "// @grant GM_openInTab\n" +
             "// @grant GM.download\n" +
+            "// @grant GM_download\n" +
             "// @grant GM.cookie\n" +
             "// @grant GM.webRequest\n" +
             "// @connect 127.0.0.1\n" +

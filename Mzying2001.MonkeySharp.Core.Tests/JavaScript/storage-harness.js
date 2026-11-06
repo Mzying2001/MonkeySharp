@@ -1,10 +1,11 @@
+const completePlan = require("./test-plan");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 
-const template = fs.readFileSync(path.resolve(__dirname, "../../Mzying2001.MonkeySharp.Core/Js/Init.js"), "utf8");
+const template = require("./bootstrap-template");
 const undefinedValue = { $monkeySharpType: "undefined" };
 const fixtureValue = value => typeof value === "undefined" ? "u" : value === null || typeof value === "object"
     ? "o" + JSON.stringify(value) : ({ string: "s", number: "n", boolean: "b" })[typeof value] + String(value);
@@ -34,7 +35,7 @@ async function install(options = {}) {
         const data = { key, oldValue, newValue, originExecutionId: executionId,
             mutationId: request.requestId, mutationMethod: request.method, sequence: ++sequence,
             oldValueExists, newValueExists };
-        const notification = { type: "notification", protocol: 1, executionId,
+        const notification = { type: "notification", protocol: 2, executionId,
             deliveryToken: executionId, event: "storage-sync", data };
         if (options.deferNotifications) notifications.push(notification);
         else deliver(notification);
@@ -48,17 +49,17 @@ async function install(options = {}) {
     globalThis.__MonkeySharpBridge = {
         dispatch: async requestJson => {
             const request = JSON.parse(requestJson);
-            const response = result => JSON.stringify({ type: "response", protocol: 1,
+            const response = result => JSON.stringify({ type: "response", protocol: 2,
                 requestId: request.requestId, ok: true, result });
             if (request.type === "hello") return JSON.stringify({
-                type: "hello-result", protocol: 1, ok: true, limits: {}, apis: options.grants || methods,
+                type: "hello-result", protocol: 2, ok: true, limits: {}, apis: methods,
                 compatibility: { storage: { complete: options.mirror !== false, entries: entries() } }
             });
             requests.push(request);
             const parameters = request.params;
             if (request.method === "runtime.getStorageSnapshot") return response({ complete: true, entries: entries() });
             if (request.method === "GM.addValueChangeListener") {
-                if (options.failRegistration) return JSON.stringify({ type: "response", protocol: 1, requestId: request.requestId,
+                if (options.failRegistration) return JSON.stringify({ type: "response", protocol: 2, requestId: request.requestId,
                     ok: false, error: { code: "MSP999_INTERNAL", message: "Registration failed" } });
                 listeners.set(parameters.listenerId, parameters.key);
             }
@@ -81,7 +82,7 @@ async function install(options = {}) {
                 for (const key of keys) {
                     if (failOnKey === key) {
                         failOnKey = null;
-                        return JSON.stringify({ type: "response", protocol: 1, requestId: request.requestId,
+                        return JSON.stringify({ type: "response", protocol: 2, requestId: request.requestId,
                             ok: false, error: { code: "MSP999_INTERNAL", message: "Simulated partial failure" } });
                     }
                     const existed = Object.hasOwn(values, key);
@@ -94,17 +95,15 @@ async function install(options = {}) {
             return response(undefinedValue);
         }
     };
-    const payload = { protocol: 1, documentId: executionId, frameId: "main", runAt: "DocumentEnd", invocations: [{
+    const payload = { protocol: 2, documentId: executionId, frameId: "main", runAt: "DocumentEnd", invocations: [{
         executionId, scriptKey: "99999999-9999-9999-9999-999999999999", capability: executionId,
-        deliveryToken: executionId, grants: options.grants || methods, info: {},
-        compatibility: { profile: options.strict ? "ModernStrict" : "LegacyCompatible", strict: Boolean(options.strict),
-            legacyGlobals: !options.strict && options.legacyGlobals !== false },
+        deliveryToken: executionId, ...(options.declaredGrants ? { declaredGrants: options.declaredGrants } : {}), grants: options.grants || methods, info: {},
         source: `globalThis.__bulkExposure = { id: ${JSON.stringify(executionId)}, api: GM,
             get: GM_getValues, set: GM_setValues, delete: GM_deleteValues,
             single: { get: GM_getValue, set: GM_setValue, delete: GM_deleteValue, list: GM_listValues,
                 add: GM_addValueChangeListener, remove: GM_removeValueChangeListener } };`
     }] };
-    vm.runInThisContext(template.replace("__MONKEYSHARP_PAYLOAD_BASE64__", Buffer.from(JSON.stringify(payload)).toString("base64")));
+    vm.runInThisContext(template.replace("__MONKEYSHARP_PAYLOAD_BASE64__", Buffer.from(JSON.stringify(completePlan(payload))).toString("base64")));
     await waitFor(() => globalThis.__bulkExposure && globalThis.__bulkExposure.id === executionId);
     return { ...globalThis.__bulkExposure, values, requests, notifications, deliver, executionId };
 }
