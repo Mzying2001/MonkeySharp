@@ -39,11 +39,11 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
         {
             await repository.InstallAsync("// ==UserScript==\n// @name Prepared content\n// @match http://127.0.0.1/compat/prepared*\n" +
                 "// @require https://content.example/one.js\n// @require https://content.example/two.js\n" +
-                "// @resource binary https://content.example/binary\n// @grant GM_getResourceText\n// @grant GM_getResourceURL\n// @run-at document-end\n// ==/UserScript==\n" +
+                "// @resource binary https://content.example/binary\n// @grant GM_getResourceText\n// @grant GM_getResourceURL\n// @grant GM_getValue\n// @run-at document-end\n// ==/UserScript==\n" +
                 "var binary = atob(GM_getResourceURL('binary').split(',')[1]);\n" +
                 "globalThis.__preparedResult = {done:true, shared:shared, accented:accented, strict:(function(){return this;})()===undefined, " +
                 "length:binary.length, bytes:binary.charCodeAt(0)===0 && binary.charCodeAt(1)===255 && binary.charCodeAt(2)===1, " +
-                "text:GM_getResourceText('binary').length};", "smoke://prepared", true, CancellationToken.None);
+                "text:GM_getResourceText('binary').length, storageLength:GM_getValue('large').length};", "smoke://prepared", true, CancellationToken.None);
             var assembly = typeof(CompatibilitySuite).Assembly;
             foreach (var name in assembly.GetManifestResourceNames().Where(name => name.EndsWith(".user.js", StringComparison.Ordinal)).OrderBy(name => name, StringComparer.Ordinal))
             {
@@ -93,11 +93,13 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                 Check(path + ":charset", result.GetProperty("accented").GetString() == "café");
                 Check(path + ":binary", result.GetProperty("length").GetInt32() == 600003 && result.GetProperty("bytes").GetBoolean());
                 Check(path + ":syncText", result.GetProperty("text").GetInt32() == 600003);
+                Check(path + ":storageSnapshot", result.GetProperty("storageLength").GetInt32() == 600000);
             }
             await ReadAsync("(function(){var f=document.createElement('iframe'); f.src='/compat/prepared-frame'; document.body.appendChild(f);return true;})()");
             await WaitAsync(() => Task.FromResult(FindFrame("/compat/prepared-frame") != null));
             var child = await WaitResultAsync("globalThis.__preparedResult || null", FindFrame("/compat/prepared-frame"));
             Check("frameResources", child.GetProperty("length").GetInt32() == 600003 && child.GetProperty("shared").GetInt32() == 2);
+            Check("frameStorageSnapshot", child.GetProperty("storageLength").GetInt32() == 600000);
         }
 
         private void Lifecycle(object sender, DocumentLifecycleEventArgs args)

@@ -64,11 +64,11 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                     var setKey = ReadKey(context.Parameters);
                     if (!context.Parameters.TryGetProperty("value", out var value))
                         throw InvalidParams("The value parameter is required.");
-                    await _store.SetAsync(scriptKey, setKey, ReadValue(value), cancellationToken).ConfigureAwait(false);
+                    await _store.ApplyAsync(scriptKey, new[] { new UserScriptValueMutation(setKey, ReadValue(value)) }, Origin(context), cancellationToken).ConfigureAwait(false);
                     return ApiResult.Undefined;
 
                 case "GM.deleteValue":
-                    await _store.DeleteAsync(scriptKey, ReadKey(context.Parameters), cancellationToken).ConfigureAwait(false);
+                    await _store.ApplyAsync(scriptKey, new[] { new UserScriptValueMutation(ReadKey(context.Parameters), null) }, Origin(context), cancellationToken).ConfigureAwait(false);
                     return ApiResult.Undefined;
 
                 case "GM.listValues":
@@ -81,14 +81,12 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 case "GM.setValues":
                     var values = ReadValues(context.Parameters, "values").ToDictionary(
                         item => item.Key, item => ReadValue(item.Value), StringComparer.Ordinal);
-                    foreach (var item in values)
-                        await _store.SetAsync(scriptKey, item.Key, item.Value, cancellationToken).ConfigureAwait(false);
+                    await _store.ApplyAsync(scriptKey, values.Select(item => new UserScriptValueMutation(item.Key, item.Value)), Origin(context), cancellationToken).ConfigureAwait(false);
                     return ApiResult.Undefined;
 
                 case "GM.deleteValues":
                     var keys = ReadKeys(context.Parameters);
-                    foreach (var key in keys)
-                        await _store.DeleteAsync(scriptKey, key, cancellationToken).ConfigureAwait(false);
+                    await _store.ApplyAsync(scriptKey, keys.Select(key => new UserScriptValueMutation(key, null)), Origin(context), cancellationToken).ConfigureAwait(false);
                     return ApiResult.Undefined;
 
                 default:
@@ -102,29 +100,19 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             EnsureObject(parameters);
             var all = !parameters.TryGetProperty("keys", out var requested) || requested.ValueKind == JsonValueKind.Null;
             IReadOnlyList<string> keys = all ? null : ReadKeys(parameters);
-            if (all && _store is IUserScriptValueSnapshotProvider snapshots)
-            {
-                var snapshot = await snapshots.GetSnapshotAsync(scriptKey, cancellationToken).ConfigureAwait(false);
-                return ApiResult.FromValue(snapshot.ToDictionary(
-                    item => item.Key, item => item.Value.EncodedValue, StringComparer.Ordinal));
-            }
-            if (all)
-                keys = await _store.ListKeysAsync(scriptKey, cancellationToken).ConfigureAwait(false);
+            var snapshot = await _store.GetSnapshotAsync(scriptKey, cancellationToken).ConfigureAwait(false);
+            if (all) return ApiResult.FromValue(snapshot.ToDictionary(item => item.Key, item => item.Value.EncodedValue, StringComparer.Ordinal));
+            var available = snapshot.ToDictionary(item => item.Key, item => item.Value.EncodedValue, StringComparer.Ordinal);
             var result = new Dictionary<string, string>(StringComparer.Ordinal);
             foreach (var key in keys)
             {
-                var stored = await _store.GetAsync(scriptKey, key, cancellationToken).ConfigureAwait(false);
-                if (stored.Exists) result[key] = stored.Value.EncodedValue;
+                if (available.TryGetValue(key, out var encoded)) result[key] = encoded;
             }
             return ApiResult.FromValue(result);
         }
 
-        internal static IReadOnlyList<string> ReadMutationKeys(string method, JsonElement parameters)
-        {
-            if (method == "GM.setValues") return ReadValues(parameters, "values").Keys.ToList();
-            if (method == "GM.deleteValues") return ReadKeys(parameters);
-            return new[] { ReadKey(parameters) };
-        }
+        private static UserScriptValueMutationOrigin Origin(ApiInvocationContext context) =>
+            new UserScriptValueMutationOrigin(context.RequestId, context.ExecutionId, context.Method);
 
         private static Dictionary<string, JsonElement> ReadValues(JsonElement parameters, string name)
         {

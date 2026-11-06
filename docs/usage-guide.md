@@ -260,7 +260,7 @@ Modern storage belongs to one authorized family; each legacy global requires its
 
 Legacy signatures use the same parameters: `GM_getValue`/`GM_getValues`/`GM_listValues` return values immediately; `GM_setValue`/`GM_deleteValue`/`GM_setValues`/`GM_deleteValues`/`GM_removeValueChangeListener` return `undefined`; `GM_addValueChangeListener` returns a numeric ID immediately. Synchronous value reads/writes require a complete storage mirror. Listener aliases do not require a mirror. Writes update the mirror immediately and queue asynchronous commits. Failed commits roll back/reconcile and emit `MSC413_COMPATIBILITY_MUTATION_FAILED`; a successful synchronous return does not mean persistence. Legacy listener registration failures remove the local handler and report the failure asynchronously.
 
-Modern writes share this commit queue and their Promises expose host completion/failure. Each bulk write/delete uses one bridge request and commits keys sequentially. A storage failure stops the batch and preserves previously committed keys and their notifications. Validation failures change no keys. Reconciliation reapplies later queued mutations. Empty batches are valid.
+Modern writes share this commit queue and their Promises expose host completion/failure. Each bulk write/delete uses one bridge request and commits the validated batch atomically. A storage failure preserves the previous partition and emits no partial notifications. This is MonkeySharp's storage contract, rather than a transaction guarantee attributed to Tampermonkey. Validation failures change no keys. Reconciliation reapplies later queued mutations. Empty batches are valid.
 
 ```javascript
 // @grant GM.getValues
@@ -700,7 +700,7 @@ Defaults: ordinary bridge requests/responses are limited to 1 MiB each, resource
 | --- | --- |
 | Script never runs | Enabled installation, positive URL match, exclusions, iframe rules, run-at, metadata errors; explicit grants also require host trust opt-in (`MSR201_BRIDGE_INTEGRITY_REQUIRED`). |
 | `GM` or one method is undefined | Grant state, exact spelling, profile, and host service. Missing APIs are usually absent, not stubs. |
-| Only synchronous storage/resource APIs are missing | Snapshot options, budget/timeout; `MSC410_COMPATIBILITY_BOOTSTRAP_FAILED`, `MSC411_COMPATIBILITY_SNAPSHOT_DEGRADED`, `MSC412_COMPATIBILITY_BOOTSTRAP_LIMIT`. |
+| User code fails before its first statement | Complete storage/resource preparation, snapshot chunk delivery, replay retention and configured byte/time budgets; `MSC410_COMPATIBILITY_BOOTSTRAP_FAILED`. Preparation failure does not remove granted APIs and continue. |
 | A legacy write seemed to succeed but data reverted | Async commit failed; inspect `MSC413_COMPATIBILITY_MUTATION_FAILED`; use awaited modern writes. |
 | A dependency is missing | Host dependency provider and `MSR400_DEPENDENCY_RESOLUTION_FAILED` / `MSR401_DEPENDENCY_PROVIDER_UNAVAILABLE`. |
 | Code runs too late or in the wrong world | document-start is best effort (`MSR100`/`MSR101`); sandbox/unwrap requests cannot create isolation (`MSR212`/`MSR213`). |

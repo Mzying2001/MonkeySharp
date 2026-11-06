@@ -1,5 +1,70 @@
             const storageRecord = entries => Object.assign(Object.create(null), Object.fromEntries(entries));
 
+            const loadStorageSnapshot = async function (record, snapshot) {
+                if (snapshot && Number.isInteger(snapshot.chunkCount) && snapshot.chunkCount > 0) {
+                    const chunks = [];
+                    for (let index = 0; index < snapshot.chunkCount; index += 1) {
+                        const part = await call(record, "runtime.getStorageChunk", { snapshotId: snapshot.snapshotId, index });
+                        if (!part || part.index !== index || part.snapshotId !== snapshot.snapshotId || typeof part.chunk !== "string") throw new Error("Incomplete storage snapshot.");
+                        chunks.push(part.chunk);
+                    }
+                    const json = chunks.join("");
+                    if (json.length !== snapshot.jsonLength) throw new Error("Truncated storage snapshot.");
+                    snapshot = JSON.parse(json);
+                }
+                if (!snapshot || snapshot.complete !== true || !Number.isSafeInteger(snapshot.sequence) || snapshot.sequence < 0 ||
+                    !Array.isArray(snapshot.entries) || snapshot.entries.some(entry => !Array.isArray(entry) || entry.length !== 2 || typeof entry[0] !== "string" || typeof entry[1] !== "string") ||
+                    new Set(snapshot.entries.map(entry => entry[0])).size !== snapshot.entries.length) throw new Error("A complete atomic storage snapshot is required before running this script.");
+                snapshot.entries.forEach(entry => decodeStoredValue(entry[1]));
+                record.storageMirror = storageRecord(snapshot.entries);
+                record.lastStorageSequence = snapshot.sequence;
+                record.pendingStorageMutations.forEach(mutation => { if (!mutation.confirmed) applyStorageMutation(record, mutation); });
+            };
+
+            const applyStorageSync = function (record, data) {
+                if (data.sequence <= record.lastStorageSequence) return;
+                if (data.sequence !== record.lastStorageSequence + 1) throw new Error("Storage change sequence has a gap.");
+                if (data.newValueExists) record.storageMirror[data.key] = data.newValue;
+                else delete record.storageMirror[data.key];
+                record.pendingStorageMutations.forEach(mutation => {
+                    if (data.originExecutionId === record.executionId && mutation.mutationId === data.mutationId && mutation.key === data.key) mutation.confirmed = true;
+                    if (!mutation.confirmed && mutation.key === data.key) applyStorageMutation(record, mutation);
+                });
+                record.lastStorageSequence = data.sequence;
+            };
+
+            const prepareStorage = async function (record, initialSnapshot) {
+                record.storageReady = false;
+                if (initialSnapshot) await loadStorageSnapshot(record, initialSnapshot);
+                for (let attempt = 0; attempt < 3; attempt += 1) {
+                    const replay = await call(record, "runtime.getStorageChanges", { afterSequence: record.lastStorageSequence });
+                    if (replay && replay.complete === true && Array.isArray(replay.changes)) {
+                        replay.changes.forEach(data => applyStorageSync(record, data));
+                        if (record.lastStorageSequence !== replay.sequence) throw new Error("Incomplete storage change replay.");
+                        record.storageReady = true;
+                        const queued = record.storageNotifications.splice(0);
+                        queued.sort((left, right) => left.data.sequence - right.data.sequence).forEach(notification => receive(notification));
+                        return;
+                    }
+                    await loadStorageSnapshot(record, await call(record, "runtime.getStorageSnapshot", {}));
+                }
+                throw new Error("Storage replay repeatedly exceeded retention; retry this execution.");
+            };
+
+            const resynchronizeStorage = function (record, freshSnapshot) {
+                if (!record.storageResync) record.storageResync = (async function () {
+                    const snapshot = freshSnapshot ? await call(record, "runtime.getStorageSnapshot", {}) : null;
+                    await prepareStorage(record, snapshot);
+                })().catch(error => {
+                    console.error("[MonkeySharp] storage resynchronization failed", error);
+                    throw error;
+                }).finally(() => {
+                    record.storageResync = null;
+                    if (record.storageReady && record.storageNotifications.length) resynchronizeStorage(record).catch(() => {});
+                });
+                return record.storageResync;
+            };
+
             const encodeStoredValue = function (value) {
                 const ancestors = new Set();
                 const normalize = function (item) {
@@ -49,13 +114,7 @@
 
             const reportMutationFailure = async function (record, method, error) {
                 try {
-                    const snapshot = await call(record, "runtime.getStorageSnapshot", {});
-                    if (snapshot && snapshot.complete && snapshot.entries && record.storageMirror) {
-                        record.storageMirror = storageRecord(snapshot.entries);
-                        record.pendingStorageMutations.forEach(mutation => {
-                            if (!mutation.confirmed) applyStorageMutation(record, mutation);
-                        });
-                    }
+                    await resynchronizeStorage(record, true);
                 } catch (snapshotError) {
                     if (root.console && typeof root.console.warn === "function") {
                         root.console.warn("[MonkeySharp] compatibility storage reconcile failed", snapshotError);

@@ -179,8 +179,8 @@ Provider requirements:
 - `IUserScriptValueStore.SetAsync` accepts an immutable `UserScriptValue`; `StoredValue.Value` exposes it and `StoredValue.Exists` alone distinguishes absence. Use `UserScriptValue.FromJson(json)`, `UserScriptValue.Undefined`, or `UserScriptValue.FromEncoded(encoded)`. This replaces the former raw-JSON storage contract; there is no legacy overload.
 - Persist `EncodedValue` without dropping type information. Encodings are `u` for undefined, `btrue`/`bfalse`, `n` followed by a number or `NaN`/`Infinity`/`-Infinity`, `s` followed by literal string contents, and `o` followed by canonical object/array/null JSON. `FromEncoded` validates and canonicalizes them; a user object's property names never act as protocol markers.
 - Operations for one `ScriptKey` must be linearizable. Keys may be empty strings, but script partition IDs must be non-empty. Cancellation before commit makes no change; cancellation after commit succeeds. Emit one `ValueChanged` event per actual committed change, including creation/deletion of stored undefined; identical encoded writes and deletion of absent keys emit none. `ListKeysAsync` preserves insertion order, with updates retaining position and delete/reinsert moving a key to the end.
-- A value store should also implement `IUserScriptValueSnapshotProvider`, returning an immutable `IReadOnlyList<KeyValuePair<string, UserScriptValue>>` in insertion order for atomic compatibility snapshots. Without it, the gateway reads keys and values separately and reports `MSC411_COMPATIBILITY_SNAPSHOT_DEGRADED`.
-- Bulk GM APIs require no additional storage interface. Writes/deletes commit keys sequentially, preserve earlier commits on failure, and emit the usual per-key events. Full `GM.getValues()` reads use snapshot support when available, otherwise separate key/value reads.
+- `IUserScriptValueStore` requires atomic `GetSnapshotAsync` (values plus partition watermark), `GetChangesAsync` (contiguous suffix after a watermark), and `ApplyAsync` (validated atomic batch with request/execution provenance). Subscribe to `ValueChanged` before taking a snapshot, then replay changes after its watermark. No per-key snapshot fallback exists. In-memory and SQLite stores retain 4096 changes per script; an expired/future watermark requests a fresh snapshot. Watermarks belong to one live store session; execution credentials expire when the host restarts.
+- Bulk writes/deletes validate and commit through one `ApplyAsync`; failures publish no partial keys or events. Committed changes retain `mutationId`, `originExecutionId`, method and per-script sequence. This atomicity is a MonkeySharp store contract, not a guarantee attributed to Tampermonkey. Bulk reads consume one atomic snapshot.
 - Configure `new InMemoryUserScriptRepository(preparer: new UserScriptPreparer(dependencyProvider, resourceProvider))` (or the persistent repository) before installing scripts. Preparation fetches and verifies all dependencies/resources, preserves dependency scope/order with statement boundaries, and atomically activates the resulting immutable revision. The default combined source/content budget is 32 MiB. Failed installation/update publishes nothing; failed updates retain the previous version. Executions never fetch installation content.
 - Missing dependencies skip execution with `MSR401_DEPENDENCY_PROVIDER_UNAVAILABLE`; provider failure emits `MSR400_DEPENDENCY_RESOLUTION_FAILED`, independently of calling style.
 - `IResourceProvider` returns previously authorized content for a declared resource. Resource data is limited by `BridgeOptions.MaxResourceBytes`.
@@ -228,17 +228,15 @@ Protocol errors use stable codes `MSP001` through `MSP010` and `MSP999`. Diagnos
 | `MaxResourceBytes` | 10 MiB | Each resource exposed through the resource API. Installation content has a separate `UserScriptPreparer` budget. |
 | `RequestTimeout` | 30 seconds | Ordinary bridge requests; HTTP `execute` is exempt. |
 | `MaxPendingRequestsPerDocument` | 64 | Concurrent bridge requests for a document, including HTTP `execute`. |
-| `MaxCompatibilityBootstrapBytes` | 64 MiB | Total serialized snapshot budget. Resource snapshots larger than one response are transferred in indexed chunks before user code starts. |
+| `MaxCompatibilityBootstrapBytes` | 64 MiB | Total serialized snapshot budget. Storage and resource snapshots larger than one response are transferred in indexed chunks before user code starts. |
 | `CompatibilityBootstrapTimeout` | 5 seconds | Preparation of each storage or resource snapshot. |
 | `MaxReplayEntriesPerExecution` | 4096 | Recent request IDs retained to reject replays for an execution. |
 
-Compatibility snapshot diagnostics distinguish preparation failure, degraded consistency, and size limits:
+Snapshot preparation failures prevent user code from starting; byte-budget errors request a host budget adjustment. Storage transfer IDs pin complete snapshots, and missing chunks or sequence gaps require reassembly/replay or a fresh snapshot:
 
 | Diagnostic | Meaning |
 | --- | --- |
 | `MSC410_COMPATIBILITY_BOOTSTRAP_FAILED` | Snapshot preparation failed or timed out; the corresponding synchronous aliases are unavailable. |
-| `MSC411_COMPATIBILITY_SNAPSHOT_DEGRADED` | The value store lacks atomic snapshot support; the gateway falls back to separate reads. |
-| `MSC412_COMPATIBILITY_BOOTSTRAP_LIMIT` | A snapshot exceeds its byte budget and is marked incomplete; the corresponding synchronous aliases are unavailable. |
 
 ## Bridge Protocol
 

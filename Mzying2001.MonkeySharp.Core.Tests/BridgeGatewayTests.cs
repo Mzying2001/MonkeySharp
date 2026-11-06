@@ -242,7 +242,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Fact]
-        public async Task BulkStorageStopsOnFailureAndPreservesCommittedNotifications()
+        public async Task BulkStorageFailurePreservesWholePartitionAndPublishesNothing()
         {
             using (var fixture = await BridgeFixture.CreateWithStoreAsync(new FailingBulkStore(), "GM.setValues", "GM.addValueChangeListener"))
             {
@@ -255,21 +255,9 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                     values = new { first = "n1", fail = "n2", last = "n3" }
                 }, requestId), BridgeErrorCodes.Internal);
                 var scriptKey = fixture.Invocation.ScriptKey.ToString();
-                Assert.Equal("n1", (await fixture.Store.GetAsync(scriptKey, "first", CancellationToken.None)).Value.EncodedValue);
+                Assert.False((await fixture.Store.GetAsync(scriptKey, "first", CancellationToken.None)).Exists);
                 Assert.False((await fixture.Store.GetAsync(scriptKey, "last", CancellationToken.None)).Exists);
-                Assert.Equal(2, notifications.Count);
-                foreach (var notification in notifications)
-                {
-                    using (var data = JsonDocument.Parse(notification.DataJson))
-                    {
-                        Assert.Equal("first", data.RootElement.GetProperty("key").GetString());
-                        Assert.Equal(requestId, data.RootElement.GetProperty("mutationId").GetString());
-                        Assert.Equal("GM.setValues", data.RootElement.GetProperty("mutationMethod").GetString());
-                        Assert.False(data.RootElement.GetProperty("oldValueExists").GetBoolean());
-                        Assert.True(data.RootElement.GetProperty("newValueExists").GetBoolean());
-                        Assert.Equal(fixture.Invocation.ExecutionId, data.RootElement.GetProperty("originExecutionId").GetString());
-                    }
-                }
+                Assert.Empty(notifications);
                 notifications.Clear();
                 await fixture.Store.SetAsync(scriptKey, "last", FromJson("4"), CancellationToken.None);
                 using (var data = JsonDocument.Parse(Assert.Single(notifications).DataJson))
@@ -288,9 +276,9 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Fact]
-        public async Task BulkReadAllFallsBackForStoresWithoutSnapshotSupport()
+        public async Task BulkReadAllUsesRequiredAtomicSnapshot()
         {
-            using (var fixture = await BridgeFixture.CreateWithStoreAsync(new KeyOnlyStore(), "GM.getValues", "GM.setValues"))
+            using (var fixture = await BridgeFixture.CreateWithStoreAsync(new InMemoryUserScriptValueStore(), "GM.getValues", "GM.setValues"))
             {
                 await fixture.RequestAsync("GM.setValues", new { values = new { first = "n1", second = "stwo" } });
                 var result = (await fixture.RequestAsync("GM.getValues", new { })).GetProperty("result");
@@ -1008,25 +996,6 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 if (key == "fail") throw new InvalidOperationException("Simulated storage failure.");
                 return Task.CompletedTask;
             }
-        }
-
-        private sealed class KeyOnlyStore : IUserScriptValueStore, IDisposable
-        {
-            private readonly InMemoryUserScriptValueStore _inner = new InMemoryUserScriptValueStore();
-            public event EventHandler<UserScriptValueChangedEventArgs> ValueChanged
-            {
-                add { _inner.ValueChanged += value; }
-                remove { _inner.ValueChanged -= value; }
-            }
-            public Task<StoredValue> GetAsync(string scriptKey, string key, CancellationToken cancellationToken) =>
-                _inner.GetAsync(scriptKey, key, cancellationToken);
-            public Task SetAsync(string scriptKey, string key, UserScriptValue value, CancellationToken cancellationToken) =>
-                _inner.SetAsync(scriptKey, key, value, cancellationToken);
-            public Task<bool> DeleteAsync(string scriptKey, string key, CancellationToken cancellationToken) =>
-                _inner.DeleteAsync(scriptKey, key, cancellationToken);
-            public Task<IReadOnlyList<string>> ListKeysAsync(string scriptKey, CancellationToken cancellationToken) =>
-                _inner.ListKeysAsync(scriptKey, cancellationToken);
-            public void Dispose() => _inner.Dispose();
         }
 
         private sealed class FixtureResourceProvider : IResourceProvider

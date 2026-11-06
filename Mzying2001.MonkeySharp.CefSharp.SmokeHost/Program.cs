@@ -53,6 +53,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
         {
             using (var fixture = new LocalHttpFixture())
             using (var otherFixture = new LocalHttpFixture())
+            using (var values = new Mzying2001.MonkeySharp.Core.Storage.InMemoryUserScriptValueStore())
             {
                 var startUri = fixture.Start();
                 otherFixture.Start();
@@ -66,10 +67,13 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                     CancellationToken.None);
                 await CompatibilitySuite.InstallAsync(repository, fixture.Port, otherFixture.Port);
                 preparedContent.Offline = true;
+                var preparedScript = (await repository.GetSnapshotAsync(CancellationToken.None)).Single(script => script.Definition.Metadata.Name == "Prepared content");
+                await values.SetAsync(preparedScript.ScriptKey.ToString(), "large", Mzying2001.MonkeySharp.Core.Storage.UserScriptValue.FromEncoded("s" + new string('v', 600000)), CancellationToken.None);
 
                 SmokeHttpDownloadService downloads = null;
                 {
                     using (var host = new CefSharpUserScriptHostBuilder(repository)
+                        .UseValueStore(values)
                         .UseNotificationService(new SmokeNotificationService())
                         .UseTabService(new SmokeTabService())
                         .UseDownloadServiceFactory(http => downloads = new SmokeHttpDownloadService(fixture.Port, http))

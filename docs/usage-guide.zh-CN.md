@@ -263,7 +263,7 @@ value 使用 JSON.stringify/JSON.parse 克隆：顶层 undefined、函数、symb
 
 旧式签名使用相同参数：GM_getValue/GM_getValues/GM_listValues 同步返回值；GM_setValue/GM_deleteValue/GM_setValues/GM_deleteValues/GM_removeValueChangeListener 返回 undefined；GM_addValueChangeListener 立即返回数字 ID。同步值读写需要完整存储镜像，监听别名不依赖镜像。写入立即修改镜像，再串行异步提交；失败时回滚并重新同步，产生 MSC413_COMPATIBILITY_MUTATION_FAILED。同步返回成功不代表持久化完成。旧式监听注册失败时会移除本地处理器，并异步报告失败。
 
-现代写入共享提交队列，通过 Promise 观察宿主提交成功或失败。每次批量写入或删除仅发送一个桥接请求，再逐键提交，不保证整批原子性：中途失败会停止后续操作，保留已提交的键及对应通知。参数校验失败不会修改任何键。失败后重新同步镜像并重放后续排队操作。空批次合法。
+现代写入共享提交队列，通过 Promise 观察宿主提交成功或失败。每次批量写入或删除仅发送一个桥接请求，在全量校验后原子提交；失败保留原分区且不发送部分通知。这是 MonkeySharp 的存储契约，不宣称 Tampermonkey 保证事务。参数校验失败不会修改任何键。失败后重新同步镜像并重放后续排队操作。空批次合法。
 
 ```javascript
 // @grant GM.getValues
@@ -722,7 +722,7 @@ window.addEventListener("urlchange", onRoute);
 | --- | --- |
 | 脚本没有执行 | 启用状态、正向匹配、排除项、框架规则、run-at、元数据错误；显式授权还需要宿主信任选项（MSR201_BRIDGE_INTEGRITY_REQUIRED）。 |
 | GM 或方法为 undefined | 授权状态、大小写、兼容模式及宿主服务。缺失 API 通常根本不暴露，而非提供空实现。 |
-| 只有同步存储/资源 API 缺失 | 快照选项、大小和超时；MSC410_COMPATIBILITY_BOOTSTRAP_FAILED、MSC411_COMPATIBILITY_SNAPSHOT_DEGRADED、MSC412_COMPATIBILITY_BOOTSTRAP_LIMIT。 |
+| 用户代码在第一句前失败 | 检查完整的存储/资源准备、快照分块、重放保留范围及大小/时间预算；MSC410_COMPATIBILITY_BOOTSTRAP_FAILED。准备失败会阻止执行，不会删去已授权 API 后继续。 |
 | 旧版写入看似成功后又回退 | 异步提交失败，查看 MSC413_COMPATIBILITY_MUTATION_FAILED；改用可 await 的现代写入。 |
 | 依赖不可用 | 检查宿主依赖提供器及 MSR400_DEPENDENCY_RESOLUTION_FAILED / MSR401_DEPENDENCY_PROVIDER_UNAVAILABLE。 |
 | 执行过晚或世界不符 | document-start 尽力执行（MSR100/MSR101），sandbox/unwrap 不创建隔离（MSR212/MSR213）。 |

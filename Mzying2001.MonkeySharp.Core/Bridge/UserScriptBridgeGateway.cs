@@ -33,6 +33,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             new Dictionary<string, IUserScriptApiProvider>(StringComparer.Ordinal);
         private readonly HashSet<IUserScriptApiProvider> _providerInstances =
             new HashSet<IUserScriptApiProvider>();
+        private readonly Dictionary<string, StorageTransfer> _storageSnapshots = new Dictionary<string, StorageTransfer>(StringComparer.Ordinal);
         private readonly object _stateLock = new object();
         private readonly Dictionary<string, PendingRequest> _pending =
             new Dictionary<string, PendingRequest>(StringComparer.Ordinal);
@@ -41,8 +42,6 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             new Dictionary<string, Queue<string>>(StringComparer.Ordinal);
         private readonly Dictionary<string, Dictionary<int, ValueListener>> _listeners =
             new Dictionary<string, Dictionary<int, ValueListener>>(StringComparer.Ordinal);
-        private readonly Dictionary<string, Queue<MutationOrigin>> _mutationOrigins =
-            new Dictionary<string, Queue<MutationOrigin>>(StringComparer.Ordinal);
         private int _activeDispatches;
         private bool _providerResourcesDisposed;
         private bool _disposed;
@@ -190,7 +189,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                 _seenRequests.Clear();
                 _seenRequestOrder.Clear();
                 _listeners.Clear();
-                _mutationOrigins.Clear();
+                _storageSnapshots.Clear();
                 if (_activeDispatches == 0 && !_providerResourcesDisposed)
                 {
                     _providerResourcesDisposed = true;
@@ -323,45 +322,29 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             CancellationToken cancellationToken)
         {
             var scriptKey = execution.Installation.ScriptKey.ToString();
-            IReadOnlyList<KeyValuePair<string, UserScriptValue>> snapshot;
-            if (_store is IUserScriptValueSnapshotProvider provider)
+            var snapshot = await _store.GetSnapshotAsync(scriptKey, cancellationToken).ConfigureAwait(false);
+            var json = JsonSerializer.Serialize(new
             {
-                snapshot = await provider.GetSnapshotAsync(scriptKey, cancellationToken).ConfigureAwait(false);
+                complete = true, sequence = snapshot.Sequence,
+                entries = snapshot.Select(item => new[] { item.Key, item.Value.EncodedValue }).ToArray()
+            });
+            if (Encoding.UTF8.GetByteCount(json) > _options.MaxCompatibilityBootstrapBytes)
+                throw new BridgeProtocolException(BridgeErrorCodes.PayloadTooLarge, "The complete storage snapshot exceeds MaxCompatibilityBootstrapBytes.");
+            var transfer = new StorageTransfer(Guid.NewGuid().ToString("D"), json);
+            lock (_stateLock)
+            {
+                execution.Cancellation.Token.ThrowIfCancellationRequested();
+                _storageSnapshots[execution.Invocation.ExecutionId] = transfer;
             }
-            else
+            if (Encoding.UTF8.GetByteCount(json) <= _options.MaxResponseBytes / 4)
             {
-                var values = new List<KeyValuePair<string, UserScriptValue>>();
-                var keys = await _store.ListKeysAsync(scriptKey, cancellationToken).ConfigureAwait(false);
-                foreach (var key in keys)
-                {
-                    var value = await _store.GetAsync(scriptKey, key, cancellationToken).ConfigureAwait(false);
-                    if (value.Exists)
-                        values.Add(new KeyValuePair<string, UserScriptValue>(key, value.Value));
-                }
-                snapshot = values;
-                EmitDiagnostic(
-                    "MSC411_COMPATIBILITY_SNAPSHOT_DEGRADED",
-                    "The value store does not provide an atomic snapshot.",
-                    null,
-                    execution);
+                using (var document = JsonDocument.Parse(json)) return document.RootElement.Clone();
             }
-
-            var result = new Dictionary<string, object>
-            {
-                ["complete"] = true,
-                ["entries"] = snapshot.Select(item => new[] { item.Key, item.Value.EncodedValue }).ToArray()
-            };
-            if (Encoding.UTF8.GetByteCount(JsonSerializer.Serialize(result)) > _options.MaxCompatibilityBootstrapBytes)
-            {
-                EmitDiagnostic(
-                    "MSC412_COMPATIBILITY_BOOTSTRAP_LIMIT",
-                    "The compatibility storage snapshot exceeds the configured limit.",
-                    null,
-                    execution);
-                return new Dictionary<string, object> { ["complete"] = false, ["entries"] = Array.Empty<string[]>() };
-            }
-            return result;
+            return new { complete = false, snapshotId = transfer.Id, sequence = snapshot.Sequence,
+                chunkCount = (json.Length + BootstrapChunkSize - 1) / BootstrapChunkSize, jsonLength = json.Length };
         }
+
+        private int BootstrapChunkSize => Math.Max(1, (_options.MaxResponseBytes - 512) / 6);
 
         private static bool HasStorageCapability(IReadOnlyList<string> grants)
         {
@@ -382,7 +365,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
         {
             cancellationToken.ThrowIfCancellationRequested();
             var json = ResourcePackage(execution);
-            if (Encoding.UTF8.GetByteCount(json) <= _options.MaxResponseBytes / 2)
+            if (Encoding.UTF8.GetByteCount(json) <= _options.MaxResponseBytes / 4)
             {
                 using (var document = JsonDocument.Parse(json)) return Task.FromResult<object>(document.RootElement.Clone());
             }
@@ -441,12 +424,48 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                             throw new BridgeProtocolException(BridgeErrorCodes.GrantDenied, "Resource access is not granted.");
                         var json = ResourcePackage(execution);
                         var chunkSize = Math.Max(1, (_options.MaxResponseBytes - 512) / 6);
-                        var index = parameters.GetProperty("index").GetInt32();
+                        var index = ReadRequiredInt32(parameters, "index");
                         if (index < 0 || (long)index * chunkSize >= json.Length)
                             throw ProviderParameters.Invalid("Invalid resource chunk index.");
                         var offset = index * chunkSize;
                         return Limit(ProtocolJson.Success(requestId, JsonSerializer.Serialize(new
                         { index, chunk = json.Substring(offset, Math.Min(chunkSize, json.Length - offset)) })));
+                    }
+
+                    if (method == "runtime.getStorageChunk" || method == "runtime.getStorageChanges" || method == "runtime.getStorageSnapshot")
+                        if (!HasStorageCapability(execution.Installation.Definition.Metadata.Capabilities))
+                            throw new BridgeProtocolException(BridgeErrorCodes.GrantDenied, "Storage access is not granted.");
+                    if (method == "runtime.getStorageChunk")
+                    {
+                        StorageTransfer transfer;
+                        lock (_stateLock) _storageSnapshots.TryGetValue(execution.Invocation.ExecutionId, out transfer);
+                        if (transfer == null || transfer.Id != ReadRequiredString(parameters, "snapshotId"))
+                            throw new BridgeProtocolException(BridgeErrorCodes.SessionExpired, "The storage snapshot transfer expired; capture a new snapshot.");
+                        var index = ReadRequiredInt32(parameters, "index");
+                        if (index < 0 || (long)index * BootstrapChunkSize >= transfer.Json.Length)
+                            throw ProviderParameters.Invalid("Invalid storage chunk index.");
+                        var offset = index * BootstrapChunkSize;
+                        return Limit(ProtocolJson.Success(requestId, JsonSerializer.Serialize(new
+                        { index, snapshotId = transfer.Id, chunk = transfer.Json.Substring(offset, Math.Min(BootstrapChunkSize, transfer.Json.Length - offset)) })));
+                    }
+                    if (method == "runtime.getStorageChanges")
+                    {
+                        if (!parameters.TryGetProperty("afterSequence", out var watermark) ||
+                            watermark.ValueKind != JsonValueKind.Number || !watermark.TryGetInt64(out var after) || after < 0)
+                            throw ProviderParameters.Invalid("afterSequence must be a nonnegative integer.");
+                        var replay = await _store.GetChangesAsync(execution.Installation.ScriptKey.ToString(), after, linked.Token).ConfigureAwait(false);
+                        var changes = replay.Changes.Select(change => JsonDocument.Parse(ProtocolJson.ValueChangeData(
+                            0, change.Key, change.OldValue.Value?.EncodedValue, change.NewValue.Value?.EncodedValue,
+                            change.MutationId, change.OriginExecutionId, change.Sequence, change.MutationMethod))).ToArray();
+                        try
+                        {
+                            var json = JsonSerializer.Serialize(new { complete = replay.Complete, sequence = replay.Sequence,
+                                changes = changes.Select(document => document.RootElement.Clone()).ToArray() });
+                            if (Encoding.UTF8.GetByteCount(json) > _options.MaxResponseBytes / 2)
+                                json = JsonSerializer.Serialize(new { complete = false, sequence = replay.Sequence });
+                            return Limit(ProtocolJson.Success(requestId, json));
+                        }
+                        finally { foreach (var document in changes) document.Dispose(); }
                     }
 
                     if (method == "runtime.getStorageSnapshot")
@@ -477,26 +496,9 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                         result = RemoveValueListener(execution, parameters);
                     else if (_providers.TryGetValue(method, out var provider))
                     {
-                        var mutations = IsValueMutation(method)
-                            ? BeginMutations(execution, method, parameters, requestId)
-                            : Array.Empty<MutationOrigin>();
-                        try
-                        {
-                            result = await provider.InvokeAsync(new ApiInvocationContext(
-                                execution.Installation,
-                                execution.Frame,
-                                execution.Invocation.ExecutionId,
-                                requestId,
-                                method,
-                                parameters,
-                                (target, token) => ReauthorizeTargetAsync(
-                                    execution, method, parameters, target, token)), linked.Token).ConfigureAwait(false);
-                        }
-                        finally
-                        {
-                            foreach (var mutation in mutations)
-                                RemovePendingMutation(mutation);
-                        }
+                        result = await provider.InvokeAsync(new ApiInvocationContext(
+                            execution.Installation, execution.Frame, execution.Invocation.ExecutionId, requestId, method, parameters,
+                            (target, token) => ReauthorizeTargetAsync(execution, method, parameters, target, token)), linked.Token).ConfigureAwait(false);
                     }
                     else
                     {
@@ -707,10 +709,9 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
         {
             if (!ScriptKey.TryParse(args.ScriptKey, out var scriptKey))
                 return;
-            var mutation = TakeMutation(args.ScriptKey, args.Key);
-            var originExecutionId = args.OriginExecutionId ?? mutation?.OriginExecutionId;
-            var mutationId = args.MutationId ?? mutation?.MutationId;
-            var executions = _engine.GetExecutionsForScript(scriptKey).ToList();
+            var originExecutionId = args.OriginExecutionId;
+            var mutationId = args.MutationId;
+            var executions = _engine.GetExecutionsForScript(scriptKey).Where(execution => HasStorageCapability(execution.Installation.Definition.Metadata.Capabilities)).ToList();
             var deliveries = new List<Tuple<UserScriptEngine.ExecutionRecord, ValueListener>>();
             lock (_stateLock)
             {
@@ -733,7 +734,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                 mutationId,
                 originExecutionId,
                 args.Sequence,
-                mutation?.Method);
+                args.MutationMethod);
             foreach (var execution in executions)
             {
                 Notification?.Invoke(this, new BridgeNotificationEventArgs(
@@ -759,58 +760,6 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
         {
             return method == "GM.setValue" || method == "GM.deleteValue" ||
                 method == "GM.setValues" || method == "GM.deleteValues";
-        }
-
-        private IReadOnlyList<MutationOrigin> BeginMutations(
-            UserScriptEngine.ExecutionRecord execution, string method, JsonElement parameters, string requestId)
-        {
-            var mutations = BasicApiProvider.ReadMutationKeys(method, parameters)
-                .Select(key => new MutationOrigin(
-                    requestId, execution.Invocation.ExecutionId, execution.Installation.ScriptKey.ToString(), key, method))
-                .ToList();
-            lock (_stateLock)
-            {
-                foreach (var mutation in mutations)
-                {
-                    var bucketKey = mutation.ScriptKey + ":" + mutation.Key;
-                    if (!_mutationOrigins.TryGetValue(bucketKey, out var queue))
-                    {
-                        queue = new Queue<MutationOrigin>();
-                        _mutationOrigins.Add(bucketKey, queue);
-                    }
-                    queue.Enqueue(mutation);
-                }
-            }
-            return mutations;
-        }
-
-        private MutationOrigin TakeMutation(string scriptKey, string key)
-        {
-            lock (_stateLock)
-            {
-                var bucketKey = scriptKey + ":" + key;
-                if (!_mutationOrigins.TryGetValue(bucketKey, out var queue) || queue.Count == 0)
-                    return null;
-                var mutation = queue.Dequeue();
-                if (queue.Count == 0)
-                    _mutationOrigins.Remove(bucketKey);
-                return mutation;
-            }
-        }
-
-        private void RemovePendingMutation(MutationOrigin mutation)
-        {
-            lock (_stateLock)
-            {
-                var bucketKey = mutation.ScriptKey + ":" + mutation.Key;
-                if (!_mutationOrigins.TryGetValue(bucketKey, out var queue))
-                    return;
-                var remaining = queue.Where(item => item.MutationId != mutation.MutationId).ToList();
-                if (remaining.Count == 0)
-                    _mutationOrigins.Remove(bucketKey);
-                else
-                    _mutationOrigins[bucketKey] = new Queue<MutationOrigin>(remaining);
-            }
         }
 
         private static string ReplaceListenerId(string data, int listenerId)
@@ -883,6 +832,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             lock (_stateLock)
             {
                 _listeners.Remove(execution.Invocation.ExecutionId);
+                _storageSnapshots.Remove(execution.Invocation.ExecutionId);
                 if (_seenRequestOrder.TryGetValue(execution.Invocation.ExecutionId, out var order))
                 {
                     foreach (var key in order)
@@ -1058,22 +1008,11 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             public string Key { get; }
         }
 
-        private sealed class MutationOrigin
+        private sealed class StorageTransfer
         {
-            public MutationOrigin(string mutationId, string originExecutionId, string scriptKey, string key, string method)
-            {
-                MutationId = mutationId;
-                OriginExecutionId = originExecutionId;
-                ScriptKey = scriptKey;
-                Key = key;
-                Method = method;
-            }
-
-            public string MutationId { get; }
-            public string Method { get; }
-            public string OriginExecutionId { get; }
-            public string ScriptKey { get; }
-            public string Key { get; }
+            public StorageTransfer(string id, string json) { Id = id; Json = json; }
+            public string Id { get; }
+            public string Json { get; }
         }
     }
 }

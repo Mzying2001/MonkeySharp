@@ -45,9 +45,11 @@ test("bootstrap exposes only granted Promise APIs and authenticates notification
                     protocol: 2,
                     ok: true,
                     limits: {},
-                    apis: ["GM.getValue", "GM.setValue", "GM.addValueChangeListener"]
+                    apis: ["GM.getValue", "GM.setValue", "GM.addValueChangeListener"],
+                    compatibility: { storage: { complete: true, sequence: 0, entries: [] } }
                 });
             }
+            if (request.method === "runtime.getStorageChanges") return JSON.stringify({ protocol: 2, type: "response", ok: true, requestId: request.requestId, result: { complete: true, sequence: 0, changes: [] } });
             methods.push(request.method);
             let result = { $monkeySharpType: "undefined" };
             if (request.method === "GM.setValue") values.set(request.params.key, request.params.value);
@@ -92,8 +94,8 @@ test("bootstrap exposes only granted Promise APIs and authenticates notification
     await globalThis.__bootstrapPromise;
     await waitFor(() => methods.includes("GM.addValueChangeListener"));
     assert.deepEqual(globalThis.__stored, { dark: true });
-    assert.equal(globalThis.__legacyType, "undefined");
-    assert.deepEqual(methods.slice(0, 2), ["GM.setValue", "GM.getValue"]);
+    assert.equal(globalThis.__legacyType, "function");
+    assert.deepEqual(methods.slice(0, 2), ["GM.setValue", "GM.addValueChangeListener"]);
 
     assert.equal(globalThis.__MonkeySharpRuntime.receive({
         type: "notification",

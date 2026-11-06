@@ -182,6 +182,8 @@
                     webRequestHandlers: new Map(),
                     mutationTail: Promise.resolve(),
                     storageMirror: null,
+                    storageReady: false,
+                    storageNotifications: [],
                     valueChangeSequences: new Map(),
                     pendingStorageMutations: [],
                     lastStorageSequence: 0,
@@ -197,11 +199,8 @@
                         throw new Error(hello.error && hello.error.message || "MonkeySharp bridge handshake failed.");
                     }
                     availableApis = new Set(hello.apis || []);
-                    if (hello.compatibility && hello.compatibility.storage &&
-                        hello.compatibility.storage.complete &&
-                        hello.compatibility.storage.entries) {
-                        record.storageMirror = storageRecord(hello.compatibility.storage.entries);
-                    }
+                    if (invocation.grants.some(name => /GM\.(getValue|setValue|deleteValue|listValues|getValues|setValues|deleteValues|addValueChangeListener|removeValueChangeListener)$/.test(name)))
+                        await prepareStorage(record, hello.compatibility && hello.compatibility.storage || {});
                     if (hello.compatibility && hello.compatibility.resources && hello.compatibility.resources.chunkCount) {
                         const descriptor = hello.compatibility.resources;
                         const chunks = [];
@@ -223,6 +222,8 @@
                     executions.delete(invocation.executionId);
                     throw new Error("The complete resource package must be ready before running this script.");
                 }
+                if (record.storageResync) await record.storageResync;
+                if (record.storageMirror && !record.storageReady) throw new Error("Storage synchronization did not complete.");
                 const gm = createApi(record, invocation, availableApis);
                 record.windowFacade = createWindowFacade(record, invocation, availableApis);
                 const legacy = createLegacyFacade(record, invocation, gm);
@@ -262,33 +263,25 @@
                 if (!record || record.deliveryToken !== notification.deliveryToken) return false;
                 const data = notification.data || {};
                 try {
+                    if ((notification.event === "storage-sync" || notification.event === "value-change") && !record.storageReady) {
+                        record.storageNotifications.push(notification);
+                        return true;
+                    }
                     if (notification.event === "storage-sync") {
-                        if (data.sequence && data.sequence <= record.lastStorageSequence) return true;
-                        if (record.storageMirror && typeof data.key === "string") {
-                            if (data.newValueExists) record.storageMirror[data.key] = data.newValue;
-                            else delete record.storageMirror[data.key];
-                            record.pendingStorageMutations.forEach(mutation => {
-                                if (data.originExecutionId === record.executionId &&
-                                    mutation.mutationId === data.mutationId && mutation.key === data.key) {
-                                    mutation.confirmed = true;
-                                }
-                                if (!mutation.confirmed && mutation.key === data.key) applyStorageMutation(record, mutation);
-                            });
+                        if (data.sequence > record.lastStorageSequence + 1) {
+                            record.storageNotifications.push(notification);
+                            resynchronizeStorage(record).catch(() => {});
+                            return true;
                         }
-                        if (data.sequence) record.lastStorageSequence = data.sequence;
+                        applyStorageSync(record, data);
                         return true;
                     }
                     if (notification.event === "value-change") {
                         if (data.sequence && data.sequence <= (record.valueChangeSequences.get(data.listenerId) || 0)) return true;
-                        if (record.storageMirror && typeof data.key === "string" && (!data.sequence || data.sequence > record.lastStorageSequence)) {
-                            if (data.newValueExists) record.storageMirror[data.key] = data.newValue;
-                            else delete record.storageMirror[data.key];
-                            record.pendingStorageMutations.forEach(mutation => {
-                                if (!mutation.confirmed && mutation.key === data.key) applyStorageMutation(record, mutation);
-                            });
-                            if (data.sequence && data.sequence > record.lastStorageSequence) {
-                                record.lastStorageSequence = data.sequence;
-                            }
+                        if (data.sequence > record.lastStorageSequence) {
+                            record.storageNotifications.push(notification);
+                            resynchronizeStorage(record).catch(() => {});
+                            return true;
                         }
                         const handler = record.handlers.get(data.listenerId);
                         if (!handler) return false;

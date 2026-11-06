@@ -21,8 +21,8 @@ for (const name of ["missing", "none", "legacy", "modern", "mixed", "unknown", "
         const context = vm.createContext({
             atob, TextDecoder, crypto, console, navigator: { userAgent: "node-contract-fixture" },
             fetch: (_url, request) => { completed(JSON.parse(request.body)); return Promise.resolve(); },
-            __MonkeySharpBridge: { dispatch: async () => ({ type: "hello-result", protocol: 2, ok: true,
-                apis: [...capabilities], compatibility: { storage: { complete: true, entries: [] } } }) }
+            __MonkeySharpBridge: { dispatch: async input => JSON.parse(input).type !== "hello" ? ({ protocol: 2, type: "response", ok: true, requestId: JSON.parse(input).requestId, result: { complete: true, sequence: 0, changes: [] } }) : ({ type: "hello-result", protocol: 2, ok: true,
+                apis: [...capabilities], compatibility: { storage: { complete: true, sequence: 0, entries: [] } } }) }
         });
         const payload = { protocol: 2, documentId: name, frameId: "main", invocations: [{
             executionId: name, scriptKey: name, source, declaredGrants, grants: [...capabilities],

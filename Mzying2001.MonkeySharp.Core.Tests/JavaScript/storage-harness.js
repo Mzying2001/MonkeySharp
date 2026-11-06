@@ -29,12 +29,14 @@ async function install(options = {}) {
     const listeners = new Map();
     const notifications = [];
     let sequence = 0;
+    const journal = [];
     let failOnKey = options.failOnKey;
     const deliver = notification => globalThis.__MonkeySharpRuntime.receive(notification);
     const changed = (request, key, oldValue, newValue, oldValueExists, newValueExists) => {
         const data = { key, oldValue, newValue, originExecutionId: executionId,
             mutationId: request.requestId, mutationMethod: request.method, sequence: ++sequence,
             oldValueExists, newValueExists };
+        journal.push(data);
         const notification = { type: "notification", protocol: 2, executionId,
             deliveryToken: executionId, event: "storage-sync", data };
         if (options.deferNotifications) notifications.push(notification);
@@ -51,13 +53,18 @@ async function install(options = {}) {
             const request = JSON.parse(requestJson);
             const response = result => JSON.stringify({ type: "response", protocol: 2,
                 requestId: request.requestId, ok: true, result });
+            const snapshot = { complete: true, sequence, entries: entries() };
+            const json = JSON.stringify(snapshot);
+            if (request.method === "runtime.getStorageChunk") return response({ index: request.params.index,
+                snapshotId: executionId, chunk: json.slice(request.params.index * 23, (request.params.index + 1) * 23) });
+            if (request.method === "runtime.getStorageChanges") return response({ complete: true, sequence, changes: journal.filter(change => change.sequence > request.params.afterSequence) });
             if (request.type === "hello") return JSON.stringify({
                 type: "hello-result", protocol: 2, ok: true, limits: {}, apis: methods,
-                compatibility: { storage: { complete: options.mirror !== false, entries: entries() } }
+                compatibility: { storage: options.chunked ? { complete: false, sequence, snapshotId: executionId, chunkCount: Math.ceil(json.length / 23), jsonLength: json.length } : snapshot }
             });
             requests.push(request);
             const parameters = request.params;
-            if (request.method === "runtime.getStorageSnapshot") return response({ complete: true, entries: entries() });
+            if (request.method === "runtime.getStorageSnapshot") return response(snapshot);
             if (request.method === "GM.addValueChangeListener") {
                 if (options.failRegistration) return JSON.stringify({ type: "response", protocol: 2, requestId: request.requestId,
                     ok: false, error: { code: "MSP999_INTERNAL", message: "Registration failed" } });
@@ -79,12 +86,12 @@ async function install(options = {}) {
                 const set = request.method === "GM.setValue" || request.method === "GM.setValues";
                 const bulk = request.method.endsWith("Values");
                 const keys = bulk ? (set ? Object.keys(parameters.values) : parameters.keys) : [parameters.key];
+                if (keys.includes(failOnKey)) {
+                    failOnKey = null;
+                    return JSON.stringify({ type: "response", protocol: 2, requestId: request.requestId,
+                        ok: false, error: { code: "MSP999_INTERNAL", message: "Simulated atomic batch failure" } });
+                }
                 for (const key of keys) {
-                    if (failOnKey === key) {
-                        failOnKey = null;
-                        return JSON.stringify({ type: "response", protocol: 2, requestId: request.requestId,
-                            ok: false, error: { code: "MSP999_INTERNAL", message: "Simulated partial failure" } });
-                    }
                     const existed = Object.hasOwn(values, key);
                     const oldValue = existed ? values[key] : null;
                     if (set) values[key] = bulk ? parameters.values[key] : parameters.value;
