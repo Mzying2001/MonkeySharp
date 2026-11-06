@@ -10,7 +10,12 @@ Work follows the six P0 points of the local 2026-11-06 plan on
 | 3. Single contract and actual info | `45465c9` | Protocol 2; shared catalog; exact legacy names and reference-tested modern families; source strictness; modular JS; real manager/environment data. 74 JS tests, 231 Core tests, 37 adapter tests, 38 Demo tests; six real SmokeHost/CDP combinations and 84/121 x64 WPF. |
 | 4. Downloads | `1454031` | Abortable completion Promise, subscribe-before-Start, shared CEF network and atomic files. 315 .NET / 81 JS tests; six real SmokeHost/CDP combinations; 84/121 x64 WPF including native picker cancellation. See [download evidence](download-findings.md). |
 | 5. Notifications, menus, clipboard | `0633e57` | Completion/acknowledged clicks, tag replacement, ordered menu updates and frame subscriptions, clipboard overloads and actual CF_HTML. 319 .NET / 85 JS tests; six SmokeHost/CDP combinations; 84/121 x64 WPF. See [interaction evidence](interaction-findings.md). |
-| 6. Cookie backend | Pending | Shared CDP, precise selection, SameSite and real context isolation. |
+| 6. Cookie backend | `d4cf685` | Shared browser CDP; verified writes, SameSite and exact selected deletion; CRUD-only public contract. 325 .NET / 85 JS tests; complete 84/121 baselines; six real SmokeHost/CDP combinations with TLS and separate RequestContexts; real 84/121 WPF. See [Cookie evidence](cookie-findings.md). |
+
+The six implementation points have individual commits. Work stops after P0;
+P1 step 7 has not begun. Historical MV2 reference intake and third-party corpus
+intake/execution remain pending, and the strict-start/isolated-world boundaries
+above remain explicit limitations. These are not counted as passed validation.
 
 Step 3 intentionally follows fixed runtime evidence where the original plan's
 assumptions differ: `none` retains an info-only GM object; modern storage,
