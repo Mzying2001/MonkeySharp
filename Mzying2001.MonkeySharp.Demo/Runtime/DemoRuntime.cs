@@ -46,11 +46,12 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                 runtime._database = new SqliteDatabase(runtime.Paths.DatabasePath);
                 await runtime._database.InitializeAsync(CancellationToken.None);
                 var diagnostics = new DiagnosticsViewModel(dispatcher, runtime.Paths.LogsDirectory);
-                runtime.Repository = new PersistentUserScriptRepository(new SqliteUserScriptRepositoryPersistence(runtime._database, runtime.Paths, diagnostics.Report));
+                runtime.Content = new HttpContentService(runtime.Paths);
+                runtime.Repository = new PersistentUserScriptRepository(new SqliteUserScriptRepositoryPersistence(runtime._database, runtime.Paths, diagnostics.Report),
+                    preparer: new UserScriptPreparer(runtime.Content, runtime.Content));
                 await runtime.Repository.InitializeAsync(CancellationToken.None);
                 runtime._values = new SqliteUserScriptValueStore(runtime._database);
                 runtime._tabStates = new SqliteTabStateService(runtime._database);
-                runtime.Content = new HttpContentService(runtime.Paths);
                 runtime.Updates = new UserScriptUpdateService(runtime.Repository, runtime.Content);
                 await dispatcher.InvokeAsync(() =>
                 {
@@ -92,7 +93,6 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                 .UseWindowService(new WpfWindowService(MainWindow, tab, _dispatcher))
                 .UseDownloadServiceFactory(http => downloads = new DownloadService(Paths.DownloadsDirectory, _dispatcher, MainWindow, http))
                 .UseTabStateService(_tabStates.ForTab(tab.TabId))
-                .UseResourceProvider(Content).UseDependencyProvider(Content)
                 .Configure(new CefSharpHostOptions
                 {
                     TrustedPageWorld = true,

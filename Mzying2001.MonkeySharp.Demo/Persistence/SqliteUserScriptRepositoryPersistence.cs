@@ -37,7 +37,7 @@ namespace Mzying2001.MonkeySharp.Demo.Persistence
                 using (var connection = _database.OpenReady())
                 using (var command = connection.CreateCommand())
                 {
-                    command.CommandText = "SELECT script_key,source_origin,is_enabled,installed_at,updated_at,source_hash FROM scripts ORDER BY rowid";
+                    command.CommandText = "SELECT script_key,source_origin,is_enabled,installed_at,updated_at,source_hash,(SELECT payload FROM prepared_revisions WHERE script_key=scripts.script_key) FROM scripts ORDER BY rowid";
                     using (var reader = command.ExecuteReader())
                     {
                         while (reader.Read())
@@ -59,7 +59,8 @@ namespace Mzying2001.MonkeySharp.Demo.Persistence
                             records.Add(new UserScriptPersistenceRecord(key, source,
                                 reader.IsDBNull(1) ? null : reader.GetString(1), reader.GetBoolean(2),
                                 DateTimeOffset.Parse(reader.GetString(3), CultureInfo.InvariantCulture),
-                                DateTimeOffset.Parse(reader.GetString(4), CultureInfo.InvariantCulture)));
+                                DateTimeOffset.Parse(reader.GetString(4), CultureInfo.InvariantCulture),
+                                reader.IsDBNull(6) ? null : reader.GetString(6)));
                         }
                     }
                 }
@@ -104,6 +105,18 @@ ON CONFLICT(script_key) DO UPDATE SET source_origin=excluded.source_origin,is_en
                         command.Parameters.AddWithValue("$updated", record.UpdatedAt.ToString("O"));
                         command.Parameters.AddWithValue("$hash", Hash(bytes));
                         command.ExecuteNonQuery();
+                        using (var prepared = connection.CreateCommand())
+                        {
+                            prepared.Transaction = transaction;
+                            prepared.CommandText = "DELETE FROM prepared_revisions WHERE script_key=$key;";
+                            if (record.PreparedRevisionJson != null)
+                            {
+                                prepared.CommandText += " INSERT INTO prepared_revisions(script_key,payload) VALUES($key,$payload);";
+                                prepared.Parameters.AddWithValue("$payload", record.PreparedRevisionJson);
+                            }
+                            prepared.Parameters.AddWithValue("$key", record.ScriptKey.ToString());
+                            prepared.ExecuteNonQuery();
+                        }
                         using (var output = new FileStream(temporary, FileMode.Create, FileAccess.Write, FileShare.None))
                         { output.Write(bytes, 0, bytes.Length); output.Flush(true); }
                         cancellationToken.ThrowIfCancellationRequested();

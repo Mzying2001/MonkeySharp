@@ -104,7 +104,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             var source = MetadataAndMatchingTests.Script(
                 "// @name resource\n// @match https://example.com/*\n// @run-at document-end\n" +
                 "// @grant " + grant + "\n// @resource template https://cdn.example/template.txt");
-            using (var provider = new ResourceAndNetworkApiProvider(new FixtureResourceProvider()))
+            using (var provider = new ResourceAndNetworkApiProvider())
             using (var fixture = await BridgeFixture.CreateFromSourceAsync(
                 source, new IUserScriptApiProvider[] { provider }))
             {
@@ -133,7 +133,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 "// @name resource\n// @match https://example.com/*\n// @run-at document-end\n" +
                 (grant == null ? "" : "// @grant " + grant + "\n") +
                 "// @resource template https://cdn.example/template.txt");
-            using (var provider = new ResourceAndNetworkApiProvider(new FixtureResourceProvider()))
+            using (var provider = new ResourceAndNetworkApiProvider())
             using (var fixture = await BridgeFixture.CreateFromSourceAsync(
                 source, new IUserScriptApiProvider[] { provider }))
             {
@@ -1111,10 +1111,9 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 string source,
                 IEnumerable<IUserScriptApiProvider> providers)
             {
-                var repository = new InMemoryUserScriptRepository();
+                var repository = new InMemoryUserScriptRepository(preparer: new UserScriptPreparer(new FixtureDependencyProvider(), new FixtureResourceProvider()));
                 await repository.InstallAsync(source, "fixture", true, CancellationToken.None);
-                var engine = new UserScriptEngine(repository, sourceResolver: new ResourceScriptSourceResolver(
-                    new FixtureDependencyProvider(), 4096));
+                var engine = new UserScriptEngine(repository);
                 var frame = CreateFrame("legacy-fixture-document");
                 var plan = await engine.ProcessLifecycleAsync(
                     new DocumentLifecycleEventArgs(DocumentLifecycleKind.DomContentLoaded, frame),

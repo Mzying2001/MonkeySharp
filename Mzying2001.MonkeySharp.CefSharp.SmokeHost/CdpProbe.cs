@@ -24,12 +24,12 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             using (var store = new InMemoryUserScriptValueStore())
             {
                 var start = fixture.Start();
-                var repository = new InMemoryUserScriptRepository();
+                var repository = new InMemoryUserScriptRepository(preparer: new UserScriptPreparer(resources: new ProbeResources()));
                 var script = await repository.InstallAsync("// ==UserScript==\n// @name GM first inline probe\n// @match http://127.0.0.1/*\n// @run-at document-start\n// @grant GM_getValue\n// @grant GM_getResourceText\n// @grant GM.xmlHttpRequest\n// @resource text " + start + "\n// @connect 127.0.0.1\n// ==/UserScript==\n" +
                     "document.documentElement.dataset.gmStart = GM_getValue('ready') + ':' + GM_getResourceText('text');\n" +
                     "GM.xmlHttpRequest({url:location.origin+'/xhr'}).then(function(r){document.documentElement.dataset.gmXhr=r.responseText;});", "probe://timing", true, CancellationToken.None);
                 await store.SetAsync(script.ScriptKey.ToString(), "ready", UserScriptValue.FromJson("\"value\""), CancellationToken.None);
-                using (var host = new CefSharpUserScriptHostBuilder(repository).UseValueStore(store).UseResourceProvider(new ProbeResources())
+                using (var host = new CefSharpUserScriptHostBuilder(repository).UseValueStore(store)
                     .Configure(new CefSharpHostOptions { TrustedPageWorld = true }).Build())
                 using (var form = new ProbeForm(host, new Uri(start, "/probe/start")))
                     Application.Run(form);

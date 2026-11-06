@@ -29,6 +29,11 @@ async function main() {
                 resolveEvidence(JSON.parse(Buffer.concat(chunks).toString("utf8")));
                 response.end("ok");
             });
+        } else if (/^\/fixture-content\/[a-z0-9.-]+$/.test(request.url)) {
+            const contentPath = path.join(root, "docs/compatibility/fixtures/content", path.basename(request.url));
+            if (!fs.existsSync(contentPath)) { response.statusCode = 404; response.end(); return; }
+            response.setHeader("Content-Type", request.url.endsWith(".js") ? "text/javascript; charset=windows-1252" : "application/octet-stream");
+            response.end(fs.readFileSync(contentPath));
         } else {
             response.setHeader("Content-Type", "text/html; charset=utf-8");
             response.end("<!doctype html><html><head><title>Return contract fixture</title></head><body>Return contract fixture</body></html>");
@@ -51,7 +56,8 @@ async function main() {
         await page.locator("input[type=file]").waitFor({ state: "attached" });
         // Import through Tampermonkey's own installation UI, not storage injection.
         const askPromise = context.waitForEvent("page", page => page.url().includes("/ask.html"));
-        await page.locator("input[type=file]").setInputFiles(fixture);
+        const fixtureSource = fs.readFileSync(fixture, "utf8").replaceAll("__PORT__", String(server.address().port));
+        await page.locator("input[type=file]").setInputFiles({ name: path.basename(fixture), mimeType: "text/javascript", buffer: Buffer.from(fixtureSource) });
         const ask = await askPromise;
         const installed = ask.waitForEvent("close", { timeout: 5000 }).catch(() => undefined);
         await ask.locator('input[type=button][value="安装"], input[type=button][value="Install"]').click();
@@ -65,7 +71,13 @@ async function main() {
         const result = await Promise.race([evidence, new Promise((_, reject) => { deadline = setTimeout(() => reject(new Error("No userscript evidence within 20 seconds.")), 20000); })]).finally(() => clearTimeout(deadline));
         result.effects.tabsBefore = tabsBefore;
         result.effects.tabsAfter = await worker.evaluate(() => chrome.tabs.query({}).then(tabs => tabs.length));
-        const checks = result.caseId === "returns" ? {
+        const checks = result.caseId === "prepared-content" ? {
+            sourceExecuted: result.effects.shared === 3,
+            strictInherited: result.effects.strict === true,
+            nonUtf8: result.effects.accented === "café",
+            binaryResource: result.effects.binary === "AP8B",
+            allAlgorithms: result.effects.hashes === "sha1,sha384,sha512"
+        } : result.caseId === "returns" ? {
             noInvocationErrors: !result.events.some(event => event.name.endsWith(":throw") || event.name.endsWith(":rejected")),
             domNodes: result.effects.nodes.every(Boolean),
             stylesApplied: JSON.stringify(result.effects.styles) === JSON.stringify(["17", "23"]),

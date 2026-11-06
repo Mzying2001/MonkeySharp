@@ -132,6 +132,30 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
             => Assert.Equal(expected, DownloadService.SafeFileName(supplied));
 
         [Fact]
+        public async Task PreparedRevisionsSurviveOfflineRepositoryReload()
+        {
+            using (var fixture = await PersistenceTests.Fixture.Create())
+            using (var server = new LocalHttpFixture())
+            using (var content = new HttpContentService(fixture.Paths))
+            {
+                var repository = new Mzying2001.MonkeySharp.Core.Repository.PersistentUserScriptRepository(fixture.Persistence,
+                    preparer: new Mzying2001.MonkeySharp.Core.Repository.UserScriptPreparer(content, content));
+                await repository.InitializeAsync(CancellationToken.None);
+                var source = PersistenceTests.Source.Replace("// @grant none", "// @grant none\n// @require " + server.BaseUrl +
+                    "/dependency.js\n// @resource text " + server.BaseUrl + "/redirect");
+                var script = await repository.InstallAsync(source, "origin", true, CancellationToken.None);
+                server.Dispose();
+                var restored = new Mzying2001.MonkeySharp.Core.Repository.PersistentUserScriptRepository(fixture.Persistence);
+                await restored.InitializeAsync(CancellationToken.None);
+                var loaded = await restored.GetAsync(script.ScriptKey, CancellationToken.None);
+                Assert.True(loaded.IsEnabled);
+                Assert.Equal(script.PreparedRevision.Source, loaded.PreparedRevision.Source);
+                Assert.Equal("demo-resource", loaded.PreparedRevision.Resources["text"].DecodeText());
+                Assert.Equal(script.PreparedRevision.Resources["text"].Bytes, loaded.PreparedRevision.Resources["text"].Bytes);
+            }
+        }
+
+        [Fact]
         public async Task DependenciesAreCachedAndContentHasRedirectAndSizeLimits()
         {
             using (var fixture = await PersistenceTests.Fixture.Create())
@@ -139,7 +163,9 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
             using (var content = new HttpContentService(fixture.Paths))
             {
                 var source = PersistenceTests.Source.Replace("// @grant none", "// @grant none\n// @require " + server.BaseUrl + "/dependency.js");
-                var script = await fixture.Repository.InstallAsync(source, "origin", true, CancellationToken.None);
+                var repository = new Mzying2001.MonkeySharp.Core.Repository.InMemoryUserScriptRepository(
+                    preparer: new Mzying2001.MonkeySharp.Core.Repository.UserScriptPreparer(content, content));
+                var script = await repository.InstallAsync(source, "origin", true, CancellationToken.None);
                 Assert.Equal("demo-resource", (await content.FetchAsync(server.BaseUrl + "/redirect", CancellationToken.None)).Text);
                 await Assert.ThrowsAsync<ArgumentException>(() => content.FetchAsync(server.BaseUrl + "/bad-redirect", CancellationToken.None));
                 await Assert.ThrowsAsync<IOException>(() => content.FetchAsync(server.BaseUrl + "/oversize", CancellationToken.None));
@@ -163,7 +189,9 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
                     digest = Convert.ToBase64String(sha.ComputeHash(expectedBytes));
                 var source = PersistenceTests.Source.Replace("// @grant none", "// @grant none\n// @require " +
                     server.BaseUrl + "/dependency.js#sha256=" + digest);
-                var script = await fixture.Repository.InstallAsync(source, "origin", true, CancellationToken.None);
+                var repository = new Mzying2001.MonkeySharp.Core.Repository.InMemoryUserScriptRepository(
+                    preparer: new Mzying2001.MonkeySharp.Core.Repository.UserScriptPreparer(content, content));
+                var script = await repository.InstallAsync(source, "origin", true, CancellationToken.None);
                 var dependency = script.Definition.Metadata.Requires.Single();
                 var first = await content.GetScriptAsync(script, dependency, CancellationToken.None);
                 Assert.Equal(Encoding.UTF8.GetString(expectedBytes), first.Text);

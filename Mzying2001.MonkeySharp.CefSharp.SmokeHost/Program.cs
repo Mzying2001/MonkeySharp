@@ -57,13 +57,15 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                 var startUri = fixture.Start();
                 otherFixture.Start();
                 fixture.OtherPort = otherFixture.Port;
-                var repository = new InMemoryUserScriptRepository();
+                var preparedContent = new PreparedContent();
+                var repository = new InMemoryUserScriptRepository(preparer: new UserScriptPreparer(preparedContent, preparedContent));
                 await repository.InstallAsync(
                     LegacyFixture.Replace("__PORT__", fixture.Port.ToString()),
                     "smoke://fixture",
                     true,
                     CancellationToken.None);
                 await CompatibilitySuite.InstallAsync(repository, fixture.Port, otherFixture.Port);
+                preparedContent.Offline = true;
 
                 SmokeHttpDownloadService downloads = null;
                 {
@@ -403,7 +405,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             _timeoutTimer.Stop();
             await _host.DetachAsync(CancellationToken.None).ConfigureAwait(true);
             var success = _initialFixturePassed && _mainFrameLoads >= 2 && _childFrameLoads >= 1 && _contextReleased >= 1 &&
-                !_host.IsAttached && _compatibilityResults != null && _compatibilityResults.Count == 5 && _compatibilityResults.Values.All(value => value);
+                !_host.IsAttached && _compatibilityResults != null && _compatibilityResults.Count == 6 && _compatibilityResults.Values.All(value => value);
             object fixture = null;
             if (!string.IsNullOrEmpty(_initialFixtureJson))
             {

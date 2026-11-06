@@ -62,7 +62,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             int maxResourceBytes = 10 * 1024 * 1024,
             TimeSpan? requestTimeout = null,
             int maxPendingRequestsPerDocument = 64,
-            int maxCompatibilityBootstrapBytes = 1024 * 1024,
+            int maxCompatibilityBootstrapBytes = 64 * 1024 * 1024,
             TimeSpan? compatibilityBootstrapTimeout = null,
             int maxReplayEntriesPerExecution = 4096)
         {

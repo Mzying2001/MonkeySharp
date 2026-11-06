@@ -21,7 +21,6 @@ namespace Mzying2001.MonkeySharp.CefSharp
         private IUserScriptPermissionPolicy _permissionPolicy;
         private Action<UserScriptLogEntry> _log;
         private CefSharpHostOptions _options = new CefSharpHostOptions();
-        private IResourceProvider _resources;
         private IHttpRequestService _http;
         private IMenuService _menu;
         private INotificationService _notifications;
@@ -33,7 +32,6 @@ namespace Mzying2001.MonkeySharp.CefSharp
         private IUserScriptWindowService _window;
         private ICookieService _cookies;
         private IWebRequestService _webRequests;
-        private IUserScriptDependencyProvider _dependencies;
         private bool _built;
 
         /// <summary>Initializes a host builder.</summary>
@@ -70,30 +68,12 @@ namespace Mzying2001.MonkeySharp.CefSharp
             return this;
         }
 
-        /// <summary>Enables resource GM APIs with a host resource provider.</summary>
-        /// <param name="resources">The resource provider to use.</param>
-        /// <returns>This builder.</returns>
-        public CefSharpUserScriptHostBuilder UseResourceProvider(IResourceProvider resources)
-        {
-            _resources = resources ?? throw new ArgumentNullException(nameof(resources));
-            return this;
-        }
-
         /// <summary>Enables <c>GM.xmlHttpRequest</c> with a host HTTP service.</summary>
         /// <param name="http">The HTTP request service to use.</param>
         /// <returns>This builder.</returns>
         public CefSharpUserScriptHostBuilder UseHttpRequestService(IHttpRequestService http)
         {
             _http = http ?? throw new ArgumentNullException(nameof(http));
-            return this;
-        }
-
-        /// <summary>Enables <c>@require</c> dependency loading.</summary>
-        /// <param name="dependencies">The dependency provider to use.</param>
-        /// <returns>This builder.</returns>
-        public CefSharpUserScriptHostBuilder UseDependencyProvider(IUserScriptDependencyProvider dependencies)
-        {
-            _dependencies = dependencies ?? throw new ArgumentNullException(nameof(dependencies));
             return this;
         }
 
@@ -226,12 +206,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                         {
                             ["GM.xmlHttpRequest"] = "policy-disabled", ["GM.cookie"] = "policy-disabled", ["GM.webRequest"] = "policy-disabled"
                         })
-                },
-                sourceResolver: _dependencies == null
-                    ? null
-                    : new ResourceScriptSourceResolver(
-                        _dependencies,
-                        _options.Bridge?.MaxResourceBytes ?? 10 * 1024 * 1024));
+                });
             var ownedServices = new List<IDisposable>();
             try
             {
@@ -265,13 +240,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 }
 
                 var providers = new List<IUserScriptApiProvider>(_providers);
-                if (_resources != null || effectiveHttp != null)
-                {
-                    providers.Add(new ResourceAndNetworkApiProvider(
-                        _resources,
-                        effectiveHttp,
-                        _options.Bridge));
-                }
+                providers.Add(new ResourceAndNetworkApiProvider(http: effectiveHttp, options: _options.Bridge));
                 if (_menu != null || _notifications != null || _clipboard != null || _tabs != null ||
                     _downloads != null || _tabState != null || _window != null)
                 {

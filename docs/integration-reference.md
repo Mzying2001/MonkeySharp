@@ -60,7 +60,13 @@ policy/engine reasons are recorded in `GM.info.compatibility.capabilities`.
 
 ## Resource Integrity and Update Checks
 
-`@require` and `@resource` may carry `md5` or `sha256` hashes in hexadecimal or standard Base64. Both `#algorithm=value` and `#algorithm-value` forms are accepted, with comma/semicolon-separated hashes; the last supported declaration is selected. The fragment is stripped from the requested and cached URL. When integrity is declared, the Core resolver, resource API, and Demo HTTP cache verify original bytes before use, and cached bytes are verified again when read. An unsupported algorithm produces a warning; malformed declarations, no usable supported hash among the declarations, and digest mismatches fail closed and prevent the resource from loading. Resources without integrity declarations load without hash verification.
+Configure installation content with `new InMemoryUserScriptRepository(preparer: new UserScriptPreparer(dependencyProvider, resourceProvider))`, or pass the same preparer to `PersistentUserScriptRepository`. Install, edit and update await complete preparation before publishing a revision; a failed update leaves the active revision intact. All frames consume the captured revision without further content-provider calls. Dependencies share one scope and retain directive/strict semantics, with newline/semicolon boundaries between source segments.
+
+`ResourceContent` retains original bytes, MIME, optional charset and optional host-decoded text. The host text takes precedence; otherwise charset selects the decoder, with UTF-8 as the default. Binary data URLs use the original bytes. The Demo atomically stores prepared content with the script, validates its content digests on reload, and upgrades format-2 databases with an additive table. Existing records are prepared once during initialization; unavailable content fails initialization explicitly and preserves the database. Installation providers own trusted network policy separately from GM network authorization.
+
+The preparer defaults to a 32 MiB combined source/content budget. Resource packages have a separate 64 MiB serialized bootstrap budget and use indexed response chunks when needed. User code starts only after complete reassembly; missing, duplicate or truncated chunks fail execution. See [P1 implementation evidence](compatibility/p1-implementation.md).
+
+`@require` and `@resource` may carry `md5`, `sha1`, `sha256`, `sha384` or `sha512` hashes in hexadecimal or standard Base64. Both `#algorithm=value` and `#algorithm-value` forms are accepted, with comma/semicolon-separated hashes; the last supported declaration is selected. The fragment is stripped from the requested and cached URL. When integrity is declared, the installation preparer, resource API, and Demo HTTP cache verify original bytes before use, and cached bytes are verified again when read. An unsupported algorithm produces a warning; malformed declarations, no usable supported hash among the declarations, and digest mismatches fail closed and prevent the resource from loading. Resources without integrity declarations load without hash verification.
 
 The Demo manager offers a manual check-and-install action. `@updateURL` is preferred as the check source and `@downloadURL` as the download source; `@downloadURL none` disables checks. A candidate must have the same non-empty `@name` and `@namespace`, and the downloaded version must be newer than the installed one and no older than the checked version. Applying it preserves the installation key, enabled state, installation time, and GM storage while replacing source and update metadata. Checks use the Demo's separate HTTP client without browser login cookies; there is no background schedule or runtime bridge update API.
 
@@ -140,8 +146,6 @@ The following example assumes the repository and service instances have already 
 var host = new CefSharpUserScriptHostBuilder(repository)
     .UseValueStore(persistentStore)
     .UsePermissionPolicy(permissionPolicy)
-    .UseDependencyProvider(cachedDependencyProvider)
-    .UseResourceProvider(resourceProvider)
     .UseMenuService(menuService)
     .UseNotificationService(notificationService)
     .UseClipboardService(clipboardService)
@@ -177,7 +181,7 @@ Provider requirements:
 - Operations for one `ScriptKey` must be linearizable. Keys may be empty strings, but script partition IDs must be non-empty. Cancellation before commit makes no change; cancellation after commit succeeds. Emit one `ValueChanged` event per actual committed change, including creation/deletion of stored undefined; identical encoded writes and deletion of absent keys emit none. `ListKeysAsync` preserves insertion order, with updates retaining position and delete/reinsert moving a key to the end.
 - A value store should also implement `IUserScriptValueSnapshotProvider`, returning an immutable `IReadOnlyList<KeyValuePair<string, UserScriptValue>>` in insertion order for atomic compatibility snapshots. Without it, the gateway reads keys and values separately and reports `MSC411_COMPATIBILITY_SNAPSHOT_DEGRADED`.
 - Bulk GM APIs require no additional storage interface. Writes/deletes commit keys sequentially, preserve earlier commits on failure, and emit the usual per-key events. Full `GM.getValues()` reads use snapshot support when available, otherwise separate key/value reads.
-- `IUserScriptDependencyProvider` owns trusted download, caching, HTTPS policy, and optional integrity validation for `@require`. `ResourceScriptSourceResolver` preserves declaration order, verifies declared integrity, and limits the combined original dependency bytes to `BridgeOptions.MaxResourceBytes`.
+- Configure `new InMemoryUserScriptRepository(preparer: new UserScriptPreparer(dependencyProvider, resourceProvider))` (or the persistent repository) before installing scripts. Preparation fetches and verifies all dependencies/resources, preserves dependency scope/order with statement boundaries, and atomically activates the resulting immutable revision. The default combined source/content budget is 32 MiB. Failed installation/update publishes nothing; failed updates retain the previous version. Executions never fetch installation content.
 - Missing dependencies skip execution with `MSR401_DEPENDENCY_PROVIDER_UNAVAILABLE`; provider failure emits `MSR400_DEPENDENCY_RESOLUTION_FAILED`, independently of calling style.
 - `IResourceProvider` returns previously authorized content for a declared resource. Resource data is limited by `BridgeOptions.MaxResourceBytes`.
 - `IHttpRequestService` receives a repeatable `IUserScriptHttpBody` and observer before work begins. It reports metadata before body data, honors the optional `UserScriptHttpRequest.MaxResponseBytes` body limit (`null` means unlimited), calls `RedirectAllowed` before following redirects, and records followed URLs for Core to recheck against `@connect`. This body limit is separate from the bridge message limit `BridgeOptions.MaxResponseBytes`.
@@ -221,10 +225,10 @@ Protocol errors use stable codes `MSP001` through `MSP010` and `MSP999`. Diagnos
 | --- | --- | --- |
 | `MaxRequestBytes` | 1 MiB | Each UTF-8 bridge request, including HTTP body chunk messages. |
 | `MaxResponseBytes` | 1 MiB | Each UTF-8 bridge response, including the combined hello response and body reads. |
-| `MaxResourceBytes` | 10 MiB | Each resource; also the combined dependency bytes when using the builder's `ResourceScriptSourceResolver`. |
+| `MaxResourceBytes` | 10 MiB | Each resource exposed through the resource API. Installation content has a separate `UserScriptPreparer` budget. |
 | `RequestTimeout` | 30 seconds | Ordinary bridge requests; HTTP `execute` is exempt. |
 | `MaxPendingRequestsPerDocument` | 64 | Concurrent bridge requests for a document, including HTTP `execute`. |
-| `MaxCompatibilityBootstrapBytes` | 1 MiB | Each serialized storage or resource snapshot; the combined hello response must also fit `MaxResponseBytes`. |
+| `MaxCompatibilityBootstrapBytes` | 64 MiB | Total serialized snapshot budget. Resource snapshots larger than one response are transferred in indexed chunks before user code starts. |
 | `CompatibilityBootstrapTimeout` | 5 seconds | Preparation of each storage or resource snapshot. |
 | `MaxReplayEntriesPerExecution` | 4096 | Recent request IDs retained to reject replays for an execution. |
 

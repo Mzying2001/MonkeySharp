@@ -91,6 +91,8 @@ Use F12 in the Demo to open DevTools. `GM` and `GM_*` are wrapper-local bindings
 
 ## Metadata
 
+Dependencies and resources are fetched and verified when a script is installed or edited. A failed preparation leaves the existing version active. Executions, including new frames and offline navigation, reuse that immutable content. Legacy resource reads are ready before user code starts. Hosts configure `UserScriptPreparer` on the repository; see the [installation contract](integration-reference.md#resource-integrity-and-update-checks).
+
 The header begins with `// ==UserScript==` and ends with `// ==/UserScript==`. Put it first for portability. The default parser allows a preamble within 128 lines/64 Ki UTF-16 characters; Metadata errors prevent installation; warnings remain available to the host. For known single-valued keys, the first occurrence wins and duplicates produce a warning; repeat collection fields on separate lines. Unknown entries are preserved but do not acquire runtime behavior.
 
 | Fields | Syntax and behavior |
@@ -131,7 +133,7 @@ Each `(document, frame, script, run-at)` executes once. Same-document navigation
 
 ### Dependencies, resources, and updates
 
-`@require` and `@resource` URLs accept `md5`/`sha256` integrity fragments: `#sha256=<digest>` or `#sha256-<digest>`, with hexadecimal or standard Base64 digests. Comma/semicolon-separated declarations select the last supported hash. Fragments are stripped before fetching/caching. Original bytes are checked before use and on cache reads. Malformed declarations, unusable unsupported hashes, and mismatches prevent loading.
+`@require` and `@resource` URLs accept `md5`/`sha1`/`sha256`/`sha384`/`sha512` integrity fragments: `#sha256=<digest>` or `#sha256-<digest>`, with hexadecimal or standard Base64 digests. Comma/semicolon-separated declarations select the last supported hash. Fragments are stripped before fetching/caching. Original bytes are checked before use and on cache reads. Malformed declarations, unusable unsupported hashes, and mismatches prevent loading.
 
 The host fetches and caches dependencies. A script declaring `@require` is skipped if its provider is absent; dependency failure never silently executes the main source alone. Resource APIs require a resource provider.
 

@@ -21,7 +21,6 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         IUserScriptApiProvider,
         IUserScriptNotificationSource,
         IUserScriptDiagnosticSource,
-        IUserScriptCompatibilityBootstrapProvider,
         IUserScriptExecutionObserver,
         IDisposable
     {
@@ -35,7 +34,6 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             "Transfer-Encoding", "Upgrade", "Keep-Alive", "TE", "Trailer"
         };
 
-        private readonly IResourceProvider _resources;
         private readonly IHttpRequestService _http;
         private readonly BridgeOptions _options;
         private readonly IReadOnlyCollection<string> _methods;
@@ -44,27 +42,19 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         private bool _disposed;
 
         /// <summary>Initializes a resource and network API provider.</summary>
-        /// <param name="resources">The optional declared-resource provider.</param>
         /// <param name="http">The optional HTTP request service.</param>
         /// <param name="options">Bridge limits used for resources and responses, or <see langword="null"/> for defaults.</param>
         public ResourceAndNetworkApiProvider(
-            IResourceProvider resources = null,
             IHttpRequestService http = null,
             BridgeOptions options = null)
         {
-            if (resources == null && http == null)
-                throw new ArgumentException("At least one resource or HTTP service is required.");
-            _resources = resources;
             _http = http;
             if (_http is IUserScriptDiagnosticSource diagnosticSource)
                 diagnosticSource.Diagnostic += HttpDiagnostic;
             _options = options ?? new BridgeOptions();
             var methods = new List<string>();
-            if (resources != null)
-            {
-                methods.Add("GM.getResourceText");
-                methods.Add("GM.getResourceUrl");
-            }
+            methods.Add("GM.getResourceText");
+            methods.Add("GM.getResourceUrl");
             if (http != null)
                 methods.Add("GM.xmlHttpRequest");
             _methods = new ReadOnlyCollection<string>(methods);
@@ -78,36 +68,6 @@ namespace Mzying2001.MonkeySharp.Core.Apis
 
         /// <inheritdoc />
         public IReadOnlyCollection<string> Methods => _methods;
-
-        /// <inheritdoc />
-        public async Task<IReadOnlyDictionary<string, CompatibilityResourceSnapshot>> PrepareAsync(
-            UserScriptInstallation installation,
-            DocumentFrame frame,
-            IReadOnlyCollection<string> capabilities,
-            CancellationToken cancellationToken)
-        {
-            if (_resources == null || !capabilities.Contains("GM.getResourceText") &&
-                !capabilities.Contains("GM.getResourceUrl"))
-                return new ReadOnlyDictionary<string, CompatibilityResourceSnapshot>(
-                    new Dictionary<string, CompatibilityResourceSnapshot>(StringComparer.Ordinal));
-
-            var result = new Dictionary<string, CompatibilityResourceSnapshot>(StringComparer.Ordinal);
-            foreach (var declaration in installation.Definition.Metadata.Resources)
-            {
-                var content = await _resources.GetAsync(installation, declaration, cancellationToken)
-                    .ConfigureAwait(false);
-                if (content == null)
-                    throw new BridgeProtocolException(BridgeErrorCodes.Internal, "The resource provider returned no content.");
-                ResourceIntegrityVerifier.Verify(content.Bytes, declaration.Integrity, declaration.Url);
-                if (content.Bytes.Length > _options.MaxResourceBytes ||
-                    (content.Text != null && Encoding.UTF8.GetByteCount(content.Text) > _options.MaxResourceBytes))
-                    throw new BridgeProtocolException(BridgeErrorCodes.PayloadTooLarge, "The resource exceeds the configured limit.");
-                var text = content.Text ?? Encoding.UTF8.GetString(content.Bytes);
-                var url = "data:" + content.MediaType + ";base64," + Convert.ToBase64String(content.Bytes);
-                result[declaration.Name] = new CompatibilityResourceSnapshot(text, url);
-            }
-            return new ReadOnlyDictionary<string, CompatibilityResourceSnapshot>(result);
-        }
 
         /// <inheritdoc />
         public async Task<ApiResult> InvokeAsync(ApiInvocationContext context, CancellationToken cancellationToken)
@@ -124,7 +84,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             }
         }
 
-        private async Task<ApiResult> InvokeResourceAsync(
+        private Task<ApiResult> InvokeResourceAsync(
             ApiInvocationContext context,
             CancellationToken cancellationToken)
         {
@@ -133,10 +93,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 .SingleOrDefault(item => item.Name == name);
             if (declaration == null)
                 throw ProviderParameters.Invalid("The resource '" + name + "' was not declared.");
-            var content = await _resources.GetAsync(
-                context.Installation,
-                declaration,
-                cancellationToken);
+            var content = context.Installation.PreparedRevision.Resources[name];
             if (content == null)
                 throw new BridgeProtocolException(BridgeErrorCodes.Internal, "The resource provider returned no content.");
             ResourceIntegrityVerifier.Verify(content.Bytes, declaration.Integrity, declaration.Url);
@@ -145,11 +102,11 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 throw new BridgeProtocolException(BridgeErrorCodes.PayloadTooLarge, "The resource exceeds the configured limit.");
             if (context.Method == "GM.getResourceText")
             {
-                var text = content.Text ?? Encoding.UTF8.GetString(content.Bytes);
-                return ApiResult.FromValue(text);
+                var text = content.DecodeText();
+                return Task.FromResult(ApiResult.FromValue(text));
             }
-            return ApiResult.FromValue(
-                "data:" + content.MediaType + ";base64," + Convert.ToBase64String(content.Bytes));
+            return Task.FromResult(ApiResult.FromValue(
+                "data:" + content.MediaType + ";base64," + Convert.ToBase64String(content.Bytes)));
         }
 
         private async Task<ApiResult> InvokeHttpAsync(

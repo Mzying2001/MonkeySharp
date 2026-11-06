@@ -381,7 +381,8 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
         [Fact]
         public async Task BuilderServicesBecomeHelloCapabilitiesAndResolveDependencies()
         {
-            var repository = new InMemoryUserScriptRepository();
+            var services = new AllHostServices();
+            var repository = new InMemoryUserScriptRepository(preparer: new UserScriptPreparer(services, services));
             var grants = new[]
             {
                 "GM.getResourceText", "GM.getResourceUrl", "GM.xmlHttpRequest",
@@ -394,10 +395,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
                 "// @resource template https://cdn.example/template.txt\n" +
                 "// @require https://cdn.example/dependency.js\n" + metadata + "\n// ==/UserScript==\nwindow.mainLoaded = true;";
             await repository.InstallAsync(source, "test", true, CancellationToken.None);
-            var services = new AllHostServices();
             using (var host = new CefSharpUserScriptHostBuilder(repository)
-                .UseDependencyProvider(services)
-                .UseResourceProvider(services)
                 .UseHttpRequestService(services)
                 .UseMenuService(services)
                 .UseNotificationService(services)
@@ -415,7 +413,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
                     new DocumentLifecycleEventArgs(DocumentLifecycleKind.DomContentLoaded, frame),
                     CancellationToken.None);
                 var invocation = Assert.Single(plan.Invocations);
-                Assert.StartsWith("window.dependencyLoaded = true;", invocation.Source);
+                Assert.StartsWith("// @require https://cdn.example/dependency.js\nwindow.dependencyLoaded = true;\n;\n", invocation.Source);
 
                 var responseJson = await host.Gateway.DispatchAsync(JsonSerializer.Serialize(new
                 {

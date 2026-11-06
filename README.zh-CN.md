@@ -127,7 +127,7 @@ var host = new CefSharpUserScriptHostBuilder(repository)
 
 元数据涵盖脚本身份、URL 选择、执行时机、授权、依赖、资源及更新/来源地址。解析错误会阻止安装；警告保留在 `MetadataParseResult.Diagnostics` 中。支持字段、匹配规则和示例见[元数据指南](docs/usage-guide.zh-CN.md#元数据)。
 
-`@require` 和 `@resource` 需要宿主提供程序，并支持完整性摘要。Demo 还提供手动脚本更新。摘要语法、校验及更新规则见[集成参考](docs/integration-reference.zh-CN.md#资源完整性与更新检查)。
+`@require` 和 `@resource` 由仓库的 `UserScriptPreparer` 在安装或更新激活前获取并校验。执行时跨 frame 复用已准备内容，支持离线重复执行。Demo 持久化这些版本并提供手动更新。摘要语法、预算和更新规则见[集成参考](docs/integration-reference.zh-CN.md#资源完整性与更新检查)。
 
 静态 `@webRequest` 元数据会被校验并写入 `GM.info`，但不会安装拦截规则。需要活动规则时请使用 `GM.webRequest(...)`。
 
@@ -143,7 +143,7 @@ var host = new CefSharpUserScriptHostBuilder(repository)
 | `GM.log` / `GM_log` | Core | 传递给 builder 的日志回调。 |
 | 值存储与变更监听 | Core | 单键及批量 `getValues`/`setValues`/`deleteValues` API，支持 `GM_*` 别名；按稳定 `ScriptKey` 隔离的类型化值存储（包括已存储的 undefined）及提交后变更通知。 |
 | `GM.addStyle`、`GM.addElement` 及别名 | 引导代码 | 页面本地实现。 |
-| `GM.getResourceText`、`GM.getResourceURL` / `GM.getResourceUrl` 及旧版别名 | 条件支持 | 需要 `IResourceProvider` 和已声明的 `@resource`；任一现代 URL grant 均授权两个 URL 名称。 |
+| `GM.getResourceText`、`GM.getResourceUrl`、`GM_getResourceText`、`GM_getResourceURL` | 支持 | 消费安装时已准备的声明资源；旧式名称需要精确 grant。 |
 | `GM.xmlHttpRequest` / `GM_xmlhttpRequest` | CefSharp 默认提供 | 需要 `@connect`；支持重定向、凭据、进度、中止及二进制/multipart 请求体。响应类型和限制见 [HTTP 请求](docs/usage-guide.zh-CN.md#http-请求)。 |
 | `GM.registerMenuCommand`、`GM.unregisterMenuCommand` 及别名 | 条件支持 | 需要 `IMenuService`。 |
 | `GM.notification`、`GM.setClipboard`、`GM.openInTab` 及别名 | 条件支持 | 需要对应宿主服务。 |
@@ -161,7 +161,7 @@ var host = new CefSharpUserScriptHostBuilder(repository)
 
 ## 宿主服务
 
-Builder 默认使用内存值存储。通过 `UseValueStore`、`UseDependencyProvider`、`UseResourceProvider`、`UseMenuService` 等方法注册应用服务，提供持久化及其他能力。
+Builder 默认使用内存值存储。通过 `UseValueStore`、`UseMenuService` 等方法注册应用服务，提供持久化及其他能力。
 
 默认 XHR、Cookie 和 webRequest 服务使用已附加浏览器的请求上下文。可通过 `UseHttpRequestService`、`UseCookieService`、`UseWebRequestService` 逐项替换，或设置 `EnableDefaultNetworkServices = false` 省略全部三个默认服务。
 

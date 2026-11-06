@@ -20,9 +20,9 @@ async function install({ snapshot = false,
                     return JSON.stringify({
                         type: "hello-result", protocol: 2, ok: true, limits: {}, apis,
                         compatibility: {
-                            resources: snapshot ? {
+                            resources: {
                                 complete: true, values: { template: { text: "hello", url: resourceUrl } }
-                            } : undefined
+                            }
                         }
                     });
                 }
@@ -59,7 +59,7 @@ async function install({ snapshot = false,
 }
 
     for (const snapshot of [false, true]) {
-        test(`official resource URL names use ${snapshot ? "snapshot" : "bridge"} behavior`, async () => {
+        test(`official resource URL names use ${snapshot ? "legacy and modern snapshot" : "modern snapshot"} behavior`, async () => {
             const { gm, legacy, requests } = await install({ snapshot });
             assert.equal(typeof gm.getResourceUrl, "function");
             assert.equal(typeof gm.getResourceURL, "undefined");
@@ -68,7 +68,7 @@ async function install({ snapshot = false,
             const promises = [gm.getResourceUrl("template")];
             promises.forEach(promise => assert.equal(typeof promise.then, "function"));
             assert.deepEqual(await Promise.all(promises), [resourceUrl]);
-            assert.equal(requests.length, snapshot ? 0 : 1);
+            assert.equal(requests.length, 0);
             requests.forEach(request => {
                 assert.equal(request.method, "GM.getResourceUrl");
                 assert.deepEqual(request.params, { name: "template" });
@@ -86,7 +86,7 @@ async function install({ snapshot = false,
                     await assert.rejects(method(name), { name: "TypeError", message: "name must be a non-empty string." });
                 }
             }
-            assert.equal(requests.length, snapshot ? 0 : 1);
+            assert.equal(requests.length, 0);
             for (const method of [gm.getResourceUrl]) {
                 await assert.rejects(method("missing"), { code: "MSP007_INVALID_PARAMS" });
             }

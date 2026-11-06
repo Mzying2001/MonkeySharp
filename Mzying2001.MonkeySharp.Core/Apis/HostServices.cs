@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -54,23 +55,37 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         /// <param name="bytes">The resource bytes.</param>
         /// <param name="mediaType">The media type used for generated data URLs.</param>
         /// <param name="text">An optional host-decoded text representation.</param>
-        public ResourceContent(byte[] bytes, string mediaType = "application/octet-stream", string text = null)
+        /// <param name="charset">The optional declared character encoding.</param>
+        public ResourceContent(byte[] bytes, string mediaType = "application/octet-stream", string text = null, string charset = null)
         {
-            Bytes = bytes != null ? (byte[])bytes.Clone() : throw new ArgumentNullException(nameof(bytes));
+            _bytes = bytes != null ? (byte[])bytes.Clone() : throw new ArgumentNullException(nameof(bytes));
             MediaType = string.IsNullOrWhiteSpace(mediaType) ? "application/octet-stream" : mediaType;
             if (MediaType.IndexOfAny(new[] { '\r', '\n' }) >= 0)
                 throw new ArgumentException("The media type cannot contain line breaks.", nameof(mediaType));
             Text = text;
+            Charset = charset;
         }
 
+        private readonly byte[] _bytes;
+
         /// <summary>Gets a copy of the resource bytes supplied at construction.</summary>
-        public byte[] Bytes { get; }
+        public byte[] Bytes => (byte[])_bytes.Clone();
+
+        internal int ByteLength => _bytes.Length;
 
         /// <summary>Gets the resource media type.</summary>
         public string MediaType { get; }
 
         /// <summary>Gets the host-decoded text representation, if available.</summary>
         public string Text { get; }
+
+        /// <summary>Gets the declared character encoding, if available.</summary>
+        public string Charset { get; }
+
+        /// <summary>Decodes text using the provider's representation, declared charset or UTF-8.</summary>
+        public string DecodeText() => Text ?? (string.IsNullOrWhiteSpace(Charset)
+            ? Encoding.UTF8 : CodePagesEncodingProvider.Instance.GetEncoding(Charset.Trim('"')) ??
+                Encoding.GetEncoding(Charset.Trim('"'))).GetString(_bytes).TrimStart('\uFEFF');
     }
 
     /// <summary>

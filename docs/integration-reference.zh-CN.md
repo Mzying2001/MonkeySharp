@@ -49,7 +49,13 @@ context 和仅手动更新策略。`GM.info.version` 是管理器程序集版本
 
 ## 资源完整性与更新检查
 
-`@require` 和 `@resource` 支持十六进制或标准 Base64 编码的 `md5`、`sha256` 摘要。支持 `#algorithm=value` 和 `#algorithm-value`，多个摘要可用逗号或分号分隔，并选择最后一个当前支持的声明。请求和缓存 URL 会移除 fragment。已声明完整性要求时，Core resolver、资源 API 和 Demo HTTP 缓存在资源首次使用前验证原始字节，读取缓存时再次校验。不支持的算法会产生 warning；声明格式错误、声明中没有可用的受支持摘要或摘要不匹配都会严格拒绝加载。未声明完整性要求的资源可以加载，不执行摘要校验。
+安装前通过 `new InMemoryUserScriptRepository(preparer: new UserScriptPreparer(dependencyProvider, resourceProvider))` 配置内容服务，持久化仓库接受相同的 preparer。安装、编辑和更新会先完整准备，再原子发布；失败保留原版本。所有 frame 消费捕获的不可变版本，执行时不再调用内容提供程序。依赖共享作用域并保留指令/严格模式语义，段间加入换行和分号。
+
+`ResourceContent` 保留原始字节、MIME、可选 charset 及宿主解码文本。宿主文本优先，否则按 charset 解码，默认 UTF-8；二进制 data URL 使用原始字节。Demo 将准备内容与脚本原子持久化，重载时验证内容摘要，并为格式 2 数据库添加表而不删除数据。已有记录在初始化时一次性准备；内容不可用会明确中止初始化并保留数据库。安装内容服务的可信网络政策与 GM 请求授权分别处理。
+
+默认安装源码/内容总预算为 32 MiB；序列化资源包预算为 64 MiB，必要时按索引分块传输。用户代码只在完整重组后启动，缺块、重复索引或截断都会失败。详见 [P1 实施记录](compatibility/p1-implementation.md)。
+
+`@require` 和 `@resource` 支持十六进制或标准 Base64 编码的 `md5`、`sha1`、`sha256`、`sha384`、`sha512` 摘要。支持 `#algorithm=value` 和 `#algorithm-value`，多个摘要可用逗号或分号分隔，并选择最后一个当前支持的声明。请求和缓存 URL 会移除 fragment。已声明完整性要求时，Core preparer、资源 API 和 Demo HTTP 缓存在资源首次使用前验证原始字节，读取缓存时再次校验。不支持的算法会产生 warning；声明格式错误、声明中没有可用的受支持摘要或摘要不匹配都会严格拒绝加载。未声明完整性要求的资源可以加载，不执行摘要校验。
 
 Demo 管理器提供手动“检查并安装更新”。检查源优先使用 `@updateURL`，下载源优先使用 `@downloadURL`；`@downloadURL none` 禁用检查。候选脚本必须具有相同且非空的 `@name`/`@namespace`，下载版本必须高于当前安装且不低于检查源版本。应用更新保留 ScriptKey、启用状态、安装时间和 GM 存储，只替换源码及来源/更新时间。更新检查使用 Demo 独立 HTTP 客户端，不继承浏览器登录 Cookie；没有后台定时任务，也不通过运行时 bridge 暴露更新 API。
 
@@ -129,8 +135,6 @@ Builder 只能使用一次。应用程序拥有仓库、浏览器以及通过 `U
 var host = new CefSharpUserScriptHostBuilder(repository)
     .UseValueStore(persistentStore)
     .UsePermissionPolicy(permissionPolicy)
-    .UseDependencyProvider(cachedDependencyProvider)
-    .UseResourceProvider(resourceProvider)
     .UseMenuService(menuService)
     .UseNotificationService(notificationService)
     .UseClipboardService(clipboardService)
@@ -166,7 +170,7 @@ Demo 使用数据库格式 2，拒绝旧开发数据库，不进行迁移或删�
 - 同一 `ScriptKey` 的操作必须线性一致。值键允许空字符串，脚本分区 ID 必须非空。提交前取消不产生更改，提交后取消仍成功完成。每个实际提交变更仅发出一次 `ValueChanged`，包括创建或删除已存储的 undefined；相同编码值的重复写入及删除不存在的键不通知。`ListKeysAsync` 保留插入顺序，覆盖不移动，删除再创建移到末尾。
 - 值存储还应实现 `IUserScriptValueSnapshotProvider`，返回按插入顺序排列的不可变 `IReadOnlyList<KeyValuePair<string, UserScriptValue>>`，以提供原子的兼容性快照。否则网关会分别读取键和值，并产生 `MSC411_COMPATIBILITY_SNAPSHOT_DEGRADED`。
 - 批量 GM API 不需要额外的存储接口。写入/删除逐键提交，失败时保留之前的提交，并发出常规逐键事件。全量 `GM.getValues()` 优先使用快照能力，否则分别读取键和值。
-- `IUserScriptDependencyProvider` 负责 `@require` 的可信下载、缓存、HTTPS 策略及可选完整性验证；`ResourceScriptSourceResolver` 保持声明顺序、验证已声明的完整性，并将依赖原始字节总量限制为 `BridgeOptions.MaxResourceBytes`。
+- `UserScriptPreparer` 在安装前配置给仓库，负责获取和校验依赖/资源，保留依赖顺序和作用域，并在全部成功后原子激活不可变版本。默认源码及内容总预算为 32 MiB。安装或更新失败不会发布新版本；执行不再抓取安装内容。
 - 缺少依赖提供程序时以 `MSR401_DEPENDENCY_PROVIDER_UNAVAILABLE` 跳过执行；提供器失败产生 `MSR400_DEPENDENCY_RESOLUTION_FAILED`，不区分调用风格。
 - `IResourceProvider` 返回事先授权的已声明资源，内容受 `BridgeOptions.MaxResourceBytes` 限制。
 - `IHttpRequestService` 在工作开始前接收可重复读取的 `IUserScriptHttpBody` 和观察者；它应先报告元数据再报告正文、遵守可选的 `UserScriptHttpRequest.MaxResponseBytes` 正文上限（`null` 表示不受限）、在每次重定向前调用 `RedirectAllowed`，并记录已跟随 URL 供 Core 重新检查 `@connect`。该正文上限独立于桥接消息上限 `BridgeOptions.MaxResponseBytes`。
@@ -211,10 +215,10 @@ CefSharp 只能提供尽力而为的 document-start 钩子。相应执行产生 
 | --- | --- | --- |
 | `MaxRequestBytes` | 1 MiB | 每条 UTF-8 桥接请求，包括 HTTP 正文分块消息。 |
 | `MaxResponseBytes` | 1 MiB | 每条 UTF-8 桥接响应，包括完整的 hello 响应和正文读取结果。 |
-| `MaxResourceBytes` | 10 MiB | 每个资源；使用 Builder 的 `ResourceScriptSourceResolver` 时还限制依赖字节总量。 |
+| `MaxResourceBytes` | 10 MiB | 单个资源 API 内容；安装内容总量由 `UserScriptPreparer` 单独限制。 |
 | `RequestTimeout` | 30 秒 | 普通桥接请求；HTTP `execute` 豁免。 |
 | `MaxPendingRequestsPerDocument` | 64 | 同一文档的并发桥接请求，包括 HTTP `execute`。 |
-| `MaxCompatibilityBootstrapBytes` | 1 MiB | 每份序列化后的存储或资源快照；完整的 hello 响应还须满足 `MaxResponseBytes`。 |
+| `MaxCompatibilityBootstrapBytes` | 64 MiB | 序列化快照总预算；资源快照超过单个响应时按索引分块，在用户代码启动前完整重组。 |
 | `CompatibilityBootstrapTimeout` | 5 秒 | 每份存储或资源快照的准备时间。 |
 | `MaxReplayEntriesPerExecution` | 4096 | 每次执行保留用于拒绝重放的近期请求 ID 数量。 |
 

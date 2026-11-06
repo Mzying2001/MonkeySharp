@@ -262,18 +262,6 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
     }
 
     /// <summary>
-    /// Resolves the complete executable source for an installed userscript.
-    /// </summary>
-    public interface IUserScriptSourceResolver
-    {
-        /// <summary>Resolves dependencies and source for an installation.</summary>
-        /// <param name="installation">The userscript installation to resolve.</param>
-        /// <param name="cancellationToken">A token that cancels source resolution.</param>
-        /// <returns>The complete JavaScript source in execution order.</returns>
-        Task<string> ResolveSourceAsync(UserScriptInstallation installation, CancellationToken cancellationToken);
-    }
-
-    /// <summary>
     /// Provides a serialized bridge request together with its source frame.
     /// </summary>
     public sealed class BridgeRequestEventArgs : EventArgs

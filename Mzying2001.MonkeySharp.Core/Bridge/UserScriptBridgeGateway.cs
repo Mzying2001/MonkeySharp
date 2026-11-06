@@ -376,44 +376,35 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             return grants.Contains("GM.getResourceText") || grants.Contains("GM.getResourceUrl");
         }
 
-        private async Task<object> BuildResourceBootstrapAsync(
+        private Task<object> BuildResourceBootstrapAsync(
             UserScriptEngine.ExecutionRecord execution,
             CancellationToken cancellationToken)
         {
-            var resources = new Dictionary<string, object>(StringComparer.Ordinal);
-            foreach (var provider in _providerInstances.OfType<IUserScriptCompatibilityBootstrapProvider>())
+            cancellationToken.ThrowIfCancellationRequested();
+            var json = ResourcePackage(execution);
+            if (Encoding.UTF8.GetByteCount(json) <= _options.MaxResponseBytes / 2)
             {
-                var contribution = await provider.PrepareAsync(
-                    execution.Installation,
-                    execution.Frame,
-                    execution.Installation.Definition.Metadata.Capabilities,
-                    cancellationToken).ConfigureAwait(false);
-                if (contribution == null)
-                    continue;
-                foreach (var item in contribution)
-                {
-                    resources[item.Key] = new Dictionary<string, object>
-                    {
-                        ["text"] = item.Value.Text,
-                        ["url"] = item.Value.Url
-                    };
-                }
+                using (var document = JsonDocument.Parse(json)) return Task.FromResult<object>(document.RootElement.Clone());
             }
-            var result = new Dictionary<string, object>
+            var chunkSize = Math.Max(1, (_options.MaxResponseBytes - 512) / 6);
+            return Task.FromResult<object>(new Dictionary<string, object>
             {
-                ["complete"] = true,
-                ["values"] = resources
-            };
-            if (Encoding.UTF8.GetByteCount(JsonSerializer.Serialize(result)) > _options.MaxCompatibilityBootstrapBytes)
-            {
-                EmitDiagnostic(
-                    "MSC412_COMPATIBILITY_BOOTSTRAP_LIMIT",
-                    "The compatibility resource snapshot exceeds the configured limit.",
-                    null,
-                    execution);
-                return new Dictionary<string, object> { ["complete"] = false, ["entries"] = Array.Empty<string[]>() };
-            }
-            return result;
+                ["complete"] = false, ["chunkCount"] = (json.Length + chunkSize - 1) / chunkSize,
+                ["jsonLength"] = json.Length
+            });
+        }
+
+        private string ResourcePackage(UserScriptEngine.ExecutionRecord execution)
+        {
+            foreach (var content in execution.Installation.PreparedRevision.Resources.Values)
+                if (content.ByteLength > _options.MaxResourceBytes ||
+                    content.Text != null && Encoding.UTF8.GetByteCount(content.Text) > _options.MaxResourceBytes)
+                    throw new BridgeProtocolException(BridgeErrorCodes.PayloadTooLarge, "A prepared resource exceeds MaxResourceBytes.");
+            var json = execution.Installation.PreparedRevision.ResourcePackageJson;
+            if (Encoding.UTF8.GetByteCount(json) > _options.MaxCompatibilityBootstrapBytes)
+                throw new BridgeProtocolException(BridgeErrorCodes.PayloadTooLarge,
+                    "MSR411_PREPARED_REVISION_LIMIT: increase MaxCompatibilityBootstrapBytes for this complete resource package.");
+            return json;
         }
 
         private async Task<string> HandleRequestAsync(JsonElement root, CancellationToken cancellationToken)
@@ -442,6 +433,20 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                     {
                         HandleRuntimeError(execution, requestId, parameters);
                         return Limit(ProtocolJson.Success(requestId, ApiResult.Undefined.Json));
+                    }
+
+                    if (method == "runtime.getResourceChunk")
+                    {
+                        if (!HasResourceCapability(execution.Installation.Definition.Metadata.Capabilities))
+                            throw new BridgeProtocolException(BridgeErrorCodes.GrantDenied, "Resource access is not granted.");
+                        var json = ResourcePackage(execution);
+                        var chunkSize = Math.Max(1, (_options.MaxResponseBytes - 512) / 6);
+                        var index = parameters.GetProperty("index").GetInt32();
+                        if (index < 0 || (long)index * chunkSize >= json.Length)
+                            throw ProviderParameters.Invalid("Invalid resource chunk index.");
+                        var offset = index * chunkSize;
+                        return Limit(ProtocolJson.Success(requestId, JsonSerializer.Serialize(new
+                        { index, chunk = json.Substring(offset, Math.Min(chunkSize, json.Length - offset)) })));
                     }
 
                     if (method == "runtime.getStorageSnapshot")

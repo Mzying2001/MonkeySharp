@@ -127,7 +127,7 @@ Scripts execute in the page world inside the MonkeySharp wrapper. `@sandbox`, `@
 
 Metadata covers script identity, URL selection, execution timing, grants, dependencies, resources, and update/source links. Parse errors prevent installation; warnings remain in `MetadataParseResult.Diagnostics`. See the [metadata guide](docs/usage-guide.md#metadata) for supported fields, matching rules, and examples.
 
-`@require` and `@resource` need host providers and support integrity hashes. The Demo also offers manual script updates. Hash syntax, validation, and update rules are documented in the [integration reference](docs/integration-reference.md#resource-integrity-and-update-checks).
+`@require` and `@resource` are fetched and verified by a repository `UserScriptPreparer` before installation or update activates a revision. Executions reuse the prepared content offline and across frames. The Demo persists these revisions and offers manual script updates. Hash syntax, budgets and update rules are documented in the [integration reference](docs/integration-reference.md#resource-integrity-and-update-checks).
 
 Static `@webRequest` metadata is validated and included in `GM.info`, but does not install interception rules. Use `GM.webRequest(...)` for active registrations.
 
@@ -143,7 +143,7 @@ This table summarizes availability. Parameters, return values, callbacks, and [T
 | `GM.log` / `GM_log` | Core | Delivered to the builder's logging callback. |
 | Value storage and change listeners | Core | Single-key and bulk `getValues`/`setValues`/`deleteValues` APIs with `GM_*` aliases; Typed value storage (including stored `undefined`) isolated by stable `ScriptKey`, with committed change notifications. |
 | `GM.addStyle`, `GM.addElement` and aliases | Bootstrap | Page-local implementations. |
-| `GM.getResourceText`, `GM.getResourceURL` / `GM.getResourceUrl` and legacy aliases | Conditional | Require `IResourceProvider` and a declared `@resource`; either modern URL grant authorizes both URL names. |
+| `GM.getResourceText`, `GM.getResourceUrl`, `GM_getResourceText`, `GM_getResourceURL` | Supported | Consume the declared resources prepared with the installation; legacy names require exact grants. |
 | `GM.xmlHttpRequest` / `GM_xmlhttpRequest` | CefSharp default | Requires `@connect`; supports redirects, credentials, progress, abort, and binary/multipart bodies. See [HTTP requests](docs/usage-guide.md#http-requests) for response types and limitations. |
 | `GM.registerMenuCommand`, `GM.unregisterMenuCommand` and aliases | Conditional | Require `IMenuService`. |
 | `GM.notification`, `GM.setClipboard`, `GM.openInTab` and aliases | Conditional | Require their corresponding host services. |
@@ -161,7 +161,7 @@ If a declared API has no provider, it is normally absent and direct bridge calls
 
 ## Host Services
 
-The builder uses an in-memory value store by default. Register application services with methods such as `UseValueStore`, `UseDependencyProvider`, `UseResourceProvider`, and `UseMenuService` to add persistence and capabilities.
+The builder uses an in-memory value store by default. Register application services with methods such as `UseValueStore` and `UseMenuService` to add persistence and capabilities.
 
 Default XHR, Cookie, and webRequest services use the attached browser request context. Override them individually with `UseHttpRequestService`, `UseCookieService`, and `UseWebRequestService`, or set `EnableDefaultNetworkServices = false` to omit all three defaults.
 

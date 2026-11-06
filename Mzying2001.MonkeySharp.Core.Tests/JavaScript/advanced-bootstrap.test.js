@@ -63,7 +63,8 @@ test("advanced APIs use promises, progress notifications, and capability discove
                     protocol: 2,
                     ok: true,
                     limits: {},
-                    apis: ["GM.getResourceText", "GM.xmlHttpRequest", "GM.registerMenuCommand"]
+                    apis: ["GM.getResourceText", "GM.xmlHttpRequest", "GM.registerMenuCommand"],
+                    compatibility: { resources: { complete: true, values: { template: { text: "resource text", url: "data:text/plain,resource" } } } }
                 });
             }
             let result = { $monkeySharpType: "undefined" };

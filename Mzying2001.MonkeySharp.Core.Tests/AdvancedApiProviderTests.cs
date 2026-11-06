@@ -21,51 +21,23 @@ namespace Mzying2001.MonkeySharp.Core.Tests
     public sealed class AdvancedApiProviderTests
     {
         [Fact]
-        public async Task ResourceApisRequireDeclaredNameAndEnforceSize()
+        public async Task PreparedResourceApisCheckDeclarationAndResponseBudget()
         {
-            var installation = await InstallAsync(
-                "// @grant GM.getResourceText\n// @grant GM.getResourceUrl\n" +
-                "// @resource logo https://cdn.example/logo.txt");
-            var resources = new FakeResourceProvider(new ResourceContent(
-                Encoding.UTF8.GetBytes("hello"), "text/plain", "hello"));
-            var provider = new ResourceAndNetworkApiProvider(resources, options: new BridgeOptions(maxResourceBytes: 8));
-
-            var text = await provider.InvokeAsync(Context(installation, "GM.getResourceText", new { name = "logo" }), CancellationToken.None);
-            var url = await provider.InvokeAsync(Context(installation, "GM.getResourceUrl", new { name = "logo" }), CancellationToken.None);
-
-            Assert.Equal("hello", Json(text.Json).GetString());
-            Assert.StartsWith("data:text/plain;base64,", Json(url.Json).GetString());
-            await Assert.ThrowsAsync<BridgeProtocolException>(() => provider.InvokeAsync(
-                Context(installation, "GM.getResourceText", new { name = "missing" }), CancellationToken.None));
-
-            var oversized = new ResourceAndNetworkApiProvider(
-                new FakeResourceProvider(new ResourceContent(new byte[9])),
-                options: new BridgeOptions(maxResourceBytes: 8));
-            var exception = await Assert.ThrowsAsync<BridgeProtocolException>(() => oversized.InvokeAsync(
-                Context(installation, "GM.getResourceUrl", new { name = "logo" }), CancellationToken.None));
-            Assert.Equal(BridgeErrorCodes.PayloadTooLarge, exception.Code);
-
-            var oversizedText = new ResourceAndNetworkApiProvider(
-                new FakeResourceProvider(new ResourceContent(new byte[0], text: "123456789")),
-                options: new BridgeOptions(maxResourceBytes: 8));
-            exception = await Assert.ThrowsAsync<BridgeProtocolException>(() => oversizedText.InvokeAsync(
-                Context(installation, "GM.getResourceText", new { name = "logo" }), CancellationToken.None));
-            Assert.Equal(BridgeErrorCodes.PayloadTooLarge, exception.Code);
-        }
-
-        [Fact]
-        public async Task ResourceApiRejectsContentThatFailsDeclaredIntegrity()
-        {
-            var installation = await InstallAsync(
-                "// @grant GM.getResourceText\n" +
-                "// @resource logo https://cdn.example/logo.txt#sha256=2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824");
-            var provider = new ResourceAndNetworkApiProvider(new FakeResourceProvider(new ResourceContent(
-                Encoding.UTF8.GetBytes("tampered"), "text/plain", "tampered")));
-
-            var exception = await Assert.ThrowsAsync<ResourceIntegrityException>(() => provider.InvokeAsync(
-                Context(installation, "GM.getResourceText", new { name = "logo" }), CancellationToken.None));
-
-            Assert.Equal("MSR410_RESOURCE_INTEGRITY_FAILED", exception.Code);
+            var resources = new FakeResourceProvider(new ResourceContent(Encoding.UTF8.GetBytes("hello"), "text/plain", "hello"));
+            var repository = new InMemoryUserScriptRepository(preparer: new UserScriptPreparer(resources: resources));
+            var installation = await repository.InstallAsync(MetadataAndMatchingTests.Script(
+                "// @name resources\n// @match https://example.com/*\n// @resource logo https://cdn.example/logo.txt"), "test", true, CancellationToken.None);
+            using (var provider = new ResourceAndNetworkApiProvider(options: new BridgeOptions(maxResourceBytes: 8)))
+            {
+                Assert.Equal("hello", Json((await provider.InvokeAsync(Context(installation, "GM.getResourceText", new { name = "logo" }), CancellationToken.None)).Json).GetString());
+                Assert.Equal("data:text/plain;base64,aGVsbG8=", Json((await provider.InvokeAsync(Context(installation, "GM.getResourceUrl", new { name = "logo" }), CancellationToken.None)).Json).GetString());
+                await Assert.ThrowsAsync<BridgeProtocolException>(() => provider.InvokeAsync(Context(installation, "GM.getResourceText", new { name = "missing" }), CancellationToken.None));
+            }
+            using (var limited = new ResourceAndNetworkApiProvider(options: new BridgeOptions(maxResourceBytes: 4)))
+            {
+                var exception = await Assert.ThrowsAsync<BridgeProtocolException>(() => limited.InvokeAsync(Context(installation, "GM.getResourceText", new { name = "logo" }), CancellationToken.None));
+                Assert.Equal(BridgeErrorCodes.PayloadTooLarge, exception.Code);
+            }
         }
 
         [Fact]
@@ -400,44 +372,6 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 Assert.Equal("document", diagnostic.DocumentId);
                 Assert.IsType<InvalidOperationException>(diagnostic.Exception);
             }
-        }
-
-        [Fact]
-        public async Task DependencyResolverPreservesRequireOrderAndLimit()
-        {
-            var installation = await InstallAsync(
-                "// @grant none\n// @require https://cdn.example/one.js\n// @require https://cdn.example/two.js");
-            var dependencies = new FakeDependencyProvider(new Dictionary<string, string>
-            {
-                ["https://cdn.example/one.js"] = "const one = 1;",
-                ["https://cdn.example/two.js"] = "const two = 2;"
-            });
-            var resolver = new ResourceScriptSourceResolver(dependencies, 100);
-
-            var source = await resolver.ResolveSourceAsync(installation, CancellationToken.None);
-
-            Assert.True(source.IndexOf("const one", StringComparison.Ordinal) < source.IndexOf("const two", StringComparison.Ordinal));
-            Assert.EndsWith(installation.Definition.Source, source);
-            await Assert.ThrowsAsync<InvalidOperationException>(() =>
-                new ResourceScriptSourceResolver(dependencies, 5)
-                    .ResolveSourceAsync(installation, CancellationToken.None));
-        }
-
-        [Fact]
-        public async Task DependencyResolverRejectsContentThatFailsDeclaredIntegrity()
-        {
-            var installation = await InstallAsync(
-                "// @grant none\n" +
-                "// @require https://cdn.example/lib.js#sha256=2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824");
-            var dependencies = new FakeDependencyProvider(new Dictionary<string, string>
-            {
-                ["https://cdn.example/lib.js"] = "tampered"
-            });
-
-            var exception = await Assert.ThrowsAsync<ResourceIntegrityException>(() =>
-                new ResourceScriptSourceResolver(dependencies, 100).ResolveSourceAsync(installation, CancellationToken.None));
-
-            Assert.Equal("MSR410_RESOURCE_INTEGRITY_FAILED", exception.Code);
         }
 
         [Fact]

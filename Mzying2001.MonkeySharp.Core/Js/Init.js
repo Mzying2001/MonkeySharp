@@ -202,10 +202,26 @@
                         hello.compatibility.storage.entries) {
                         record.storageMirror = storageRecord(hello.compatibility.storage.entries);
                     }
+                    if (hello.compatibility && hello.compatibility.resources && hello.compatibility.resources.chunkCount) {
+                        const descriptor = hello.compatibility.resources;
+                        const chunks = [];
+                        for (let index = 0; index < descriptor.chunkCount; index += 1) {
+                            const part = await call(record, "runtime.getResourceChunk", { index: index });
+                            if (!part || part.index !== index || typeof part.chunk !== "string") throw new Error("Incomplete resource package.");
+                            chunks.push(part.chunk);
+                        }
+                        const json = chunks.join("");
+                        if (json.length !== descriptor.jsonLength) throw new Error("Incomplete resource package.");
+                        hello.compatibility.resources = JSON.parse(json);
+                    }
                     if (hello.compatibility && hello.compatibility.resources &&
                         hello.compatibility.resources.complete && hello.compatibility.resources.values) {
                         record.resourceMirror = Object.assign({}, hello.compatibility.resources.values);
                     }
+                }
+                if (invocation.grants.some(name => name === "GM.getResourceText" || name === "GM.getResourceUrl") && !record.resourceMirror) {
+                    executions.delete(invocation.executionId);
+                    throw new Error("The complete resource package must be ready before running this script.");
                 }
                 const gm = createApi(record, invocation, availableApis);
                 record.windowFacade = createWindowFacade(record, invocation, availableApis);

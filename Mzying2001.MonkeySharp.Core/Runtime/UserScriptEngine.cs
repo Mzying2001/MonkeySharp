@@ -23,7 +23,6 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
         private readonly IUserScriptRepository _repository;
         private readonly IUserScriptMatcher _matcher;
         private readonly UserScriptEngineOptions _options;
-        private readonly IUserScriptSourceResolver _sourceResolver;
         private readonly SemaphoreSlim _queue = new SemaphoreSlim(1, 1);
         private readonly object _stateLock = new object();
         private readonly Dictionary<string, DocumentState> _documents =
@@ -40,17 +39,14 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
         /// <param name="repository">The repository containing installed userscripts.</param>
         /// <param name="matcher">The URL matcher, or <see langword="null"/> to use the default matcher.</param>
         /// <param name="options">Execution safety requirements, or <see langword="null"/> for defaults.</param>
-        /// <param name="sourceResolver">An optional resolver for script dependencies and final source.</param>
         public UserScriptEngine(
             IUserScriptRepository repository,
             IUserScriptMatcher matcher = null,
-            UserScriptEngineOptions options = null,
-            IUserScriptSourceResolver sourceResolver = null)
+            UserScriptEngineOptions options = null)
         {
             _repository = repository ?? throw new ArgumentNullException(nameof(repository));
             _matcher = matcher ?? new UserScriptMatcher();
             _options = options ?? new UserScriptEngineOptions();
-            _sourceResolver = sourceResolver;
         }
 
         /// <summary>Occurs when script selection or source resolution produces a diagnostic.</summary>
@@ -147,36 +143,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                         documentId: frame.DocumentId, frameId: frame.FrameId));
                     return EmptyPlan(frame, UserScriptRunAt.ContextMenu);
                 }
-                if (metadata.Requires.Count != 0 && _sourceResolver == null)
-                {
-                    diagnostics.Add(new UserScriptDiagnostic(
-                        "MSR401_DEPENDENCY_PROVIDER_UNAVAILABLE", DiagnosticSeverity.Error,
-                        "The script declares @require entries but no dependency provider is configured.",
-                        scriptKey: installation.ScriptKey, documentId: frame.DocumentId, frameId: frame.FrameId));
-                    return EmptyPlan(frame, UserScriptRunAt.ContextMenu);
-                }
-                string source;
-                try
-                {
-                    source = _sourceResolver == null
-                        ? installation.Definition.Source
-                        : await _sourceResolver.ResolveSourceAsync(installation, cancellationToken).ConfigureAwait(false);
-                    if (source == null)
-                        throw new InvalidOperationException("The script source resolver returned null.");
-                }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                {
-                    throw;
-                }
-                catch (Exception exception)
-                {
-                    diagnostics.Add(new UserScriptDiagnostic(
-                        exception is ResourceIntegrityException integrityException
-                            ? integrityException.Code : "MSR400_DEPENDENCY_RESOLUTION_FAILED",
-                        DiagnosticSeverity.Error, "The script dependencies could not be resolved.", exception,
-                        installation.ScriptKey, frame.DocumentId, frame.FrameId));
-                    return EmptyPlan(frame, UserScriptRunAt.ContextMenu);
-                }
+                var source = installation.PreparedRevision?.Source ?? throw new InvalidOperationException("The installation has no prepared revision.");
                 var invocation = CreateInvocation(installation, source, frame);
                 var execution = new ExecutionRecord(frame, installation, invocation, new CancellationTokenSource());
                 lock (_stateLock)
@@ -404,45 +371,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                         documentId: frame.DocumentId,
                         frameId: frame.FrameId));
                 }
-                if (metadata.Requires.Count != 0 && _sourceResolver == null)
-                {
-                    diagnostics.Add(new UserScriptDiagnostic(
-                        "MSR401_DEPENDENCY_PROVIDER_UNAVAILABLE",
-                        DiagnosticSeverity.Error,
-                        "The script declares @require entries but no dependency provider is configured.",
-                        scriptKey: installation.ScriptKey,
-                        documentId: frame.DocumentId,
-                        frameId: frame.FrameId));
-                    continue;
-                }
-
-                string source;
-                try
-                {
-                    source = _sourceResolver == null
-                        ? installation.Definition.Source
-                        : await _sourceResolver.ResolveSourceAsync(installation, cancellationToken).ConfigureAwait(false);
-                    if (source == null)
-                        throw new InvalidOperationException("The script source resolver returned null.");
-                }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                {
-                    throw;
-                }
-                catch (Exception exception)
-                {
-                    diagnostics.Add(new UserScriptDiagnostic(
-                        exception is ResourceIntegrityException integrityException
-                            ? integrityException.Code
-                            : "MSR400_DEPENDENCY_RESOLUTION_FAILED",
-                        DiagnosticSeverity.Error,
-                        "The script dependencies could not be resolved.",
-                        exception,
-                        installation.ScriptKey,
-                        frame.DocumentId,
-                        frame.FrameId));
-                    continue;
-                }
+                var source = installation.PreparedRevision?.Source ?? throw new InvalidOperationException("The installation has no prepared revision.");
                 var invocation = CreateInvocation(installation, source, frame);
                 var execution = new ExecutionRecord(frame, installation, invocation, new CancellationTokenSource());
                 lock (_stateLock)

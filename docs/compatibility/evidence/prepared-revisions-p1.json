@@ -1,0 +1,141 @@
+{
+  "schemaVersion": 1,
+  "caseId": "prepared-revisions-p1",
+  "date": "2026-11-07",
+  "runs": [
+    {
+      "cefSharpVersion": "84.4.10.0",
+      "platform": "x64",
+      "status": "passed",
+      "checks": {
+        "/compat/prepared:scope": true,
+        "/compat/prepared:charset": true,
+        "/compat/prepared:binary": true,
+        "/compat/prepared:syncText": true,
+        "/compat/prepared-again:scope": true,
+        "/compat/prepared-again:charset": true,
+        "/compat/prepared-again:binary": true,
+        "/compat/prepared-again:syncText": true,
+        "frameResources": true
+      }
+    },
+    {
+      "cefSharpVersion": "84.4.10.0",
+      "platform": "x86",
+      "status": "passed",
+      "checks": {
+        "/compat/prepared:scope": true,
+        "/compat/prepared:charset": true,
+        "/compat/prepared:binary": true,
+        "/compat/prepared:syncText": true,
+        "/compat/prepared-again:scope": true,
+        "/compat/prepared-again:charset": true,
+        "/compat/prepared-again:binary": true,
+        "/compat/prepared-again:syncText": true,
+        "frameResources": true
+      }
+    },
+    {
+      "cefSharpVersion": "121.3.70.0",
+      "platform": "x64",
+      "status": "passed",
+      "checks": {
+        "/compat/prepared:scope": true,
+        "/compat/prepared:charset": true,
+        "/compat/prepared:binary": true,
+        "/compat/prepared:syncText": true,
+        "/compat/prepared-again:scope": true,
+        "/compat/prepared-again:charset": true,
+        "/compat/prepared-again:binary": true,
+        "/compat/prepared-again:syncText": true,
+        "frameResources": true
+      }
+    },
+    {
+      "cefSharpVersion": "121.3.70.0",
+      "platform": "x86",
+      "status": "passed",
+      "checks": {
+        "/compat/prepared:scope": true,
+        "/compat/prepared:charset": true,
+        "/compat/prepared:binary": true,
+        "/compat/prepared:syncText": true,
+        "/compat/prepared-again:scope": true,
+        "/compat/prepared-again:charset": true,
+        "/compat/prepared-again:binary": true,
+        "/compat/prepared-again:syncText": true,
+        "frameResources": true
+      }
+    },
+    {
+      "cefSharpVersion": "151.3.240.0",
+      "platform": "x64",
+      "status": "passed",
+      "checks": {
+        "/compat/prepared:scope": true,
+        "/compat/prepared:charset": true,
+        "/compat/prepared:binary": true,
+        "/compat/prepared:syncText": true,
+        "/compat/prepared-again:scope": true,
+        "/compat/prepared-again:charset": true,
+        "/compat/prepared-again:binary": true,
+        "/compat/prepared-again:syncText": true,
+        "frameResources": true
+      }
+    },
+    {
+      "cefSharpVersion": "151.3.240.0",
+      "platform": "x86",
+      "status": "passed",
+      "checks": {
+        "/compat/prepared:scope": true,
+        "/compat/prepared:charset": true,
+        "/compat/prepared:binary": true,
+        "/compat/prepared:syncText": true,
+        "/compat/prepared-again:scope": true,
+        "/compat/prepared-again:charset": true,
+        "/compat/prepared-again:binary": true,
+        "/compat/prepared-again:syncText": true,
+        "frameResources": true
+      }
+    }
+  ],
+  "dotnet": {
+    "84.4.10-x64": {
+      "core": 244,
+      "adapter": 42,
+      "demo": 39
+    },
+    "121.3.70-x64": {
+      "core": 244,
+      "adapter": 42,
+      "demo": 39
+    }
+  },
+  "javascript": {
+    "passed": 90
+  },
+  "demo": [
+    {
+      "version": "84.4.10",
+      "platform": "x64",
+      "report": "smoke-0708e1b1b68f456ba3ef4137c3996eaa.json",
+      "status": "passed"
+    },
+    {
+      "version": "121.3.70",
+      "platform": "x64",
+      "report": "smoke-27c80633752d487e9961ca0ef3338010.json",
+      "status": "passed"
+    }
+  ],
+  "fixtures": {
+    "Mzying2001.MonkeySharp.CefSharp.SmokeHost\\PreparedContent.cs": "eb00fcb96a1e0d556d32f9fcd72d587b135c9176fba20804b911ea4812074745",
+    "Mzying2001.MonkeySharp.CefSharp.SmokeHost\\CompatibilitySuite.cs": "20def64609b115010c6e5b78b9c7ef78234a166bf3c2e19ca4be2bd92b7c56be",
+    "docs\\compatibility\\fixtures\\prepared-content.user.js": "777324273e9c34aacde9f4d6e92b342eb1365dba2575944e8506e1a8141c8f92"
+  },
+  "limitations": [
+    "Full GM document-start and isolated transport remain outside step 7; see CDP findings.",
+    "Text decoding uses explicit host text, then declared charset, then UTF-8. Reference decoding varies with the require/resource fetch path; universal byte-for-byte decoding equivalence is not claimed."
+  ]
+}
