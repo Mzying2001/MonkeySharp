@@ -85,16 +85,9 @@ CefSharp 宿主默认提供 `GM.xmlHttpRequest`、`GM.cookie` 和 `GM.webRequest
 
 ### Cookie
 
-声明 `@grant GM.cookie` 或 `@grant GM_cookie`。默认提供程序使用已附加浏览器的请求上下文。省略 `details.url` 时使用当前文档 URL；显式 URL 必须被脚本的 `@match` 或 `@include` 覆盖。Core 校验 domain、path、secure、SameSite、`expirationDate`、`httpOnly` 和第一方字段。
+默认服务使用已附加浏览器的共享 CDP 会话及实际 RequestContext。访问前检查授权、宿主策略与脚本 URL 规则，返回后按 host-only/domain/path/secure 再过滤。SameSite 实际映射到 CDP，并读回 session/expiration 状态。set 检查引擎接受及实际身份/属性，delete 仅删除选中身份的准确 domain/path，再验证不存在；不再反射回显输入或提供自有监听。
 
-```javascript
-const cookies = await GM.cookie.list({ url: location.href });
-await GM.cookie.set({ url: location.href, name: "session", value: "ready", path: "/" });
-await GM.cookie.delete({ url: location.href, name: "session" });
-const listenerId = GM.cookie.addListener({}, (cookie, cause, removed) => console.log(cookie.name, cause, removed));
-```
-
-`GM_cookie.list` 回调签名为 `(cookies, error)`，`set` 和 `delete` 回调签名为 `(error)`；成功时错误值为 `null` 或 `undefined`。`addListener/removeListener` 使用数字 ID，监听回调签名为 `(cookie, cause, removed)`。执行、文档、框架或宿主释放时会清理监听器。
+现代 list 兑现实际 Cookie[]，set/delete 兑现 undefined。旧版 CRUD 返回 undefined，list 回调为 (cookies,error)，修改回调为 (error)。默认 path 是 URL 所在目录。分区及 first-party 参数在副作用前拒绝，后续分区支持独立实施。直接创建服务使用 new CefSharpCookieService(host)，不再使用独立 RequestContext 构造器；自定义 ICookieService 仅实现 CRUD。详见 [Cookie 指南](usage-guide.zh-CN.md#cookie)及[真实证据](compatibility/cookie-findings.md)。
 
 ### Web Request
 

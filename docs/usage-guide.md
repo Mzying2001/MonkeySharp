@@ -193,7 +193,7 @@ Each row requires its capability family or exact legacy declaration unless state
 | `GM.saveTab` | `GM_saveTab` | `Promise<undefined>` | Tab-state service |
 | `GM.getTabs` | `GM_getTabs` | `Promise<object>` | Tab-state service |
 | `GM.download` | `GM_download` | `Promise<DownloadDetails> & {abort()}` | Download service |
-| `GM.cookie` | `GM_cookie` | Object with CRUD/listener methods | CefSharp default |
+| `GM.cookie` | `GM_cookie` | Namespace with list/set/delete | CefSharp default |
 | `GM.webRequest` | `GM_webRequest` | Removable handle immediately | CefSharp default |
 | `unsafeWindow` | Same name | Page global object | Exact grant |
 | `window.close`, `window.focus` | Same names | `undefined` | Window service |
@@ -570,43 +570,27 @@ const handle = GM_download({
 
 ### GM.cookie / GM_cookie
 
-Grant `GM.cookie` or `GM_cookie`; all its submethods share that grant. Needs a cookie service. CefSharp's default uses the attached browser request context and can read HttpOnly cookies. Each target URL must match the script's `@match`/`@include` rules and not its exclusions. `@connect` is not a substitute for these URL rules.
+Requires a cookie grant and service. Modern GM.cookie exposes list/set/delete; legacy GM_cookie is a function namespace with those three methods. There are no addListener/removeListener extensions. Target URLs must satisfy the script's match/include/exclude rules and host permission policy before backend access; @connect does not replace these checks. Results are filtered again in Core by URL, host-only/domain, path and secure scope.
 
-| Method | Input / behavior | Result |
+| Method | Modern result | Legacy result/callback |
 | --- | --- | --- |
-| `GM.cookie.list(details?)` | Filter cookies; default details `{}`. | `Promise<Cookie[]>` |
-| `GM.cookie.set(details)` | Set a named cookie. | `Promise<Cookie>` (or provider null). |
-| `GM.cookie.delete(details)` | Delete a named cookie. | `Promise<boolean>` |
-| `GM.cookie.addListener(details?, callback)` | Also accepts just callback; receives `(cookie, cause, removed)`. | Positive numeric listener ID immediately; registration failure logged. |
-| `GM.cookie.removeListener(listenerId)` | Remove this execution's registration. | `Promise<boolean>` |
+| list(details?) | Promise of actual Cookie[] | undefined; callback(cookies, null), or callback(null, errorString) |
+| set(details) | Promise of undefined after verified write | undefined; callback() or callback(errorString) |
+| delete(details) | Promise of undefined after verified removal | undefined; callback() or callback(errorString) |
 
-| `details` field | Use and default |
-| --- | --- |
-| `url` | Absolute HTTP(S) string; defaults to the current frame URL. |
-| `name` | Exact optional list filter; required non-empty string for set/delete. |
-| `domain`, `path` | Optional list filters; for set, domain defaults to URL host, path to `/`. The default CefSharp delete uses URL + name, not exact domain/path selection. |
-| `value` | Set value string; omission defaults to empty string. |
-| `expirationDate` | Optional integral Unix **seconds**, or a parseable date string; omission creates a session cookie. Prefer Unix seconds for portability. |
-| `secure`, `httpOnly` | Set booleans, default false. |
-| `sameSite`, `firstPartyDomain` | Optional strings preserved by Core; see default-service limitations below. |
+Omitted details/url use the current frame URL. Name is an optional exact list filter and a required nonempty set/delete string. Domain/path are optional exact list filters. Set without domain creates a host-only cookie; an explicit domain must include the target host and creates a domain cookie when accepted by Chromium. Default path is the URL directory (for /nested/page it is /nested), matching the pinned reference. Explicit paths start with /. Value defaults to an empty string. Expiration is optional integral Unix seconds; omission creates a session cookie. Secure and httpOnly default false. SameSite accepts unspecified, no_restriction, lax or strict, mapped to the CDP modes rather than reflected back from input.
 
-Returned Cookie fields are `name`, `value`, `domain`, `path`, `expirationDate` (Unix seconds or null), `firstPartyDomain`, `hostOnly`, `session`, `secure`, `httpOnly`, and `sameSite`.
+List returns actual name/value/domain/path, hostOnly, session, secure, httpOnly and normalized sameSite. Persistent cookies include expirationDate in Unix seconds; session cookies omit it. Unknown first-party/partition state is not invented. Set checks the protocol result and reads back the complete selected identity and attributes; a policy-rejected or silently discarded write is an error. An expired set verifies absence. Delete selects one visible matching identity (longest path first; host-only first on a tie), sends its exact domain/path, then verifies absence. Explicit domain/path further constrain deletion; it never broadly removes every cookie with the same name. Deleting an absent cookie is harmless.
 
-Legacy CRUD returns `undefined`: `GM_cookie.list(details?, callback?)` invokes `(cookies, null)` on success or `(null, errorString)` on failure; `set(details, callback?)` and `delete(details, callback?)` invoke no-argument success callbacks or `(errorString)` on failure. Without an error callback, failures are logged. Legacy addListener returns the same numeric ID; legacy removeListener returns undefined and logs failures.
+The default backend uses the host's shared CDP session, which belongs to the attached browser's actual RequestContext. It keeps one session throughout each operation and never detaches another consumer's observer. Navigation can cancel a document's calls; detach/disposal invalidate the native session. `new CefSharpCookieService(host)` is available to direct hosts; the former request-context-only constructors are removed. A custom ICookieService implements only CRUD and must return actual verified state.
 
-**Default-service limits / Tampermonkey differences:** Cookie `partitionKey` is not implemented; unknown fields are not a partition-selection guarantee. Current CefSharp writes do not apply sameSite/firstPartyDomain to the browser cookie, even though Core accepts/preserves those strings and set results may echo them. Listeners report explicit mutations made through the service (`cause: "explicit"`); they are not a complete feed of page/HTTP cookie changes or expiration events. Unlike the [official Cookie API](https://www.tampermonkey.net/documentation.php?q=GM_cookie), addListener/removeListener are MonkeySharp additions with the three-argument callback above. Host replacements may implement richer behavior.
+partitionKey, cookiePartition and firstPartyDomain are explicitly unsupported before effects on all current versions, including 84. Partition support remains a later enhancement. Partitioned cookies are excluded from this unpartitioned backend rather than accidentally changed. Legacy callback failures are reported once, independently of the completed operation. Calling the legacy namespace itself is unsupported; use its three documented methods.
 
 ```javascript
-// @grant GM.cookie
-(async function () {
-    const id = GM.cookie.addListener({}, (cookie, cause, removed) => {
-        console.log(cookie.name, cause, removed);
-    });
-    await GM.cookie.set({ name: "ms_demo", value: "ready", path: "/" });
-    console.log(await GM.cookie.list({ name: "ms_demo" }));
-    console.log("Deleted:", await GM.cookie.delete({ name: "ms_demo" }));
-    await GM.cookie.removeListener(id);
-})().catch(console.error);
+await GM.cookie.set({name:'session',value:'ready',sameSite:'lax',path:'/'});
+console.log(await GM.cookie.list({name:'session'}));
+await GM.cookie.delete({name:'session'}); // undefined, no removal boolean
+GM_cookie.list({}, (cookies, error) => console.log(cookies, error));
 ```
 
 ## Request interception

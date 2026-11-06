@@ -73,7 +73,9 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 });
 
                 Assert.True(result.GetProperty("ok").GetBoolean());
-                Assert.Equal("example.com", result.GetProperty("result").GetProperty("domain").GetString());
+                Assert.Equal("undefined", result.GetProperty("result").GetProperty("$monkeySharpType").GetString());
+                var listed = await fixture.RequestAsync("GM.cookie", new { operation = "list" });
+                Assert.Equal("example.com", listed.GetProperty("result")[0].GetProperty("domain").GetString());
             }
         }
 

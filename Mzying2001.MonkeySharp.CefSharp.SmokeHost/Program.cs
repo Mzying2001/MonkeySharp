@@ -32,6 +32,9 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             {
                 RootCachePath = cachePath
             };
+            // Test-only self-signed loopback TLS; never applied by the production adapter.
+            settings.CefCommandLineArgs.Add("ignore-certificate-errors", "1");
+            settings.CefCommandLineArgs.Add("host-resolver-rules", "MAP cookie.monkeysharp.test 127.0.0.1");
             if (!Cef.Initialize(settings))
                 throw new InvalidOperationException("CefSharp initialization failed.");
 
@@ -126,12 +129,11 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             "if (mainFrame && location.pathname.indexOf('/initial') >= 0) {\n" +
             "  (async function () {\n" +
             "    smoke.apis = {};\n" +
-            "    smoke.cookie = await GM.cookie.set({ url: location.href, name: 'smoke-cookie', value: 'ready' });\n" +
+            "    await GM.cookie.set({ url: location.href, name: 'smoke-cookie', value: 'ready' });\n" +
             "    smoke.cookieList = (await GM.cookie.list({ url: location.href })).length;\n" +
-            "    GM.cookie.addListener({ url: location.href }, function (cookie) { smoke.cookieChanged = cookie && cookie.value === 'changed'; });\n" +
             "    await GM.cookie.list({ url: location.href });\n" +
             "    await GM.cookie.set({ url: location.href, name: 'smoke-cookie', value: 'changed' });\n" +
-            "    while (!smoke.cookieChanged) { await GM.cookie.set({ url: location.href, name: 'smoke-cookie', value: 'changed' }); await new Promise(function (resolve) { setTimeout(resolve, 25); }); }\n" +
+            "    await GM.cookie.set({ url: location.href, name: 'smoke-cookie', value: 'changed' }); smoke.cookieReadback = (await GM.cookie.list({url:location.href,name:'smoke-cookie'}))[0].value === 'changed';\n" +
             "    smoke.webRule = GM.webRequest([{ selector: location.origin + '/__monkeysharp_block__', action: 'cancel' }], function (info, message, details) { smoke.webRequestEvents = (smoke.webRequestEvents || 0) + (message === 'cancel' ? 1 : 0); });\n" +
             "    var beacon = document.createElement('img'); beacon.src = location.origin + '/webrequest-beacon'; document.body.appendChild(beacon);\n" +
             "    await GM.notification({ title: 'MonkeySharp smoke', text: 'notification', onclick: function () { smoke.notificationClicked = true; }, ondone: function () { smoke.notificationDone = true; } });\n" +
@@ -154,11 +156,11 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             "    try { await GM.xmlHttpRequest({ url: location.origin + '/slow', timeout: 50, ontimeout: function () { smoke.extended.timeout = true; } }); } catch (ignore) {}\n" +
             "    await new Promise(function (resolve) { var pending = GM.xmlHttpRequest({ url: location.origin + '/slow', onabort: function () { smoke.extended.abort = true; resolve(); }, onerror: resolve }); pending.catch(function () {}); setTimeout(function () { pending.abort(); }, 20); });\n" +
             "    smoke.apis.xmlhttpExtended = Object.keys(smoke.extended).length === 10 && Object.keys(smoke.extended).every(function (key) { return smoke.extended[key] === true; });\n" +
-            "    while (!smoke.notificationDone || !smoke.downloadProgress || !smoke.downloadCompleted || !smoke.cookieChanged || !smoke.tab.id) await new Promise(function (resolve) { setTimeout(resolve, 25); });\n" +
+            "    while (!smoke.notificationDone || !smoke.downloadProgress || !smoke.downloadCompleted || !smoke.cookieReadback || !smoke.tab.id) await new Promise(function (resolve) { setTimeout(resolve, 25); });\n" +
             "    smoke.apis.notification = smoke.notificationDone === true;\n" +
             "    smoke.apis.tab = Boolean(smoke.tab && smoke.tab.id);\n" +
             "    smoke.apis.download = smoke.downloadProgress === true && smoke.downloadCompleted === true;\n" +
-            "    smoke.apis.cookie = smoke.cookieList === 1 && smoke.cookieChanged === true;\n" +
+            "    smoke.apis.cookie = smoke.cookieList === 1 && smoke.cookieReadback === true;\n" +
             "    smoke.apis.webRequest = Boolean(smoke.webRule) && typeof smoke.webRule.remove === 'function';\n" +
             "    smoke.done = true;\n" +
             "    window.__monkeySharpSmokeResult = smoke; document.documentElement.dataset.monkeySharpSmoke = JSON.stringify(smoke);\n" +
@@ -458,6 +460,18 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
 
     internal sealed class LocalHttpFixture : IDisposable
     {
+        private readonly System.Security.Cryptography.X509Certificates.X509Certificate2 _certificate;
+        public LocalHttpFixture(bool tls = false)
+        {
+            if (!tls) return;
+            var assembly = typeof(LocalHttpFixture).Assembly;
+            using (var input = assembly.GetManifestResourceStream(assembly.GetManifestResourceNames().Single(name => name.EndsWith("loopback.pfx"))))
+            using (var bytes = new MemoryStream())
+            {
+                input.CopyTo(bytes);
+                _certificate = new System.Security.Cryptography.X509Certificates.X509Certificate2(bytes.ToArray(), "fixture");
+            }
+        }
         private readonly TcpListener _listener = new TcpListener(IPAddress.Loopback, 0);
         private CancellationTokenSource _cancellation;
         private Task _acceptLoop;
@@ -476,7 +490,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             Port = ((IPEndPoint)_listener.LocalEndpoint).Port;
             _cancellation = new CancellationTokenSource();
             _acceptLoop = AcceptLoopAsync();
-            return new Uri("http://127.0.0.1:" + Port + "/initial");
+            return new Uri((_certificate == null ? "http" : "https") + "://127.0.0.1:" + Port + "/initial");
         }
 
         public void Dispose()
@@ -496,6 +510,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             foreach (var client in _clients.Keys) client.Dispose();
             Task.WhenAll(_serving).GetAwaiter().GetResult();
             _cancellation?.Dispose();
+            _certificate?.Dispose();
         }
 
         private async Task AcceptLoopAsync()
@@ -523,7 +538,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
         private async Task ServeAsync(TcpClient client)
         {
             using (client)
-            using (var stream = client.GetStream())
+            using (var stream = await OpenStreamAsync(client).ConfigureAwait(false))
             {
                 try
                 {
@@ -649,6 +664,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                 catch (IOException)
                 {
                 }
+                catch (System.Security.Authentication.AuthenticationException) { }
                 catch (SocketException)
                 {
                 }
@@ -658,7 +674,20 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             }
         }
 
-        private static async Task<HttpRequestData> ReadRequestAsync(NetworkStream stream)
+        private async Task<Stream> OpenStreamAsync(TcpClient client)
+        {
+            if (_certificate == null) return client.GetStream();
+            var stream = new System.Net.Security.SslStream(client.GetStream(), false);
+            try
+            {
+                await stream.AuthenticateAsServerAsync(_certificate, false, System.Security.Authentication.SslProtocols.Tls12, false).ConfigureAwait(false);
+                return stream;
+            }
+            catch (Exception error) when (error is IOException || error is System.Security.Authentication.AuthenticationException)
+            { stream.Dispose(); return Stream.Null; }
+        }
+
+        private static async Task<HttpRequestData> ReadRequestAsync(Stream stream)
         {
             var buffer = new byte[4096];
             using (var received = new MemoryStream())
@@ -711,7 +740,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
         }
 
         private static async Task WriteResponseAsync(
-            NetworkStream stream,
+            Stream stream,
             int status,
             string statusText,
             string contentType,
@@ -730,7 +759,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             await stream.WriteAsync(body, 0, body.Length).ConfigureAwait(false);
         }
 
-        private static async Task WriteChunkedAsync(NetworkStream stream)
+        private static async Task WriteChunkedAsync(Stream stream)
         {
             var header = Encoding.ASCII.GetBytes(
                 "HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\n" +
@@ -749,7 +778,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             await stream.WriteAsync(end, 0, end.Length).ConfigureAwait(false);
         }
 
-        private static async Task WriteDownloadAsync(NetworkStream stream, bool slow, CancellationToken token)
+        private static async Task WriteDownloadAsync(Stream stream, bool slow, CancellationToken token)
         {
             var header = Encoding.ASCII.GetBytes("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: " +
                 DownloadBytes.Length + "\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n");

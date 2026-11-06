@@ -1,0 +1,97 @@
+{
+  "schemaVersion": 1,
+  "caseId": "cookie-returns",
+  "immediateReturn": {
+    "modern-set": {
+      "type": "object",
+      "then": true
+    },
+    "modern-list": {
+      "type": "object",
+      "then": true
+    },
+    "modern-delete": {
+      "type": "object",
+      "then": true
+    },
+    "legacy-set": {
+      "type": "undefined",
+      "then": false
+    },
+    "legacy-list": {
+      "type": "undefined",
+      "then": false
+    },
+    "legacy-delete": {
+      "type": "undefined",
+      "then": false
+    }
+  },
+  "events": [],
+  "promise": {
+    "modern-set": {
+      "state": "fulfilled",
+      "type": "undefined"
+    },
+    "modern-list": {
+      "state": "fulfilled",
+      "type": "object",
+      "value": [
+        {
+          "domain": "127.0.0.1",
+          "httpOnly": false,
+          "secure": false,
+          "path": "/",
+          "sameSite": "unspecified",
+          "value": "yes",
+          "name": "reference",
+          "session": true,
+          "hostOnly": true
+        }
+      ]
+    },
+    "modern-delete": {
+      "state": "fulfilled",
+      "type": "undefined"
+    }
+  },
+  "effects": {
+    "modern": "object",
+    "legacy": "function",
+    "defaultPath": "/nested",
+    "legacyMembers": [
+      "set",
+      "delete",
+      "list"
+    ],
+    "tabsBefore": 4,
+    "tabsAfter": 4
+  },
+  "fixtureHash": "187a94041fd754dadc9493cc007a4f434871d0c860195aecf3f8cb4bd6d97eda",
+  "contractSource": [
+    "https://www.tampermonkey.net/documentation.php?locale=en",
+    "Tampermonkey 5.5.1/MV3 runtime"
+  ],
+  "environment": {
+    "manager": "Tampermonkey",
+    "managerVersion": "5.5.1",
+    "chromiumVersion": "Edg/156.0.4314.58",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36 Edg/156.0.0.0",
+    "manifestVersion": 3,
+    "settings": {
+      "headless": true,
+      "userScriptsAccess": true,
+      "freshProfile": true
+    },
+    "commit": "6003cbcab752ac4e21088d4cf5a08a349c6a6be2",
+    "platform": "x64",
+    "capabilities": {
+      "referenceReturnProbe": true
+    },
+    "world": "manager-selected"
+  },
+  "checks": {
+    "exposureRecorded": true
+  },
+  "status": "passed"
+}

@@ -1,2 +1,7 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Keep hashed compatibility fixtures byte-stable across Windows checkouts.
+docs/compatibility/fixtures/*.user.js text eol=lf
+Mzying2001.MonkeySharp.CefSharp.SmokeHost/Fixtures/*.user.js text eol=lf
+Mzying2001.MonkeySharp.CefSharp.SmokeHost/Fixtures/loopback.pfx -text

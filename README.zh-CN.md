@@ -149,7 +149,7 @@ var host = new CefSharpUserScriptHostBuilder(repository)
 | `GM.notification`、`GM.setClipboard`、`GM.openInTab` 及别名 | 条件支持 | 需要对应宿主服务。 |
 | `GM.download` / `GM_download` | 条件支持 | 需要 `IDownloadService`。现代调用立即返回可取消的完成 Promise；两种入口均支持回调，Demo 共用浏览器网络上下文。详见[下载](docs/usage-guide.zh-CN.md#下载)。 |
 | `GM.getTab`、`GM.saveTab`、`GM.getTabs` 及别名 | 条件支持 | 需要 `ITabStateService`。 |
-| `GM.cookie` / `GM_cookie` | CefSharp 默认提供 | 结构化访问浏览器请求上下文。 |
+| `GM.cookie` / `GM_cookie` | CefSharp 默认提供 | 通过共享 CDP 验证实际 RequestContext 的 CRUD、SameSite 及精确删除；不提供自有监听或分区支持。 |
 | `GM.webRequest` / `GM_webRequest` | CefSharp 默认提供 | 运行时注册、可移除句柄及取消/重定向结果回调。 |
 | `window.close`、`window.focus` | 条件支持 | 需要各自的精确授权和 `IUserScriptWindowService`；宿主可以拒绝关闭最后一个标签页。 |
 | `window.onurlchange` | Core | 需要精确授权；监听 `pushState`、`replaceState`、`popstate` 和 `hashchange` URL 变化。 |

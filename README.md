@@ -149,7 +149,7 @@ This table summarizes availability. Parameters, return values, callbacks, and [T
 | `GM.notification`, `GM.setClipboard`, `GM.openInTab` and aliases | Conditional | Require their corresponding host services. |
 | `GM.download` / `GM_download` | Conditional | Requires `IDownloadService`. Modern calls immediately return an abortable completion Promise; both forms support callbacks. Demo shares the browser network context. See [downloads](docs/usage-guide.md#downloads). |
 | `GM.getTab`, `GM.saveTab`, `GM.getTabs` and aliases | Conditional | Require `ITabStateService`. |
-| `GM.cookie` / `GM_cookie` | CefSharp default | Structured access to the attached browser request context. |
+| `GM.cookie` / `GM_cookie` | CefSharp default | Verified CRUD through shared CDP in the attached RequestContext, with SameSite and exact deletion. No custom listeners or partition support. |
 | `GM.webRequest` / `GM_webRequest` | CefSharp default | Runtime registrations with removable handles and cancel/redirect result callbacks. |
 | `window.close`, `window.focus` | Conditional | Require their exact grants and `IUserScriptWindowService`; the host may refuse to close the last tab. |
 | `window.onurlchange` | Core | Requires the exact grant; observes `pushState`, `replaceState`, `popstate`, and `hashchange` URL changes. |

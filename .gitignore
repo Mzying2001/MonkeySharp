@@ -403,3 +403,6 @@ FodyWeavers.xsd
 # Chromium smoke cache created in the repository root by CefSharp.
 /GPUCache/
 /Mzying2001.MonkeySharp.CefSharp.SmokeHost/GPUCache/
+
+# Public test-only TLS keypair, documented with its fixed fixture password.
+!Mzying2001.MonkeySharp.CefSharp.SmokeHost/Fixtures/loopback.pfx

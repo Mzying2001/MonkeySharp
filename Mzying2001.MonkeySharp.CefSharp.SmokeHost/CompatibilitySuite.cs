@@ -1,6 +1,7 @@
 using CefSharp;
 using CefSharp.WinForms;
 using Mzying2001.MonkeySharp.Core.Repository;
+using Mzying2001.MonkeySharp.Core.Apis;
 using Mzying2001.MonkeySharp.Core.Runtime;
 using System;
 using System.Collections.Generic;
@@ -51,7 +52,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             results["frames"] = await RunCaseAsync("frames", FramesAsync);
             results["spaUrl"] = await RunCaseAsync("spaUrl", SpaAsync);
             results["download"] = await RunCaseAsync("download", DownloadAsync);
-            results["cookie"] = await RunCaseAsync("cookie", () => ScriptCaseAsync("cookie"));
+            results["cookie"] = await RunCaseAsync("cookie", CookieAsync);
             results["webRequest"] = await RunCaseAsync("webRequest", WebRequestAsync);
             return results;
         }
@@ -246,7 +247,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             var required = name == "download"
                 ? new[] { "promise", "handle", "completed", "canceled", "timeout", "failure", "singleTerminal", "loginRedirect", "anonymous", "empty", "earlyCancel", "diskFailure" }
                 : name == "cookie"
-                    ? new[] { "setList", "legacy", "context", "listener", "removed", "deleted" }
+                    ? new[] { "setList", "legacy", "context", "noListeners", "preciseDelete", "deleted", "setUndefined", "partitionRejected" }
                     : new[] { "cancel", "redirect", "remove", "restored", "noCallbackAfterRemove" };
             foreach (var check in required) Check(check, result.GetProperty("checks").GetProperty(check).GetBoolean());
         }
@@ -272,6 +273,87 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             Check("navigationTaskContinues", File.ReadAllBytes(Path.Combine(_downloads.DirectoryPath, "navigation.bin")).SequenceEqual(LocalHttpFixture.DownloadBytes));
             using (var hash = System.Security.Cryptography.SHA256.Create())
                 Console.WriteLine(JsonSerializer.Serialize(new { type = "download-file-evidence", sha256 = BitConverter.ToString(hash.ComputeHash(File.ReadAllBytes(Path.Combine(_downloads.DirectoryPath, "authenticated.bin")))).Replace("-", "").ToLowerInvariant(), bytes = LocalHttpFixture.DownloadBytes.Length }));
+        }
+
+        private async Task CookieAsync()
+        {
+            await ScriptCaseAsync("cookie");
+            using (var tls = new LocalHttpFixture(true))
+            {
+                var url = tls.Start();
+                await ReadAsync("(globalThis.__httpsCookieProbe(" + JsonSerializer.Serialize(url.GetLeftPart(UriPartial.Authority)) + "), true)");
+                await WaitAsync(async () => (await ReadAsync("globalThis.__compatCase.httpsDone || false"))?.GetBoolean() == true);
+                var result = (await ReadAsync("globalThis.__compatCase")).Value;
+                if (result.TryGetProperty("error", out var error)) throw new InvalidOperationException(error.GetString());
+                foreach (var check in new[] { "httpsState", "httpsSend", "expirySameSite", "httpsDeleted", "engineRejected", "domainCookie" })
+                    Check(check, result.GetProperty("checks").GetProperty(check).GetBoolean());
+                Check("realTlsRequest", tls.RequestCount("/cookie") == 1);
+                Console.WriteLine("{\"type\":\"cookie-probe\",\"phase\":\"tls-verified\"}");
+            }
+            Console.WriteLine("{\"type\":\"cookie-probe\",\"phase\":\"tls-disposed\"}");
+            await OnUiAsync(ContextIsolationAsync).ConfigureAwait(false);
+        }
+
+        private async Task ContextIsolationAsync()
+        {
+            using (var primary = new CefSharpCookieService(_host))
+            using (var context = CookiePhase("context", () => new RequestContext(new RequestContextSettings())))
+            using (var otherHost = new CefSharpUserScriptHostBuilder(new InMemoryUserScriptRepository()).Build())
+            using (var other = CookiePhase("browser", () => new ChromiumWebBrowser("about:blank", context)))
+            {
+                Console.WriteLine("{\"type\":\"cookie-probe\",\"phase\":\"contexts-created\"}");
+                var url = new Uri("http://127.0.0.1:" + _fixture.Port + "/cookie");
+                await primary.SetAsync(new UserScriptCookieMutation(url, "context-proof", "primary"), CancellationToken.None);
+                Console.WriteLine("{\"type\":\"cookie-probe\",\"phase\":\"primary-written\"}");
+                otherHost.Attach(other);
+                other.Size = new System.Drawing.Size(2, 2);
+                _browser.FindForm().Controls.Add(other);
+                await otherHost.PrepareAsync();
+                Console.WriteLine("{\"type\":\"cookie-probe\",\"phase\":\"secondary-prepared\"}");
+                using (var secondary = new CefSharpCookieService(otherHost))
+                using (var http = new CefSharpHttpRequestService(context))
+                {
+                    Check("contextInitiallyIsolated", (await secondary.ListAsync(new UserScriptCookieQuery(url, "context-proof"), CancellationToken.None)).Count == 0);
+                    await secondary.SetAsync(new UserScriptCookieMutation(url, "context-proof", "secondary"), CancellationToken.None);
+                    Check("contextWritesIsolated", (await primary.ListAsync(new UserScriptCookieQuery(url, "context-proof"), CancellationToken.None)).Single().Value == "primary");
+                    var observer = new CookieHttpObserver();
+                    await http.SendAsync(new UserScriptHttpRequest("GET", url, new Dictionary<string, string>(), null, null, null, (_, __) => Task.FromResult(true)), observer, CancellationToken.None).Completion;
+                    Check("contextHttpEffect", observer.Text.Contains("context-proof=secondary") && !observer.Text.Contains("context-proof=primary"));
+                    await secondary.DeleteAsync(new UserScriptCookieMutation(url, "context-proof"), CancellationToken.None);
+                }
+                await primary.DeleteAsync(new UserScriptCookieMutation(url, "context-proof"), CancellationToken.None);
+                await otherHost.DetachAsync(CancellationToken.None);
+                _browser.FindForm().Controls.Remove(other);
+            }
+        }
+
+        private Task OnUiAsync(Func<Task> action)
+        {
+            var completion = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _browser.BeginInvoke(new Action(async () =>
+            {
+                try { await action(); completion.TrySetResult(null); }
+                catch (Exception error) { completion.TrySetException(error); }
+            }));
+            return completion.Task;
+        }
+
+        private sealed class CookieHttpObserver : IUserScriptHttpObserver
+        {
+            private readonly MemoryStream _bytes = new MemoryStream();
+            public string Text => System.Text.Encoding.UTF8.GetString(_bytes.ToArray());
+            public void OnResponseStarted(UserScriptHttpResponse response) { }
+            public void OnResponseData(byte[] bytes, int offset, int count) => _bytes.Write(bytes, offset, count);
+            public void OnDownloadProgress(long loaded, long? total) { }
+            public void OnUploadProgress(long loaded, long? total) { }
+        }
+
+        private static T CookiePhase<T>(string phase, Func<T> create)
+        {
+            Console.WriteLine(JsonSerializer.Serialize(new { type = "cookie-probe", phase = "creating-" + phase }));
+            var value = create();
+            Console.WriteLine(JsonSerializer.Serialize(new { type = "cookie-probe", phase = "created-" + phase }));
+            return value;
         }
 
         private async Task WebRequestAsync()

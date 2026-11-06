@@ -211,6 +211,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             var ownsStore = _store == null;
             var store = _store ?? new InMemoryUserScriptValueStore();
             var contextAccessor = new CefSharpRequestContextAccessor();
+            CefSharpUserScriptHost builtHost = null;
             var engine = new UserScriptEngine(
                 _repository,
                 options: new UserScriptEngineOptions
@@ -259,7 +260,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 }
                 if (effectiveCookies == null && _options.EnableDefaultNetworkServices)
                 {
-                    effectiveCookies = new CefSharpCookieService(() => contextAccessor.Current);
+                    effectiveCookies = new CefSharpCookieService(token => builtHost.GetCdpSessionAsync(token));
                     ownedServices.Add((IDisposable)effectiveCookies);
                 }
 
@@ -294,7 +295,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     providers,
                     _options.Bridge ?? throw new InvalidOperationException("Bridge options are required."),
                     _log);
-                return new CefSharpUserScriptHost(
+                builtHost = new CefSharpUserScriptHost(
                     engine,
                     gateway,
                     _options,
@@ -302,6 +303,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     effectiveWebRequests,
                     contextAccessor,
                     ownedServices);
+                return builtHost;
             }
             catch
             {

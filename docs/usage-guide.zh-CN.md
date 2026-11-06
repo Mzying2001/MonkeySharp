@@ -193,7 +193,7 @@ none 按 5.5.1 实测使用独立对象 receiver。生产执行仍在可信页�
 | `GM.saveTab` | `GM_saveTab` | `Promise<undefined>` | 标签页状态服务 |
 | `GM.getTabs` | `GM_getTabs` | `Promise<object>` | 标签页状态服务 |
 | `GM.download` | `GM_download` | `Promise<DownloadDetails> & {abort()}` | 下载服务 |
-| `GM.cookie` | `GM_cookie` | 包含 CRUD/监听方法的对象 | CefSharp 默认服务 |
+| `GM.cookie` | `GM_cookie` | 含 list/set/delete 的命名空间 | CefSharp 默认服务 |
 | `GM.webRequest` | `GM_webRequest` | 立即返回可移除句柄 | CefSharp 默认服务 |
 | `unsafeWindow` | 同名 | 页面全局对象 | 精确授权 |
 | `window.close`、`window.focus` | 同名 | 各返回 `Promise<boolean>` | 窗口服务 |
@@ -584,43 +584,27 @@ const handle = GM_download({
 
 ### GM.cookie / GM_cookie
 
-授权 GM.cookie 或 GM_cookie，所有子方法共享该授权。需要 Cookie 服务。CefSharp 默认实现使用所附浏览器请求上下文，可读取 HttpOnly Cookie。每个目标 URL 都必须符合脚本 @match/@include 且不被排除；@connect 不能代替这些 URL 规则。
+需要 Cookie 授权与服务。现代 GM.cookie 仅提供 list/set/delete，旧版 GM_cookie 是带这三个方法的函数命名空间；没有 addListener/removeListener 自有扩展。访问后端前检查目标 URL 的 match/include/exclude 规则与宿主策略，@connect 不能替代这些检查。返回值还会在 Core 按 URL、host-only/domain、path 和 secure 范围再次过滤。
 
-| 方法 | 输入 / 行为 | 返回值 |
+| 方法 | 现代结果 | 旧版结果 / 回调 |
 | --- | --- | --- |
-| `GM.cookie.list(details?)` | 按条件筛选，details 默认为 {}。 | `Promise<Cookie[]>` |
-| `GM.cookie.set(details)` | 设置命名 Cookie。 | `Promise<Cookie>`，提供器也可返回 null。 |
-| `GM.cookie.delete(details)` | 删除命名 Cookie。 | `Promise<boolean>` |
-| `GM.cookie.addListener(details?, callback)` | 也可只传 callback；回调参数为 (cookie, cause, removed)。 | 立即返回正整数 ID，注册失败记录日志。 |
-| `GM.cookie.removeListener(listenerId)` | 移除当前执行实例的监听。 | `Promise<boolean>` |
+| list(details?) | 实际 Cookie[] 的 Promise | undefined；callback(cookies, null)，失败为 callback(null, errorString) |
+| set(details) | 验证写入后兑现 undefined | undefined；callback() 或 callback(errorString) |
+| delete(details) | 验证删除后兑现 undefined | undefined；callback() 或 callback(errorString) |
 
-| details 字段 | 用途与默认值 |
-| --- | --- |
-| `url` | 绝对 HTTP(S) 字符串，默认当前框架 URL。 |
-| `name` | list 的可选精确过滤条件，set/delete 必须提供非空字符串。 |
-| `domain`、`path` | list 的可选过滤条件；set 的 domain 默认 URL 主机、path 默认 /。默认 CefSharp 删除使用 URL + name，不按精确 domain/path 选择。 |
-| `value` | set 使用的字符串，省略时为空字符串。 |
-| `expirationDate` | 可选整数 Unix **秒数**或可解析日期字符串；省略创建会话 Cookie。为便于迁移，优先使用 Unix 秒数。 |
-| `secure`、`httpOnly` | set 布尔值，默认 false。 |
-| `sameSite`、`firstPartyDomain` | Core 保留的可选字符串，见下述默认服务限制。 |
+省略 details/url 使用当前 frame URL。name 是可选精确列表过滤条件，set/delete 要求非空字符串。domain/path 是可选精确列表过滤条件。set 不传 domain 创建 host-only Cookie；显式 domain 必须覆盖目标 host，并在 Chromium 接受时创建 domain Cookie。默认 path 是 URL 所在目录（/nested/page 对应 /nested），与固定参考一致；显式路径以 / 开始。value 默认空字符串。expirationDate 是可选整数 Unix 秒，省略即 session Cookie。secure/httpOnly 默认 false。sameSite 接受 unspecified、no_restriction、lax、strict，实际映射到 CDP，而非回显输入。
 
-返回的 Cookie 字段为 name、value、domain、path、expirationDate（Unix 秒数或 null）、firstPartyDomain、hostOnly、session、secure、httpOnly 和 sameSite。
+列表返回真实 name/value/domain/path、hostOnly、session、secure、httpOnly 及规范化 sameSite；持久 Cookie 含 Unix 秒 expirationDate，session Cookie 省略该字段。未知 first-party/partition 状态不伪造。set 检查协议结果，再读回完整身份及属性；策略拒绝或静默丢弃都报错。过期时间在过去的 set 验证 Cookie 已不存在。delete 选择一个可见身份（路径最长优先，同长时 host-only 优先），按准确 domain/path 删除并验证不存在；显式 domain/path 进一步限定，不会按名字批量误删。删除不存在项无副作用。
 
-旧版 CRUD 返回 undefined：GM_cookie.list(details?, callback?) 成功回调 (cookies, null)，失败回调 (null, errorString)；set(details, callback?) 和 delete(details, callback?) 成功时无参数调用，失败传 errorString。未提供错误回调时记录日志。旧版 addListener 返回同样的数字 ID；旧版 removeListener 返回 undefined，失败记录日志。
+默认后端使用宿主共享 CDP 会话，对应已附加浏览器的真实 RequestContext。单次操作始终使用同一会话，不解除其他消费者的观察器。导航可取消文档调用，detach/dispose 使原生会话失效。直接宿主可使用 new CefSharpCookieService(host)，旧的仅 RequestContext 构造器已移除。自定义 ICookieService 仅实现 CRUD，并须提供经过验证的实际状态。
 
-**默认服务限制 / 与 Tampermonkey 的差异：** 未实现 Cookie partitionKey，未知字段不保证分区选择。当前 CefSharp 写入不会将 sameSite/firstPartyDomain 应用到浏览器 Cookie，即使 Core 接受并保留字符串，set 的返回值也可能回显它们。监听器只报告经该服务完成的显式修改（cause: "explicit"），不是页面/HTTP Cookie 变更及过期事件的完整订阅。相较[官方 Cookie API](https://www.tampermonkey.net/documentation.php?q=GM_cookie)，addListener/removeListener 是 MonkeySharp 扩展，采用上述三参数回调。替换的宿主服务可以实现更多行为。
+partitionKey、cookiePartition、firstPartyDomain 在当前所有版本（包括 84）都于副作用前明确拒绝，分区支持保留给后续步骤。未分区后端过滤掉分区 Cookie，避免误改。旧版回调异常只单独报告一次，不改变已完成操作。请使用旧版命名空间的三个公开方法，不支持直接调用命名空间本身。
 
 ```javascript
-// @grant GM.cookie
-(async function () {
-    const id = GM.cookie.addListener({}, (cookie, cause, removed) => {
-        console.log(cookie.name, cause, removed);
-    });
-    await GM.cookie.set({ name: "ms_demo", value: "ready", path: "/" });
-    console.log(await GM.cookie.list({ name: "ms_demo" }));
-    console.log("Deleted:", await GM.cookie.delete({ name: "ms_demo" }));
-    await GM.cookie.removeListener(id);
-})().catch(console.error);
+await GM.cookie.set({name:'session',value:'ready',sameSite:'lax',path:'/'});
+console.log(await GM.cookie.list({name:'session'}));
+await GM.cookie.delete({name:'session'}); // undefined，不返回删除布尔值
+GM_cookie.list({}, (cookies, error) => console.log(cookies, error));
 ```
 
 <a id="request-interception"></a>

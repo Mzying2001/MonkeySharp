@@ -385,30 +385,15 @@
 
             const addNetworkApi = function (record, enabled, api) {
                 if (enabled("GM.cookie")) {
-                    api.cookie = Object.freeze({
-                        list: details => call(record, "GM.cookie", { operation: "list", details: serializableValue(details || {}) }),
-                        set: details => call(record, "GM.cookie", { operation: "set", details: serializableValue(details || {}) }),
-                        delete: details => call(record, "GM.cookie", { operation: "delete", details: serializableValue(details || {}) }),
-                        addListener: function (details, callback) {
-                            if (typeof details === "function") { callback = details; details = {}; }
-                            if (typeof callback !== "function") throw new TypeError("callback must be a function.");
-                            const listenerId = nextListenerId++;
-                            record.cookieHandlers.set(listenerId, callback);
-                            call(record, "GM.cookie", {
-                                operation: "addListener", listenerId: listenerId,
-                                details: serializableValue(details || {})
-                            }).catch(error => {
-                                record.cookieHandlers.delete(listenerId);
-                                console.error("[MonkeySharp] cookie listener registration failed", error);
-                            });
-                            return listenerId;
-                        },
-                        removeListener: async function (listenerId) {
-                            const removed = await call(record, "GM.cookie", { operation: "removeListener", listenerId: listenerId });
-                            if (removed) record.cookieHandlers.delete(listenerId);
-                            return removed;
-                        }
-                    });
+                    const invokeCookie = function (operation, details) {
+                        if (typeof details === "undefined") details = {};
+                        if (!details || typeof details !== "object" || Array.isArray(details)) return Promise.reject(new TypeError("cookie details must be an object."));
+                        for (const option of ["partitionKey", "cookiePartition", "firstPartyDomain"]) if (Object.prototype.hasOwnProperty.call(details, option)) return Promise.reject(notSupported(option + " is not supported by this cookie backend."));
+                        return call(record, "GM.cookie", { operation, details: serializableValue(details) });
+                    };
+                    api.cookie = Object.freeze({ list: details => invokeCookie("list", details),
+                        set: details => invokeCookie("set", details).then(() => undefined),
+                        delete: details => invokeCookie("delete", details).then(() => undefined) });
                 }
                 if (enabled("GM.webRequest")) {
                     api.webRequest = function (rules, listener) {
@@ -503,38 +488,22 @@
                 };
             };
 
-            const addLegacyNetwork = function (api, facade) {
-                if (api.cookie) facade.GM_cookie = {
-                    list: function (details, callback) {
-                        if (typeof details === "function") { callback = details; details = {}; }
-                        api.cookie.list(details).then(value => {
-                            if (typeof callback === "function") callback(value, null);
-                        }).catch(error => {
-                            if (typeof callback === "function") callback(null, String(error && error.message || error));
-                            else console.error("[MonkeySharp] legacy cookie list failed", error);
+            const addLegacyNetwork = function (record, api, facade) {
+                if (api.cookie) {
+                    const cookieCallback = function (operation, details, callback) {
+                        if (typeof details === "function") { callback = details; details = undefined; }
+                        if (typeof callback !== "undefined" && typeof callback !== "function") throw new TypeError("callback must be a function.");
+                        const invoke = args => invokeHostCallback(record, typeof callback === "function" ? () => callback(...args) : null, undefined, undefined, "cookie " + operation);
+                        api.cookie[operation](details).then(value => invoke(operation === "list" ? [value, null] : []), error => {
+                            const message = String(error && error.message || error);
+                            if (callback) invoke(operation === "list" ? [null, message] : [message]);
+                            else console.error("[MonkeySharp] cookie " + operation + " failed", error);
                         });
-                    },
-                    set: function (details, callback) {
-                        api.cookie.set(details).then(() => {
-                            if (typeof callback === "function") callback();
-                        }).catch(error => {
-                            if (typeof callback === "function") callback(String(error && error.message || error));
-                            else console.error("[MonkeySharp] legacy cookie set failed", error);
-                        });
-                    },
-                    delete: function (details, callback) {
-                        api.cookie.delete(details).then(() => {
-                            if (typeof callback === "function") callback();
-                        }).catch(error => {
-                            if (typeof callback === "function") callback(String(error && error.message || error));
-                            else console.error("[MonkeySharp] legacy cookie delete failed", error);
-                        });
-                    },
-                    addListener: function (details, callback) { return api.cookie.addListener(details, callback); },
-                    removeListener: function (listenerId) {
-                        api.cookie.removeListener(listenerId).catch(error => console.error("[MonkeySharp] legacy cookie listener removal failed", error));
-                    }
-                };
+                    };
+                    facade.GM_cookie = Object.freeze(Object.assign(function () { throw new TypeError("Use GM_cookie.list, set or delete."); }, { list: (details, callback) => cookieCallback("list", details, callback),
+                        set: (details, callback) => cookieCallback("set", details, callback),
+                        delete: (details, callback) => cookieCallback("delete", details, callback) }));
+                }
                 if (api.webRequest) facade.GM_webRequest = function (rules, listener) {
                     return api.webRequest(rules, listener);
                 };

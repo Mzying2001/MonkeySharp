@@ -157,7 +157,7 @@
                 addLegacyPage(record, api, facade);
                 addLegacyHttp(api, facade);
                 addLegacyHost(record, api, facade);
-                addLegacyNetwork(api, facade);
+                addLegacyNetwork(record, api, facade);
                 const declared = new Set(invocation.declaredGrants || []);
                 return Object.fromEntries(Object.entries(facade).filter(([name]) => declared.has(name)));
             };
@@ -179,7 +179,6 @@
                     downloadHandlers: new Map(),
                     notificationHandlers: new Map(),
                     tabHandlers: [],
-                    cookieHandlers: new Map(),
                     webRequestHandlers: new Map(),
                     mutationTail: Promise.resolve(),
                     storageMirror: null,
@@ -330,12 +329,6 @@
                             invokeHostCallback(record, state.callbacks.onprogress, state.details, { loaded: data.loaded, total: data.total }, "download progress");
                         } else if (notification.event === "download-complete") state.finish("complete", data.result || {});
                         else state.finish(notification.event === "download-timeout" ? "timeout" : notification.event === "download-aborted" ? "aborted" : "error", data);
-                        return true;
-                    }
-                    if (notification.event === "cookie-change") {
-                        const callback = record.cookieHandlers.get(data.listenerId);
-                        if (!callback) return false;
-                        callback(data.cookie, data.cause, Boolean(data.removed));
                         return true;
                     }
                     if (notification.event === "webrequest-result") {

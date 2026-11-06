@@ -17,7 +17,7 @@ function waitFor(predicate) {
     });
 }
 
-test("modern GM.cookie and legacy GM_cookie share CRUD and listener bridge", async () => {
+test("modern GM.cookie and legacy GM_cookie share CRUD without listener extensions", async () => {
     const cookies = [];
     globalThis.__MonkeySharpBridge = {
         dispatch: async requestJson => {
@@ -45,10 +45,11 @@ test("modern GM.cookie and legacy GM_cookie share CRUD and listener bridge", asy
         protocol: 2, documentId: "cookie-document", frameId: "main", runAt: "DocumentEnd", invocations: [{
             executionId: "cookie-execution", scriptKey: "66666666-6666-6666-6666-666666666666",
             source: [
+                "globalThis.__cookieNamespace = GM_cookie;",
                 "globalThis.__cookiePromise = (async function () {",
-                "  await GM.cookie.set({url:'https://example.com/', name:'sid', value:'abc'});",
+                "  globalThis.__cookieSetResult = await GM.cookie.set({url:'https://example.com/', name:'sid', value:'abc'});",
                 "  globalThis.__modernCookies = await GM.cookie.list({url:'https://example.com/'});",
-                "  globalThis.__cookieListener = GM.cookie.addListener({url:'https://example.com/'}, value => globalThis.__cookieEvent = value);",
+                "  globalThis.__cookieListenerRemoved = typeof GM.cookie.addListener === 'undefined' && typeof GM_cookie.removeListener === 'undefined';",
                 "  GM_cookie.list({url:'https://example.com/'}, (value, error) => { globalThis.__legacyCookies = value; globalThis.__legacyCookieError = error; });",
                 "})();"
             ].join("\n"),
@@ -62,10 +63,13 @@ test("modern GM.cookie and legacy GM_cookie share CRUD and listener bridge", asy
     assert.equal(globalThis.__modernCookies[0].value, "abc");
     assert.equal(globalThis.__legacyCookies[0].name, "sid");
     assert.equal(globalThis.__legacyCookieError, null);
-    assert.equal(globalThis.__MonkeySharpRuntime.receive({
-        type: "notification", protocol: 2, executionId: "cookie-execution", deliveryToken: "cookie-delivery",
-        event: "cookie-change", data: { listenerId: globalThis.__cookieListener,
-            cookie: { name: "sid", value: "next" }, cause: "explicit", removed: false, sequence: 1 }
-    }), true);
-    assert.equal(globalThis.__cookieEvent.value, "next");
+    assert.equal(globalThis.__cookieListenerRemoved, true);
+    assert.equal(globalThis.__cookieSetResult, undefined);
+    let callbackCount = 0;
+    globalThis.__cookieCallback = () => { callbackCount++; throw new Error("callback failed"); };
+    // Use a second invocation through the captured facade to verify callback failures are isolated.
+    assert.equal(typeof globalThis.__cookieNamespace, "function");
+    globalThis.__cookieNamespace.set({name:'callback',value:'yes'}, globalThis.__cookieCallback);
+    await new Promise(resolve => setTimeout(resolve, 20));
+    assert.equal(callbackCount, 1);
 });

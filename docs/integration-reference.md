@@ -96,16 +96,9 @@ Only the long-running `execute` operation is exempt from `BridgeOptions.RequestT
 
 ### Cookies
 
-Declare `@grant GM.cookie` or `@grant GM_cookie`. The default provider uses the attached browser request context. An omitted `details.url` uses the current document URL; an explicit URL must be covered by the script's `@match` or `@include` rules. Core validates domain, path, secure, SameSite, `expirationDate`, `httpOnly`, and first-party fields.
+The default service uses the attached browser's shared CDP session and actual RequestContext. Core checks grants, host policy and script URL rules before access, then filters returned host-only/domain/path/secure scope. SameSite is mapped to CDP and read back with session/expiration state. Set checks engine acceptance and actual identity/attributes; delete selects one identity, deletes its exact domain/path and verifies absence. No reflection-based input echo or custom listeners remain.
 
-```javascript
-const cookies = await GM.cookie.list({ url: location.href });
-await GM.cookie.set({ url: location.href, name: "session", value: "ready", path: "/" });
-await GM.cookie.delete({ url: location.href, name: "session" });
-const listenerId = GM.cookie.addListener({}, (cookie, cause, removed) => console.log(cookie.name, cause, removed));
-```
-
-`GM_cookie.list` calls back as `(cookies, error)`, while `set` and `delete` call back as `(error)`. Successful operations pass `null`/`undefined` for the error value. `addListener/removeListener` use numeric IDs; listener callbacks receive `(cookie, cause, removed)`. Listener registrations are released with the execution, document, frame, or host.
+Modern list resolves actual Cookie[]; set/delete resolve undefined. Legacy CRUD returns undefined and invokes (cookies,error) for list or (error) for mutations. The default path is the URL directory. Partition/first-party parameters are rejected before effects; newer partition support remains separate. Services created directly use new CefSharpCookieService(host), rather than a standalone RequestContext constructor. Custom ICookieService backends implement only CRUD. See the [Cookie guide](usage-guide.md#cookies) and [real Cookie evidence](compatibility/cookie-findings.md).
 
 ### Web Requests
 
@@ -298,7 +291,7 @@ The adapter resolves the current renderer's `location.href` before matching scri
 | `frames` | Single-key and bulk GM storage calls, including all six modern/legacy bulk entry points, typed undefined, listener return contracts, cross-instance notifications and navigation snapshots, in the main frame, a same-origin child and a child on another port; once-per-document execution, `@noframes`, child navigation and context release. |
 | `spaUrl` | `pushState`, `replaceState`, hash navigation and history back; both URL callback forms, old/new URLs, host lifecycle events, grant gating and no reinjection. |
 | `download` | Modern Promise/handle and legacy callbacks; actual HTTP downloads with exact file bytes, cancellation after progress, timeout, HTTP failure, one terminal callback and partial-file cleanup. |
-| `cookie` | Modern and legacy set/list/delete, listener removal, request-context cookie sharing and anonymous XHR without cookies. |
+| `cookie` | Verified CRUD, SameSite, HTTP/TLS cookie effects, exact multi-path deletion, and two real RequestContexts with isolated network state. |
 | `webRequest` | Browser-native fetch cancellation and redirect, callback details, server request counts, explicit removal and navigation cleanup. |
 
 The download service is test-only: Chromium executes GM calls and the supplied host service transfers local HTTP bytes to an isolated temporary directory. It does not test Chromium's download UI. Existing storage/XHR/notification/tab/navigation checks remain required.

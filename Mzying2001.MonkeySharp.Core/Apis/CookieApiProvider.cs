@@ -37,9 +37,10 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         public bool Matches(UserScriptCookie cookie)
         {
             if (Name != null && !string.Equals(Name, cookie.Name, StringComparison.Ordinal)) return false;
-            if (Domain != null && !string.Equals(Domain, cookie.Domain, StringComparison.OrdinalIgnoreCase)) return false;
+            if (Domain != null && !string.Equals(Domain.TrimStart('.'), cookie.Domain.TrimStart('.'), StringComparison.OrdinalIgnoreCase)) return false;
             if (Path != null && !string.Equals(Path, cookie.Path, StringComparison.Ordinal)) return false;
-            if (!DomainMatches(Url.Host, cookie.Domain)) return false;
+            if (cookie.Secure && Url.Scheme != Uri.UriSchemeHttps) return false;
+            if (cookie.HostOnly ? !string.Equals(Url.Host, cookie.Domain.TrimStart('.'), StringComparison.OrdinalIgnoreCase) : !DomainMatches(Url.Host, cookie.Domain)) return false;
             return PathMatches(Url.AbsolutePath, cookie.Path);
         }
 
@@ -53,7 +54,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
 
         internal static bool DomainMatches(string host, string domain)
         {
-            return string.Equals(host, domain, StringComparison.OrdinalIgnoreCase) ||
+            return string.Equals(host, domain.TrimStart('.'), StringComparison.OrdinalIgnoreCase) ||
                 host.EndsWith("." + domain.TrimStart('.'), StringComparison.OrdinalIgnoreCase);
         }
 
@@ -118,23 +119,26 @@ namespace Mzying2001.MonkeySharp.Core.Apis
     {
         /// <summary>Initializes a set or delete request and derives omitted domain/path defaults.</summary>
         public UserScriptCookieMutation(
-            Uri url, string name, string value = null, string domain = null, string path = "/",
+            Uri url, string name, string value = null, string domain = null, string path = null,
             DateTime? expirationDate = null, bool secure = false, bool httpOnly = false, string sameSite = null,
-            string firstPartyDomain = null, string originExecutionId = null)
+            string firstPartyDomain = null)
         {
             Url = UserScriptCookieQuery.ValidateUrl(url);
             if (string.IsNullOrEmpty(name)) throw new ArgumentException("Cookie name is required.", nameof(name));
             Name = name;
             Value = value ?? string.Empty;
             HostOnly = string.IsNullOrEmpty(domain);
-            Domain = HostOnly ? url.Host : domain.TrimStart('.');
-            Path = string.IsNullOrEmpty(path) ? "/" : path;
+            Domain = HostOnly ? url.Host.ToLowerInvariant() : "." + domain.TrimStart('.').ToLowerInvariant();
+            if (!UserScriptCookieQuery.DomainMatches(url.Host, Domain)) throw new ArgumentException("Cookie domain is outside the target URL.", nameof(domain));
+            HasExplicitPath = path != null;
+            if (path != null && !path.StartsWith("/", StringComparison.Ordinal)) throw new ArgumentException("Cookie path must start with /.", nameof(path));
+            var lastSlash = url.AbsolutePath.LastIndexOf('/');
+            Path = path ?? (lastSlash <= 0 ? "/" : url.AbsolutePath.Substring(0, lastSlash));
             ExpirationDate = expirationDate;
             Secure = secure;
             HttpOnly = httpOnly;
             SameSite = sameSite;
             FirstPartyDomain = firstPartyDomain;
-            OriginExecutionId = originExecutionId;
         }
 
         /// <summary>Gets the target URL.</summary>
@@ -159,417 +163,133 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         public string FirstPartyDomain { get; }
         /// <summary>Gets whether the mutation targets an exact host.</summary>
         public bool HostOnly { get; }
-        /// <summary>Gets the execution that initiated the change, when known.</summary>
-        public string OriginExecutionId { get; }
+        /// <summary>Gets whether a path was explicitly selected.</summary>
+        public bool HasExplicitPath { get; }
     }
 
-    /// <summary>Describes a cookie change delivered to registered listeners.</summary>
-    public sealed class UserScriptCookieChangedEventArgs : EventArgs
-    {
-        /// <summary>Initializes cookie change event data.</summary>
-        public UserScriptCookieChangedEventArgs(UserScriptCookie cookie, string cause, bool removed,
-            string originExecutionId, long sequence)
-        {
-            Cookie = cookie;
-            Cause = cause;
-            Removed = removed;
-            OriginExecutionId = originExecutionId;
-            Sequence = sequence;
-        }
-
-        /// <summary>Gets the cookie that changed.</summary>
-        public UserScriptCookie Cookie { get; }
-        /// <summary>Gets the service-defined change cause.</summary>
-        public string Cause { get; }
-        /// <summary>Gets whether the cookie was removed.</summary>
-        public bool Removed { get; }
-        /// <summary>Gets the originating execution, when known.</summary>
-        public string OriginExecutionId { get; }
-        /// <summary>Gets the monotonically increasing service change sequence.</summary>
-        public long Sequence { get; }
-    }
-
-    /// <summary>Represents a registered cookie listener.</summary>
-    public interface ICookieListenerRegistration : IDisposable
-    {
-    }
-
-    /// <summary>Provides cookie CRUD and change-listener operations for one browser session.</summary>
+    /// <summary>Provides cookie CRUD for one browser context. Results must reflect engine state.</summary>
     public interface ICookieService
     {
-        /// <summary>Lists cookies visible to a query.</summary>
+        /// <summary>Lists cookies visible to the URL and exact optional filters.</summary>
         Task<IReadOnlyList<UserScriptCookie>> ListAsync(UserScriptCookieQuery query, CancellationToken cancellationToken);
-        /// <summary>Creates or overwrites a cookie.</summary>
+        /// <summary>Sets and verifies a cookie, returning actual state (null for an expired deletion).</summary>
         Task<UserScriptCookie> SetAsync(UserScriptCookieMutation mutation, CancellationToken cancellationToken);
-        /// <summary>Deletes a cookie and returns whether one was removed.</summary>
+        /// <summary>Deletes at most one selected cookie identity and verifies its absence.</summary>
         Task<bool> DeleteAsync(UserScriptCookieMutation mutation, CancellationToken cancellationToken);
-        /// <summary>
-        /// Registers a change listener. Browser adapters may only report mutations performed
-        /// through this service when their underlying cookie API has no global observer.
-        /// </summary>
-        ICookieListenerRegistration AddListener(
-            UserScriptCookieQuery query,
-            EventHandler<UserScriptCookieChangedEventArgs> changed);
     }
 
-    /// <summary>Adapts an <see cref="ICookieService"/> to modern and legacy GM cookie APIs.</summary>
-    public sealed class CookieApiProvider : IUserScriptApiProvider, IUserScriptNotificationSource,
-        IUserScriptExecutionObserver, IDisposable
+    /// <summary>Authorizes and normalizes the modern/legacy cookie CRUD contract.</summary>
+    public sealed class CookieApiProvider : IUserScriptApiProvider, IDisposable
     {
         private readonly ICookieService _cookies;
-        private readonly object _sync = new object();
-        private readonly Dictionary<string, ICookieListenerRegistration> _listeners =
-            new Dictionary<string, ICookieListenerRegistration>(StringComparer.Ordinal);
-        private readonly HashSet<string> _pendingListeners = new HashSet<string>(StringComparer.Ordinal);
-        private readonly HashSet<string> _endedPendingListeners = new HashSet<string>(StringComparer.Ordinal);
         private bool _disposed;
-
-        /// <summary>Initializes a provider over an application-owned cookie service.</summary>
-        public CookieApiProvider(ICookieService cookies)
-        {
-            _cookies = cookies ?? throw new ArgumentNullException(nameof(cookies));
-        }
-
+        /// <summary>Uses a host-owned cookie backend.</summary>
+        public CookieApiProvider(ICookieService cookies) { _cookies = cookies ?? throw new ArgumentNullException(nameof(cookies)); }
         /// <inheritdoc />
-        public event EventHandler<ApiNotificationEventArgs> Notification;
-        /// <inheritdoc />
-        public IReadOnlyCollection<string> Methods { get; } = new ReadOnlyCollection<string>(new[]
-        {
-            "GM.cookie"
-        });
-
+        public IReadOnlyCollection<string> Methods { get; } = new ReadOnlyCollection<string>(new[] { "GM.cookie" });
+        /// <summary>Releases this instance.</summary>
+        public void Dispose() { _disposed = true; }
         /// <inheritdoc />
         public async Task<ApiResult> InvokeAsync(ApiInvocationContext context, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            lock (_sync) ThrowIfDisposed();
-            switch (context.Method)
-            {
-                case "GM.cookie":
-                    return await InvokeCookieAsync(context, cancellationToken).ConfigureAwait(false);
-                default: throw new UnsupportedApiException("The API '" + context.Method + "' is not supported.");
-            }
-        }
-
-        /// <inheritdoc />
-        public void OnExecutionEnded(string executionId)
-        {
-            ICookieListenerRegistration[] registrations;
-            var prefix = executionId + ":";
-            lock (_sync)
-            {
-                var keys = _listeners.Keys
-                    .Where(item => item.StartsWith(prefix, StringComparison.Ordinal))
-                    .ToArray();
-                registrations = keys.Select(item => _listeners[item]).ToArray();
-                foreach (var key in keys) _listeners.Remove(key);
-                foreach (var key in _pendingListeners.Where(item =>
-                    item.StartsWith(prefix, StringComparison.Ordinal)))
-                    _endedPendingListeners.Add(key);
-            }
-            foreach (var registration in registrations) registration.Dispose();
-        }
-
-        /// <inheritdoc />
-        public void Dispose()
-        {
-            ICookieListenerRegistration[] registrations;
-            lock (_sync)
-            {
-                if (_disposed) return;
-                _disposed = true;
-                registrations = _listeners.Values.ToArray();
-                _listeners.Clear();
-                _endedPendingListeners.Clear();
-            }
-            foreach (var registration in registrations) registration.Dispose();
-        }
-
-        private async Task<ApiResult> InvokeCookieAsync(ApiInvocationContext context, CancellationToken cancellationToken)
-        {
+            if (_disposed) throw new ObjectDisposedException(nameof(CookieApiProvider));
+            if (context.Method != "GM.cookie") throw new UnsupportedApiException(context.Method);
             ProviderParameters.RequireObject(context.Parameters);
             var operation = ProviderParameters.OptionalString(context.Parameters, "operation") ?? "list";
-            var details = context.Parameters.TryGetProperty("details", out var detailsValue)
-                ? detailsValue : context.Parameters;
+            var details = context.Parameters.TryGetProperty("details", out var item) ? item : context.Parameters;
+            ProviderParameters.RequireObject(details);
+            foreach (var unsupported in new[] { "partitionKey", "cookiePartition", "firstPartyDomain" })
+                if (details.TryGetProperty(unsupported, out _)) throw new UnsupportedApiException(unsupported + " is not supported by this cookie backend.");
+            var text = ProviderParameters.OptionalString(details, "url") ?? context.Frame.Url?.AbsoluteUri;
+            if (!Uri.TryCreate(text, UriKind.Absolute, out var url) || (url.Scheme != "http" && url.Scheme != "https"))
+                throw ProviderParameters.Invalid("url must be an absolute HTTP(S) URL.");
+            EnsureAccessible(context, url);
+            var query = new UserScriptCookieQuery(url, ProviderParameters.OptionalString(details, "name"),
+                ProviderParameters.OptionalString(details, "domain"), ProviderParameters.OptionalString(details, "path"));
+            if (query.Domain != null && !UserScriptCookieQuery.DomainMatches(url.Host, query.Domain))
+                throw ProviderParameters.Invalid("Cookie domain is outside the authorized URL.");
             if (operation == "list")
             {
-                var query = ReadQuery(details, context.Frame.Url);
-                EnsureAccessible(context, query.Url);
-                var cookies = await _cookies.ListAsync(query, cancellationToken).ConfigureAwait(false);
-                return ApiResult.FromValue(cookies.Select(ToJson).ToArray());
+                var values = await _cookies.ListAsync(query, cancellationToken).ConfigureAwait(false);
+                return ApiResult.FromValue(values.Where(query.Matches).Select(ToJson).ToArray());
             }
-            if (operation == "set")
+            if (operation != "set" && operation != "delete") throw ProviderParameters.Invalid("Unknown cookie operation.");
+            var name = ProviderParameters.RequiredString(details, "name");
+            DateTime? expiration = null;
+            if (details.TryGetProperty("expirationDate", out var expires))
             {
-                var mutation = ReadMutation(details, context.Frame.Url, context.ExecutionId);
-                EnsureAccessible(context, mutation.Url);
-                var cookie = await _cookies.SetAsync(mutation, cancellationToken).ConfigureAwait(false);
-                return ApiResult.FromValue(ToJson(cookie));
+                if (expires.ValueKind != JsonValueKind.Number || !expires.TryGetDouble(out var seconds) || seconds != Math.Truncate(seconds) ||
+                    seconds < DateTimeOffset.MinValue.ToUnixTimeSeconds() || seconds > DateTimeOffset.MaxValue.ToUnixTimeSeconds())
+                    throw ProviderParameters.Invalid("expirationDate must be integral Unix seconds in range.");
+                expiration = DateTimeOffset.FromUnixTimeSeconds((long)seconds).UtcDateTime;
             }
-            if (operation == "delete")
-            {
-                var mutation = ReadMutation(details, context.Frame.Url, context.ExecutionId);
-                EnsureAccessible(context, mutation.Url);
-                return ApiResult.FromValue(await _cookies.DeleteAsync(mutation, cancellationToken).ConfigureAwait(false));
-            }
-            if (operation == "addListener")
-            {
-                var query = ReadQuery(details, context.Frame.Url);
-                EnsureAccessible(context, query.Url);
-                var listenerId = ProviderParameters.RequiredInt32(context.Parameters, "listenerId");
-                var key = context.ExecutionId + ":" + listenerId;
-                RegisterListener(key, () => _cookies.AddListener(query, (_, change) => Notification?.Invoke(this,
-                    new ApiNotificationEventArgs(context.Installation.ScriptKey, context.ExecutionId, "cookie-change",
-                        JsonSerializer.Serialize(new
-                        {
-                            listenerId,
-                            cookie = ToJson(change.Cookie),
-                            cause = change.Cause,
-                            removed = change.Removed,
-                            originExecutionId = change.OriginExecutionId,
-                            sequence = change.Sequence
-                        })))));
-                return ApiResult.FromValue(listenerId);
-            }
-            if (operation == "removeListener")
-            {
-                var listenerId = ProviderParameters.RequiredInt32(context.Parameters, "listenerId");
-                var key = context.ExecutionId + ":" + listenerId;
-                ICookieListenerRegistration registration;
-                lock (_sync)
-                {
-                    ThrowIfDisposed();
-                    if (!_listeners.TryGetValue(key, out registration)) return ApiResult.FromValue(false);
-                    _listeners.Remove(key);
-                }
-                registration.Dispose();
-                return ApiResult.FromValue(true);
-            }
-            throw ProviderParameters.Invalid("Unknown cookie operation.");
+            var sameSite = NormalizeSameSite(ProviderParameters.OptionalString(details, "sameSite"));
+            UserScriptCookieMutation mutation;
+            try { mutation = new UserScriptCookieMutation(url, name, ProviderParameters.OptionalString(details, "value"), query.Domain,
+                query.Path, expiration, ProviderParameters.OptionalBoolean(details, "secure"), ProviderParameters.OptionalBoolean(details, "httpOnly"), sameSite); }
+            catch (ArgumentException error) { throw ProviderParameters.Invalid(error.Message); }
+            if (operation == "set") await _cookies.SetAsync(mutation, cancellationToken).ConfigureAwait(false);
+            else await _cookies.DeleteAsync(mutation, cancellationToken).ConfigureAwait(false);
+            return ApiResult.Undefined;
         }
-
-        private void RegisterListener(string key, Func<ICookieListenerRegistration> factory)
+        internal static string NormalizeSameSite(string value)
         {
-            lock (_sync)
-            {
-                ThrowIfDisposed();
-                if (_listeners.ContainsKey(key) || !_pendingListeners.Add(key))
-                    throw ProviderParameters.Invalid("listenerId is already registered.");
-            }
-            ICookieListenerRegistration registration = null;
-            try
-            {
-                registration = factory();
-                if (registration == null)
-                    throw new InvalidOperationException("The cookie service returned no listener registration.");
-                bool disposed;
-                bool executionEnded;
-                lock (_sync)
-                {
-                    _pendingListeners.Remove(key);
-                    disposed = _disposed;
-                    executionEnded = _endedPendingListeners.Remove(key);
-                    if (!disposed && !executionEnded)
-                        _listeners.Add(key, registration);
-                }
-                if (disposed || executionEnded)
-                {
-                    registration.Dispose();
-                    registration = null;
-                    if (disposed) throw new ObjectDisposedException(nameof(CookieApiProvider));
-                    throw new OperationCanceledException(
-                        "The script execution ended while registering a cookie listener.");
-                }
-            }
-            catch
-            {
-                lock (_sync)
-                {
-                    _pendingListeners.Remove(key);
-                    _endedPendingListeners.Remove(key);
-                }
-                registration?.Dispose();
-                throw;
-            }
+            if (value == null || value == "unspecified") return "unspecified";
+            if (value == "no_restriction" || value == "lax" || value == "strict") return value;
+            throw ProviderParameters.Invalid("sameSite must be unspecified, no_restriction, lax or strict.");
         }
-
-        private void ThrowIfDisposed()
-        {
-            if (_disposed) throw new ObjectDisposedException(nameof(CookieApiProvider));
-        }
-
-        private static UserScriptCookieQuery ReadQuery(JsonElement details, Uri defaultUrl)
-        {
-            ProviderParameters.RequireObject(details);
-            var urlText = ProviderParameters.OptionalString(details, "url") ?? defaultUrl?.AbsoluteUri;
-            if (!Uri.TryCreate(urlText, UriKind.Absolute, out var url) ||
-                (url.Scheme != Uri.UriSchemeHttp && url.Scheme != Uri.UriSchemeHttps))
-                throw ProviderParameters.Invalid("url must be an absolute HTTP or HTTPS URL.");
-            try
-            {
-                return new UserScriptCookieQuery(url,
-                    ProviderParameters.OptionalString(details, "name"),
-                    ProviderParameters.OptionalString(details, "domain"),
-                    ProviderParameters.OptionalString(details, "path"));
-            }
-            catch (ArgumentException exception)
-            {
-                throw ProviderParameters.Invalid(exception.Message);
-            }
-        }
-
-        private static UserScriptCookieMutation ReadMutation(JsonElement details, Uri defaultUrl, string originExecutionId)
-        {
-            var query = ReadQuery(details, defaultUrl);
-            var value = ProviderParameters.OptionalString(details, "value");
-            var expiration = ReadExpiration(details);
-            return new UserScriptCookieMutation(query.Url, query.Name,
-                value, OptionalDomain(details), query.Path, expiration,
-                ProviderParameters.OptionalBoolean(details, "secure"),
-                ProviderParameters.OptionalBoolean(details, "httpOnly"),
-                ProviderParameters.OptionalString(details, "sameSite"),
-                ProviderParameters.OptionalString(details, "firstPartyDomain"), originExecutionId);
-        }
-
-        private static string OptionalDomain(JsonElement details)
-        {
-            return details.TryGetProperty("domain", out var value) && value.ValueKind == JsonValueKind.String
-                ? value.GetString()
-                : null;
-        }
-
-        private static DateTime? ReadExpiration(JsonElement details)
-        {
-            if (!details.TryGetProperty("expirationDate", out var value))
-                return null;
-            if (value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out var seconds))
-            {
-                if (double.IsNaN(seconds) || double.IsInfinity(seconds) ||
-                    seconds != Math.Truncate(seconds) ||
-                    seconds < DateTimeOffset.MinValue.ToUnixTimeSeconds() ||
-                    seconds > DateTimeOffset.MaxValue.ToUnixTimeSeconds())
-                    throw ProviderParameters.Invalid("expirationDate must be an integral Unix timestamp in range.");
-                return DateTimeOffset.FromUnixTimeSeconds((long)seconds).UtcDateTime;
-            }
-            if (value.ValueKind == JsonValueKind.String && DateTime.TryParse(value.GetString(), out var date))
-                return date.ToUniversalTime();
-            throw ProviderParameters.Invalid("expirationDate must be Unix seconds or an ISO date.");
-        }
-
         private static void EnsureAccessible(ApiInvocationContext context, Uri url)
         {
             if (!new UserScriptMatcher().IsMatch(context.Installation.Definition.Metadata, url))
-                throw new BridgeProtocolException(BridgeErrorCodes.PermissionDenied,
-                    "The cookie URL is not covered by the script's @match or @include rules.");
+                throw new BridgeProtocolException(BridgeErrorCodes.PermissionDenied, "The script does not match the target cookie URL.");
         }
-
         private static object ToJson(UserScriptCookie cookie)
         {
-            return cookie == null ? null : new
-            {
-                name = cookie.Name, value = cookie.Value, domain = cookie.Domain, path = cookie.Path,
-                expirationDate = cookie.ExpirationDate.HasValue ? new DateTimeOffset(cookie.ExpirationDate.Value).ToUnixTimeSeconds() : (long?)null,
-                firstPartyDomain = cookie.FirstPartyDomain, hostOnly = cookie.HostOnly, session = cookie.Session,
-                secure = cookie.Secure, httpOnly = cookie.HttpOnly, sameSite = cookie.SameSite
-            };
+            var value = new Dictionary<string, object> { ["name"] = cookie.Name, ["value"] = cookie.Value, ["domain"] = cookie.Domain,
+                ["path"] = cookie.Path, ["secure"] = cookie.Secure, ["httpOnly"] = cookie.HttpOnly,
+                ["sameSite"] = cookie.SameSite ?? "unspecified", ["hostOnly"] = cookie.HostOnly, ["session"] = cookie.Session };
+            if (cookie.ExpirationDate.HasValue) value["expirationDate"] = new DateTimeOffset(cookie.ExpirationDate.Value.ToUniversalTime()).ToUnixTimeSeconds();
+            return value;
         }
     }
 
-    /// <summary>Thread-safe in-memory cookie service suitable for tests and hosts without a browser adapter.</summary>
+    /// <summary>Deterministic in-memory CRUD for non-browser hosts and tests; not browser evidence.</summary>
     public sealed class InMemoryCookieService : ICookieService, IDisposable
     {
-        private readonly object _sync = new object();
         private readonly List<UserScriptCookie> _cookies = new List<UserScriptCookie>();
-        private readonly Dictionary<Guid, Listener> _listeners = new Dictionary<Guid, Listener>();
-        private long _sequence;
-        private bool _disposed;
-
+        private readonly object _sync = new object();
         /// <inheritdoc />
         public Task<IReadOnlyList<UserScriptCookie>> ListAsync(UserScriptCookieQuery query, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            lock (_sync)
-            {
-                ThrowIfDisposed();
-                return Task.FromResult<IReadOnlyList<UserScriptCookie>>(
-                    new ReadOnlyCollection<UserScriptCookie>(_cookies.Where(query.Matches).ToList()));
-            }
+            lock (_sync) return Task.FromResult<IReadOnlyList<UserScriptCookie>>(_cookies.Where(query.Matches).ToArray());
         }
-
         /// <inheritdoc />
         public Task<UserScriptCookie> SetAsync(UserScriptCookieMutation mutation, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            UserScriptCookie cookie;
-            UserScriptCookie old;
             lock (_sync)
             {
-                ThrowIfDisposed();
-                old = _cookies.FirstOrDefault(item => item.Name == mutation.Name && item.Domain == mutation.Domain && item.Path == mutation.Path);
-                if (old != null) _cookies.Remove(old);
-                cookie = new UserScriptCookie(mutation.Name, mutation.Value, mutation.Domain, mutation.Path,
-                    mutation.ExpirationDate, mutation.Secure, mutation.HttpOnly, mutation.SameSite,
-                    mutation.FirstPartyDomain, mutation.HostOnly);
-                _cookies.Add(cookie);
+                _cookies.RemoveAll(cookie => cookie.Name == mutation.Name && cookie.Domain == mutation.Domain && cookie.Path == mutation.Path);
+                if (mutation.ExpirationDate <= DateTime.UtcNow) return Task.FromResult<UserScriptCookie>(null);
+                var value = new UserScriptCookie(mutation.Name, mutation.Value, mutation.Domain, mutation.Path, mutation.ExpirationDate,
+                    mutation.Secure, mutation.HttpOnly, mutation.SameSite, hostOnly: mutation.HostOnly);
+                _cookies.Add(value); return Task.FromResult(value);
             }
-            Publish(new UserScriptCookieChangedEventArgs(cookie, old == null ? "explicit" : "overwrite", false,
-                mutation.OriginExecutionId, Interlocked.Increment(ref _sequence)));
-            return Task.FromResult(cookie);
         }
-
         /// <inheritdoc />
         public Task<bool> DeleteAsync(UserScriptCookieMutation mutation, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            UserScriptCookie old = null;
             lock (_sync)
             {
-                ThrowIfDisposed();
-                old = _cookies.FirstOrDefault(item => item.Name == mutation.Name && item.Domain == mutation.Domain && item.Path == mutation.Path);
-                if (old != null) _cookies.Remove(old);
-            }
-            if (old != null) Publish(new UserScriptCookieChangedEventArgs(old, "explicit", true,
-                mutation.OriginExecutionId, Interlocked.Increment(ref _sequence)));
-            return Task.FromResult(old != null);
-        }
-
-        /// <inheritdoc />
-        public ICookieListenerRegistration AddListener(UserScriptCookieQuery query, EventHandler<UserScriptCookieChangedEventArgs> changed)
-        {
-            if (changed == null) throw new ArgumentNullException(nameof(changed));
-            lock (_sync)
-            {
-                ThrowIfDisposed();
-                var id = Guid.NewGuid();
-                _listeners.Add(id, new Listener(id, query, changed, this));
-                return _listeners[id];
+                var query = new UserScriptCookieQuery(mutation.Url, mutation.Name, mutation.HostOnly ? null : mutation.Domain, mutation.HasExplicitPath ? mutation.Path : null);
+                var selected = _cookies.Where(query.Matches).OrderByDescending(cookie => cookie.Path.Length).ThenByDescending(cookie => cookie.HostOnly).FirstOrDefault();
+                return Task.FromResult(selected != null && _cookies.Remove(selected));
             }
         }
-
-        private void Publish(UserScriptCookieChangedEventArgs change)
-        {
-            Listener[] listeners;
-            lock (_sync) listeners = _listeners.Values.Where(item => item.Query.Matches(change.Cookie)).ToArray();
-            foreach (var listener in listeners) listener.Callback(this, change);
-        }
-
-        private void Remove(Guid id) { lock (_sync) _listeners.Remove(id); }
-        private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(nameof(InMemoryCookieService)); }
-
-        /// <inheritdoc />
-        public void Dispose()
-        {
-            lock (_sync) { _listeners.Clear(); _cookies.Clear(); _disposed = true; }
-        }
-
-        private sealed class Listener : ICookieListenerRegistration
-        {
-            private readonly InMemoryCookieService _owner;
-            public Listener(Guid id, UserScriptCookieQuery query, EventHandler<UserScriptCookieChangedEventArgs> callback, InMemoryCookieService owner)
-            { Id = id; Query = query; Callback = callback; _owner = owner; }
-            public Guid Id { get; }
-            public UserScriptCookieQuery Query { get; }
-            public EventHandler<UserScriptCookieChangedEventArgs> Callback { get; }
-            public void Dispose() { _owner.Remove(Id); }
-        }
+        /// <summary>Releases this instance.</summary>
+        public void Dispose() { lock (_sync) _cookies.Clear(); }
     }
 }
