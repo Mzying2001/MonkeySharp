@@ -62,12 +62,12 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                     CancellationToken.None);
                 await CompatibilitySuite.InstallAsync(repository, fixture.Port, otherFixture.Port);
 
-                using (var downloads = new SmokeHttpDownloadService(fixture.Port))
+                SmokeHttpDownloadService downloads = null;
                 {
                     using (var host = new CefSharpUserScriptHostBuilder(repository)
                         .UseNotificationService(new SmokeNotificationService())
                         .UseTabService(new SmokeTabService())
-                        .UseDownloadService(downloads)
+                        .UseDownloadServiceFactory(http => downloads = new SmokeHttpDownloadService(fixture.Port, http))
                         .Configure(new CefSharpHostOptions
                         {
                             TrustedPageWorld = true
@@ -550,6 +550,19 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                     byte[] body;
                     switch (request.Path)
                     {
+                        case "/compat/files/auth":
+                            request.Headers.TryGetValue("Cookie", out var downloadCookie);
+                            if (downloadCookie != null && downloadCookie.Contains("download-login=ready")) body = DownloadBytes;
+                            else { status = 401; statusText = "Unauthorized"; body = Encoding.UTF8.GetBytes("Login required"); }
+                            break;
+                        case "/compat/files/auth-redirect":
+                            status = 302; statusText = "Found";
+                            headers.Add(new KeyValuePair<string, string>("Location", "/compat/files/auth"));
+                            body = new byte[0];
+                            break;
+                        case "/compat/files/empty":
+                            body = new byte[0];
+                            break;
                         case "/probe/start":
                             contentType = "text/html; charset=utf-8";
                             body = Encoding.UTF8.GetBytes("<!doctype html><html><head><script>" +

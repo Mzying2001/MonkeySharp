@@ -530,8 +530,11 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         /// <param name="headers">Optional HTTP request headers.</param>
         /// <param name="conflictAction">The conflict policy: uniquify, overwrite, or prompt.</param>
         /// <param name="timeout">An optional download timeout.</param>
+        /// <param name="anonymous">Whether to omit browser credentials.</param>
+        /// <param name="redirectAllowed">Authorization checked before following each redirect.</param>
         public DownloadRequest(ScriptKey scriptKey, Uri url, string name, bool saveAs,
-            IDictionary<string, string> headers = null, string conflictAction = "uniquify", TimeSpan? timeout = null)
+            IDictionary<string, string> headers = null, string conflictAction = "uniquify", TimeSpan? timeout = null,
+            bool anonymous = false, Func<Uri, CancellationToken, Task<bool>> redirectAllowed = null)
         {
             ScriptKey = scriptKey;
             Url = url ?? throw new ArgumentNullException(nameof(url));
@@ -541,6 +544,10 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 headers ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase));
             ConflictAction = string.IsNullOrEmpty(conflictAction) ? "uniquify" : conflictAction;
             Timeout = timeout;
+            if (timeout.HasValue && (timeout.Value <= TimeSpan.Zero || timeout.Value.TotalMilliseconds > int.MaxValue))
+                throw new ArgumentOutOfRangeException(nameof(timeout));
+            Anonymous = anonymous;
+            RedirectAllowed = redirectAllowed ?? ((target, token) => Task.FromResult(true));
         }
 
         /// <summary>Gets the requesting script installation.</summary>
@@ -560,6 +567,10 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         public string ConflictAction { get; }
         /// <summary>Gets the optional operation timeout.</summary>
         public TimeSpan? Timeout { get; }
+        /// <summary>Gets whether browser credentials are omitted.</summary>
+        public bool Anonymous { get; }
+        /// <summary>Gets the authorization callback invoked before every redirect.</summary>
+        public Func<Uri, CancellationToken, Task<bool>> RedirectAllowed { get; }
     }
 
     /// <summary>
@@ -569,13 +580,23 @@ namespace Mzying2001.MonkeySharp.Core.Apis
     {
         /// <summary>Initializes a download result.</summary>
         /// <param name="downloadId">The host-defined download identifier.</param>
-        public DownloadResult(string downloadId)
+        /// <param name="finalUrl">The final network URL.</param>
+        /// <param name="name">The committed file name.</param>
+        /// <param name="bytesReceived">The number of committed bytes.</param>
+        public DownloadResult(string downloadId, Uri finalUrl = null, string name = null, long bytesReceived = 0)
         {
             DownloadId = downloadId;
+            FinalUrl = finalUrl; Name = name; BytesReceived = bytesReceived;
         }
 
         /// <summary>Gets the host-defined download identifier.</summary>
         public string DownloadId { get; }
+        /// <summary>Gets the final network URL.</summary>
+        public Uri FinalUrl { get; }
+        /// <summary>Gets the committed file name without a local directory.</summary>
+        public string Name { get; }
+        /// <summary>Gets the number of bytes committed to the file.</summary>
+        public long BytesReceived { get; }
     }
 
     /// <summary>
@@ -586,16 +607,21 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         /// <summary>Gets the implemented Tampermonkey download mode: native, browser, or disabled.</summary>
         string DownloadMode { get; }
 
-        /// <summary>Starts a file download and returns its lifecycle operation.</summary>
+        /// <summary>Creates an unstarted operation. Only Start may begin UI or network work.</summary>
         /// <param name="request">The download request.</param>
         /// <param name="cancellationToken">A token that cancels the operation.</param>
-        /// <returns>The running download operation.</returns>
-        Task<IDownloadOperation> DownloadAsync(DownloadRequest request, CancellationToken cancellationToken);
+        /// <returns>An unstarted download operation; subscribe before calling Start.</returns>
+        Task<IDownloadOperation> CreateAsync(DownloadRequest request, CancellationToken cancellationToken);
     }
 
     /// <summary>Represents a running userscript download.</summary>
     public interface IDownloadOperation : IDisposable
     {
+        /// <summary>Starts work after all event subscriptions have been installed. Repeated calls have no effect.</summary>
+        void Start();
+
+        /// <summary>Gets committed file details after successful completion.</summary>
+        DownloadResult Result { get; }
         /// <summary>Gets the host-defined download identifier.</summary>
         string DownloadId { get; }
 

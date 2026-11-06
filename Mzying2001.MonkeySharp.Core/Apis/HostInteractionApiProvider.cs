@@ -137,20 +137,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 case "GM.download":
                     if (string.Equals(ProviderParameters.OptionalString(context.Parameters, "operation"), "abort", StringComparison.Ordinal))
                         return AbortDownload(context);
-                    var download = await _downloads.DownloadAsync(new DownloadRequest(
-                        context.Installation.ScriptKey,
-                        ReadHttpUrl(context.Parameters, "url"),
-                        ProviderParameters.OptionalString(context.Parameters, "name"),
-                        ProviderParameters.OptionalBoolean(context.Parameters, "saveAs"),
-                        ReadHeaders(context.Parameters),
-                        ReadConflictAction(context.Parameters),
-                        ReadTimeout(context.Parameters)), cancellationToken)
-                        .ConfigureAwait(false);
-                    if (download == null || string.IsNullOrEmpty(download.DownloadId))
-                        throw new InvalidOperationException("The download service returned no operation.");
-                    var clientId = ProviderParameters.OptionalString(context.Parameters, "clientId") ?? Guid.NewGuid().ToString("D");
-                    TrackDownload(context, clientId, download);
-                    return ApiResult.FromValue(new { id = download.DownloadId, clientId = clientId });
+                    return await StartDownloadAsync(context, cancellationToken).ConfigureAwait(false);
                 case "GM.getTab":
                     return ApiResult.FromJson(ValidateJson(await _tabState.GetAsync(
                         context.Installation.ScriptKey, context.Frame, cancellationToken).ConfigureAwait(false)));
@@ -245,14 +232,12 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                     _notificationHandles.Remove(key);
                 foreach (var key in _tabHandles.Keys.Where(item => item.StartsWith(prefix, StringComparison.Ordinal)).ToArray())
                     _tabHandles.Remove(key);
-                foreach (var key in _downloadOperations.Keys.Where(item => item.StartsWith(prefix, StringComparison.Ordinal)).ToArray())
-                    _downloadOperations.Remove(key);
             }
             foreach (var registration in registrations)
                 registration.Dispose();
             foreach (var handle in notifications) handle.Dispose();
             foreach (var handle in tabs) handle.Dispose();
-            foreach (var operation in downloads) operation.Dispose();
+            foreach (var operation in downloads) operation.DetachCallbacks();
         }
 
         private ApiResult ShowNotification(ApiInvocationContext context, CancellationToken cancellationToken)
@@ -309,24 +294,49 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             if (tab.Closed) registration.Terminalize();
         }
 
-        private ApiResult AbortDownload(ApiInvocationContext context)
+        private async Task<ApiResult> StartDownloadAsync(ApiInvocationContext context, CancellationToken cancellationToken)
         {
-            var downloadId = ProviderParameters.RequiredString(context.Parameters, "downloadId");
-            DownloadRegistration registration;
+            cancellationToken.ThrowIfCancellationRequested();
+            var clientId = ProviderParameters.RequiredString(context.Parameters, "clientId");
+            if (!Guid.TryParse(clientId, out _)) throw ProviderParameters.Invalid("clientId must be a UUID.");
+            var request = new DownloadRequest(context.Installation.ScriptKey,
+                ReadHttpUrl(context.Parameters, "url"), ProviderParameters.OptionalString(context.Parameters, "name"),
+                ProviderParameters.OptionalBoolean(context.Parameters, "saveAs"), ReadHeaders(context.Parameters),
+                ReadConflictAction(context.Parameters), ReadTimeout(context.Parameters),
+                ProviderParameters.OptionalBoolean(context.Parameters, "anonymous"),
+                (target, token) => context.AuthorizeTargetAsync == null ? Task.FromResult(true) : context.AuthorizeTargetAsync(target.AbsoluteUri, token));
+            if (_downloads.DownloadMode == "disabled" ||
+                (_downloads.DownloadMode != "browser" && (request.SaveAs || request.ConflictAction != "uniquify")))
+                throw new UnsupportedApiException("The download backend does not support the requested destination options.");
+            var key = context.ExecutionId + ":" + clientId;
+            var registration = new DownloadRegistration(this, key, request, context.ExecutionId, clientId);
             lock (_sync)
-                _downloadOperations.TryGetValue(context.ExecutionId + ":" + downloadId, out registration);
-            if (registration == null)
-                return ApiResult.FromValue(false);
-            registration.Abort();
-            return ApiResult.FromValue(true);
+            {
+                if (_disposed) throw new ObjectDisposedException(nameof(HostInteractionApiProvider));
+                if (_downloadOperations.ContainsKey(key)) throw ProviderParameters.Invalid("Duplicate download operation ID.");
+                _downloadOperations.Add(key, registration);
+            }
+            try
+            {
+                var operation = await _downloads.CreateAsync(request, registration.CancellationToken).ConfigureAwait(false);
+                if (operation == null || string.IsNullOrEmpty(operation.DownloadId))
+                {
+                    operation?.Dispose();
+                    throw new InvalidOperationException("The download service returned no operation.");
+                }
+                registration.Start(operation);
+                return ApiResult.FromValue(new { id = operation.DownloadId, clientId });
+            }
+            catch (Exception error) { registration.StartFailed(error); throw; }
         }
 
-        private void TrackDownload(ApiInvocationContext context, string clientId, IDownloadOperation operation)
+        private ApiResult AbortDownload(ApiInvocationContext context)
         {
-            var key = context.ExecutionId + ":" + operation.DownloadId;
-            var registration = new DownloadRegistration(this, key, operation, context.Installation.ScriptKey, context.ExecutionId, clientId);
-            lock (_sync) _downloadOperations[key] = registration;
-            registration.Subscribe();
+            var clientId = ProviderParameters.RequiredString(context.Parameters, "clientId");
+            DownloadRegistration registration;
+            lock (_sync) _downloadOperations.TryGetValue(context.ExecutionId + ":" + clientId, out registration);
+            registration?.Abort();
+            return ApiResult.FromValue(new { accepted = registration != null });
         }
 
         private static IDictionary<string, string> ReadHeaders(JsonElement parameters)
@@ -413,37 +423,79 @@ namespace Mzying2001.MonkeySharp.Core.Apis
 
         private sealed class DownloadRegistration : Registration
         {
-            private readonly IDownloadOperation _operation;
-            private readonly ScriptKey _scriptKey;
+            private readonly DownloadRequest _request;
             private readonly string _executionId;
             private readonly string _clientId;
+            private readonly CancellationTokenSource _lifetime = new CancellationTokenSource();
+            private IDownloadOperation _operation;
+            private volatile bool _callbacksEnabled = true;
             private readonly EventHandler<UserScriptDownloadProgress> _progress;
-            private readonly EventHandler _completed;
+            private readonly EventHandler _completed, _aborted, _timedOut;
             private readonly EventHandler<UserScriptDownloadFailure> _failed;
-            private readonly EventHandler _aborted;
-            private readonly EventHandler _timedOut;
-            public DownloadRegistration(HostInteractionApiProvider owner, string key, IDownloadOperation operation,
-                ScriptKey scriptKey, string executionId, string clientId) : base(owner, key)
+            public DownloadRegistration(HostInteractionApiProvider owner, string key, DownloadRequest request,
+                string executionId, string clientId) : base(owner, key)
             {
-                _operation = operation; _scriptKey = scriptKey; _executionId = executionId; _clientId = clientId;
-                _progress = (_, progress) => { if (!IsTerminal) owner.Notification?.Invoke(owner, new ApiNotificationEventArgs(scriptKey, executionId, "download-progress", JsonSerializer.Serialize(new { downloadId = operation.DownloadId, clientId, loaded = progress.Loaded, total = progress.Total }))); };
-                _completed = (_, __) => Terminal("download-complete", new { downloadId = operation.DownloadId, clientId });
-                _failed = (_, failure) => Terminal("download-error", new { downloadId = operation.DownloadId, clientId, error = "not_succeeded", details = failure.Error?.Message });
-                _aborted = (_, __) => Terminal("download-aborted", new { downloadId = operation.DownloadId, clientId, error = "not_succeeded", details = "The download was aborted." });
-                _timedOut = (_, __) => Terminal("download-timeout", new { downloadId = operation.DownloadId, clientId, error = "timeout", details = "The download timed out." });
+                _request = request; _executionId = executionId; _clientId = clientId;
+                _progress = (_, progress) => Publish("download-progress", new { clientId, loaded = progress.Loaded, total = progress.Total });
+                _completed = (_, __) =>
+                {
+                    var result = _operation.Result;
+                    Terminal("download-complete", new { clientId, result = new
+                    {
+                        url = (result?.FinalUrl ?? request.Url).AbsoluteUri,
+                        name = result?.Name ?? request.Name, loaded = result?.BytesReceived
+                    } });
+                };
+                _failed = (_, failure) => Terminal("download-error", new { clientId, error = "not_succeeded", details = failure.Error?.Message });
+                _aborted = (_, __) => Terminal("download-aborted", new { clientId, error = "not_succeeded", details = "The download was aborted." });
+                _timedOut = (_, __) => Terminal("download-timeout", new { clientId, error = "timeout", details = "The download timed out." });
             }
-            public void Subscribe() { _operation.Progress += _progress; _operation.Completed += _completed; _operation.Failed += _failed; _operation.Aborted += _aborted; _operation.TimedOut += _timedOut; }
-            public void Abort() { _operation.Abort(); }
+            public CancellationToken CancellationToken => _lifetime.Token;
+            public void Start(IDownloadOperation operation)
+            {
+                _operation = operation;
+                operation.Progress += _progress; operation.Completed += _completed;
+                operation.Failed += _failed; operation.Aborted += _aborted; operation.TimedOut += _timedOut;
+                if (_lifetime.IsCancellationRequested) operation.Abort();
+                operation.Completion.ContinueWith(task => { var observed = task.Exception; }, TaskScheduler.Default);
+                operation.Start();
+            }
+            public void Abort()
+            {
+                if (IsTerminal) return;
+                try { _lifetime.Cancel(); } catch (ObjectDisposedException) { }
+                _operation?.Abort();
+            }
+            public void DetachCallbacks() { _callbacksEnabled = false; }
+            public void StartFailed(Exception error)
+            {
+                Terminal(error is OperationCanceledException ? "download-aborted" : "download-error",
+                    new { clientId = _clientId, error = "not_succeeded", details = error.Message });
+            }
+            private void Publish(string eventName, object data)
+            {
+                if (_callbacksEnabled && !IsTerminal)
+                    Owner.Notification?.Invoke(Owner, new ApiNotificationEventArgs(_request.ScriptKey, _executionId, eventName, JsonSerializer.Serialize(data)));
+            }
             private void Terminal(string eventName, object data)
             {
                 if (!TryTerminal()) return;
-                Owner.Notification?.Invoke(Owner, new ApiNotificationEventArgs(_scriptKey, _executionId, eventName, JsonSerializer.Serialize(data)));
-                Dispose();
+                try
+                {
+                    if (_callbacksEnabled) Owner.Notification?.Invoke(Owner, new ApiNotificationEventArgs(_request.ScriptKey, _executionId, eventName, JsonSerializer.Serialize(data)));
+                }
+                finally
+                {
+                    if (_operation != null)
+                    {
+                        _operation.Progress -= _progress; _operation.Completed -= _completed; _operation.Failed -= _failed;
+                        _operation.Aborted -= _aborted; _operation.TimedOut -= _timedOut;
+                        _operation.Dispose();
+                    }
+                    _lifetime.Dispose();
+                }
             }
-            public override void Dispose()
-            {
-                _operation.Progress -= _progress; _operation.Completed -= _completed; _operation.Failed -= _failed; _operation.Aborted -= _aborted; _operation.TimedOut -= _timedOut; _operation.Dispose();
-            }
+            public override void Dispose() { DetachCallbacks(); Abort(); }
         }
 
         private static string ReadConflictAction(JsonElement parameters)

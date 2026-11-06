@@ -192,7 +192,7 @@ none 按 5.5.1 实测使用独立对象 receiver。生产执行仍在可信页�
 | `GM.getTab` | `GM_getTab` | `Promise<object>` | 标签页状态服务 |
 | `GM.saveTab` | `GM_saveTab` | `Promise<undefined>` | 标签页状态服务 |
 | `GM.getTabs` | `GM_getTabs` | `Promise<object>` | 标签页状态服务 |
-| `GM.download` | `GM_download` | `Promise<DownloadHandle>` | 下载服务 |
+| `GM.download` | `GM_download` | `Promise<DownloadDetails> & {abort()}` | 下载服务 |
 | `GM.cookie` | `GM_cookie` | 包含 CRUD/监听方法的对象 | CefSharp 默认服务 |
 | `GM.webRequest` | `GM_webRequest` | 立即返回可移除句柄 | CefSharp 默认服务 |
 | `unsafeWindow` | 同名 | 页面全局对象 | 精确授权 |
@@ -563,56 +563,44 @@ Demo 在正数 timeout 到期或用户关闭/点击后关闭通知。它没有�
 
 ### GM.download(details) / GM_download(details)
 
-需要对应授权和下载服务。现代调用接受选项对象或 URL 字符串；旧版还支持 GM_download(url, name) 和 GM_download(details, onload?, onerror?)。建议使用下述对象形式，便于迁移。
+需要对应授权和下载服务。两种形式都接受选项对象或 `(url, name?)`；url 必须是绝对 HTTP(S) 字符串。Blob/File 输入仍不支持。
 
 | 字段 | 类型 / 默认值 | 行为 |
 | --- | --- | --- |
-| `url` | 必需，绝对 HTTP(S) 字符串 | 不支持 Blob/File URL。 |
-| `name` | 可选字符串 | 请求的文件名，最终由宿主控制和清理。 |
-| `headers` | 字符串到字符串的对象，{} | 宿主下载请求头，校验可能与 XHR 不同。 |
-| `saveAs` | 布尔值，false | 请求显示目标选择器。 |
-| `conflictAction` | "uniquify"（默认）、"overwrite"、"prompt" | 请求的重名处理方式。 |
-| `timeout` | 可选正整数，毫秒 | 下载超时，此处 0 无效。 |
-| `onload` | 仅旧版，函数 ({id}) | 下载完成。 |
-| `onprogress` | 仅旧版，函数 ({loaded, total}) | 字节进度，total 可为 null/未知。 |
-| `onerror` | 仅旧版，函数 ({error, details, code?}) | 启动、失败或取消信息。 |
-| `ontimeout` | 仅旧版，函数 ({error: "timeout", details}) | 超时；未提供时回退到 onerror。 |
+| `url` | 必填 HTTP(S) 字符串 | 初始目标及重定向均经过宿主授权。 |
+| `name` | 可选字符串 | 建议文件名，最终路径由宿主选择及清理。 |
+| `headers` | 字符串字典，`{}` | 使用共用的浏览器网络服务。 |
+| `anonymous` | 布尔值，false | 不带浏览器 Cookie 和凭据。 |
+| `saveAs` | 布尔值，false | 请求宿主保存对话框。 |
+| `conflictAction` | uniquify / overwrite / prompt | 默认 uniquify；保存和冲突选项需要 browser 模式。 |
+| `timeout` | 正整数毫秒 | 覆盖选择路径、传输及提交；文件服务默认十分钟。 |
+| `onload` | 函数 `({url, name, loaded})` | 最终文件提交成功后调用。 |
+| `onprogress` | 函数 `({loaded, total})` | 字节进度；total 可为 null。 |
+| `onerror` | 函数 `({error, details, code?})` | 启动、传输、取消及磁盘失败。 |
+| `ontimeout` | 函数 | 超时；缺省回退到 onerror。 |
 
-现代返回普通 **`Promise<DownloadHandle>`，在启动后兑现**，不是完成时兑现。await 后得到 {id, abort()}；Promise 自身没有 .abort()。旧版立即返回本地句柄，id 异步可用。句柄 abort() 返回 `Promise<boolean>`，表示是否已向宿主请求/接受中止，而非下载完成结果。旧版句柄没有 ID 时可能返回 false，实际结果应通过终态回调观察。
+现代 GM.download 立即返回**带 abort() 的原始完成 Promise**，只有文件 flush、关闭并原子移动或替换到最终位置后才兑现。支持的完成详情是 `{url, name, loaded}` 子集：最终 URL、实际文件名和提交字节数，不含本地路径和内部 ID。旧版立即返回 `{abort()}`。两者 abort 均返回 undefined，在宿主确认前也能取消，终态后调用无害。两者均支持回调；回调异常单独报告，不会把已提交的下载变成失败。每次操作只结算一次。
 
-**当前下载限制：** 现代回调及完成时机将在 P0 下载步骤替换；该步骤完成前，通过已声明的 GM_download 观察终态。
+错误使用 `{error, details, code?}`，类别包括 not_enabled、not_permitted、not_whitelisted、not_supported、not_succeeded 和 timeout。现代 Promise 拒绝并调用对应回调；旧版通过回调报告。保存取消和主动中止归为 not_succeeded。Blob/File 和无效选项在网络操作前拒绝。
 
-错误类别包括 not_enabled（会话失效）、not_permitted（授权）、not_whitelisted（宿主权限）、not_supported、not_succeeded 和 timeout。名称与 Tampermonkey 相似，但 not_whitelisted 不一定代表文件扩展名白名单。现代宿主/启动失败会以普通 {error, details, code} 对象拒绝，而不是带 .message 的 Error；本地校验仍可能拒绝 TypeError。旧版的启动及后续失败通过回调报告。完成/中止/失败均为终态；导航或宿主释放会取消执行实例拥有的下载。
+Demo GM 下载与 GM XHR 使用同一个 CEF HTTP 服务及 RequestContext，继承浏览器登录凭据、匿名语义、重定向授权及配置的 webRequest 组合。内容通过有界缓冲流入临时文件，再提交到 Data/Downloads 或用户选择的位置；失败和取消先清理临时文件，再通知终态。下载由宿主策略授权，不应用 XHR 的 @connect 列表，也没有扩展名白名单偏好设置。
 
-Demo 默认流式保存到 Data/Downloads，清理文件名，支持选择路径和冲突处理，并删除部分文件。其独立 HTTP 客户端**不会继承浏览器登录 Cookie 或凭据**。Core 不会对下载应用 XHR 的 @connect 白名单，访问由宿主下载服务和权限策略决定。不实现 anonymous 选项，也没有内置 Tampermonkey 的扩展名白名单设置。
-
-**与 Tampermonkey 的差异：**[官方现代 API](https://www.tampermonkey.net/documentation.php?q=GM_download)描述的是带 abort 的 Promise，并兑现下载详情；MonkeySharp 兑现启动句柄，在 await 后的句柄上中止，需要完成回调时使用旧版门面。
+已接受的下载属于宿主任务。导航、执行结束、脚本禁用或卸载会停止文档回调，已接受的任务按捕获的授权和重定向策略继续。宿主释放时取消任务，并应在关闭 CEF/网络服务前等待清理完成。完成前显式 abort 会取消任务；未接受或无效调用不启动传输。
 
 ```javascript
 // @grant GM.download
-(async function () {
-    const download = await GM.download({
-        url: "https://example.com/", name: "example.html"
-    });
-    console.log("Started:", download.id);
-    // To cancel after starting: await download.abort();
-})().catch(console.error);
-```
+const pending = GM.download({ url: 'https://example.com/file', name: 'file.bin' });
+// pending.abort(); // 可在调用后立即取消
+pending.then(details => console.log('已提交:', details.name, details.loaded), console.error);
 
-默认旧版模式中，需要完成通知时使用：
-
-```javascript
 // @grant GM_download
-const download = GM_download({
-    url: "https://example.com/", name: "example.html",
-    onload: result => console.log("Finished:", result.id),
-    onerror: error => console.error("Download failed:", error),
-    ontimeout: error => console.error("Download timed out:", error)
+const handle = GM_download({
+    url: 'https://example.com/file', name: 'file.bin',
+    onload: details => console.log('已提交:', details.name),
+    onerror: error => console.error(error)
 });
-// To cancel: download.abort().catch(console.error);
+// handle.abort();
 ```
-
-<a id="cookies"></a>
 
 ## Cookie
 
@@ -739,7 +727,7 @@ window.addEventListener("urlchange", onRoute);
 | 菜单 / 剪贴板 | 使用字符串访问键及 MIME 字符串，移除不支持的选项对象/回调重载。 |
 | 通知 | 只使用支持字段；现代 Promise 在注册后兑现，而非关闭后。 |
 | 标签页 | 两种形式都立即返回句柄；通过 close/onclose 操作，不支持隐私模式和数字插入位置。 |
-| 下载 | await 启动句柄，再调用其 abort；完成回调需要旧版 GM_download，Demo 不继承浏览器凭据。 |
+| 下载 | 立即返回带 abort 的完成 Promise；Demo 共用浏览器网络上下文，文件提交后才完成。 |
 | Cookie | 没有 partitionKey 语义，默认 SameSite/第一方写入及变更订阅有限。 |
 | webRequest | 改写动作对象及回调，显式注册运行时规则并保留移除句柄。 |
 | 其他管理器 API | 不内置 GM.audio/GM_audio 和扩展专属内容/部署 API；未知授权不会增加它们。 |
@@ -775,7 +763,7 @@ window.addEventListener("urlchange", onRoute);
 | 依赖不可用 | 检查宿主依赖提供器及 MSR400_DEPENDENCY_RESOLUTION_FAILED / MSR401_DEPENDENCY_PROVIDER_UNAVAILABLE。 |
 | 执行过晚或世界不符 | document-start 尽力执行（MSR100/MSR101），sandbox/unwrap 不创建隔离（MSR212/MSR213）。 |
 | XHR 重定向后失败 | @connect 必须允许每个重定向目标，并检查宿主策略。 |
-| 浏览器已登录但下载失败 | Demo 下载器是独立 HTTP 客户端；如果应用提供认证下载/原生下载路径，可使用该路径。 |
+| 浏览器已登录但下载失败 | 检查实际 RequestContext、anonymous 选项、重定向授权及宿主权限；GM 下载共用浏览器网络服务；如果应用提供认证下载/原生下载路径，可使用该路径。 |
 | 导航后异步回调停止 | 旧执行已释放，需要在新文档重新注册。 |
 | JavaScript 异常 | 查看开发者工具及宿主 MSR300_SCRIPT_EXCEPTION，显式捕获异步错误。 |
 

@@ -15,6 +15,8 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
         private readonly CancellationTokenSource _cancellation = new CancellationTokenSource();
         private readonly ConcurrentBag<TcpClient> _clients = new ConcurrentBag<TcpClient>();
         private int _slowRequests;
+        private readonly ConcurrentDictionary<string, int> _requests = new ConcurrentDictionary<string, int>();
+        public int RequestCount(string path) => _requests.TryGetValue(path, out var count) ? count : 0;
         public LocalHttpFixture()
         {
             _listener.Start();
@@ -47,6 +49,7 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                     var request = await reader.ReadLineAsync().ConfigureAwait(false);
                     if (request == null) return;
                     var path = request.Split(' ')[1].Split('?')[0];
+                    _requests.AddOrUpdate(path, 1, (_, count) => count + 1);
                     var headers = new StringBuilder();
                     string line;
                     while (!string.IsNullOrEmpty(line = await reader.ReadLineAsync().ConfigureAwait(false))) headers.AppendLine(line);
@@ -71,7 +74,11 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                         case "/redirect": body = "redirect"; status = "302 Found"; extra = "Location: /resource\r\n"; break;
                         case "/bad-redirect": body = "redirect"; status = "302 Found"; extra = "Location: file:///C:/Windows/win.ini\r\n"; break;
                         case "/oversize": body = string.Empty; break;
-                        case "/download": case "/slow": body = new string('d', 256 * 1024); break;
+                        case "/download":
+                            if (headers.ToString().Contains("demo-cookie=ready")) body = new string('d', 256 * 1024);
+                            else { body = "Login required"; status = "401 Unauthorized"; }
+                            break;
+                        case "/slow": body = new string('d', 256 * 1024); break;
                         default: body = "fixture"; break;
                     }
                     if (path == "/slow") Interlocked.Increment(ref _slowRequests);

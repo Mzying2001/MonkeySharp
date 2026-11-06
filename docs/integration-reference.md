@@ -197,11 +197,14 @@ Interaction services have distinct lifecycle contracts:
 | --- | --- | --- |
 | `INotificationService.ShowAsync` | `INotificationHandle` immediately | `Completion`, `Clicked`, `Closed`, and `Dispose`; there is no separate `Abort` member. |
 | `ITabService.OpenAsync` | `Task<ITabHandle>` | `TabId`, `Closed`, `OnClose`, `CloseAsync`, and `Dispose`; there is no `Completion` task. |
-| `IDownloadService.DownloadAsync` | `Task<IDownloadOperation>` | `DownloadId`, `Completion`, `Progress`, `Completed`, `Failed`, `Aborted`, `TimedOut`, `Abort`, and `Dispose`. |
+| `IDownloadService.CreateAsync` | `Task<IDownloadOperation>` | `Start`, `Result`, `DownloadId`, `Completion`, `Progress`, `Completed`, `Failed`, `Aborted`, `TimedOut`, `Abort`, and `Dispose`. Create must return an unstarted operation; subscribe to every event before Start. |
+
+Use `UseDownloadServiceFactory(http => new FileDownloadService(http, selectDestination))` to share the effective CEF network service (including webRequest composition) with XHR. The builder owns factory-created disposable services. `selectDestination` is trusted host policy/UI returning an absolute `DownloadDestination` or null to cancel. Browser-mode hosts implement picker and conflict options; native-mode hosts reject them before effects. Dispose cancels accepted tasks; await `DrainAsync` before shutting down CEF. `DownloadRequest.Anonymous` and `RedirectAllowed` must be honored. Each operation emits exactly one terminal event; successful `Result` describes the committed file. Never start transfer or UI from CreateAsync.
+
 
 The runtime uses handle events to deliver script callbacks; completing a `Completion` task alone does not send a terminal callback. Providers should emit one terminal event and support idempotent cleanup when the execution ends. Releasing a tab handle should release its observations; closing the user tab is a separate `CloseAsync` action.
 
-The JavaScript download contract differs from the host operation contract: `GM.download` returns a `Promise<DownloadHandle>` that resolves when the download starts, and currently ignores callback fields in `details`. Use the declared `GM_download` entry point for script-facing progress and terminal callbacks. See the [download guide](usage-guide.md#downloads) for return values and limitations.
+`GM.download` immediately returns an abortable completion Promise; `GM_download` returns an abort-only handle. Both support callbacks. Completion follows final file commit, with `{url, name, loaded}` details. See the [download guide](usage-guide.md#downloads) for return values and lifecycle policy.
 
 ## Lifecycle and Diagnostics
 
@@ -211,7 +214,7 @@ The JavaScript download contract differs from the host operation contract: `GM.d
 identify initialization that already occurred. These APIs do not upgrade
 userscript timing guarantees. See the [real protocol findings](compatibility/cdp-findings.md).
 
-The adapter creates an identity per frame document and executes each `(document, frame, script, run-at)` once. `@run-at context-menu` scripts are listed by the native CefSharp context menu for the matching frame and execute a fresh invocation only after the user selects an entry. Navigation, context release, detach, and disposal invalidate capabilities and cancel pending work.
+The adapter creates an identity per frame document and executes each `(document, frame, script, run-at)` once. `@run-at context-menu` scripts are listed by the native CefSharp context menu for the matching frame and execute a fresh invocation only after the user selects an entry. Navigation, context release and detach invalidate document capabilities and pending calls. Accepted downloads continue as host tasks with document callbacks muted; host disposal cancels them.
 
 `GM.info` and `GM_info` are always available without a grant, under the single contract. Missing `@grant` and explicit `@grant none` expose only info; explicit grant lists include info alongside their authorized API families. Explicit `GM.info` and `GM_info` declarations remain accepted by the grant catalog (official legacy spellings are always parsed). The original declaration state and grant lists are preserved; no implicit info grant is added to metadata. Both names reference the same deep-frozen snapshot of metadata, grants, URL rules, resources, update state, handler, sandbox mode, and raw metadata text. Its versioned `compatibility` block has `contractVersion: 2` and identifies fixed, metadata-derived, mixed, and extension-owned fields, including the page-world execution boundary.
 

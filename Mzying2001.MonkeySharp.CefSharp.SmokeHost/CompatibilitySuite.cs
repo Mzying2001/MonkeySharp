@@ -244,7 +244,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             await NavigateAsync("/compat/" + name);
             var result = await WaitResultAsync("globalThis.__compatCase || null");
             var required = name == "download"
-                ? new[] { "promise", "handle", "completed", "canceled", "timeout", "failure", "singleTerminal" }
+                ? new[] { "promise", "handle", "completed", "canceled", "timeout", "failure", "singleTerminal", "loginRedirect", "anonymous", "empty", "earlyCancel", "diskFailure" }
                 : name == "cookie"
                     ? new[] { "setList", "legacy", "context", "listener", "removed", "deleted" }
                     : new[] { "cancel", "redirect", "remove", "restored", "noCallbackAfterRemove" };
@@ -255,12 +255,23 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
         {
             await ScriptCaseAsync("download");
             await _downloads.DrainAsync();
-            foreach (var name in new[] { "modern", "legacy" })
+            foreach (var name in new[] { "modern", "legacy", "authenticated" })
                 Check(name + "Bytes", File.ReadAllBytes(Path.Combine(_downloads.DirectoryPath, name + ".bin")).SequenceEqual(LocalHttpFixture.DownloadBytes));
+            Check("emptyFile", new FileInfo(Path.Combine(_downloads.DirectoryPath, "empty.bin")).Length == 0);
             Check("partialCleanup", !Directory.GetFiles(_downloads.DirectoryPath, "*.part").Any() &&
-                new[] { "cancel", "timeout", "failure" }.All(name => !File.Exists(Path.Combine(_downloads.DirectoryPath, name + ".bin"))));
+                new[] { "cancel", "timeout", "failure", "anonymous", "early", "disk-failure" }.All(name => !File.Exists(Path.Combine(_downloads.DirectoryPath, name + ".bin"))));
             Check("realRequests", _fixture.RequestCount("/compat/files/bytes") == 2 && _fixture.RequestCount("/compat/files/slow") == 1 &&
                 _fixture.RequestCount("/compat/files/stalled") == 1 && _fixture.RequestCount("/compat/files/missing") == 1);
+            Check("credentialAndEarlyFailureRequests", _fixture.RequestCount("/compat/files/auth") == 2 &&
+                _fixture.RequestCount("/compat/files/auth-redirect") == 1 && _fixture.RequestCount("/compat/files/early-cancel") == 0 &&
+                _fixture.RequestCount("/compat/files/disk-failure") == 0);
+            await ReadAsync("(globalThis.__startNavigationDownload(), true)");
+            await WaitAsync(() => Task.FromResult(_fixture.RequestCount("/compat/files/slow") == 2));
+            await NavigateAsync("/compat/cleanup");
+            await _downloads.DrainAsync();
+            Check("navigationTaskContinues", File.ReadAllBytes(Path.Combine(_downloads.DirectoryPath, "navigation.bin")).SequenceEqual(LocalHttpFixture.DownloadBytes));
+            using (var hash = System.Security.Cryptography.SHA256.Create())
+                Console.WriteLine(JsonSerializer.Serialize(new { type = "download-file-evidence", sha256 = BitConverter.ToString(hash.ComputeHash(File.ReadAllBytes(Path.Combine(_downloads.DirectoryPath, "authenticated.bin")))).Replace("-", "").ToLowerInvariant(), bytes = LocalHttpFixture.DownloadBytes.Length }));
         }
 
         private async Task WebRequestAsync()

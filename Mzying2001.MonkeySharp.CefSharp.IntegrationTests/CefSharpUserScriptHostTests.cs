@@ -989,7 +989,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
             public Task<ITabHandle> OpenAsync(OpenTabRequest request, CancellationToken cancellationToken)
                 => Task.FromResult<ITabHandle>(new NoopTabHandle("tab"));
 
-            public Task<IDownloadOperation> DownloadAsync(DownloadRequest request, CancellationToken cancellationToken)
+            public Task<IDownloadOperation> CreateAsync(DownloadRequest request, CancellationToken cancellationToken)
                 => Task.FromResult<IDownloadOperation>(new NoopDownloadOperation("download"));
 
             public Task<string> GetAsync(
@@ -1048,6 +1048,8 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
 
         private sealed class NoopDownloadOperation : IDownloadOperation
         {
+            public void Start() { }
+            public DownloadResult Result => new DownloadResult(DownloadId);
             public NoopDownloadOperation(string id) { DownloadId = id; }
             public string DownloadId { get; }
             public Task Completion { get; } = Task.CompletedTask;

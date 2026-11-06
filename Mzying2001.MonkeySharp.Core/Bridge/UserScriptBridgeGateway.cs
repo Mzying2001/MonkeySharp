@@ -556,7 +556,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             string target,
             CancellationToken cancellationToken)
         {
-            if (execution.Cancellation.IsCancellationRequested ||
+            if ((method != "GM.download" && execution.Cancellation.IsCancellationRequested) ||
                 !execution.Installation.Definition.Metadata.Capabilities.Contains(method))
                 return false;
             var authorization = new ApiAuthorizationRequest(

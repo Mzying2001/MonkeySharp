@@ -147,7 +147,7 @@ var host = new CefSharpUserScriptHostBuilder(repository)
 | `GM.xmlHttpRequest` / `GM_xmlhttpRequest` | CefSharp 默认提供 | 需要 `@connect`；支持重定向、凭据、进度、中止及二进制/multipart 请求体。响应类型和限制见 [HTTP 请求](docs/usage-guide.zh-CN.md#http-请求)。 |
 | `GM.registerMenuCommand`、`GM.unregisterMenuCommand` 及别名 | 条件支持 | 需要 `IMenuService`。 |
 | `GM.notification`、`GM.setClipboard`、`GM.openInTab` 及别名 | 条件支持 | 需要对应宿主服务。 |
-| `GM.download` / `GM_download` | 条件支持 | 需要 `IDownloadService`。现代调用在启动后返回句柄，并忽略回调字段；进度及完成回调需要旧式接口。详见[下载](docs/usage-guide.zh-CN.md#下载)。 |
+| `GM.download` / `GM_download` | 条件支持 | 需要 `IDownloadService`。现代调用立即返回可取消的完成 Promise；两种入口均支持回调，Demo 共用浏览器网络上下文。详见[下载](docs/usage-guide.zh-CN.md#下载)。 |
 | `GM.getTab`、`GM.saveTab`、`GM.getTabs` 及别名 | 条件支持 | 需要 `ITabStateService`。 |
 | `GM.cookie` / `GM_cookie` | CefSharp 默认提供 | 结构化访问浏览器请求上下文。 |
 | `GM.webRequest` / `GM_webRequest` | CefSharp 默认提供 | 运行时注册、可移除句柄及取消/重定向结果回调。 |

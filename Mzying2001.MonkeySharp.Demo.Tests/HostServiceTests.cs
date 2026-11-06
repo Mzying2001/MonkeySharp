@@ -190,9 +190,10 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
             {
                 var main = new MainWindowViewModel(new DiagnosticsViewModel(Dispatcher.CurrentDispatcher, fixture.Paths.LogsDirectory));
                 var key = ScriptKey.Parse(Guid.NewGuid().ToString());
-                using (var service = new DownloadService(fixture.Paths.DownloadsDirectory, Dispatcher.CurrentDispatcher, main))
+                var network = new DownloadTestHttp();
+                using (var service = new DownloadService(fixture.Paths.DownloadsDirectory, Dispatcher.CurrentDispatcher, main, network))
                 {
-                    var operation = await service.DownloadAsync(new DownloadRequest(
+                    var operation = await service.CreateAsync(new DownloadRequest(
                         key,
                         new Uri(server.BaseUrl + "/download"),
                         "../result.txt",
@@ -203,19 +204,22 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
                     var completed = 0;
                     operation.Progress += (sender, args) => progress++;
                     operation.Completed += (sender, args) => completed++;
+                    Assert.Equal(0, network.Requests);
+                    operation.Start();
                     await operation.Completion;
                     Assert.True(progress > 0); Assert.Equal(1, completed);
                     var replayed = 0;
                     operation.Completed += (sender, args) => replayed++;
-                    Assert.Equal(1, replayed);
+                    Assert.Equal(0, replayed);
                     Assert.Equal(256 * 1024, new FileInfo(Path.Combine(fixture.Paths.DownloadsDirectory, "result.txt")).Length);
-                    var second = await service.DownloadAsync(new DownloadRequest(key, new Uri(server.BaseUrl + "/slow"), "cancel.txt", false), CancellationToken.None);
+                    var second = await service.CreateAsync(new DownloadRequest(key, new Uri(server.BaseUrl + "/slow"), "cancel.txt", false), CancellationToken.None);
                     second.Abort();
+                    second.Start();
                     await Assert.ThrowsAnyAsync<OperationCanceledException>(() => second.Completion);
                     await service.DrainAsync();
                     Assert.False(File.Exists(Path.Combine(fixture.Paths.DownloadsDirectory, "cancel.txt")));
                     Assert.Empty(Directory.GetFiles(fixture.Paths.DownloadsDirectory, "*.part"));
-                    var timedOut = await service.DownloadAsync(new DownloadRequest(
+                    var timedOut = await service.CreateAsync(new DownloadRequest(
                         key,
                         new Uri(server.BaseUrl + "/slow"),
                         "timeout.txt",
@@ -225,11 +229,38 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
                         TimeSpan.FromMilliseconds(20)), CancellationToken.None);
                     var timeoutCallbacks = 0;
                     timedOut.TimedOut += (sender, args) => timeoutCallbacks++;
-                    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => timedOut.Completion);
+                    timedOut.Start();
+                    await Assert.ThrowsAsync<TimeoutException>(() => timedOut.Completion);
                     Assert.Equal(1, timeoutCallbacks);
                 }
             }
         });
+
+        private sealed class DownloadTestHttp : IHttpRequestService
+        {
+            public int Requests;
+            public IHttpRequestOperation SendAsync(UserScriptHttpRequest request, IUserScriptHttpObserver observer, CancellationToken cancellationToken)
+            {
+                Interlocked.Increment(ref Requests);
+                var completion = Task.Run(async () =>
+                {
+                    if (request.Url.AbsolutePath == "/slow") await Task.Delay(500, cancellationToken);
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var response = new UserScriptHttpResponse(200, "OK", request.Url, new Dictionary<string, string>(), "", "application/octet-stream", null);
+                    observer.OnResponseStarted(response);
+                    var bytes = new byte[64 * 1024];
+                    for (var index = 0; index < 4; index++) observer.OnResponseData(bytes, 0, bytes.Length);
+                    return response;
+                }, cancellationToken);
+                return new DownloadTestOperation(completion);
+            }
+            private sealed class DownloadTestOperation : IHttpRequestOperation
+            {
+                public DownloadTestOperation(Task<UserScriptHttpResponse> completion) { Completion = completion; }
+                public Task<UserScriptHttpResponse> Completion { get; }
+                public void Abort() { }
+            }
+        }
 
         private static Task OnDispatcher(Func<Task> action)
         {

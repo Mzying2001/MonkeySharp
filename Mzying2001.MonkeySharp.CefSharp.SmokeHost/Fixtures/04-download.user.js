@@ -27,9 +27,29 @@
     };
     try {
         const promise = GM.download({ url: location.origin + '/compat/files/bytes', name: 'modern.bin' });
-        result.checks.promise = typeof promise.then === 'function';
+        result.checks.promise = typeof promise.then === 'function' && typeof promise.abort === 'function';
         const modern = await promise;
-        result.checks.handle = !!modern.id && typeof modern.abort === 'function';
+        result.checks.handle = modern.name === 'modern.bin' && modern.loaded > 0 && typeof modern.abort === 'undefined';
+        document.cookie = 'download-login=ready; path=/';
+        const authenticated = await GM.download({ url: location.origin + '/compat/files/auth-redirect', name: 'authenticated.bin' });
+        result.checks.loginRedirect = authenticated.url.endsWith('/compat/files/auth') && authenticated.loaded > 0;
+        try {
+            await GM.download({ url: location.origin + '/compat/files/auth', name: 'anonymous.bin', anonymous: true });
+            result.checks.anonymous = false;
+        } catch (error) { result.checks.anonymous = error.error === 'not_succeeded'; }
+        const empty = await GM.download({ url: location.origin + '/compat/files/empty', name: 'empty.bin' });
+        result.checks.empty = empty.loaded === 0;
+        const early = GM.download({ url: location.origin + '/compat/files/early-cancel', name: 'early.bin' });
+        early.abort(); early.abort();
+        try { await early; result.checks.earlyCancel = false; }
+        catch (error) { result.checks.earlyCancel = error.error === 'not_succeeded'; }
+        try {
+            await GM.download({ url: location.origin + '/compat/files/disk-failure', name: 'disk-failure.bin' });
+            result.checks.diskFailure = false;
+        } catch (error) { result.checks.diskFailure = error.error === 'not_succeeded'; }
+        globalThis.__startNavigationDownload = function () {
+            GM_download({ url: location.origin + '/compat/files/slow', name: 'navigation.bin', onload: function () { throw new Error('Old document callback ran'); } });
+        };
         const success = start('legacy', '/compat/files/bytes');
         result.checks.completed = await success.completion === 'load' && success.progressed();
         const canceled = start('cancel', '/compat/files/slow');

@@ -48,7 +48,7 @@ test("the shared legacy userscript fixture exercises callback and modern facade 
                 result = { id: "download-" + downloadStarts.length, clientId: request.params.clientId };
             } else if (request.method === "GM.download" && request.params.operation === "abort") {
                 abortCount += 1;
-                result = true;
+                result = { accepted: true };
             } else if (request.method === "GM.notification") {
                 notificationRequests.push(request.params);
                 result = { id: "notification-" + notificationRequests.length };
@@ -78,7 +78,6 @@ test("the shared legacy userscript fixture exercises callback and modern facade 
     vm.runInThisContext(template.replace("__MONKEYSHARP_PAYLOAD_BASE64__", encoded));
     await waitFor(() => globalThis.__legacyFixtureState && globalThis.__legacyFixtureState.cookie &&
         downloadStarts.length === 3 && notificationRequests.length === 2 && webRequestRegistrations.length === 1);
-    await waitFor(() => globalThis.__legacyFixtureState.abortDownload.id !== null);
     await globalThis.__legacyFixtureState.windowActions;
 
     const state = globalThis.__legacyFixtureState;
@@ -107,20 +106,20 @@ test("the shared legacy userscript fixture exercises callback and modern facade 
         clientId: downloadStarts[0].clientId, loaded: 3, total: 8
     }), true);
     assert.equal(receive("download-complete", {
-        clientId: downloadStarts[0].clientId, downloadId: "download-1"
+        clientId: downloadStarts[0].clientId, result: { name: "legacy.bin", loaded: 8 }
     }), true);
     assert.equal(receive("download-timeout", {
         clientId: downloadStarts[1].clientId, error: "timeout"
     }), true);
     await state.abortDownload.abort();
     assert.equal(receive("download-aborted", {
-        clientId: downloadStarts[2].clientId, error: "aborted"
+        clientId: downloadStarts[2].clientId, error: "not_succeeded"
     }), true);
     assert.equal(abortCount, 1);
     assert.deepEqual(state.downloadProgress, { loaded: 3, total: 8 });
-    assert.deepEqual(state.downloadComplete, { id: "download-1" });
+    assert.deepEqual(state.downloadComplete, { name: "legacy.bin", loaded: 8 });
     assert.equal(state.downloadTimeout.error, "timeout");
-    assert.equal(state.downloadAbortError.error, "aborted");
+    assert.equal(state.downloadAbortError.error, "not_succeeded");
 
     assert.equal(receive("notification-click", { notificationId: "notification-1" }), true);
     assert.equal(receive("notification-click", { notificationId: "notification-2" }), true);

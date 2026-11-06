@@ -1,5 +1,6 @@
 using Mzying2001.MonkeySharp.Demo.ViewModels;
 using Mzying2001.MonkeySharp.Demo.Views;
+using Mzying2001.MonkeySharp.Demo.Services;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -57,7 +58,14 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                 await WaitAsync(async () => await EvaluateBoolean(primary, "window.__demo.tabClosed === true"));
                 checks["openInTab"] = true;
                 await WaitAsync(async () => await EvaluateBoolean(primary, "window.__demo.download === true"));
-                checks["download"] = Directory.GetFiles(runtime.Paths.DownloadsDirectory, "demo-smoke*.txt").Length == 1;
+                var downloaded = Directory.GetFiles(runtime.Paths.DownloadsDirectory, "demo-smoke*.txt");
+                checks["download"] = downloaded.Length == 1 && File.ReadAllText(downloaded[0]) == new string('d', 256 * 1024);
+                await Evaluate(primary, "window.__testSaveCancel()");
+                await WaitAsync(() => Task.FromResult(DownloadFilePicker.Close(new System.Windows.Interop.WindowInteropHelper(Application.Current.MainWindow).Handle)));
+                await WaitAsync(async () => await EvaluateBoolean(primary, "window.__demo.saveCanceled === true"));
+                checks["downloadSaveCanceled"] = fixture.RequestCount("/save-cancel") == 0 && !File.Exists(Path.Combine(runtime.Paths.DownloadsDirectory, "canceled.txt"));
+                using (var hash = System.Security.Cryptography.SHA256.Create())
+                    Console.WriteLine(JsonSerializer.Serialize(new { type = "download-file-evidence", sha256 = BitConverter.ToString(hash.ComputeHash(File.ReadAllBytes(downloaded[0]))).Replace("-", "").ToLowerInvariant(), bytes = new FileInfo(downloaded[0]).Length }));
                 await WaitAsync(() => Task.FromResult(Application.Current.Windows.Cast<Window>().Any(window => window.Title == "Demo smoke notification")));
                 var notification = Application.Current.Windows.Cast<Window>().First(window => window.Title == "Demo smoke notification");
                 var button = ((StackPanel)notification.Content).Children.OfType<Button>().First();
@@ -239,7 +247,13 @@ sessionStorage.setItem('runs', String(window.__demo.runs));
         await GM.notification({ title: 'Demo smoke notification', text: 'Click to complete lifecycle test', onclick: function () { result.notificationClick = true; }, ondone: function () { result.notificationDone = true; } });
         const child = GM_openInTab('__BASE__/child', { active: false, insert: true, setParent: true });
         setTimeout(function () { child.close(); setTimeout(function () { result.tabClosed = child.closed; }, 500); }, 500);
-        GM_download({ url: '__BASE__/download', name: 'demo-smoke.txt', onload: function () { result.download = true; }, onerror: function (error) { result.error = String(error); } });
+        const download = GM.download({ url: '__BASE__/download', name: 'demo-smoke.txt' });
+        const completed = await download;
+        result.download = typeof download.abort === 'function' && completed.loaded === 256 * 1024;
+        window.__testSaveCancel = function () {
+            GM.download({ url: '__BASE__/save-cancel', name: 'canceled.txt', saveAs: true })
+                .then(function () { result.saveCanceled = false; }, function (error) { result.saveCanceled = error.error === 'not_succeeded'; });
+        };
     }
     result.ready = true;
     GM.log('Demo smoke ready');

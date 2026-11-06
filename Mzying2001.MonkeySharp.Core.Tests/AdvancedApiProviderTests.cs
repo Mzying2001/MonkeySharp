@@ -478,6 +478,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                     "GM.download",
                     new
                     {
+                        clientId = Guid.NewGuid().ToString("D"),
                         url = "https://example.com/file",
                         name = "file",
                         saveAs = true,
@@ -572,13 +573,65 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 Assert.True(Json(closed.Json).GetBoolean());
                 Assert.False(Json(repeatedClose.Json).GetBoolean());
 
-                var download = await provider.InvokeAsync(Context(installation, "GM.download", new { url = "https://example.com/file" }), CancellationToken.None);
-                var aborted = await provider.InvokeAsync(Context(installation, "GM.download", new { operation = "abort", downloadId = "download" }), CancellationToken.None);
-                var repeatedAbort = await provider.InvokeAsync(Context(installation, "GM.download", new { operation = "abort", downloadId = "download" }), CancellationToken.None);
+                var clientId = Guid.NewGuid().ToString("D");
+                var download = await provider.InvokeAsync(Context(installation, "GM.download", new { url = "https://example.com/file", clientId }), CancellationToken.None);
+                var aborted = await provider.InvokeAsync(Context(installation, "GM.download", new { operation = "abort", clientId }), CancellationToken.None);
+                var repeatedAbort = await provider.InvokeAsync(Context(installation, "GM.download", new { operation = "abort", clientId }), CancellationToken.None);
                 Assert.Equal("download", Json(download.Json).GetProperty("id").GetString());
-                Assert.True(Json(aborted.Json).GetBoolean());
-                Assert.False(Json(repeatedAbort.Json).GetBoolean());
+                Assert.True(Json(aborted.Json).GetProperty("accepted").GetBoolean());
+                Assert.False(Json(repeatedAbort.Json).GetProperty("accepted").GetBoolean());
             }
+        }
+
+        [Fact]
+        public async Task DownloadSubscribesBeforeSynchronousCompletionAndIgnoresDuplicateTerminals()
+        {
+            var installation = await InstallAsync("// @grant GM.download");
+            var service = new ControlledDownloadService { CompleteOnStart = true };
+            using var provider = new HostInteractionApiProvider(downloads: service);
+            var events = new List<string>();
+            provider.Notification += (_, value) => events.Add(value.EventName);
+            await provider.InvokeAsync(Context(installation, "GM.download", new { url = "https://example.com/file", clientId = Guid.NewGuid().ToString() }), CancellationToken.None);
+            service.Operation.Complete();
+            Assert.Equal(new[] { "download-complete" }, events);
+            Assert.True(service.Operation.Disposed);
+        }
+
+        [Fact]
+        public async Task DownloadCanBeCanceledWhileHostIsStillCreatingOperation()
+        {
+            var installation = await InstallAsync("// @grant GM.download");
+            var service = new ControlledDownloadService { DelayCreation = true };
+            using var provider = new HostInteractionApiProvider(downloads: service);
+            var events = new List<string>();
+            provider.Notification += (_, value) => events.Add(value.EventName);
+            var clientId = Guid.NewGuid().ToString();
+            var starting = provider.InvokeAsync(Context(installation, "GM.download", new { url = "https://example.com/file", clientId }), CancellationToken.None);
+            await provider.InvokeAsync(Context(installation, "GM.download", new { operation = "abort", clientId }), CancellationToken.None);
+            service.Created.SetResult(service.Operation);
+            await starting;
+            Assert.True(service.Operation.WasAborted);
+            Assert.Equal(new[] { "download-aborted" }, events);
+        }
+
+        [Fact]
+        public async Task DocumentEndMutesDownloadCallbacksButHostDisposalCancelsTasks()
+        {
+            var installation = await InstallAsync("// @grant GM.download");
+            var service = new ControlledDownloadService();
+            using var provider = new HostInteractionApiProvider(downloads: service);
+            var events = new List<string>();
+            provider.Notification += (_, value) => events.Add(value.EventName);
+            await provider.InvokeAsync(Context(installation, "GM.download", new { url = "https://example.com/file", clientId = Guid.NewGuid().ToString() }), CancellationToken.None);
+            provider.OnExecutionEnded("execution");
+            Assert.False(service.Operation.WasAborted);
+            service.Operation.Complete();
+            Assert.Empty(events);
+            service.Operation = new ControlledDownload();
+            await provider.InvokeAsync(Context(installation, "GM.download", new { url = "https://example.com/file", clientId = Guid.NewGuid().ToString() }), CancellationToken.None);
+            provider.Dispose();
+            Assert.True(service.Operation.WasAborted);
+            Assert.Empty(events);
         }
 
         [Fact]
@@ -702,7 +755,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         private sealed class FakeHostServices :
             IMenuService, INotificationService, IClipboardService, ITabService, IDownloadService, IUserScriptWindowService
         {
-            public string DownloadMode => "native";
+            public string DownloadMode => "browser";
             private Action _menuCallback;
             public FakeMenuRegistration MenuRegistration { get; } = new FakeMenuRegistration();
             public string ClipboardText { get; private set; }
@@ -733,7 +786,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 OpenTab = request;
                 return Task.FromResult<ITabHandle>(new FakeTabHandle("tab"));
             }
-            public Task<IDownloadOperation> DownloadAsync(DownloadRequest request, CancellationToken cancellationToken)
+            public Task<IDownloadOperation> CreateAsync(DownloadRequest request, CancellationToken cancellationToken)
             {
                 Download = request;
                 return Task.FromResult<IDownloadOperation>(new FakeDownloadOperation("download"));
@@ -774,6 +827,8 @@ namespace Mzying2001.MonkeySharp.Core.Tests
 
         private sealed class FakeDownloadOperation : IDownloadOperation
         {
+            public void Start() { }
+            public DownloadResult Result => new DownloadResult(DownloadId);
             public FakeDownloadOperation(string id) { DownloadId = id; }
             public string DownloadId { get; }
             public Task Completion { get; } = Task.CompletedTask;
@@ -784,6 +839,35 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             public event EventHandler TimedOut { add { } remove { } }
             public void Abort() { Aborted?.Invoke(this, EventArgs.Empty); }
             public void Dispose() { }
+        }
+
+        private sealed class ControlledDownloadService : IDownloadService
+        {
+            public string DownloadMode => "browser";
+            public bool CompleteOnStart, DelayCreation;
+            public ControlledDownload Operation = new ControlledDownload();
+            public TaskCompletionSource<IDownloadOperation> Created = new TaskCompletionSource<IDownloadOperation>();
+            public Task<IDownloadOperation> CreateAsync(DownloadRequest request, CancellationToken cancellationToken)
+            {
+                Operation.CompleteOnStart = CompleteOnStart;
+                return DelayCreation ? Created.Task : Task.FromResult<IDownloadOperation>(Operation);
+            }
+        }
+        private sealed class ControlledDownload : IDownloadOperation
+        {
+            public string DownloadId => "controlled";
+            public DownloadResult Result => new DownloadResult(DownloadId, name: "empty.bin");
+            private readonly TaskCompletionSource<object> _completion = new TaskCompletionSource<object>();
+            public Task Completion => _completion.Task;
+            public bool CompleteOnStart, WasAborted, Disposed;
+            public event EventHandler<UserScriptDownloadProgress> Progress { add { } remove { } }
+            public event EventHandler<UserScriptDownloadFailure> Failed { add { } remove { } }
+            public event EventHandler TimedOut { add { } remove { } }
+            public event EventHandler Completed, Aborted;
+            public void Start() { if (WasAborted) Aborted?.Invoke(this, EventArgs.Empty); else if (CompleteOnStart) Complete(); }
+            public void Complete() { Completed?.Invoke(this, EventArgs.Empty); _completion.TrySetResult(null); }
+            public void Abort() { WasAborted = true; Aborted?.Invoke(this, EventArgs.Empty); _completion.TrySetCanceled(); }
+            public void Dispose() { Disposed = true; }
         }
 
         private sealed class FakeMenuRegistration : IMenuRegistration

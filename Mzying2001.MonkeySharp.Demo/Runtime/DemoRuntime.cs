@@ -82,7 +82,7 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
         {
             _dispatcher.VerifyAccess();
             if (_disposed) throw new ObjectDisposedException(nameof(DemoRuntime));
-            var downloads = new DownloadService(Paths.DownloadsDirectory, _dispatcher, MainWindow);
+            DownloadService downloads = null;
             var host = new CefSharpUserScriptHostBuilder(Repository)
                 .UseValueStore(_values).UsePermissionPolicy(new AllowDeclaredPermissionsPolicy())
                 .UseMenuService(new WpfMenuService(tab, _dispatcher))
@@ -90,7 +90,8 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                 .UseClipboardService(new WpfClipboardService(_dispatcher))
                 .UseTabService(new WpfTabService(MainWindow, tab, _dispatcher))
                 .UseWindowService(new WpfWindowService(MainWindow, tab, _dispatcher))
-                .UseDownloadService(downloads).UseTabStateService(_tabStates.ForTab(tab.TabId))
+                .UseDownloadServiceFactory(http => downloads = new DownloadService(Paths.DownloadsDirectory, _dispatcher, MainWindow, http))
+                .UseTabStateService(_tabStates.ForTab(tab.TabId))
                 .UseResourceProvider(Content).UseDependencyProvider(Content)
                 .Configure(new CefSharpHostOptions
                 {

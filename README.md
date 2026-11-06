@@ -147,7 +147,7 @@ This table summarizes availability. Parameters, return values, callbacks, and [T
 | `GM.xmlHttpRequest` / `GM_xmlhttpRequest` | CefSharp default | Requires `@connect`; supports redirects, credentials, progress, abort, and binary/multipart bodies. See [HTTP requests](docs/usage-guide.md#http-requests) for response types and limitations. |
 | `GM.registerMenuCommand`, `GM.unregisterMenuCommand` and aliases | Conditional | Require `IMenuService`. |
 | `GM.notification`, `GM.setClipboard`, `GM.openInTab` and aliases | Conditional | Require their corresponding host services. |
-| `GM.download` / `GM_download` | Conditional | Requires `IDownloadService`. Modern calls resolve a start handle and ignore callback fields; progress/completion callbacks require the legacy facade. See [downloads](docs/usage-guide.md#downloads). |
+| `GM.download` / `GM_download` | Conditional | Requires `IDownloadService`. Modern calls immediately return an abortable completion Promise; both forms support callbacks. Demo shares the browser network context. See [downloads](docs/usage-guide.md#downloads). |
 | `GM.getTab`, `GM.saveTab`, `GM.getTabs` and aliases | Conditional | Require `ITabStateService`. |
 | `GM.cookie` / `GM_cookie` | CefSharp default | Structured access to the attached browser request context. |
 | `GM.webRequest` / `GM_webRequest` | CefSharp default | Runtime registrations with removable handles and cancel/redirect result callbacks. |

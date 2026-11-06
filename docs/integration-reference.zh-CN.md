@@ -186,11 +186,14 @@ Demo 使用数据库格式 2，拒绝旧开发数据库，不进行迁移或删�
 | --- | --- | --- |
 | `INotificationService.ShowAsync` | 立即返回 `INotificationHandle` | `Completion`、`Clicked`、`Closed`、`Dispose`；没有独立的 `Abort` 成员。 |
 | `ITabService.OpenAsync` | `Task<ITabHandle>` | `TabId`、`Closed`、`OnClose`、`CloseAsync`、`Dispose`；没有 `Completion` 任务。 |
-| `IDownloadService.DownloadAsync` | `Task<IDownloadOperation>` | `DownloadId`、`Completion`、`Progress`、`Completed`、`Failed`、`Aborted`、`TimedOut`、`Abort`、`Dispose`。 |
+| `IDownloadService.CreateAsync` | `Task<IDownloadOperation>` | `Start`、`Result`、`DownloadId`、`Completion` 及进度/完成/失败/取消/超时事件、`Abort`、`Dispose`。Create 必须返回未启动操作，先订阅所有事件，再调用 Start。 |
+
+通过 `UseDownloadServiceFactory(http => new FileDownloadService(http, selectDestination))` 与 XHR 共用实际 CEF 网络服务及 webRequest 组合。builder 管理工厂创建的可释放服务。selectDestination 是可信宿主策略或 UI，返回绝对 DownloadDestination，取消时返回 null。browser 模式实现保存和冲突选项；native 模式在副作用前拒绝这些选项。Dispose 取消已接受任务；关闭 CEF 前等待 DrainAsync。必须遵守 DownloadRequest.Anonymous 和 RedirectAllowed。每次操作只发一个终态事件，成功 Result 表示已提交的文件；CreateAsync 不得启动网络或 UI。
+
 
 运行时通过句柄事件向脚本发送回调；仅完成 `Completion` 任务不会发送终态回调。提供程序应只发出一次终态事件，并支持执行结束时的幂等清理。释放标签页句柄应解除观察关系；关闭用户标签页是独立的 `CloseAsync` 操作。
 
-JavaScript 下载契约与宿主操作契约不同：`GM.download` 返回的 `Promise<DownloadHandle>` 在下载启动时完成，目前会忽略 `details` 中的回调字段。需要脚本侧进度及终态回调时，应使用已声明的 `GM_download` 入口。返回值及限制详见[下载使用指南](usage-guide.zh-CN.md#下载)。
+`GM.download` 立即返回带 abort 的完成 Promise，`GM_download` 返回仅含 abort 的句柄；两者均支持回调。最终文件提交后才完成，详情为 `{url, name, loaded}`。返回形状及生命周期策略详见[下载使用指南](usage-guide.zh-CN.md#下载)。
 
 ## 生命周期与诊断
 
@@ -199,7 +202,7 @@ JavaScript 下载契约与宿主操作契约不同：`GM.download` 返回的 `Pr
 分别标记附加、准备发生时初始化已完成。这些 API 不提高用户脚本的时序保证。
 参见[真实协议实验结论](compatibility/cdp-findings.md)。
 
-适配器为每个框架文档建立身份，并对每个 `(document, frame, script, run-at)` 组合执行一次。`@run-at context-menu` 脚本会按当前 frame 匹配规则出现在 CefSharp 原生上下文菜单中，只有用户选择菜单项后才创建一次新的执行。导航、上下文释放、分离和宿主释放都会使能力失效并取消待处理工作。
+适配器为每个框架文档建立身份，并对每个 `(document, frame, script, run-at)` 组合执行一次。`@run-at context-menu` 脚本会按当前 frame 匹配规则出现在 CefSharp 原生上下文菜单中，只有用户选择菜单项后才创建一次新的执行。导航、上下文释放和分离使文档能力失效并取消待处理调用；已接受下载继续作为宿主任务运行，文档回调停止。宿主释放时取消这些任务。
 
 GM.info 和 GM_info 无需单独授权，始终引用同一个深度冻结快照。声明状态与原始授权列表保持不变。
 compatibility 块的 contractVersion 为 2，记录真实执行世界、可用 API 及字段来源。管理器版本来自程序集；

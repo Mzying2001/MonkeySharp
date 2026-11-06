@@ -192,7 +192,7 @@ Each row requires its capability family or exact legacy declaration unless state
 | `GM.getTab` | `GM_getTab` | `Promise<object>` | Tab-state service |
 | `GM.saveTab` | `GM_saveTab` | `Promise<undefined>` | Tab-state service |
 | `GM.getTabs` | `GM_getTabs` | `Promise<object>` | Tab-state service |
-| `GM.download` | `GM_download` | `Promise<DownloadHandle>` | Download service |
+| `GM.download` | `GM_download` | `Promise<DownloadDetails> & {abort()}` | Download service |
 | `GM.cookie` | `GM_cookie` | Object with CRUD/listener methods | CefSharp default |
 | `GM.webRequest` | `GM_webRequest` | Removable handle immediately | CefSharp default |
 | `unsafeWindow` | Same name | Page global object | Exact grant |
@@ -548,53 +548,43 @@ Legacy getTab/getTabs errors are structured `{error, details, code}` objects. Mu
 
 ### GM.download(details) / GM_download(details)
 
-Requires its grant and a download service. The modern call accepts an options object or a URL string. Legacy additionally supports `GM_download(url, name)` and `GM_download(details, onload?, onerror?)`. Use the documented object form for portability.
+Requires its grant and a download service. Both forms accept an options object or `(url, name?)`, where `url` is an absolute HTTP(S) string. Blob/File inputs remain unsupported.
 
 | Field | Type / default | Behavior |
 | --- | --- | --- |
-| `url` | Required absolute HTTP(S) string | No Blob/File URL input. |
-| `name` | Optional string | Requested filename, ultimately controlled/sanitized by the host. |
-| `headers` | String-to-string object, `{}` | Host download headers; validation may differ from XHR. |
-| `saveAs` | Boolean, `false` | Request a destination picker. |
-| `conflictAction` | `"uniquify"` (default), `"overwrite"`, `"prompt"` | Requested collision behavior. |
-| `timeout` | Optional positive integer milliseconds | Download timeout; zero is not valid here. |
-| `onload` | Legacy-only function `({id})` | Download completed. |
-| `onprogress` | Legacy-only function `({loaded, total})` | Byte progress; total can be null/unknown. |
-| `onerror` | Legacy-only function `({error, details, code?})` | Start/failure/cancellation information. |
-| `ontimeout` | Legacy-only function `({error: "timeout", details})` | Timeout; falls back to onerror if absent. |
+| `url` | Required HTTP(S) string | Initial target and redirects pass host authorization. |
+| `name` | Optional string | Suggested filename; the host selects and sanitizes the destination. |
+| `headers` | String-to-string object, `{}` | Uses the shared browser network service. |
+| `anonymous` | Boolean, `false` | Omit browser cookies and credentials. |
+| `saveAs` | Boolean, `false` | Request a host destination picker. |
+| `conflictAction` | `"uniquify"`, `"overwrite"`, `"prompt"` | Default is uniquify. Picker and conflict options require browser mode. |
+| `timeout` | Positive integer milliseconds | Covers destination selection, transfer and commit; the file service defaults to ten minutes. |
+| `onload` | Function `({url, name, loaded})` | Runs after successful final file commit. |
+| `onprogress` | Function `({loaded, total})` | Byte progress; total can be null. |
+| `onerror` | Function `({error, details, code?})` | Start, transfer, cancellation or disk failure. |
+| `ontimeout` | Function | Timeout; falls back to onerror. |
 
-Modern result is a plain **`Promise<DownloadHandle>` resolving when started**, not when completed. Await it to obtain `{id, abort()}`. The Promise itself has no `.abort()`. Legacy returns a local handle immediately; `id` becomes available asynchronously. Handle `abort()` returns `Promise<boolean>` indicating whether a host abort was requested/accepted, not a completion result. Before a legacy handle has an ID it may return false; use terminal callbacks to observe actual outcome.
+Modern `GM.download` immediately returns the original completion **Promise with `abort()`**. It resolves only after the file is flushed, closed and atomically moved/replaced into its final destination. Its completion details are the supported subset `{url, name, loaded}` (final URL, actual filename, committed bytes), without local paths or internal IDs. Legacy immediately returns `{abort()}`. Both abort methods return `undefined`, work before host acknowledgment, and are harmless after a terminal state. Both forms support callbacks; a callback exception is reported separately and cannot turn a committed download into failure. Each operation settles once.
 
-**Current download limitation:** modern callbacks and completion settlement are being replaced in the P0 download step. Until that step, use the declared `GM_download` entry point for terminal callbacks.
+Errors use `{error, details, code?}`: `not_enabled`, `not_permitted`, `not_whitelisted`, `not_supported`, `not_succeeded`, or `timeout`. Host failures reject the modern Promise and invoke the callback; legacy failures use callbacks. A picker cancellation and explicit abort are `not_succeeded`. Unsupported Blob/File inputs and invalid options fail before network work.
 
-Error categories include `not_enabled` (expired session), `not_permitted` (grant), `not_whitelisted` (host permission), `not_supported`, `not_succeeded`, and `timeout`. Names resemble Tampermonkey's categories, but `not_whitelisted` does not necessarily mean a filename-extension whitelist. Modern host/start failures reject with a plain `{error, details, code}` object, not an Error with `.message`; local validation can still reject a TypeError. Legacy start and later failures arrive through callbacks. A completed/aborted/failed operation is terminal. Navigation or host disposal cancels execution-owned downloads.
+Demo GM downloads use the exact CEF HTTP service and RequestContext used by GM XHR, including browser login credentials, anonymous behavior, redirect checks and configured webRequest composition. They stream through a bounded buffer into temporary files, then commit to `Data/Downloads` or a picker destination. Cancellation/failure removes partials before the terminal event. Download authorization uses the host policy, rather than XHR's `@connect` list; there is no extension-whitelist preference.
 
-The Demo streams to its `Data/Downloads` directory by default, sanitizes names, supports picker/conflict actions, and removes partial files. Its separate HTTP client **does not inherit browser login cookies or credentials**. Core does not apply the XHR `@connect` allowlist to downloads; the host download service and permission policy decide access. There is no implemented `anonymous` option or built-in Tampermonkey extension-whitelist preference.
-
-**Tampermonkey difference:** the [official modern API](https://www.tampermonkey.net/documentation.php?q=GM_download) documents an abortable Promise resolving download details. MonkeySharp instead resolves a start handle; abort the awaited handle and use the legacy facade when completion callbacks are necessary.
+Accepted downloads are host tasks. Navigation, execution end, script disable or uninstall mute document callbacks while accepted transfers continue under their captured authorization and redirect policy. Host disposal cancels tasks; the host must drain them before disposing CEF/network services. An explicit abort before completion cancels the task. Unaccepted or invalid calls do no transfer work.
 
 ```javascript
 // @grant GM.download
-(async function () {
-    const download = await GM.download({
-        url: "https://example.com/", name: "example.html"
-    });
-    console.log("Started:", download.id);
-    // To cancel after starting: await download.abort();
-})().catch(console.error);
-```
+const pending = GM.download({ url: 'https://example.com/file', name: 'file.bin' });
+// pending.abort(); // optional, including immediately after the call
+pending.then(details => console.log('Committed:', details.name, details.loaded), console.error);
 
-For completion notifications in the default legacy profile:
-
-```javascript
 // @grant GM_download
-const download = GM_download({
-    url: "https://example.com/", name: "example.html",
-    onload: result => console.log("Finished:", result.id),
-    onerror: error => console.error("Download failed:", error),
-    ontimeout: error => console.error("Download timed out:", error)
+const handle = GM_download({
+    url: 'https://example.com/file', name: 'file.bin',
+    onload: details => console.log('Committed:', details.name),
+    onerror: error => console.error(error)
 });
-// To cancel: download.abort().catch(console.error);
+// handle.abort();
 ```
 
 ## Cookies
@@ -716,7 +706,7 @@ window.addEventListener("urlchange", onRoute);
 | Menu / clipboard | Use string access keys and MIME strings; remove unsupported options objects/callback overloads. |
 | Notifications | Use supported detail fields; modern resolution is registration, not dismissal. |
 | Tabs | Modern returns a Promise; legacy returns an immediate handle; use close/onclose; private mode and numeric insertion positions are absent. |
-| Downloads | Await the start handle, then call its abort; completion callbacks require legacy GM_download; Demo downloads lack browser credentials. |
+| Downloads | Immediately returns an abortable completion Promise; Demo uses the shared browser network context and commits the file before completion. |
 | Cookies | No partitionKey semantics; default SameSite/first-party writes and change feeds are limited. |
 | webRequest | Rewrite action objects and callbacks; explicitly register runtime rules and retain the removal handle. |
 | Other manager APIs | `GM.audio`/`GM_audio` and extension-specific content/deployment APIs are not built in. Unknown grants do not add them. |
@@ -750,7 +740,7 @@ Defaults: ordinary bridge requests/responses are limited to 1 MiB each, resource
 | A dependency is missing | Host dependency provider and `MSR400_DEPENDENCY_RESOLUTION_FAILED` / `MSR401_DEPENDENCY_PROVIDER_UNAVAILABLE`. |
 | Code runs too late or in the wrong world | document-start is best effort (`MSR100`/`MSR101`); sandbox/unwrap requests cannot create isolation (`MSR212`/`MSR213`). |
 | XHR fails after a redirect | Allow every redirect destination with `@connect`; check host policy. |
-| Download fails despite browser login | Demo downloader is a separate HTTP client; use the application's authenticated/native download path if provided. |
+| Download fails despite browser login | Check the actual RequestContext, anonymous option, redirect authorization, and host permission policy. |
 | Async callback stopped after navigation | The old execution was released; register again in the new document. |
 | JavaScript exception | DevTools console and host `MSR300_SCRIPT_EXCEPTION`; catch asynchronous work explicitly. |
 

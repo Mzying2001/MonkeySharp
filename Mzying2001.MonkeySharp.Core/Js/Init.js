@@ -310,26 +310,13 @@
                         return true;
                     }
                     if (notification.event === "download-progress" || notification.event === "download-complete" ||
-                        notification.event === "download-error" || notification.event === "download-aborted" ||
-                        notification.event === "download-timeout") {
-                        const state = record.downloadHandlers.get(data.clientId || data.downloadId);
-                        if (!state) return false;
+                        notification.event === "download-error" || notification.event === "download-aborted" || notification.event === "download-timeout") {
+                        const state = record.downloadHandlers.get(data.clientId);
+                        if (!state || state.terminal) return false;
                         if (notification.event === "download-progress") {
-                            if (state.callbacks.onprogress) state.callbacks.onprogress({ loaded: data.loaded, total: data.total });
-                        } else if (notification.event === "download-complete") {
-                            state.terminal = true;
-                            if (state.callbacks.onload) state.callbacks.onload({ id: data.downloadId });
-                            record.downloadHandlers.delete(data.clientId || data.downloadId);
-                        } else if (notification.event === "download-timeout") {
-                            state.terminal = true;
-                            if (state.callbacks.ontimeout) state.callbacks.ontimeout({ error: data.error || "timeout", details: data.details || null });
-                            else if (state.callbacks.onerror) state.callbacks.onerror({ error: data.error || "timeout", details: data.details || null });
-                            record.downloadHandlers.delete(data.clientId || data.downloadId);
-                        } else {
-                            state.terminal = true;
-                            if (state.callbacks.onerror) state.callbacks.onerror({ error: data.error || "not_succeeded", details: data.details || null });
-                            record.downloadHandlers.delete(data.clientId || data.downloadId);
-                        }
+                            invokeHostCallback(record, state.callbacks.onprogress, state.details, { loaded: data.loaded, total: data.total }, "download progress");
+                        } else if (notification.event === "download-complete") state.finish("complete", data.result || {});
+                        else state.finish(notification.event === "download-timeout" ? "timeout" : notification.event === "download-aborted" ? "aborted" : "error", data);
                         return true;
                     }
                     if (notification.event === "cookie-change") {

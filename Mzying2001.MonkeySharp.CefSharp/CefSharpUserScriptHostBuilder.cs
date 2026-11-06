@@ -28,6 +28,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
         private IClipboardService _clipboard;
         private ITabService _tabs;
         private IDownloadService _downloads;
+        private Func<IHttpRequestService, IDownloadService> _downloadFactory;
         private ITabStateService _tabState;
         private IUserScriptWindowService _window;
         private ICookieService _cookies;
@@ -138,6 +139,14 @@ namespace Mzying2001.MonkeySharp.CefSharp
         public CefSharpUserScriptHostBuilder UseDownloadService(IDownloadService downloads)
         {
             _downloads = downloads ?? throw new ArgumentNullException(nameof(downloads));
+            _downloadFactory = null;
+            return this;
+        }
+
+        /// <summary>Creates downloads using this host's actual shared HTTP service and request context.</summary>
+        public CefSharpUserScriptHostBuilder UseDownloadServiceFactory(Func<IHttpRequestService, IDownloadService> factory)
+        {
+            _downloadFactory = factory ?? throw new ArgumentNullException(nameof(factory));
             return this;
         }
 
@@ -242,6 +251,12 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 }
 
                 var effectiveCookies = _cookies;
+                if (_downloadFactory != null)
+                {
+                    if (effectiveHttp == null) throw new InvalidOperationException("The download factory requires an HTTP request service.");
+                    _downloads = _downloadFactory(effectiveHttp) ?? throw new InvalidOperationException("The download factory returned no service.");
+                    if (_downloads is IDisposable downloadOwner) ownedServices.Add(downloadOwner);
+                }
                 if (effectiveCookies == null && _options.EnableDefaultNetworkServices)
                 {
                     effectiveCookies = new CefSharpCookieService(() => contextAccessor.Current);

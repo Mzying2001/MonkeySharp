@@ -1,3 +1,82 @@
+            const invokeHostCallback = function (record, callback, receiver, value, name) {
+                if (typeof callback !== "function") return;
+                try { callback.call(receiver, value); }
+                catch (error) {
+                    console.error("[MonkeySharp] " + name + " callback failed", error);
+                    call(record, "runtime.reportError", { message: name + " callback failed: " + String(error && error.message || error) })
+                        .catch(reportError => console.error("[MonkeySharp] callback reporting failed", reportError));
+                }
+            };
+
+            const createDownloadOperation = function (record, input, name) {
+                const clientId = uuid();
+                const state = { clientId, terminal: false, abortRequested: false, abortSent: false,
+                    abortInFlight: false, abortAttempts: 0, startSent: false, accepted: false, details: {}, callbacks: {} };
+                const promise = new Promise((resolve, reject) => { state.resolve = resolve; state.reject = reject; });
+                if (input && typeof input === "object") {
+                    state.details = input;
+                    for (const name of ["onload", "onerror", "onprogress", "ontimeout"]) if (typeof input[name] === "function") state.callbacks[name] = input[name];
+                }
+                const operation = { promise, hasErrorCallback: Boolean(state.callbacks.onerror || state.callbacks.ontimeout) };
+                state.finish = function (kind, value) {
+                    if (state.terminal) return;
+                    state.terminal = true;
+                    record.downloadHandlers.delete(clientId);
+                    if (kind === "complete") {
+                        invokeHostCallback(record, state.callbacks.onload, state.details, value, "download onload");
+                        state.resolve(value);
+                    } else {
+                        const error = downloadError(value, kind === "timeout" ? "timeout" : "not_succeeded");
+                        const callback = kind === "timeout" && state.callbacks.ontimeout ? state.callbacks.ontimeout : state.callbacks.onerror;
+                        invokeHostCallback(record, callback, state.details, error, "download " + kind);
+                        state.reject(error);
+                    }
+                };
+                const sendAbort = function () {
+                    if (!state.startSent || state.terminal || state.abortSent || state.abortInFlight) return;
+                    state.abortInFlight = true;
+                    state.abortAttempts++;
+                    call(record, "GM.download", { operation: "abort", clientId }).then(result => {
+                        state.abortInFlight = false;
+                        state.abortSent = Boolean(result && result.accepted);
+                        if (!state.abortSent && state.accepted && !state.terminal && state.abortAttempts < 2) sendAbort();
+                    }, error => { state.abortInFlight = false; state.finish("error", error); });
+                };
+                promise.abort = function () {
+                    if (state.terminal || state.abortRequested) return;
+                    state.abortRequested = true;
+                    if (!state.startSent) state.finish("aborted", { error: "not_succeeded", details: "The download was aborted before starting." });
+                    else sendAbort();
+                };
+                record.downloadHandlers.set(clientId, state);
+                Promise.resolve().then(() => {
+                    if (state.terminal) return;
+                    const details = typeof input === "string" ? { url: input, name } : input;
+                    if (!details || typeof details !== "object" || Array.isArray(details)) throw new TypeError("details must be an object or URL string.");
+                    state.details = details;
+                    for (const callback of ["onload", "onerror", "onprogress", "ontimeout"]) {
+                        if (typeof details[callback] !== "undefined" && typeof details[callback] !== "function") throw new TypeError(callback + " must be a function.");
+                        state.callbacks[callback] = details[callback];
+                    }
+                    operation.hasErrorCallback = Boolean(state.callbacks.onerror || state.callbacks.ontimeout);
+                    if (objectTag(details.url) === "[object Blob]" || objectTag(details.url) === "[object File]") throw notSupported("Blob/File downloads require the renderer binary transport.");
+                    if (typeof details.url !== "string" || !/^https?:\/\//i.test(details.url)) throw new TypeError("url must be an absolute HTTP or HTTPS URL.");
+                    if (typeof details.name !== "undefined" && typeof details.name !== "string") throw new TypeError("name must be a string.");
+                    for (const option of ["saveAs", "anonymous"]) if (typeof details[option] !== "undefined" && typeof details[option] !== "boolean") throw new TypeError(option + " must be a boolean.");
+                    if (typeof details.timeout !== "undefined" && (!Number.isInteger(details.timeout) || details.timeout <= 0)) throw new TypeError("timeout must be a positive integer.");
+                    if (typeof details.conflictAction !== "undefined" && !["uniquify", "overwrite", "prompt"].includes(details.conflictAction)) throw new TypeError("Invalid conflictAction.");
+                    state.startSent = true;
+                    return call(record, "GM.download", { operation: "start", clientId, url: details.url,
+                        name: details.name || null, headers: details.headers ? serializableValue(details.headers) : {},
+                        saveAs: Boolean(details.saveAs), anonymous: Boolean(details.anonymous),
+                        conflictAction: details.conflictAction || "uniquify", timeout: details.timeout }).then(() => {
+                        state.accepted = true;
+                        if (state.abortRequested) sendAbort();
+                    });
+                }).catch(error => state.finish(state.abortRequested ? "aborted" : "error", error));
+                return operation;
+            };
+
             const downloadError = function (error, fallback) {
                 if (error && typeof error === "object" && typeof error.error === "string") {
                     return { error: error.error, details: error.details || null, code: error.code || null };
@@ -139,47 +218,9 @@
                     };
                     api.openInTab = function (url, options) { return record.openTab(url, options).ready; };
                 }
-                if (enabled("GM.download")) {
-                    api.download = async function (details, state) {
-                        if (typeof details === "string") details = { url: details };
-                        if (!details || typeof details !== "object") throw new TypeError("details must be an object.");
-                        const clientId = uuid();
-                        state = state || { clientId: clientId, id: null, abortRequested: false, terminal: false, callbacks: {} };
-                        state.clientId = clientId;
-                        record.downloadHandlers.set(clientId, state);
-                        const request = {
-                            operation: "start",
-                            clientId: clientId,
-                            url: details.url,
-                            name: details.name || null,
-                            headers: details.headers ? serializableValue(details.headers) : {},
-                            saveAs: Boolean(details.saveAs),
-                            conflictAction: details.conflictAction || "uniquify",
-                            timeout: typeof details.timeout === "number" ? details.timeout : undefined
-                        };
-                        const handle = {
-                            id: null,
-                            abort: function () {
-                                if (state.terminal || state.aborted) return Promise.resolve(false);
-                                state.aborted = true;
-                                state.abortRequested = true;
-                                if (!state.id) return Promise.resolve(false);
-                                return call(record, "GM.download", { operation: "abort", downloadId: state.id });
-                            }
-                        };
-                        state.handle = handle;
-                        try {
-                            const result = await call(record, "GM.download", request);
-                            state.id = result && result.id;
-                            handle.id = state.id;
-                            if (state.abortRequested) await handle.abort();
-                            return handle;
-                        } catch (error) {
-                            record.downloadHandlers.delete(clientId);
-                            throw downloadError(error);
-                        }
-                    };
-                }
+                if (enabled("GM.download")) api.download = function (details, name) {
+                    return createDownloadOperation(record, details, name).promise;
+                };
                 if (enabled("GM.getTab")) api.getTab = async () => call(record, "GM.getTab", {});
                 if (enabled("GM.saveTab")) {
                     api.saveTab = async value => call(record, "GM.saveTab", { value: serializableValue(value) });
@@ -264,36 +305,11 @@
                     operation.ready.catch(error => console.error("[MonkeySharp] legacy tab open failed", error));
                     return operation.handle;
                 };
-                if (api.download) facade.GM_download = function (details, onload, onerror) {
-                    if (typeof details === "string" && typeof onload === "string") {
-                        details = { url: details, name: onload };
-                        onload = undefined;
-                    }
-                    if (typeof details === "string") details = { url: details };
-                    if (!details || typeof details !== "object") throw new TypeError("details must be an object.");
-                    ["onload", "onerror", "onprogress", "ontimeout"].forEach(name => {
-                        if (typeof details[name] !== "undefined" && typeof details[name] !== "function") {
-                            throw new TypeError(name + " must be a function.");
-                        }
+                if (api.download) facade.GM_download = function (details, name) {
+                    const operation = createDownloadOperation(record, details, name);
+                    operation.promise.catch(error => {
+                        if (!operation.hasErrorCallback) console.error("[MonkeySharp] legacy download failed", error);
                     });
-                    const state = { id: null, callbacks: {
-                        onload: onload || details.onload,
-                        onerror: onerror || details.onerror,
-                        onprogress: details.onprogress,
-                        ontimeout: details.ontimeout
-                    } };
-                    const handlePromise = api.download(details, state);
-                    handlePromise.catch(error => {
-                        if (typeof state.callbacks.onerror === "function") state.callbacks.onerror(downloadError(error));
-                        else console.error("[MonkeySharp] legacy download failed", error);
-                    });
-                    return {
-                        abort: function () {
-                            if (state.abortRequested) return Promise.resolve(false);
-                            state.abortRequested = true;
-                            return state.handle ? state.handle.abort() : Promise.resolve(false);
-                        },
-                        get id() { return state.id; }
-                    };
+                    return { abort: operation.promise.abort };
                 };
             };
