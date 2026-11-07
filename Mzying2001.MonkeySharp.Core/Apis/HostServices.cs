@@ -557,7 +557,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
     {
         /// <summary>Initializes a download request.</summary>
         /// <param name="scriptKey">The requesting script installation.</param>
-        /// <param name="url">The absolute HTTP or HTTPS download URL.</param>
+        /// <param name="url">The absolute HTTP(S) URL or renderer blob source identifier.</param>
         /// <param name="name">The optional suggested file name.</param>
         /// <param name="saveAs">Whether the host should prompt for a destination.</param>
         /// <param name="headers">Optional HTTP request headers.</param>
@@ -565,9 +565,11 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         /// <param name="timeout">An optional download timeout.</param>
         /// <param name="anonymous">Whether to omit browser credentials.</param>
         /// <param name="redirectAllowed">Authorization checked before following each redirect.</param>
+        /// <param name="body">Renderer-provided bytes for a Blob/File download, owned by the provider until its terminal event.</param>
         public DownloadRequest(ScriptKey scriptKey, Uri url, string name, bool saveAs,
             IDictionary<string, string> headers = null, string conflictAction = "uniquify", TimeSpan? timeout = null,
-            bool anonymous = false, Func<Uri, CancellationToken, Task<bool>> redirectAllowed = null)
+            bool anonymous = false, Func<Uri, CancellationToken, Task<bool>> redirectAllowed = null,
+            IUserScriptHttpBody body = null)
         {
             ScriptKey = scriptKey;
             Url = url ?? throw new ArgumentNullException(nameof(url));
@@ -581,7 +583,11 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 throw new ArgumentOutOfRangeException(nameof(timeout));
             Anonymous = anonymous;
             RedirectAllowed = redirectAllowed ?? ((target, token) => Task.FromResult(true));
+            Body = body;
         }
+
+        /// <summary>Gets renderer-provided bytes for a Blob/File download; null means network transfer.</summary>
+        public IUserScriptHttpBody Body { get; }
 
         /// <summary>Gets the requesting script installation.</summary>
         public ScriptKey ScriptKey { get; }

@@ -414,7 +414,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             _timeoutTimer.Stop();
             await _host.DetachAsync(CancellationToken.None).ConfigureAwait(true);
             var success = _initialFixturePassed && _mainFrameLoads >= 2 && _childFrameLoads >= 1 && _contextReleased >= 1 &&
-                !_host.IsAttached && _compatibilityResults != null && _compatibilityResults.Count == 11 && _compatibilityResults.Values.All(value => value);
+                !_host.IsAttached && _compatibilityResults != null && _compatibilityResults.Count == 12 && _compatibilityResults.Values.All(value => value);
             object fixture = null;
             if (!string.IsNullOrEmpty(_initialFixtureJson))
             {
@@ -564,6 +564,13 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                     if (request.Path == "/compat/replay-image") await Task.Delay(3000, _cancellation.Token).ConfigureAwait(false);
                     if (request.Path == "/compat/replay-defer") await Task.Delay(200, _cancellation.Token).ConfigureAwait(false);
                     if (request.Path == "/compat/files/stalled") await Task.Delay(1500, _cancellation.Token).ConfigureAwait(false);
+                    if (request.Path == "/compat/truncated")
+                    {
+                        var partial = Encoding.ASCII.GetBytes("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: 100000\r\nConnection: close\r\n\r\nfirst");
+                        await stream.WriteAsync(partial, 0, partial.Length).ConfigureAwait(false);
+                        await Task.Delay(200, _cancellation.Token).ConfigureAwait(false);
+                        return;
+                    }
                     if (request.Path == "/stream")
                     {
                         await WriteChunkedAsync(stream).ConfigureAwait(false);
@@ -648,6 +655,12 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                             statusText = "Not Found";
                             body = Encoding.UTF8.GetBytes("missing fixture file");
                             break;
+                        case "/compat/latin":
+                            contentType = "text/plain; charset=windows-1252";
+                            body = new byte[] { 99, 97, 102, 233 }; break;
+                        case "/compat/html":
+                            contentType = "text/html; charset=utf-8";
+                            body = Encoding.UTF8.GetBytes("<!doctype html><title>parsed html</title><p>body"); break;
                         case "/xhr":
                             body = Encoding.UTF8.GetBytes("legacy xhr ok");
                             break;

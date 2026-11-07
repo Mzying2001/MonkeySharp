@@ -252,7 +252,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                         _tabs,
                         _downloads,
                         _tabState,
-                        _window));
+                        _window, _options.Bridge));
                 }
                 if (effectiveCookies != null)
                     providers.Add(new CookieApiProvider(effectiveCookies));

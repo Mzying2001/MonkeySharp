@@ -250,6 +250,24 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
             catch (KeyNotFoundException) { return false; }
         }
 
+        internal async Task InvalidateExecutionAsync(string executionId, CancellationToken token)
+        {
+            ExecutionRecord ended = null;
+            await _queue.WaitAsync(token).ConfigureAwait(false);
+            try
+            {
+                lock (_stateLock)
+                    if (_executions.TryGetValue(executionId, out ended))
+                    {
+                        _executions.Remove(executionId);
+                        if (_documents.TryGetValue(ended.Frame.DocumentId, out var document)) document.ExecutionIds.Remove(executionId);
+                        ended.Cancellation.Cancel(); ended.Cancellation.Dispose();
+                    }
+            }
+            finally { _queue.Release(); }
+            if (ended != null) NotifyExecutionsEnded(new[] { ended });
+        }
+
         private async Task<InjectionPlan> ProcessLifecycleCoreAsync(
             DocumentLifecycleEventArgs lifecycle,
             ICollection<UserScriptDiagnostic> diagnostics,

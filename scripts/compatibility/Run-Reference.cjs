@@ -122,6 +122,12 @@ async function main() {
             stylesApplied: JSON.stringify(result.effects.styles) === JSON.stringify(["17", "23"]),
             promisesSettled: Object.values(result.promise).every(value => value.state === "fulfilled"),
             openedTabsClosed: result.effects.tabsBefore === result.effects.tabsAfter
+        } : result.caseId === "binary-inputs" ? {
+            blobText: result.effects.blobText === "blob text 你好",
+            fileText: result.effects.fileText === "file text",
+            urlBytes: JSON.stringify(result.effects.urlBytes) === "[0,255,1]",
+            callbackReceiver: result.effects.callbackThis === true,
+            abortHandle: result.immediateReturn.abort === "function"
         } : { exposureRecorded: Object.keys(result.immediateReturn).length > 0 };
         const record = {
             ...result, fixtureHash,

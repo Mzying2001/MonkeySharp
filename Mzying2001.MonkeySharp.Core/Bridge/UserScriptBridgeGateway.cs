@@ -252,7 +252,10 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             }
 
             if (!await _engine.IsInstallationActiveAsync(execution.Installation, cancellationToken).ConfigureAwait(false))
+            {
+                await _engine.InvalidateExecutionAsync(execution.Invocation.ExecutionId, CancellationToken.None).ConfigureAwait(false);
                 return Limit(ProtocolJson.Error(null, BridgeErrorCodes.SessionExpired, "The installation changed or was disabled.", true));
+            }
             var grants = execution.Installation.Definition.Metadata.Capabilities;
             var supported = SupportedApis().Where(api => (api == "GM.info" || grants.Contains(api)) &&
                 !(execution.Frame.ExecutionWorld == "isolated" && api == "GM.webRequest"));
@@ -411,7 +414,10 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             if (!TryReadExecution(root, out var execution))
                 return Limit(ProtocolJson.Error(requestId, BridgeErrorCodes.SessionExpired, "The script execution session is not active."));
             if (!await _engine.IsInstallationActiveAsync(execution.Installation, cancellationToken).ConfigureAwait(false))
+            {
+                await _engine.InvalidateExecutionAsync(execution.Invocation.ExecutionId, CancellationToken.None).ConfigureAwait(false);
                 return Limit(ProtocolJson.Error(requestId, BridgeErrorCodes.SessionExpired, "The installation changed or was disabled."));
+            }
             var method = ReadRequiredString(root, "method");
             if (execution.Frame.ExecutionWorld == "isolated" && method == "GM.webRequest")
                 return Limit(ProtocolJson.Error(requestId, BridgeErrorCodes.NotSupported, "Historical webRequest page-frame interception is not implemented for isolated contexts."));
@@ -619,7 +625,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                 !parameters.TryGetProperty("operation", out var operation) ||
                 operation.ValueKind != JsonValueKind.String)
                 return false;
-            return string.Equals(operation.GetString(), "execute", StringComparison.Ordinal);
+            return operation.GetString() == "execute" || operation.GetString() == "readBody";
         }
 
         private string HandleCancel(JsonElement root)
@@ -961,6 +967,8 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
         {
             if (parameters.ValueKind != JsonValueKind.Object)
                 return null;
+            if (method == "GM.download" && parameters.TryGetProperty("operation", out var downloadOperation) && downloadOperation.ValueKind == JsonValueKind.String &&
+                downloadOperation.GetString() == "createBody") return frameUrl?.AbsoluteUri;
             if (string.Equals(method, "GM.cookie", StringComparison.Ordinal))
             {
                 if (parameters.TryGetProperty("details", out var details) &&

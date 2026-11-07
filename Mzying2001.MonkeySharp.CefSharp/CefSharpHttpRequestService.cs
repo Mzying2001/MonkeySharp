@@ -196,6 +196,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             private long _downloaded;
             private string _currentMethod;
             private bool _sendBody;
+            private string _uploadPath;
             private bool _allowExplicitCredentials;
 
             public Operation(CefSharpHttpRequestService owner, UserScriptHttpRequest request,
@@ -274,24 +275,29 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     if (_sendBody)
                     {
                         cefRequest.InitializePostData();
-                        using (var body = _request.Body.OpenRead())
-                        {
-                            var buffer = new byte[64 * 1024];
-                            int count;
-                            while ((count = body.Read(buffer, 0, buffer.Length)) > 0)
-                            {
-                                IPostDataElement element;
+                        // CefURLRequest accepts a single bytes/file element, not a list of byte chunks.
+                        IPostDataElement element;
 #if CEF_SHARP_LEGACY_REQUEST_FACTORY
-                                element = new PostDataElement();
+                        element = new PostDataElement();
 #else
-                                element = PostDataElement.Create();
+                        element = PostDataElement.Create();
 #endif
-                                var bytes = new byte[count];
-                                Buffer.BlockCopy(buffer, 0, bytes, 0, count);
-                                element.Bytes = bytes;
-                                cefRequest.PostData.AddElement(element);
-                            }
+                        if (_request.Body.Length <= 64 * 1024)
+                        {
+                            using (var body = _request.Body.OpenRead())
+                            using (var bytes = new MemoryStream()) { body.CopyTo(bytes); element.Bytes = bytes.ToArray(); }
                         }
+                        else
+                        {
+                            if (_uploadPath == null)
+                            {
+                                _uploadPath = Path.GetTempFileName();
+                                using (var body = _request.Body.OpenRead())
+                                using (var file = File.OpenWrite(_uploadPath)) body.CopyTo(file, 64 * 1024);
+                            }
+                            element.File = _uploadPath;
+                        }
+                        cefRequest.PostData.AddElement(element);
                     }
 
                     if (_webRequests != null)
@@ -556,6 +562,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 PublishError(exception);
                 if (abort)
                     QueueUi(() => DisposeRequestOnUi(_cefRequest, _urlRequest));
+                QueueUi(CleanupUpload);
                 _completion.TrySetException(exception);
                 _owner.Remove(this);
             }
@@ -567,8 +574,17 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 _timeout?.Dispose();
                 _cancellationRegistration.Dispose();
                 _cancellation.Dispose();
+                CleanupUpload();
                 _completion.TrySetResult(response);
                 _owner.Remove(this);
+            }
+
+            private void CleanupUpload()
+            {
+                if (_uploadPath == null) return;
+                try { File.Delete(_uploadPath); _uploadPath = null; }
+                catch (IOException exception) { _owner.ReportCallbackFailure("upload cleanup", exception); }
+                catch (UnauthorizedAccessException exception) { _owner.ReportCallbackFailure("upload cleanup", exception); }
             }
 
             private bool IsCompleted => Interlocked.CompareExchange(ref _completed, 0, 0) != 0;

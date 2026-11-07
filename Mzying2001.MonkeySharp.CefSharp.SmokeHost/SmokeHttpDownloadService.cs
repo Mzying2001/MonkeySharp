@@ -22,7 +22,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
         }
         public Task<IDownloadOperation> CreateAsync(DownloadRequest request, CancellationToken cancellationToken)
         {
-            if (request.Url.Scheme != "http" || request.Url.Host != "127.0.0.1" || request.Url.Port != _port ||
+            if ((request.Body == null && (request.Url.Scheme != "http" || request.Url.Host != "127.0.0.1" || request.Url.Port != _port)) ||
                 string.IsNullOrEmpty(request.Name) || Path.GetFileName(request.Name) != request.Name || request.SaveAs)
                 throw new InvalidOperationException("Smoke downloads require a named local file without UI.");
             return _pipeline.CreateAsync(request, cancellationToken);

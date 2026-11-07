@@ -90,6 +90,26 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             Assert.Equal(1, terminals);
         }
 
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public async Task RendererBodyUsesAtomicFilePathWithoutNetworkAndCleansAfterAbort(bool abort)
+        {
+            var http = new Http(Array.Empty<byte>());
+            using var body = new HttpSpoolingBuffer();
+            var bytes = Enumerable.Range(0, 350003).Select(i => (byte)(i % 251)).ToArray();
+            body.Append(bytes, 0, bytes.Length);
+            var path = Path.Combine(_directory, "blob.bin");
+            using var service = new FileDownloadService(http, (_, __) => Task.FromResult(new DownloadDestination(path, false)));
+            var operation = await service.CreateAsync(new DownloadRequest(default, new Uri("blob:https://example.com/id"), "blob.bin", false, body: body), CancellationToken.None);
+            if (abort) operation.Progress += (_, __) => operation.Abort();
+            operation.Start();
+            if (abort) { await Assert.ThrowsAnyAsync<OperationCanceledException>(() => operation.Completion); Assert.False(File.Exists(path)); }
+            else { await operation.Completion.WaitAsync(TimeSpan.FromSeconds(5)); Assert.Equal(bytes, File.ReadAllBytes(path)); }
+            Assert.Empty(Directory.GetFiles(_directory, "*.part"));
+            Assert.Equal(0, http.Requests);
+        }
+
         private static DownloadRequest Request(string conflict = "uniquify") => new DownloadRequest(default, new Uri("https://example.com/file"), "file.bin", false, conflictAction: conflict);
         public void Dispose()
         {

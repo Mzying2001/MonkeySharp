@@ -28,7 +28,10 @@
                 if (tag === "[object Blob]" || tag === "[object File]") {
                     throw notSupported("Blob and File request URLs are not supported.");
                 }
-                if (typeof value === "string") return value;
+                if (typeof value === "string") {
+                    if (typeof root.URL === "function") return new root.URL(value, root.location && root.location.href).href;
+                    return value;
+                }
                 if (tag === "[object URL]") return value.href;
                 throw new TypeError("details.url must be a string or URL.");
             };
@@ -60,13 +63,13 @@
                     };
                 }
                 if (tag === "[object Blob]" || tag === "[object File]") {
-                    return { bytes: new Uint8Array(await value.arrayBuffer()), contentType: value.type || null };
+                    return { blob: value, contentType: value.type || null };
                 }
                 if (tag === "[object FormData]") {
                     if (typeof root.Response !== "function") throw notSupported("This browser cannot serialize FormData.");
                     const encoded = new root.Response(value);
                     return {
-                        bytes: new Uint8Array(await encoded.arrayBuffer()),
+                        blob: await encoded.blob(),
                         contentType: encoded.headers.get("content-type")
                     };
                 }
@@ -121,10 +124,113 @@
                 handler.state.responseHeaders = data.responseHeaders || "";
             };
 
+            const parseHttpDocument = function (text, mime) {
+                if (typeof DOMParser !== "function") return null;
+                const type = /^text\/html(?:;|$)/i.test(mime || "") ? "text/html" : "text/xml";
+                const document = new DOMParser().parseFromString(text, type);
+                if (type !== "text/html" && typeof document.querySelector === "function" && document.querySelector("parsererror")) return null;
+                return document;
+            };
+
+            const rendererBlobRequest = function (record, details) {
+                const type = details.responseXML === true ? "document" : details.responseType || "text";
+                const fetchMode = details.fetch === true || details.anonymous === true || typeof details.redirect !== "undefined";
+                if (!["text", "json", "arraybuffer", "blob", "stream", "document", "xml"].includes(type)) throw new TypeError("responseType is not supported.");
+                for (const option of ["proxy", "cookiePartition", "cookie", "user", "password", "data"]) if (typeof details[option] !== "undefined") throw notSupported(option + " is not supported for a renderer Blob/File URL.");
+                if (details.method && details.method.toUpperCase() !== "GET") throw notSupported("Renderer Blob/File requests support GET only.");
+                if (details.synchronous === true || details.async === false) throw notSupported("Synchronous requests are unavailable.");
+                if (details.headers && Object.keys(details.headers).length) throw notSupported("Headers are unavailable for a renderer Blob/File URL.");
+                if (details.signal && (typeof details.signal.addEventListener !== "function" || typeof details.signal.removeEventListener !== "function")) throw new TypeError("signal must be an AbortSignal.");
+                if (typeof details.timeout !== "undefined" && (!Number.isInteger(details.timeout) || details.timeout < 0)) throw new TypeError("timeout must not be negative.");
+                const callbacks = {};
+                for (const name of ["onloadstart", "onreadystatechange", "onprogress", "onload", "onerror", "onabort", "ontimeout", "onloadend"]) {
+                    if (typeof details[name] !== "undefined" && typeof details[name] !== "function") throw new TypeError(name + " must be a function.");
+                    callbacks[name] = details[name];
+                }
+                const controller = new AbortController();
+                const state = { context: details.context, readyState: 0, status: 0, statusText: "", response: null, responseXML: null, responseText: "", responseHeaders: "", finalUrl: "" };
+                const handler = { callbacks, state };
+                let terminal = false, ownedUrl, streamController, timer;
+                let rejectOperation;
+                const finish = function (error) {
+                    if (terminal) return;
+                    terminal = true;
+                    if (timer) clearTimeout(timer);
+                    state.readyState = 4;
+                    invokeHttpCallback(handler, "onreadystatechange");
+                    if (error) {
+                        if (streamController) try { streamController.error(error); } catch (_) { }
+                        invokeHttpCallback(handler, error.code === "MSP009_TIMEOUT" ? "ontimeout" : error.name === "AbortError" ? "onabort" : "onerror", error);
+                        rejectOperation(error);
+                    } else invokeHttpCallback(handler, "onload");
+                    invokeHttpCallback(handler, "onloadend");
+                    if (ownedUrl) root.URL.revokeObjectURL(ownedUrl);
+                    if (details.signal) details.signal.removeEventListener("abort", abort);
+                    record.pageListeners.delete(lifecycle);
+                };
+                const abort = () => { controller.abort(); finish(Object.assign(new Error("The renderer request was aborted."), { name: "AbortError", code: "MSP010_CANCELED" })); };
+                const lifecycle = { remove: abort };
+                record.pageListeners.add(lifecycle);
+                const promise = new Promise((resolve, reject) => {
+                    rejectOperation = reject;
+                    if (!fetchMode && details.timeout > 0) timer = setTimeout(() => { controller.abort(); finish(Object.assign(new Error("The renderer request timed out."), { code: "MSP009_TIMEOUT" })); }, details.timeout);
+                    Promise.resolve().then(async () => {
+                        if (terminal) return;
+                        let blob;
+                        if (objectTag(details.url) === "[object Blob]" || objectTag(details.url) === "[object File]") {
+                            blob = details.url; ownedUrl = root.URL.createObjectURL(blob); state.finalUrl = ownedUrl;
+                        } else {
+                            state.finalUrl = normalizeHttpUrl(details.url);
+                            const response = await root.fetch(state.finalUrl, { signal: controller.signal });
+                            if (!response.ok) throw new Error("The renderer could not resolve the blob URL.");
+                            blob = await response.blob();
+                        }
+                        if (blob.size > (record.bridgeLimits.binaryTransferBytes || 256 * 1024 * 1024)) throw Object.assign(new Error("Renderer body exceeds the transfer budget."), { code: "MSP008_PAYLOAD_TOO_LARGE" });
+                        state.status = 200; state.statusText = "OK"; state.responseHeaders = "Content-Type: " + blob.type + "\r\n";
+                        const mime = details.overrideMimeType || blob.type || "application/octet-stream";
+                        const charset = /charset\s*=\s*["']?([^;"' ]+)/i.exec(mime);
+                        let decoder;
+                        try { decoder = new TextDecoder(charset ? charset[1] : "utf-8"); } catch (_) { decoder = new TextDecoder(); }
+                        let offset = 0;
+                        const next = async () => {
+                            if (controller.signal.aborted) throw Object.assign(new Error("The renderer request was aborted."), { name: "AbortError" });
+                            const bytes = new Uint8Array(await blob.slice(offset, Math.min(offset + 65536, blob.size)).arrayBuffer());
+                            offset += bytes.length;
+                            return bytes;
+                        };
+                        if (type === "stream") state.response = new ReadableStream({
+                            start(value) { streamController = value; },
+                            async pull(value) {
+                                try { const bytes = await next(); if (bytes.length) value.enqueue(bytes); if (offset >= blob.size) { value.close(); finish(); } }
+                                catch (error) { finish(error); }
+                            }, cancel: abort
+                        });
+                        state.readyState = 1; invokeHttpCallback(handler, "onloadstart"); if (!fetchMode) invokeHttpCallback(handler, "onreadystatechange");
+                        state.readyState = 2; if (!fetchMode) invokeHttpCallback(handler, "onreadystatechange");
+                        if (type === "stream") { state.responseText = undefined; resolve(state); return; }
+                        let text = "";
+                        while (offset < blob.size) { const bytes = await next(); text += decoder.decode(bytes, { stream: true }); state.readyState = 3; if (!fetchMode) invokeHttpCallback(handler, "onprogress", httpProgress(handler, { loaded: offset, total: blob.size })); }
+                        text += decoder.decode(); state.responseText = text;
+                        if (type === "arraybuffer") { state.responseText = undefined; state.response = await blob.arrayBuffer(); }
+                        else if (type === "blob") { state.responseText = undefined; state.response = blob.slice(0, blob.size, mime); }
+                        else if (type === "json") { try { state.response = JSON.parse(text); } catch (_) { state.response = null; } }
+                        else if (type === "document" || type === "xml") { state.responseXML = parseHttpDocument(text, mime); state.response = type === "document" ? state.responseXML : text; }
+                        else state.response = text;
+                        if (!terminal) { finish(); resolve(state); }
+                    }).catch(finish);
+                });
+                promise.abort = abort;
+                if (details.signal) { if (details.signal.aborted) abort(); else details.signal.addEventListener("abort", abort, { once: true }); }
+                return promise;
+            };
+
             const addHttpApi = function (record, enabled, api) {
                 if (enabled("GM.xmlHttpRequest")) {
                     api.xmlHttpRequest = function (details) {
                         if (!details || typeof details !== "object") throw new TypeError("details must be an object.");
+                        if (objectTag(details.url) === "[object Blob]" || objectTag(details.url) === "[object File]" ||
+                            typeof details.url === "string" && /^blob:/i.test(details.url) || objectTag(details.url) === "[object URL]" && details.url.protocol === "blob:")
+                            return rendererBlobRequest(record, details);
                         const requestUrl = normalizeHttpUrl(details.url);
                         if (typeof details.proxy !== "undefined") throw notSupported("proxy is not supported by CefSharp.");
                         if (typeof details.cookiePartition !== "undefined") {
@@ -193,7 +299,8 @@
                             if (typeof details[name] !== "boolean") throw new TypeError(name + " must be a boolean.");
                             parameters[name] = details[name];
                         });
-                        if (!details.fetch && details.timeout > 0) parameters.timeout = details.timeout;
+                        parameters.fetch = details.fetch === true || details.anonymous === true || typeof details.redirect !== "undefined";
+                        if (!parameters.fetch && details.timeout > 0) parameters.timeout = details.timeout;
                         if (typeof details.redirect !== "undefined") {
                             if (!["follow", "error", "manual"].includes(details.redirect)) {
                                 throw new TypeError("redirect must be 'follow', 'error', or 'manual'.");
@@ -239,20 +346,18 @@
                             deferState4: effectiveResponseType !== "stream",
                             pendingState4: false,
                             streamController: null,
-                            streamChunks: [],
-                            streamClosed: false,
                             terminal: false,
                             cleanup: null
                         };
                         let released = false;
                         const release = function () {
+                            if (!handler.streamController || handler.terminal || handler.failed || record.disposed) record.xhrHandlers.delete(xhrId);
                             if (released) return;
                             released = true;
                             if (details.signal && externalAbort) details.signal.removeEventListener("abort", externalAbort);
                             if (sessionId) call(record, "GM.xmlHttpRequest", {
                                 operation: "release", sessionId: sessionId
                             }).catch(error => console.warn("[MonkeySharp] XHR release failed", error));
-                            record.xhrHandlers.delete(xhrId);
                         };
                         handler.cleanup = release;
                         record.xhrHandlers.set(xhrId, handler);
@@ -267,15 +372,29 @@
                             if (controller) controller.abort();
                         };
                         let responseStream = null;
+                        let streamReady;
+                        const streamSessionReady = new Promise(resolve => { streamReady = resolve; });
+                        let streamOffset = 0;
                         if (effectiveResponseType === "stream") {
                             if (typeof ReadableStream !== "function") throw notSupported("ReadableStream is unavailable.");
                             responseStream = new ReadableStream({
-                                start: function (streamController) {
-                                    handler.streamController = streamController;
-                                    handler.streamChunks.splice(0).forEach(chunk => streamController.enqueue(chunk));
-                                    if (handler.streamClosed) streamController.close();
+                                start: function (streamController) { handler.streamController = streamController; },
+                                async pull(streamController) {
+                                    await streamSessionReady;
+                                    if (handler.failed) return;
+                                    try {
+                                        const part = await call(record, "GM.xmlHttpRequest", { operation: "readBody", sessionId, offset: streamOffset }, signal);
+                                        const bytes = decodeHttpChunk(part.chunk);
+                                        if (bytes.length) { streamOffset += bytes.length; streamController.enqueue(bytes); }
+                                        if (part.done) { handler.streamConsumed = true; streamController.close(); release(); }
+                                    } catch (error) {
+                                        handler.failed = true;
+                                        try { streamController.error(error); } catch (_) { }
+                                        if (!handler.terminal) { invokeHttpCallback(handler, "onerror", legacyError(error)); invokeHttpCallback(handler, "onloadend"); handler.terminal = true; }
+                                        release();
+                                    }
                                 },
-                                cancel: function () { abortRequest(); }
+                                cancel: function () { abortRequest(); release(); }
                             });
                             state.response = responseStream;
                             state.responseText = undefined;
@@ -288,18 +407,15 @@
                                 }
                                 const body = await serializeHttpBody(details.data, binaryRequest);
                                 setDefaultHeader(parameters.headers, "Content-Type", body.contentType);
+                                const bodyLength = body.blob ? body.blob.size : body.bytes ? body.bytes.length : 0;
+                                if (bodyLength > (record.bridgeLimits.binaryTransferBytes || 256 * 1024 * 1024)) throw Object.assign(new Error("Request body exceeds the configured transfer budget."), { code: "MSP008_PAYLOAD_TOO_LARGE" });
                                 const created = await call(record, "GM.xmlHttpRequest", parameters, signal);
                                 sessionId = created.sessionId;
-                                if (body.bytes && body.bytes.length !== 0) {
-                                    const bytes = body.bytes;
-                                    for (let offset = 0; offset < bytes.length; offset += 65536) {
-                                        const segment = bytes.subarray(offset, Math.min(offset + 65536, bytes.length));
-                                        let binary = "";
-                                        for (let index = 0; index < segment.length; index += 1) binary += String.fromCharCode(segment[index]);
-                                        await call(record, "GM.xmlHttpRequest", {
-                                            operation: "appendBody", sessionId: sessionId, chunk: btoa(binary)
-                                        }, signal);
-                                    }
+                                for (let offset = 0; offset < bodyLength; offset += 65536) {
+                                    const segment = body.blob ? new Uint8Array(await body.blob.slice(offset, Math.min(offset + 65536, bodyLength)).arrayBuffer()) : body.bytes.subarray(offset, Math.min(offset + 65536, bodyLength));
+                                    let binary = "";
+                                    for (let index = 0; index < segment.length; index += 1) binary += String.fromCharCode(segment[index]);
+                                    await call(record, "GM.xmlHttpRequest", { operation: "appendBody", sessionId, chunk: btoa(binary) }, signal);
                                 }
                                 const response = await call(record, "GM.xmlHttpRequest", {
                                     operation: "execute", sessionId: sessionId
@@ -308,24 +424,26 @@
                                 state.statusText = response.statusText;
                                 state.finalUrl = response.finalUrl || state.finalUrl;
                                 state.responseHeaders = response.responseHeaders || "";
-                                if (effectiveResponseType === "stream") return state;
+                                if (effectiveResponseType === "stream") { streamReady(); return state; }
                                 const chunks = [];
+                                const binaryResponse = effectiveResponseType === "arraybuffer" || effectiveResponseType === "blob";
+                                let decoder;
+                                try { decoder = new TextDecoder(response.charset || "utf-8"); } catch (_) { decoder = new TextDecoder(); }
+                                let responseText = "";
                                 let length = 0;
                                 while (length < response.bodyLength) {
                                     const result = await call(record, "GM.xmlHttpRequest", {
                                         operation: "readBody", sessionId: sessionId, offset: length
                                     }, signal);
                                     const chunk = decodeHttpChunk(result.chunk);
-                                    chunks.push(chunk);
+                                    if (binaryResponse) chunks.push(chunk); else responseText += decoder.decode(chunk, { stream: true });
                                     length += chunk.length;
                                     if (result.done) break;
                                 }
-                                const responseBytes = new Uint8Array(length);
+                                const responseBytes = new Uint8Array(binaryResponse ? length : 0);
                                 let bodyOffset = 0;
                                 chunks.forEach(chunk => { responseBytes.set(chunk, bodyOffset); bodyOffset += chunk.length; });
-                                let responseText;
-                                try { responseText = new TextDecoder(response.charset || "utf-8").decode(responseBytes); }
-                                catch (_) { responseText = new TextDecoder().decode(responseBytes); }
+                                if (!binaryResponse) responseText += decoder.decode();
                                 if (effectiveResponseType === "json") {
                                     state.responseText = responseText;
                                     try { state.response = responseText.length === 0 ? null : JSON.parse(responseText); }
@@ -342,7 +460,7 @@
                                     state.responseText = responseText;
                                     if (typeof DOMParser === "function") {
                                         try {
-                                            state.responseXML = new DOMParser().parseFromString(responseText, "text/xml");
+                                            state.responseXML = parseHttpDocument(responseText, response.mimeType);
                                             state.response = effectiveResponseType === "document" ? state.responseXML : responseText;
                                         } catch (_) {
                                             state.responseXML = null;
@@ -362,6 +480,9 @@
                                 handler.terminal = true;
                                 return state;
                             } catch (error) {
+                                handler.failed = true;
+                                streamReady();
+                                if (handler.streamController) try { handler.streamController.error(error); } catch (_) { }
                                 const callbackError = legacyError(error);
                                 callbackError.name = error && error.name === "AbortError" ||
                                     error && error.code === "MSP010_CANCELED" ? "AbortError" : "Error";
@@ -374,7 +495,7 @@
                                 handler.terminal = true;
                                 throw error;
                             } finally {
-                                if (effectiveResponseType !== "stream" || handler.terminal) release();
+                                if (effectiveResponseType !== "stream" || handler.failed || handler.streamConsumed) release();
                             }
                         })();
                         operation.abort = abortRequest;

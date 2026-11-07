@@ -1,4 +1,5 @@
 using Mzying2001.MonkeySharp.Core.Domain;
+using Mzying2001.MonkeySharp.Core.Bridge;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -39,6 +40,8 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             new Dictionary<string, TabRegistration>(StringComparer.Ordinal);
         private readonly Dictionary<string, DownloadRegistration> _downloadOperations =
             new Dictionary<string, DownloadRegistration>(StringComparer.Ordinal);
+        private readonly BridgeOptions _options;
+        private readonly Dictionary<string, BinaryDownload> _downloadBodies = new Dictionary<string, BinaryDownload>();
         private bool _disposed;
 
         /// <summary>Initializes a provider from the host interaction services that are available.</summary>
@@ -49,6 +52,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         /// <param name="downloads">The optional download service.</param>
         /// <param name="tabState">The optional tab-state service.</param>
         /// <param name="window">The optional current-window service.</param>
+        /// <param name="options">Binary staging limits shared with the bridge.</param>
         public HostInteractionApiProvider(
             IMenuService menu = null,
             INotificationService notifications = null,
@@ -56,7 +60,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             ITabService tabs = null,
             IDownloadService downloads = null,
             ITabStateService tabState = null,
-            IUserScriptWindowService window = null)
+            IUserScriptWindowService window = null, BridgeOptions options = null)
         {
             if (menu == null && notifications == null && clipboard == null && tabs == null &&
                 downloads == null && tabState == null && window == null)
@@ -68,6 +72,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             _downloads = downloads;
             _tabState = tabState;
             _window = window;
+            _options = options ?? new BridgeOptions();
             var methods = new List<string>();
             if (menu != null)
             {
@@ -137,6 +142,8 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                     TrackTab(context, tab);
                     return ApiResult.FromValue(new { id = tab.TabId });
                 case "GM.download":
+                    var downloadOperation = ProviderParameters.OptionalString(context.Parameters, "operation");
+                    if (downloadOperation == "createBody" || downloadOperation == "appendBody" || downloadOperation == "releaseBody") return TransferDownloadBody(context, downloadOperation, cancellationToken);
                     if (string.Equals(ProviderParameters.OptionalString(context.Parameters, "operation"), "abort", StringComparison.Ordinal))
                         return AbortDownload(context);
                     return await StartDownloadAsync(context, cancellationToken).ConfigureAwait(false);
@@ -188,6 +195,8 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 _notificationHandles.Clear();
                 _tabHandles.Clear();
                 _downloadOperations.Clear();
+                foreach (var body in _downloadBodies.Values) body.Buffer.Dispose();
+                _downloadBodies.Clear();
                 _pendingMenus.Clear();
                 _endedPendingMenus.Clear();
                 _disposed = true;
@@ -205,6 +214,8 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             if (string.IsNullOrEmpty(executionId))
                 throw new ArgumentException("The execution ID is required.", nameof(executionId));
             var prefix = executionId + ":";
+            lock (_sync) foreach (var key in _downloadBodies.Keys.Where(key => key.StartsWith(prefix, StringComparison.Ordinal)).ToArray())
+            { _downloadBodies[key].Buffer.Dispose(); _downloadBodies.Remove(key); }
             IMenuRegistration[] registrations;
             NotificationRegistration[] notifications;
             TabRegistration[] tabs;
@@ -307,26 +318,80 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             if (tab.Closed) registration.Terminalize();
         }
 
+        private ApiResult TransferDownloadBody(ApiInvocationContext context, string operation, CancellationToken token)
+        {
+            token.ThrowIfCancellationRequested();
+            var client = ProviderParameters.RequiredString(context.Parameters, "clientId");
+            if (!Guid.TryParse(client, out _)) throw ProviderParameters.Invalid("clientId must be a UUID.");
+            var key = context.ExecutionId + ":" + client;
+            lock (_sync)
+            {
+                if (operation == "releaseBody")
+                {
+                    if (_downloadBodies.TryGetValue(key, out var removed)) { removed.Buffer.Dispose(); _downloadBodies.Remove(key); }
+                    return ApiResult.Undefined;
+                }
+                if (operation == "createBody")
+                {
+                    if (!context.Parameters.TryGetProperty("length", out var size) || size.ValueKind != JsonValueKind.Number || !size.TryGetInt64(out var length) || length < 0 || length > _options.MaxBinaryTransferBytes)
+                        throw new BridgeProtocolException(BridgeErrorCodes.PayloadTooLarge, "The binary download exceeds MaxBinaryTransferBytes.");
+                    if (!Uri.TryCreate(ProviderParameters.RequiredString(context.Parameters, "url"), UriKind.Absolute, out var url) || url.Scheme != "blob")
+                        throw ProviderParameters.Invalid("A renderer binary download needs a blob source identifier.");
+                    if (_downloadBodies.ContainsKey(key) || _downloadOperations.ContainsKey(key)) throw ProviderParameters.Invalid("Duplicate binary operation.");
+                    if (_downloadBodies.Keys.Count(value => value.StartsWith(context.ExecutionId + ":", StringComparison.Ordinal)) >= _options.MaxPendingRequestsPerDocument)
+                        throw new BridgeProtocolException(BridgeErrorCodes.PayloadTooLarge, "Too many staged binary downloads.");
+                    _downloadBodies.Add(key, new BinaryDownload(url, length));
+                    return ApiResult.Undefined;
+                }
+                if (!_downloadBodies.TryGetValue(key, out var body)) throw ProviderParameters.Invalid("The binary download is not staged by this execution.");
+                if (!context.Parameters.TryGetProperty("offset", out var position) || position.ValueKind != JsonValueKind.Number || !position.TryGetInt64(out var offset) || offset != body.Buffer.Length)
+                    throw ProviderParameters.Invalid("Binary chunks must have contiguous, nonduplicate offsets.");
+                var encoded = ProviderParameters.RequiredString(context.Parameters, "chunk");
+                if (encoded.Length > (HttpSpoolingBuffer.BridgeChunkSize + 2) / 3 * 4) throw ProviderParameters.Invalid("Binary chunk too large.");
+                byte[] bytes;
+                try { bytes = Convert.FromBase64String(encoded); } catch (FormatException) { throw ProviderParameters.Invalid("Invalid binary chunk."); }
+                if (bytes.Length > HttpSpoolingBuffer.BridgeChunkSize || body.Buffer.Length + bytes.Length > body.Length) throw ProviderParameters.Invalid("Binary chunk exceeds the declared body length.");
+                body.Buffer.Append(bytes, 0, bytes.Length);
+                return ApiResult.Undefined;
+            }
+        }
+
+        private sealed class BinaryDownload
+        {
+            internal BinaryDownload(Uri url, long length) { Url = url; Length = length; }
+            internal readonly Uri Url;
+            internal readonly long Length;
+            internal readonly HttpSpoolingBuffer Buffer = new HttpSpoolingBuffer();
+        }
+
         private async Task<ApiResult> StartDownloadAsync(ApiInvocationContext context, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var clientId = ProviderParameters.RequiredString(context.Parameters, "clientId");
             if (!Guid.TryParse(clientId, out _)) throw ProviderParameters.Invalid("clientId must be a UUID.");
+            BinaryDownload binary = null;
+            var binaryStart = ProviderParameters.OptionalString(context.Parameters, "operation") == "startBody";
+            var key = context.ExecutionId + ":" + clientId;
+            if (binaryStart)
+                lock (_sync)
+                {
+                    if (!_downloadBodies.TryGetValue(key, out binary) || binary.Buffer.Length != binary.Length) throw ProviderParameters.Invalid("The complete binary body is required before starting.");
+                }
             var request = new DownloadRequest(context.Installation.ScriptKey,
-                ReadHttpUrl(context.Parameters, "url"), ProviderParameters.OptionalString(context.Parameters, "name"),
+                binary?.Url ?? ReadHttpUrl(context.Parameters, "url"), ProviderParameters.OptionalString(context.Parameters, "name"),
                 ProviderParameters.OptionalBoolean(context.Parameters, "saveAs"), ReadHeaders(context.Parameters),
                 ReadConflictAction(context.Parameters), ReadTimeout(context.Parameters),
                 ProviderParameters.OptionalBoolean(context.Parameters, "anonymous"),
-                (target, token) => context.AuthorizeTargetAsync == null ? Task.FromResult(true) : context.AuthorizeTargetAsync(target.AbsoluteUri, token));
+                (target, token) => context.AuthorizeTargetAsync == null ? Task.FromResult(true) : context.AuthorizeTargetAsync(target.AbsoluteUri, token), binary?.Buffer);
             if (_downloads.DownloadMode == "disabled" ||
                 (_downloads.DownloadMode != "browser" && (request.SaveAs || request.ConflictAction != "uniquify")))
                 throw new UnsupportedApiException("The download backend does not support the requested destination options.");
-            var key = context.ExecutionId + ":" + clientId;
-            var registration = new DownloadRegistration(this, key, request, context.ExecutionId, clientId);
+            var registration = new DownloadRegistration(this, key, request, context.ExecutionId, clientId, binary?.Buffer);
             lock (_sync)
             {
                 if (_disposed) throw new ObjectDisposedException(nameof(HostInteractionApiProvider));
                 if (_downloadOperations.ContainsKey(key)) throw ProviderParameters.Invalid("Duplicate download operation ID.");
+                if (binary != null) _downloadBodies.Remove(key);
                 _downloadOperations.Add(key, registration);
             }
             try
@@ -485,6 +550,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             private readonly DownloadRequest _request;
             private readonly string _executionId;
             private readonly string _clientId;
+            private readonly IDisposable _bodyOwner;
             private readonly CancellationTokenSource _lifetime = new CancellationTokenSource();
             private IDownloadOperation _operation;
             private volatile bool _callbacksEnabled = true;
@@ -492,9 +558,9 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             private readonly EventHandler _completed, _aborted, _timedOut;
             private readonly EventHandler<UserScriptDownloadFailure> _failed;
             public DownloadRegistration(HostInteractionApiProvider owner, string key, DownloadRequest request,
-                string executionId, string clientId) : base(owner, key)
+                string executionId, string clientId, IDisposable bodyOwner = null) : base(owner, key)
             {
-                _request = request; _executionId = executionId; _clientId = clientId;
+                _request = request; _executionId = executionId; _clientId = clientId; _bodyOwner = bodyOwner;
                 _progress = (_, progress) => Publish("download-progress", new { clientId, loaded = progress.Loaded, total = progress.Total });
                 _completed = (_, __) =>
                 {
@@ -551,6 +617,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                         _operation.Aborted -= _aborted; _operation.TimedOut -= _timedOut;
                         _operation.Dispose();
                     }
+                    _bodyOwner?.Dispose();
                     _lifetime.Dispose();
                 }
             }

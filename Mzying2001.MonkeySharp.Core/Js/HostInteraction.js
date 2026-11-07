@@ -42,14 +42,17 @@
                         if (!state.abortSent && state.accepted && !state.terminal && state.abortAttempts < 2) sendAbort();
                     }, error => { state.abortInFlight = false; state.finish("error", error); });
                 };
+                const releaseBody = () => call(record, "GM.download", { operation: "releaseBody", clientId }).catch(() => {});
                 promise.abort = function () {
                     if (state.terminal || state.abortRequested) return;
                     state.abortRequested = true;
+                    if (state.binaryController) state.binaryController.abort();
+                    if (state.bodyCreated) releaseBody();
                     if (!state.startSent) state.finish("aborted", { error: "not_succeeded", details: "The download was aborted before starting." });
                     else sendAbort();
                 };
                 record.downloadHandlers.set(clientId, state);
-                Promise.resolve().then(() => {
+                Promise.resolve().then(async () => {
                     if (state.terminal) return;
                     const details = typeof input === "string" ? { url: input, name } : input;
                     if (!details || typeof details !== "object" || Array.isArray(details)) throw new TypeError("details must be an object or URL string.");
@@ -59,20 +62,60 @@
                         state.callbacks[callback] = details[callback];
                     }
                     operation.hasErrorCallback = Boolean(state.callbacks.onerror || state.callbacks.ontimeout);
-                    if (objectTag(details.url) === "[object Blob]" || objectTag(details.url) === "[object File]") throw notSupported("Blob/File downloads require the renderer binary transport.");
-                    if (typeof details.url !== "string" || !/^https?:\/\//i.test(details.url)) throw new TypeError("url must be an absolute HTTP or HTTPS URL.");
+                    let blob = objectTag(details.url) === "[object Blob]" || objectTag(details.url) === "[object File]" ? details.url : null;
+                    let sourceUrl = blob ? null : normalizeHttpUrl(details.url);
+                    if (!blob && !/^(?:https?:|blob:)/i.test(sourceUrl)) throw new TypeError("url must be an HTTP(S) or renderer blob URL.");
                     if (typeof details.name !== "undefined" && typeof details.name !== "string") throw new TypeError("name must be a string.");
                     for (const option of ["saveAs", "anonymous"]) if (typeof details[option] !== "undefined" && typeof details[option] !== "boolean") throw new TypeError(option + " must be a boolean.");
                     if (typeof details.timeout !== "undefined" && (!Number.isInteger(details.timeout) || details.timeout <= 0)) throw new TypeError("timeout must be a positive integer.");
                     if (typeof details.conflictAction !== "undefined" && !["uniquify", "overwrite", "prompt"].includes(details.conflictAction)) throw new TypeError("Invalid conflictAction.");
-                    state.startSent = true;
-                    return call(record, "GM.download", { operation: "start", clientId, url: details.url,
-                        name: details.name || null, headers: details.headers ? serializableValue(details.headers) : {},
-                        saveAs: Boolean(details.saveAs), anonymous: Boolean(details.anonymous),
-                        conflictAction: details.conflictAction || "uniquify", timeout: details.timeout }).then(() => {
+                    if (blob || /^blob:/i.test(sourceUrl)) {
+                        if (details.headers && Object.keys(details.headers).length) throw notSupported("Headers are not supported for local binary downloads.");
+                        state.binaryController = typeof AbortController === "function" ? new AbortController() : null;
+                        const signal = state.binaryController && state.binaryController.signal;
+                        let ownedUrl;
+                        try {
+                            if (!blob) {
+                                if (typeof root.fetch !== "function") throw notSupported("This renderer cannot resolve blob URLs.");
+                                const local = await root.fetch(sourceUrl, { signal });
+                                if (!local.ok) throw new Error("The renderer could not resolve the blob URL.");
+                                blob = await local.blob();
+                            } else {
+                                if (!root.URL || typeof root.URL.createObjectURL !== "function") throw notSupported("Object URLs are unavailable.");
+                                ownedUrl = root.URL.createObjectURL(blob); sourceUrl = ownedUrl;
+                            }
+                            if (state.terminal) return;
+                            const budget = record.bridgeLimits.binaryTransferBytes || 256 * 1024 * 1024;
+                            if (blob.size > budget) throw Object.assign(new Error("The binary download exceeds the configured transfer budget."), { code: "MSP008_PAYLOAD_TOO_LARGE" });
+                            state.bodyCreated = true;
+                            await call(record, "GM.download", { operation: "createBody", clientId, url: sourceUrl, length: blob.size }, signal);
+                            for (let offset = 0; offset < blob.size; offset += 65536) {
+                                if (state.terminal) return;
+                                const bytes = new Uint8Array(await blob.slice(offset, Math.min(offset + 65536, blob.size)).arrayBuffer());
+                                let binary = "";
+                                bytes.forEach(value => { binary += String.fromCharCode(value); });
+                                await call(record, "GM.download", { operation: "appendBody", clientId, offset, chunk: btoa(binary) }, signal);
+                            }
+                            if (state.terminal) return;
+                            state.startSent = true;
+                            await call(record, "GM.download", { operation: "startBody", clientId, name: details.name || blob.name || "download.bin",
+                                saveAs: Boolean(details.saveAs), anonymous: Boolean(details.anonymous), conflictAction: details.conflictAction || "uniquify", timeout: details.timeout }, signal);
+                            state.accepted = true;
+                            state.bodyCreated = false;
+                            if (state.abortRequested) sendAbort();
+                        } finally {
+                            if (ownedUrl) root.URL.revokeObjectURL(ownedUrl);
+                            if (state.bodyCreated) await releaseBody();
+                        }
+                    } else {
+                        state.startSent = true;
+                        await call(record, "GM.download", { operation: "start", clientId, url: sourceUrl,
+                            name: details.name || null, headers: details.headers ? serializableValue(details.headers) : {},
+                            saveAs: Boolean(details.saveAs), anonymous: Boolean(details.anonymous),
+                            conflictAction: details.conflictAction || "uniquify", timeout: details.timeout });
                         state.accepted = true;
                         if (state.abortRequested) sendAbort();
-                    });
+                    }
                 }).catch(error => state.finish(state.abortRequested ? "aborted" : "error", error));
                 return operation;
             };

@@ -86,7 +86,7 @@ test("XHR serializes Tampermonkey request inputs and exposes abort", async () =>
 
     assert.deepEqual(globalThis.__unsupported, [
         "MSP006_NOT_SUPPORTED", "MSP006_NOT_SUPPORTED", "MSP006_NOT_SUPPORTED",
-        "MSP006_NOT_SUPPORTED", "MSP006_NOT_SUPPORTED"
+        "MSP006_NOT_SUPPORTED"
     ]);
 });
 

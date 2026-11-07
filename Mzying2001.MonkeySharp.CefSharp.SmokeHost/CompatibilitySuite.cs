@@ -65,6 +65,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             results["isolated"] = await RunCaseAsync("isolated", IsolatedAsync);
             results["replay"] = await RunCaseAsync("replay", ReplayAsync);
             results["csp"] = await RunCaseAsync("csp", CspAsync);
+            results["binary"] = await RunCaseAsync("binary", BinaryAsync);
             results["permissions"] = await RunCaseAsync("permissions", PermissionsAsync);
             results["frames"] = await RunCaseAsync("frames", FramesAsync);
             results["spaUrl"] = await RunCaseAsync("spaUrl", SpaAsync);
@@ -90,6 +91,16 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                 url = _context?.Url.AbsoluteUri, state = _lastState
             }));
             return success;
+        }
+
+        private async Task BinaryAsync()
+        {
+            await NavigateAsync("/compat/binary");
+            var result = await WaitResultAsync("globalThis.__binary || null");
+            foreach (var check in result.EnumerateObject().Where(value => value.Name != "done")) Check(check.Name, check.Value.GetBoolean());
+            foreach (var name in new[] { "blob-bytes.bin", "file-bytes.bin", "url-bytes.bin" })
+                Check(name, File.ReadAllBytes(Path.Combine(_downloads.DirectoryPath, name)).SequenceEqual(Enumerable.Range(0, 350003).Select(value => (byte)(value % 251))));
+            Check("noPartialFiles", Directory.GetFiles(_downloads.DirectoryPath, "*.part").Length == 0);
         }
 
         private async Task PreparedAsync()

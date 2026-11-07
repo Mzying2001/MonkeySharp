@@ -69,6 +69,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                     ["requestBytes"] = options.MaxRequestBytes,
                     ["responseBytes"] = options.MaxResponseBytes,
                     ["resourceBytes"] = options.MaxResourceBytes,
+                    ["binaryTransferBytes"] = options.MaxBinaryTransferBytes,
                     ["timeoutMilliseconds"] = (long)options.RequestTimeout.TotalMilliseconds,
                     ["pendingRequests"] = options.MaxPendingRequestsPerDocument,
                     ["replayRequestsPerExecution"] = options.MaxReplayEntriesPerExecution

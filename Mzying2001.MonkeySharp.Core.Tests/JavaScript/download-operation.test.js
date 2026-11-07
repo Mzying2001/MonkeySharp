@@ -7,7 +7,7 @@ async function install(onRequest) {
     const requests = [];
     let api;
     const errors = [];
-    const context = vm.createContext({ atob, TextDecoder, crypto,
+    const context = vm.createContext({ atob, btoa, TextDecoder, crypto, Blob, URL, fetch, AbortController,
         console: { error: (...args) => errors.push(args) }, capture: value => { api = value; } });
     const notify = (event, data) => context.__MonkeySharpRuntime.receive({ type: "notification", protocol: 2,
         executionId: "download", deliveryToken: "delivery", event, data });
@@ -148,11 +148,30 @@ test("timeout and start failure reject through one terminal callback", async () 
     await assert.rejects(bad.modern("https://example.com/file"), error => error.error === "not_supported");
 });
 
-test("unsupported binary and malformed options fail before any request", async () => {
+test("unsupported local headers and malformed options fail before any request", async () => {
     const h = await install();
-    for (const details of [{ url: new Blob(["binary"]) }, { url: "blob:renderer-owned" },
+    for (const details of [{ url: new Blob(["binary"]), headers: { Test: 'no' } }, { url: "blob:renderer-owned" },
         { url: "https://example.com/file", anonymous: "yes" }, { url: "https://example.com/file", conflictAction: "discard" }]) {
         await assert.rejects(h.modern(details));
     }
     assert.equal(starts(h).length, 0);
+});
+
+test("Blob download stages bounded chunks with backpressure and releases on transfer failure", async () => {
+    let acknowledge, appends = 0;
+    const h = await install(request => {
+        if (request.params.operation === "appendBody" && ++appends === 1) return new Promise(resolve => { acknowledge = resolve; });
+        if (request.params.operation === "startBody") throw new Error("destination failed");
+    });
+    const bytes = Uint8Array.from({ length: 150003 }, (_, i) => i % 251);
+    const pending = h.modern({ url: new Blob([bytes]), name: "blob.bin" });
+    const rejected = assert.rejects(pending, error => error.details.includes("destination failed"));
+    await waitFor(() => acknowledge);
+    await new Promise(resolve => setTimeout(resolve, 10));
+    assert.equal(appends, 1);
+    acknowledge(); await rejected;
+    const parts = h.requests.filter(r => r.params.operation === "appendBody").map(r => r.params);
+    assert.deepEqual(parts.map(p => p.offset), [0, 65536, 131072]);
+    assert.deepEqual(Buffer.concat(parts.map(p => Buffer.from(p.chunk, "base64"))), Buffer.from(bytes));
+    assert.equal(h.requests.at(-1).params.operation, "releaseBody");
 });

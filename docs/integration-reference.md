@@ -94,11 +94,11 @@ Compatibility headers such as `User-Agent`, `Referer`, `Origin`, and `Cookie` ma
 
 Callbacks are `onloadstart`, `onreadystatechange`, `onprogress`, `onuploadprogress`, `onload`, `onerror`, `ontimeout`, `onabort`, and `onloadend`. `GM.xmlHttpRequest` returns a Promise with `.abort()`; `GM_xmlhttpRequest` immediately returns an abort handle and reports through callbacks. `AbortSignal` and stream cancellation propagate to the host.
 
-Total request and response body sizes are unlimited by default. Each direction stays in memory through 256 KiB and then spills to a temporary file, which is removed on every terminal path. Chunking allows total bodies to exceed a single bridge message's size limit, but each serialized chunk message still has to fit `BridgeOptions.MaxRequestBytes` or `MaxResponseBytes`, including JSON and Base64 overhead.
+Request/response bodies and staged downloads default to a 256 MiB total limit (`BridgeOptions.MaxBinaryTransferBytes`). Each direction stays in memory through 256 KiB and then spills to a temporary file, which is removed on every terminal path. Chunking allows total bodies to exceed a single bridge message's size limit, but each serialized chunk message still has to fit `BridgeOptions.MaxRequestBytes` or `MaxResponseBytes`, including JSON and Base64 overhead.
 
-Only the long-running `execute` operation is exempt from `BridgeOptions.RequestTimeout`; other session operations use the ordinary timeout. All session requests, including `execute`, count toward `MaxPendingRequestsPerDocument`. The HTTP request's own `timeout` remains separate, except in `fetch` mode.
+Long-running `execute` and waiting stream `readBody` operations are exempt from `BridgeOptions.RequestTimeout`; other session operations use the ordinary timeout. All session requests, including `execute`, count toward `MaxPendingRequestsPerDocument`. The HTTP request's own `timeout` remains separate, except in `fetch` mode.
 
-`proxy`, `cookiePartition`, synchronous requests, and `Blob`/`File` URLs return `MSP006_NOT_SUPPORTED`. Partitioned-cookie keys are browser-extension manager state that the public CefSharp request-context API does not expose. The same code is used by modern and legacy XHR input validation.
+`proxy`, `cookiePartition`, and synchronous requests return `MSP006_NOT_SUPPORTED`. Partitioned-cookie keys are browser-extension manager state that the public CefSharp request-context API does not expose. The same code is used by modern and legacy XHR input validation.
 
 ### Cookies
 
@@ -325,3 +325,9 @@ For consent-based hosts, share `InteractiveUserScriptPermissionPolicy(new Sensit
 Scopes use stable installation key + permission kind + canonical HTTP(S) origin, with no credentials, path or query. Allow-once applies only to the currently coalesced batch; completed prompts cannot authorize later requests. Remembered decisions can be revoked. One canceled waiter does not cancel another document's joined request; all canceled waiters close the prompt. Navigation cancels interactive waits, and installation revision/enabled state is checked again after consent.
 
 Generic execution timeout starts after authorization. CEF transfer and download deadlines pause while redirect permission waits and then resume their remaining active budget. Providers validate declarations before effects as well. Demo uses an additive SQLite decision table, real asynchronous permission windows and a permission-management button; revocation cancels pending prompts and reloads affected execution state. Its scripted E2E clicks the actual permission window and checks persistence.
+
+### Binary transport and stream completion
+
+Text decoding preserves split multibyte sequences and declared charsets. HTML MIME uses DOMParser's HTML parser; invalid XML returns null. HTTP stream Promises resolve when headers and the stream are available. Subsequent failures error the stream; onload/onloadend follow network completion independently of consumer speed. The renderer pulls at most 64 KiB at a time; the host spools unread bytes (256 KiB in memory, then disk) within the total budget. This bounds bridge queues; CEF URLRequest cannot pause the network source itself. Stream spools live until EOF/cancel/execution end. Non-stream responses are assembled in renderer memory. Progress does not guarantee partial responseText.
+
+Blob/File downloads stage acknowledged 64 KiB chunks and share the file pipeline's save/abort/atomic commit semantics. The provider owns DownloadRequest.Body until the download's terminal event; custom services must read these bytes without dereferencing its blob identifier through HTTP. Incomplete staging is released on failure/navigation. Accepted downloads may outlive their document with callbacks detached. Callback context remains the original local object; the fixed TM 5.5.1 reference clones that object across its extension boundary, so object identity equivalence is not claimed.

@@ -315,7 +315,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Fact]
-        public async Task HttpStreamPublishesRawChunksAndCompletesWithoutBuffering()
+        public async Task HttpStreamUsesBoundedPullChunksAndCompletesIndependentlyOfConsumption()
         {
             var installation = await InstallAsync("// @grant GM.xmlHttpRequest\n// @connect api.example.com");
             var response = new UserScriptHttpResponse(
@@ -342,9 +342,10 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             var deadline = DateTime.UtcNow.AddSeconds(1);
             while (!notifications.Any(item => item.EventName == "xhr-complete") && DateTime.UtcNow < deadline)
                 await Task.Delay(1);
-            var chunk = Assert.Single(notifications, item => item.EventName == "xhr-chunk");
-            Assert.Equal("stream body", Encoding.UTF8.GetString(Convert.FromBase64String(
-                Json(chunk.DataJson).GetProperty("chunk").GetString())));
+            Assert.DoesNotContain(notifications, item => item.EventName == "xhr-chunk");
+            var chunk = await provider.InvokeAsync(Context(installation, "GM.xmlHttpRequest", new { operation = "readBody", sessionId, offset = 0 }), CancellationToken.None);
+            Assert.Equal("stream body", Encoding.UTF8.GetString(Convert.FromBase64String(Json(chunk.Json).GetProperty("chunk").GetString())));
+            Assert.True(Json(chunk.Json).GetProperty("done").GetBoolean());
             Assert.Single(notifications, item => item.EventName == "xhr-complete");
         }
 
@@ -602,6 +603,36 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             Assert.Contains(result.Diagnostics, item => item.Code == "MSM052_INVALID_CONNECT");
         }
 
+        [Fact]
+        public async Task BinaryDownloadStagesContiguousBoundedBytesAndTransfersOwnershipUntilTerminal()
+        {
+            var installation = await InstallAsync("// @grant GM.download");
+            var downloads = new ControlledDownloadService();
+            using var provider = new HostInteractionApiProvider(downloads: downloads, options: new BridgeOptions(maxBinaryTransferBytes: 400000));
+            var id = Guid.NewGuid().ToString();
+            Task<ApiResult> Invoke(object value) => provider.InvokeAsync(Context(installation, "GM.download", value), CancellationToken.None);
+            await Invoke(new { operation = "createBody", clientId = id, url = "blob:https://example.com/source", length = 300001 });
+            await Assert.ThrowsAsync<BridgeProtocolException>(() => Invoke(new { operation = "startBody", clientId = id, name = "file" }));
+            var bytes = Enumerable.Range(0, 300001).Select(i => (byte)(i % 251)).ToArray();
+            for (var offset = 0; offset < bytes.Length; offset += 65536)
+                await Invoke(new { operation = "appendBody", clientId = id, offset, chunk = Convert.ToBase64String(bytes.Skip(offset).Take(65536).ToArray()) });
+            await Assert.ThrowsAsync<BridgeProtocolException>(() => Invoke(new { operation = "appendBody", clientId = id, offset = 0, chunk = "AQ==" }));
+            await Invoke(new { operation = "startBody", clientId = id, name = "file" });
+            var spool = Assert.IsType<HttpSpoolingBuffer>(downloads.Request.Body);
+            Assert.True(spool.IsFileBacked);
+            var temporary = spool.TemporaryPath;
+            using (var read = spool.OpenRead()) using (var copy = new MemoryStream()) { await read.CopyToAsync(copy); Assert.Equal(bytes, copy.ToArray()); }
+            provider.OnExecutionEnded("execution");
+            Assert.True(File.Exists(temporary));
+            downloads.Operation.Complete();
+            Assert.False(File.Exists(temporary));
+            var next = Guid.NewGuid().ToString();
+            await Invoke(new { operation = "createBody", clientId = next, url = "blob:https://example.com/source", length = 10 });
+            provider.OnExecutionEnded("execution");
+            await Assert.ThrowsAsync<BridgeProtocolException>(() => Invoke(new { operation = "startBody", clientId = next, name = "file" }));
+            await Assert.ThrowsAsync<BridgeProtocolException>(() => Invoke(new { operation = "createBody", clientId = next, url = "blob:https://example.com/source", length = 400001 }));
+        }
+
         private static async Task<UserScriptInstallation> InstallAsync(string extraMetadata)
         {
             var repository = new InMemoryUserScriptRepository();
@@ -782,10 +813,12 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             public string DownloadMode => "browser";
             public bool CompleteOnStart, DelayCreation;
             public ControlledDownload Operation = new ControlledDownload();
+            public DownloadRequest Request;
             public TaskCompletionSource<IDownloadOperation> Created = new TaskCompletionSource<IDownloadOperation>();
             public Task<IDownloadOperation> CreateAsync(DownloadRequest request, CancellationToken cancellationToken)
             {
                 Operation.CompleteOnStart = CompleteOnStart;
+                Request = request;
                 return DelayCreation ? Created.Task : Task.FromResult<IDownloadOperation>(Operation);
             }
         }

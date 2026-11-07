@@ -83,11 +83,11 @@ CefSharp 宿主默认提供 `GM.xmlHttpRequest`、`GM.cookie` 和 `GM.webRequest
 
 回调包括 `onloadstart`、`onreadystatechange`、`onprogress`、`onuploadprogress`、`onload`、`onerror`、`ontimeout`、`onabort` 和 `onloadend`。`GM.xmlHttpRequest` 返回带 `.abort()` 的 Promise；`GM_xmlhttpRequest` 立即返回中止句柄并通过回调报告结果。`AbortSignal` 和流取消都会传递到宿主。
 
-请求体和响应体的总大小默认不受限。单方向数据在 256 KiB 以内保留在内存，超过后转存临时文件，并在所有终止路径中删除。分块允许正文总量超过单条桥接消息的大小限制，但每条序列化后的分块消息仍必须满足 `BridgeOptions.MaxRequestBytes` 或 `MaxResponseBytes`，包括 JSON 和 Base64 开销。
+请求体、响应体及暂存下载默认分别限制为 256 MiB（BridgeOptions.MaxBinaryTransferBytes）。单方向数据在 256 KiB 以内保留在内存，超过后转存临时文件，并在所有终止路径中删除。分块允许正文总量超过单条桥接消息的大小限制，但每条序列化后的分块消息仍必须满足 `BridgeOptions.MaxRequestBytes` 或 `MaxResponseBytes`，包括 JSON 和 Base64 开销。
 
-只有长时间运行的 `execute` 操作豁免 `BridgeOptions.RequestTimeout`；其余会话操作仍使用普通请求超时。所有会话请求（包括 `execute`）都计入 `MaxPendingRequestsPerDocument`。HTTP 请求自身的 `timeout` 独立生效，`fetch` 模式除外。
+长时间运行的 `execute` 和等待流数据的 `readBody` 操作豁免 `BridgeOptions.RequestTimeout`；其余会话操作仍使用普通请求超时。所有会话请求（包括 `execute`）都计入 `MaxPendingRequestsPerDocument`。HTTP 请求自身的 `timeout` 独立生效，`fetch` 模式除外。
 
-`proxy`、`cookiePartition`、同步请求以及作为 URL 的 `Blob`/`File` 返回 `MSP006_NOT_SUPPORTED`。Cookie 分区键属于浏览器扩展管理器状态，CefSharp 公开请求上下文 API 不提供该状态。现代和 legacy XHR 输入校验使用同一错误码。
+`proxy`、`cookiePartition` 和同步请求返回 `MSP006_NOT_SUPPORTED`。Cookie 分区键属于浏览器扩展管理器状态，CefSharp 公开请求上下文 API 不提供该状态。现代和 legacy XHR 输入校验使用同一错误码。
 
 ### Cookie
 
@@ -315,3 +315,9 @@ document-idle 在 DOMContentLoaded 后调度，不等待缓慢资源的 load。�
 记忆键是稳定安装身份、权限类型及 HTTP(S) origin，不保存凭据、path/query。允许一次仅对当前合并等待批次有效，不能授权后续请求。单个等待者取消不影响其他文档的同批请求，全部取消才关闭提示。导航取消交互等待，授权结束后再次检查安装版本及启用状态。
 
 普通调用超时在授权后开始；CEF 传输与下载的截止计时在重定向权限等待时暂停并恢复剩余预算。Demo 添加 SQLite 权限表而不删除原数据，使用真实异步窗口，并提供权限按钮及按脚本撤销。撤销取消等待并刷新执行状态；WPF E2E 操作真实按钮。
+
+### 二进制传输与流完成
+
+文本按声明字符集增量解码，保留跨分块的多字节字符；HTML MIME 使用 HTML 解析器，无效 XML 返回 null。显式 redirect 或 anonymous 会启用 fetch 语义，忽略传输 timeout/进度且只报告 readyState 4。HTTP stream 的 Promise 在响应头和流可用时兑现，后续失败通过流传播；onload/onloadend 随网络完成触发。renderer 每次按需拉取最多 64 KiB，宿主在 256 KiB 后转存磁盘，并受总预算约束。这限制桥接队列，但 CEF URLRequest 本身不能暂停网络源。暂存流在 EOF、取消或执行结束时释放；非流响应仍在 renderer 内组装。进度回调不保证逐步 responseText。
+
+Blob/File 下载逐块等待宿主确认，再使用共用的保存、取消、临时文件和原子提交路径。provider 在终态前持有 DownloadRequest.Body，自定义下载服务应读取该字节源，不应通过 HTTP 访问 blob 标识。失败或导航清理未启动的暂存；已接受下载可在文档结束后继续，回调已分离。context 保留本地原始对象；固定 TM 5.5.1 对照会跨扩展边界复制对象，因此不声称引用身份一致。

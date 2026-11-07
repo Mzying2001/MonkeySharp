@@ -56,6 +56,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
         /// <param name="maxCompatibilityBootstrapBytes">The maximum compatibility bootstrap size.</param>
         /// <param name="compatibilityBootstrapTimeout">The compatibility bootstrap timeout.</param>
         /// <param name="maxReplayEntriesPerExecution">The number of recent request IDs retained to reject replays for one execution.</param>
+        /// <param name="maxBinaryTransferBytes">The total request, response, or staged download budget, independent of bridge packet size.</param>
         public BridgeOptions(
             int maxRequestBytes = 1024 * 1024,
             int maxResponseBytes = 1024 * 1024,
@@ -64,7 +65,8 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             int maxPendingRequestsPerDocument = 64,
             int maxCompatibilityBootstrapBytes = 64 * 1024 * 1024,
             TimeSpan? compatibilityBootstrapTimeout = null,
-            int maxReplayEntriesPerExecution = 4096)
+            int maxReplayEntriesPerExecution = 4096,
+            int maxBinaryTransferBytes = 256 * 1024 * 1024)
         {
             if (maxRequestBytes <= 0) throw new ArgumentOutOfRangeException(nameof(maxRequestBytes));
             if (maxResponseBytes <= 0) throw new ArgumentOutOfRangeException(nameof(maxResponseBytes));
@@ -82,7 +84,12 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             CompatibilityBootstrapTimeout = compatibilityBootstrapTimeout ?? TimeSpan.FromSeconds(5);
             if (CompatibilityBootstrapTimeout <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(compatibilityBootstrapTimeout));
             MaxReplayEntriesPerExecution = maxReplayEntriesPerExecution;
+            if (maxBinaryTransferBytes <= 0) throw new ArgumentOutOfRangeException(nameof(maxBinaryTransferBytes));
+            MaxBinaryTransferBytes = maxBinaryTransferBytes;
         }
+
+        /// <summary>Gets the total budget for a renderer binary upload, separately from a single bridge packet.</summary>
+        public int MaxBinaryTransferBytes { get; }
 
         /// <summary>Gets the maximum UTF-8 request size.</summary>
         public int MaxRequestBytes { get; }

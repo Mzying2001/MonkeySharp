@@ -368,7 +368,7 @@ Modern result: a `Promise<Response>` with an immediate `.abort()` method. Non-st
 
 | `details` field | Type / default | Behavior |
 | --- | --- | --- |
-| `url` | Required absolute HTTP(S) string or `URL` | Relative URLs and Blob/File URLs are unsupported. |
+| `url` | HTTP(S) string/URL, Blob/File, or blob URL | Relative URLs resolve against the document; local inputs use renderer bytes. |
 | `method` | String, `"GET"` | Valid HTTP token, case-insensitive; CONNECT, TRACE, TRACK are rejected. |
 | `headers` | String-to-string object, `{}` | Header names/values validated; CR/LF injection rejected. |
 | `data` | Optional body | String, ArrayBuffer, typed array, DataView, Blob/File, FormData, URLSearchParams, object, or array. Null/omission gives no body. |
@@ -389,7 +389,7 @@ Modern result: a `Promise<Response>` with an immediate `.abort()` method. Non-st
 | `proxy`, `cookiePartition` | Unsupported | Supplying either returns/throws `MSP006_NOT_SUPPORTED`. |
 | `synchronous:true`, `async:false` | Unsupported | Rejected with `MSP006_NOT_SUPPORTED`; the API is asynchronous. |
 
-Objects/arrays are sent as JSON, URLSearchParams as form encoding, and FormData as multipart with generated boundary/filenames/media types. Appropriate content type is supplied unless you set it yourself. Blob/File **bodies** are supported even though Blob/File **URLs** are not.
+Objects/arrays are sent as JSON, URLSearchParams as form encoding, and FormData as multipart with generated boundary/filenames/media types. Appropriate content type is supplied unless you set it yourself. Blob/File bodies and URL inputs are supported. Blob/File URL inputs and blob URL strings are resolved inside their owning renderer; local requests support GET without network headers, authentication, or an upload body.
 
 `User-Agent`, `Referer`, `Origin`, and `Cookie` headers are allowed. `Host`, `Content-Length`, connection/transfer-control headers, and `Sec-*`/`Proxy-*` names are rejected. Cross-origin redirects strip explicit cookies and authorization. Cookie merging and browser-authentication behavior remain host-service details; do not assume exact Tampermonkey browser-version behavior.
 
@@ -405,7 +405,7 @@ Objects/arrays are sent as JSON, URLSearchParams as form encoding, and FormData 
 | `responseHeaders` | Raw header string, preserving repeated headers. |
 | `response` | Text string; parsed JSON (invalid/empty JSON gives `null`); ArrayBuffer; Blob; XML Document for `document`; text for `xml`; or ReadableStream of Uint8Array for `stream`. |
 | `responseText` | Decoded text for text/JSON/document/xml; `undefined` for arraybuffer/blob/stream. No incremental text-body guarantee in progress callbacks. |
-| `responseXML` | Parsed XML Document for document/xml when DOMParser is available; otherwise `null`. Invalid XML may be a parser-error document. |
+| `responseXML` | Parsed XML Document for document/xml when DOMParser is available; otherwise `null`. HTML MIME uses the HTML parser; invalid XML returns null. |
 | `context` | Original JavaScript context value. |
 
 | Callback | Argument / timing |
@@ -419,9 +419,9 @@ Objects/arrays are sent as JSON, URLSearchParams as form encoding, and FormData 
 
 Callbacks run with `this` set to the response state. Modern preflight validation can throw synchronously before returning a Promise; wrap the entire call in `try/catch` as well as awaiting it. Failures after start reject the Promise; inspect `.code`/`.name` when available. Callback errors use categories such as `not_supported`, `not_permitted`, `timeout`, and `not_succeeded`. The legacy facade reports immediate request validation failures through onerror where possible; malformed callback types may still throw.
 
-XHR bodies are transferred in chunks; the default host has no overall request/response byte cap, keeps the first 256 KiB in memory, then spools to temporary files. This is separate from ordinary bridge-message limits. The JavaScript side still assembles non-stream response bodies in memory. Prefer `stream` for large responses.
+XHR bodies are transferred in chunks; the default total limit is 256 MiB per body, keeps the first 256 KiB in memory, then spools to temporary files. This is separate from ordinary bridge-message limits. The JavaScript side still assembles non-stream response bodies in memory. Prefer `stream` for large responses.
 
-**Tampermonkey differences:** transport is CefSharp/host-backed; proxy and partitioned-cookie controls are absent; DOMParser XML/document types and the upload/signal controls are MonkeySharp behavior. Redirect mode does not automatically imply fetch mode. Progress does not promise progressively decoded responseText. Synchronous requests are unsupported in both current documented APIs; do not treat that shared restriction as a MonkeySharp-only difference. Compare the [official XHR reference](https://www.tampermonkey.net/documentation.php?q=GM_xmlhttpRequest).
+**Tampermonkey differences:** transport is CefSharp/host-backed; proxy and partitioned-cookie controls are absent; DOMParser XML/document types and the upload/signal controls are MonkeySharp behavior. Explicit redirect mode and anonymous requests imply fetch mode. Progress does not promise progressively decoded responseText. Synchronous requests are unsupported in both current documented APIs; do not treat that shared restriction as a MonkeySharp-only difference. Compare the [official XHR reference](https://www.tampermonkey.net/documentation.php?q=GM_xmlhttpRequest).
 
 ```javascript
 // @grant GM.xmlHttpRequest
@@ -535,7 +535,7 @@ Legacy getTab/getTabs errors are structured `{error, details, code}` objects. Mu
 
 ### GM.download(details) / GM_download(details)
 
-Requires its grant and a download service. Both forms accept an options object or `(url, name?)`, where `url` is an absolute HTTP(S) string. Blob/File inputs remain unsupported.
+Requires its grant and a download service. Both forms accept an options object or `(url, name?)`, where `url` is an HTTP(S) string, Blob/File value, or renderer blob URL. Blob/File values and blob URL strings are supported; relative HTTP URLs resolve against the document.
 
 | Field | Type / default | Behavior |
 | --- | --- | --- |
@@ -553,7 +553,7 @@ Requires its grant and a download service. Both forms accept an options object o
 
 Modern `GM.download` immediately returns the original completion **Promise with `abort()`**. It resolves only after the file is flushed, closed and atomically moved/replaced into its final destination. Its completion details are the supported subset `{url, name, loaded}` (final URL, actual filename, committed bytes), without local paths or internal IDs. Legacy immediately returns `{abort()}`. Both abort methods return `undefined`, work before host acknowledgment, and are harmless after a terminal state. Both forms support callbacks; a callback exception is reported separately and cannot turn a committed download into failure. Each operation settles once.
 
-Errors use `{error, details, code?}`: `not_enabled`, `not_permitted`, `not_whitelisted`, `not_supported`, `not_succeeded`, or `timeout`. Host failures reject the modern Promise and invoke the callback; legacy failures use callbacks. A picker cancellation and explicit abort are `not_succeeded`. Unsupported Blob/File inputs and invalid options fail before network work.
+Errors use `{error, details, code?}`: `not_enabled`, `not_permitted`, `not_whitelisted`, `not_supported`, `not_succeeded`, or `timeout`. Host failures reject the modern Promise and invoke the callback; legacy failures use callbacks. A picker cancellation and explicit abort are `not_succeeded`. Unsupported controls and invalid options fail before network work.
 
 Demo GM downloads use the exact CEF HTTP service and RequestContext used by GM XHR, including browser login credentials, anonymous behavior, redirect checks and configured webRequest composition. They stream through a bounded buffer into temporary files, then commit to `Data/Downloads` or a picker destination. Cancellation/failure removes partials before the terminal event. Download authorization uses the host policy, rather than XHR's `@connect` list; there is no extension-whitelist preference.
 
@@ -673,7 +673,7 @@ window.addEventListener("urlchange", onRoute);
 | Match subdomains | `*.domain` match patterns include the bare domain and all its subdomains. |
 | Stored values | Use supported storage values; await modern writes for failures; account for bounded mirrors and post-commit notifications. |
 | Resources | Use `GM.getResourceUrl` or `GM.getResourceUrl` with either grant; expect a data URL and host-provided resource availability. |
-| XHR | Check unsupported proxy/partition/Blob-URL controls; adapt progress/XML behavior; inspect HTTP status explicitly. |
+| XHR | Check unsupported proxy/partition controls; adapt progress/XML behavior; inspect HTTP status explicitly. |
 | Menu / clipboard | Options and ID updates, interaction-completion notifications, and text/HTML clipboard info/callback overloads. |
 | Notifications | Use supported detail fields; modern resolution is registration, not dismissal. |
 | Tabs | Modern returns a Promise; legacy returns an immediate handle; use close/onclose; private mode and numeric insertion positions are absent. |
@@ -723,3 +723,9 @@ MonkeySharp behavior was checked against the [grant catalog](../Mzying2001.Monke
 The sandbox window privately replays cached DOMContentLoaded/load events after listener registration, using untrusted synthetic events as observed in the reference. Document-idle does not replay the earlier DOMContentLoaded event. Window listeners support once/removal/abort and are cleared with their execution; direct page DOM listeners remain user-owned. Raw source evaluation and inserted styles remain subject to page CSP. Isolated source/DOM and style effects have separate browser evidence; the adapter never enables whole-page CSP bypass.
 
 Permission prompts identify the installed script, capability and exact target origin. The Demo offers allow once, remember allow, or remember deny. Allow once covers the currently waiting same-scope batch only. Use the Permissions button to revoke an installation's remembered decisions; tabs reload so cached execution state cannot retain a revoked decision. Navigation closes obsolete waits. Neither an interactive allow nor a stored allow can override connect or Cookie URL declarations.
+
+### Binary transport and stream completion
+
+Text decoding preserves split multibyte sequences and declared charsets. HTML MIME uses DOMParser's HTML parser; invalid XML returns null. HTTP stream Promises resolve when headers and the stream are available. Subsequent failures error the stream; onload/onloadend follow network completion independently of consumer speed. The renderer pulls at most 64 KiB at a time; the host spools unread bytes (256 KiB in memory, then disk) within the total budget. This bounds bridge queues; CEF URLRequest cannot pause the network source itself. Stream spools live until EOF/cancel/execution end. Non-stream responses are assembled in renderer memory. Progress does not guarantee partial responseText.
+
+Blob/File downloads stage acknowledged 64 KiB chunks and share the file pipeline's save/abort/atomic commit semantics. The provider owns DownloadRequest.Body until the download's terminal event; custom services must read these bytes without dereferencing its blob identifier through HTTP. Incomplete staging is released on failure/navigation. Accepted downloads may outlive their document with callbacks detached. Callback context remains the original local object; the fixed TM 5.5.1 reference clones that object across its extension boundary, so object identity equivalence is not claimed.

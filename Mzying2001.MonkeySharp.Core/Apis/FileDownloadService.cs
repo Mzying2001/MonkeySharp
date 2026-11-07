@@ -140,13 +140,35 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                     _cancellation.Token.ThrowIfCancellationRequested();
                     partial = destination.Path + "." + DownloadId + ".part";
                     _output = new FileStream(partial, FileMode.CreateNew, FileAccess.Write, FileShare.None, 64 * 1024);
-                    var request = new UserScriptHttpRequest("GET", _request.Url,
-                        _request.Headers.ToDictionary(item => item.Key, item => item.Value), null, null, null,
-                        async (target, token) => { using (_deadline.Pause()) return await _request.RedirectAllowed(target, token).ConfigureAwait(false); }, new UserScriptHttpRequestOptions { Anonymous = _request.Anonymous });
-                    var network = _owner._http.SendAsync(request, this, _cancellation.Token);
-                    var response = await network.Completion.ConfigureAwait(false);
-                    if (_responseError != null) throw _responseError;
-                    if (response.Status < 200 || response.Status >= 400) throw new IOException("Download HTTP status " + response.Status + ".");
+                    Uri finalUrl;
+                    if (_request.Body != null)
+                    {
+                        _total = _request.Body.Length;
+                        using (var input = _request.Body.OpenRead())
+                        {
+                            var buffer = new byte[HttpSpoolingBuffer.BridgeChunkSize];
+                            int count;
+                            while ((count = await input.ReadAsync(buffer, 0, buffer.Length, _cancellation.Token).ConfigureAwait(false)) != 0)
+                            {
+                                _cancellation.Token.ThrowIfCancellationRequested();
+                                await _output.WriteAsync(buffer, 0, count, _cancellation.Token).ConfigureAwait(false);
+                                _loaded += count;
+                                Raise(() => Progress?.Invoke(this, new UserScriptDownloadProgress(_loaded, _total)));
+                            }
+                        }
+                        finalUrl = _request.Url;
+                    }
+                    else
+                    {
+                        var request = new UserScriptHttpRequest("GET", _request.Url,
+                            _request.Headers.ToDictionary(item => item.Key, item => item.Value), null, null, null,
+                            async (target, token) => { using (_deadline.Pause()) return await _request.RedirectAllowed(target, token).ConfigureAwait(false); }, new UserScriptHttpRequestOptions { Anonymous = _request.Anonymous });
+                        var network = _owner._http.SendAsync(request, this, _cancellation.Token);
+                        var response = await network.Completion.ConfigureAwait(false);
+                        if (_responseError != null) throw _responseError;
+                        if (response.Status < 200 || response.Status >= 400) throw new IOException("Download HTTP status " + response.Status + ".");
+                        finalUrl = response.FinalUrl;
+                    }
                     _output.Flush(true);
                     _output.Dispose(); _output = null;
                     lock (_sync)
@@ -155,7 +177,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                         // File commit is the completion/abort linearization boundary.
                         var path = Commit(partial, destination);
                         _committed = true;
-                        Result = new DownloadResult(DownloadId, response.FinalUrl, Path.GetFileName(path), _loaded);
+                        Result = new DownloadResult(DownloadId, finalUrl, Path.GetFileName(path), _loaded);
                     }
                     terminal = 1;
                 }

@@ -380,7 +380,7 @@ attributes 是可选对象：textContent/innerHTML 设置内容，字符串 styl
 
 | details 字段 | 类型 / 默认值 | 行为 |
 | --- | --- | --- |
-| `url` | 必需，绝对 HTTP(S) 字符串或 URL 对象 | 不支持相对 URL 和 Blob/File URL。 |
+| `url` | HTTP(S) 字符串/URL、Blob/File 或 blob URL | 相对 URL 在 renderer 中解析；支持 Blob/File 和 blob URL。 |
 | `method` | 字符串，"GET" | 有效 HTTP token，不区分大小写；禁止 CONNECT、TRACE、TRACK。 |
 | `headers` | 字符串到字符串的对象，{} | 校验头名称和值，禁止 CR/LF 注入。 |
 | `data` | 可选主体 | 字符串、ArrayBuffer、类型化数组、DataView、Blob/File、FormData、URLSearchParams、对象或数组；null/省略表示无主体。 |
@@ -401,7 +401,7 @@ attributes 是可选对象：textContent/innerHTML 设置内容，字符串 styl
 | `proxy`、`cookiePartition` | 不支持 | 提供任一个都会返回/抛出 MSP006_NOT_SUPPORTED。 |
 | `synchronous:true`、`async:false` | 不支持 | 以 MSP006_NOT_SUPPORTED 拒绝；只支持异步请求。 |
 
-对象/数组按 JSON 发送，URLSearchParams 使用表单编码，FormData 使用包含自动边界、文件名和媒体类型的 multipart。未自行设置时会补入适当 Content-Type。支持 Blob/File **请求体**，但不支持 Blob/File **URL**。
+对象/数组按 JSON 发送，URLSearchParams 使用表单编码，FormData 使用包含自动边界、文件名和媒体类型的 multipart。未自行设置时会补入适当 Content-Type。支持 Blob/File 请求体及 URL 输入；blob URL 由所属 renderer 解引用，本地输入仅支持不含网络头、认证和请求体的 GET。
 
 允许 User-Agent、Referer、Origin 和 Cookie 头。禁止 Host、Content-Length、连接/传输控制头，以及 Sec-*/Proxy-* 头。跨源重定向会移除显式 Cookie 和 Authorization。Cookie 合并及浏览器认证细节仍由宿主服务决定，不应假定与每个 Tampermonkey 浏览器版本完全一致。
 
@@ -417,7 +417,7 @@ attributes 是可选对象：textContent/innerHTML 设置内容，字符串 styl
 | `responseHeaders` | 原始头字符串，保留重复响应头。 |
 | `response` | 文本；解析后的 JSON（空或非法 JSON 为 null）；ArrayBuffer；Blob；document 对应 XML Document；xml 对应文本；stream 对应 Uint8Array 数据块的 ReadableStream。 |
 | `responseText` | text/JSON/document/xml 的解码文本；arraybuffer/blob/stream 为 undefined。进度回调不保证提供逐步接收的文本主体。 |
-| `responseXML` | document/xml 类型下 DOMParser 可用时的 XML Document，否则为 null。无效 XML 可能产生包含解析错误的文档。 |
+| `responseXML` | document/xml 类型下 DOMParser 可用时的 XML Document，否则为 null。HTML MIME 使用 HTML 解析器，无效 XML 返回 null。 |
 | `context` | 原始 JavaScript context 值。 |
 
 | 回调 | 参数 / 时机 |
@@ -431,9 +431,9 @@ attributes 是可选对象：textContent/innerHTML 设置内容，字符串 styl
 
 回调的 this 指向响应状态。现代方法的前置校验可能在返回 Promise 前同步抛出，应将整个调用与 await 放进 try/catch。启动后失败会拒绝 Promise，可读取可用的 .code/.name。回调错误类别包括 not_supported、not_permitted、timeout 和 not_succeeded。旧版门面尽可能将即时请求校验失败传给 onerror，但非法回调类型仍可能直接抛出。
 
-XHR 主体分块传输；默认宿主不设置整体请求/响应字节上限，前 256 KiB 保存在内存，之后暂存到临时文件。这独立于普通桥接消息限制。JavaScript 侧仍会在内存中组装非流式响应，大响应优先使用 stream。
+XHR 主体分块传输；默认每个请求/响应体限制为 256 MiB，前 256 KiB 保存在内存，之后暂存到临时文件。这独立于普通桥接消息限制。JavaScript 侧仍会在内存中组装非流式响应，大响应优先使用 stream。
 
-**与 Tampermonkey 的差异：** 传输由 CefSharp/宿主实现；不支持代理和分区 Cookie 控制；DOMParser 的 XML/document 类型及 upload/signal 控制遵循 MonkeySharp 行为。redirect 模式不会自动启用 fetch；进度回调不保证逐步解码的 responseText。两者当前文档都不支持同步请求，不应将这一共同限制写成 MonkeySharp 特有差异。参见[官方 XHR 参考](https://www.tampermonkey.net/documentation.php?q=GM_xmlhttpRequest)。
+**与 Tampermonkey 的差异：** 传输由 CefSharp/宿主实现；不支持代理和分区 Cookie 控制；DOMParser 的 XML/document 类型及 upload/signal 控制遵循 MonkeySharp 行为。显式 redirect 及 anonymous 会启用 fetch；进度回调不保证逐步解码的 responseText。两者当前文档都不支持同步请求，不应将这一共同限制写成 MonkeySharp 特有差异。参见[官方 XHR 参考](https://www.tampermonkey.net/documentation.php?q=GM_xmlhttpRequest)。
 
 ```javascript
 // @grant GM.xmlHttpRequest
@@ -552,7 +552,7 @@ GM_setClipboard('已复制', 'text', () => console.log('已写入'));
 
 ### GM.download(details) / GM_download(details)
 
-需要对应授权和下载服务。两种形式都接受选项对象或 `(url, name?)`；url 必须是绝对 HTTP(S) 字符串。Blob/File 输入仍不支持。
+需要对应授权和下载服务。两种形式都接受选项对象或 `(url, name?)`；url 接受 HTTP(S) 字符串、Blob/File 和 blob URL。支持 Blob/File 和 blob URL 输入；相对 HTTP URL 按文档地址解析。
 
 | 字段 | 类型 / 默认值 | 行为 |
 | --- | --- | --- |
@@ -570,7 +570,7 @@ GM_setClipboard('已复制', 'text', () => console.log('已写入'));
 
 现代 GM.download 立即返回**带 abort() 的原始完成 Promise**，只有文件 flush、关闭并原子移动或替换到最终位置后才兑现。支持的完成详情是 `{url, name, loaded}` 子集：最终 URL、实际文件名和提交字节数，不含本地路径和内部 ID。旧版立即返回 `{abort()}`。两者 abort 均返回 undefined，在宿主确认前也能取消，终态后调用无害。两者均支持回调；回调异常单独报告，不会把已提交的下载变成失败。每次操作只结算一次。
 
-错误使用 `{error, details, code?}`，类别包括 not_enabled、not_permitted、not_whitelisted、not_supported、not_succeeded 和 timeout。现代 Promise 拒绝并调用对应回调；旧版通过回调报告。保存取消和主动中止归为 not_succeeded。Blob/File 和无效选项在网络操作前拒绝。
+错误使用 `{error, details, code?}`，类别包括 not_enabled、not_permitted、not_whitelisted、not_supported、not_succeeded 和 timeout。现代 Promise 拒绝并调用对应回调；旧版通过回调报告。保存取消和主动中止归为 not_succeeded。不支持的控制及无效选项在网络操作前拒绝。
 
 Demo GM 下载与 GM XHR 使用同一个 CEF HTTP 服务及 RequestContext，继承浏览器登录凭据、匿名语义、重定向授权及配置的 webRequest 组合。内容通过有界缓冲流入临时文件，再提交到 Data/Downloads 或用户选择的位置；失败和取消先清理临时文件，再通知终态。下载由宿主策略授权，不应用 XHR 的 @connect 列表，也没有扩展名白名单偏好设置。
 
@@ -696,7 +696,7 @@ window.addEventListener("urlchange", onRoute);
 | 子域名匹配 | `*.domain` 的 match 模式包含裸域名及其所有层级的子域名。 |
 | 存储 | 使用支持的存储值，await 现代写入以观察失败，并考虑镜像限额、本地同步监听及远端提交通知的时序。 |
 | 资源 | 使用 `GM.getResourceUrl` 或 `GM.getResourceUrl`，声明任一对应 grant，按 data URL 处理，并确认宿主资源提供器可用。 |
-| XHR | 检查代理/分区/Blob URL 等不支持项，适配进度/XML 行为，显式检查 HTTP 状态。 |
+| XHR | 检查代理/分区等不支持项，适配进度/XML 行为，显式检查 HTTP 状态。 |
 | 菜单 / 剪贴板 | 菜单选项及 ID 更新、通知交互完成、文本/HTML 剪贴板 info 与回调重载。 |
 | 通知 | 只使用支持字段；现代 Promise 在注册后兑现，而非关闭后。 |
 | 标签页 | 两种形式都立即返回句柄；通过 close/onclose 操作，不支持隐私模式和数字插入位置。 |
@@ -756,3 +756,9 @@ document-idle 在 DOMContentLoaded 后调度，不等待缓慢资源的 load。�
 完整 GM 的 document-start 仍为 best effort，显式保证要求会拒绝。OOPIF 不支持时明确失败且没有 raw 回退；BFCache 缓存执行撤销，需要新导航。isolated 的历史 page-frame webRequest 不支持，子 frame 的隔离手动菜单尚未与原生 CEF 菜单 frame 映射。详见[执行证据和边界](compatibility/execution-worlds.md)。
 
 权限提示显示安装脚本、权限和准确目标 origin。Demo 提供允许一次、记忆允许、拒绝并记住；允许一次仅覆盖当前同范围的合并等待批次。通过权限按钮撤销该安装的决定，标签页会刷新以清理旧执行状态。导航关闭失效等待，同意或记忆允许都不能绕过 connect 或 Cookie URL 声明。
+
+### 二进制传输与流完成
+
+文本按声明字符集增量解码，保留跨分块的多字节字符；HTML MIME 使用 HTML 解析器，无效 XML 返回 null。显式 redirect 或 anonymous 会启用 fetch 语义，忽略传输 timeout/进度且只报告 readyState 4。HTTP stream 的 Promise 在响应头和流可用时兑现，后续失败通过流传播；onload/onloadend 随网络完成触发。renderer 每次按需拉取最多 64 KiB，宿主在 256 KiB 后转存磁盘，并受总预算约束。这限制桥接队列，但 CEF URLRequest 本身不能暂停网络源。暂存流在 EOF、取消或执行结束时释放；非流响应仍在 renderer 内组装。进度回调不保证逐步 responseText。
+
+Blob/File 下载逐块等待宿主确认，再使用共用的保存、取消、临时文件和原子提交路径。provider 在终态前持有 DownloadRequest.Body，自定义下载服务应读取该字节源，不应通过 HTTP 访问 blob 标识。失败或导航清理未启动的暂存；已接受下载可在文档结束后继续，回调已分离。context 保留本地原始对象；固定 TM 5.5.1 对照会跨扩展边界复制对象，因此不声称引用身份一致。

@@ -197,6 +197,7 @@
                     valueChangeSequences: new Map(),
                     pendingStorageMutations: [],
                     lastStorageSequence: 0,
+                    bridgeLimits: {},
                     resourceMirror: null
                     , urlChangeHandlers: new Set(), urlChangeHandler: null, windowFacade: null
                 };
@@ -209,6 +210,7 @@
                         throw new Error(hello.error && hello.error.message || "MonkeySharp bridge handshake failed.");
                     }
                     availableApis = new Set(hello.apis || []);
+                    record.bridgeLimits = hello.limits || {};
                     if (invocation.grants.some(name => /GM\.(getValue|setValue|deleteValue|listValues|getValues|setValues|deleteValues|addValueChangeListener|removeValueChangeListener)$/.test(name)))
                         await prepareStorage(record, hello.compatibility && hello.compatibility.storage || {});
                     if (hello.compatibility && hello.compatibility.resources && hello.compatibility.resources.chunkCount) {
@@ -369,25 +371,17 @@
                             invokeHttpCallback(handler, "onprogress", httpProgress(handler, data));
                         } else if (notification.event === "xhr-upload-progress") {
                             invokeHttpCallback(handler, "onuploadprogress", httpProgress(handler, data));
-                        } else if (notification.event === "xhr-chunk") {
-                            const chunk = decodeHttpChunk(data.chunk);
-                            if (handler.streamController) {
-                                try { handler.streamController.enqueue(chunk); } catch (_) { }
-                            }
-                            else handler.streamChunks.push(chunk);
                         } else if (notification.event === "xhr-complete") {
                             if (handler.terminal) return true;
                             handler.streamClosed = true;
-                            if (handler.streamController) {
-                                try { handler.streamController.close(); } catch (_) { }
-                            }
                             if (handler.pendingState4) invokeHttpCallback(handler, "onreadystatechange");
                             invokeHttpCallback(handler, "onload");
                             invokeHttpCallback(handler, "onloadend");
                             handler.terminal = true;
-                            handler.cleanup();
+                            if (!handler.streamController || handler.streamConsumed) handler.cleanup();
                         } else if (notification.event === "xhr-error") {
                             if (handler.terminal) return true;
+                            handler.failed = true;
                             const error = xhrError({ code: data.code, message: data.message });
                             error.name = data.code === "MSP010_CANCELED" ? "AbortError" : "Error";
                             if (data.code === "MSP010_CANCELED") error.name = "AbortError";

@@ -54,8 +54,6 @@ test("XHR exposes response types, ordered lifecycle events, context, and streams
                         xhrId: session.xhrId, readyState: 3, status: 200, statusText: "OK",
                         finalUrl: "https://api.example.com/stream", responseHeaders: headers
                     });
-                    notify("xhr-chunk", { xhrId: session.xhrId, chunk: Buffer.from("stream ").toString("base64") });
-                    notify("xhr-chunk", { xhrId: session.xhrId, chunk: Buffer.from("body").toString("base64") });
                     notify("xhr-state", {
                         xhrId: session.xhrId, readyState: 4, status: 200, statusText: "OK",
                         finalUrl: "https://api.example.com/stream", responseHeaders: headers
@@ -75,7 +73,7 @@ test("XHR exposes response types, ordered lifecycle events, context, and streams
                         xhrId: session.xhrId, readyState: 4, status: 200, statusText: "OK",
                         finalUrl: "https://api.example.com/" + session.kind, responseHeaders: headers
                     });
-                    const bodies = { text: "text", json: '{"answer":42}', arraybuffer: "bytes", blob: "blob" };
+                    const bodies = { stream: "stream body", text: "text", json: '{"answer":42}', arraybuffer: "bytes", blob: "blob" };
                     result = {
                         status: 200, statusText: "OK", finalUrl: "https://api.example.com/" + session.kind,
                         responseHeaders: headers, mimeType: session.kind === "blob" ? "text/custom" : "application/json",
@@ -84,7 +82,7 @@ test("XHR exposes response types, ordered lifecycle events, context, and streams
                 }
             } else if (params.operation === "readBody") {
                 const session = sessions.get(params.sessionId);
-                const bodies = { text: "text", json: '{"answer":42}', arraybuffer: "bytes", blob: "blob" };
+                const bodies = { stream: "stream body", text: "text", json: '{"answer":42}', arraybuffer: "bytes", blob: "blob" };
                 result = { chunk: Buffer.from(bodies[session.kind]).toString("base64"), done: true };
             }
             return JSON.stringify({
