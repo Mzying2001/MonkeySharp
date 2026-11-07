@@ -229,61 +229,51 @@
                 if (enabled("GM.openInTab")) {
                     record.openTab = function (url, options) {
                         if (typeof url !== "string") throw new TypeError("url must be a string.");
-                        options = options || {};
-                        const state = {
-                            id: null,
-                            closed: false,
-                            terminal: false,
-                            closeRequested: false,
-                            closePromise: null,
-                            closeResolve: null,
-                            closeReject: null,
-                            onclose: null,
-                            closeSent: false
+                        if (typeof root.URL === "function") url = new root.URL(url, root.location && root.location.href).href;
+                        if (typeof options === "boolean") options = { active: !options };
+                        if (typeof options === "undefined") options = {};
+                        if (!options || typeof options !== "object" || Array.isArray(options)) throw new TypeError("options must be a boolean or object.");
+                        if (typeof options.incognito !== "undefined") throw notSupported("Private tab creation is not available.");
+                        for (const option of ["active", "loadInBackground", "setParent"]) if (typeof options[option] !== "undefined" && typeof options[option] !== "boolean") throw new TypeError(option + " must be a boolean.");
+                        if (typeof options.insert !== "undefined" && typeof options.insert !== "boolean" && (!Number.isInteger(options.insert) || options.insert < 0 || options.insert > 2147483647)) throw new TypeError("insert must be a boolean or nonnegative integer.");
+                        const state = { clientId: uuid(), id: null, closed: false, terminal: false, closeRequested: false, closeSent: false, onclose: null };
+                        state.finish = function () {
+                            if (state.terminal) return;
+                            state.closed = true; state.terminal = true;
+                            const index = record.tabHandlers.indexOf(state);
+                            if (index >= 0) record.tabHandlers.splice(index, 1);
+                            if (typeof state.onclose === "function") {
+                                try { state.onclose.call(handle); } catch (error) { console.error("[MonkeySharp] tab onclose failed", error); }
+                            }
                         };
                         const sendClose = function () {
-                            if (!state.id || state.closeSent) return state.closePromise || Promise.resolve(false);
+                            if (!state.id || state.closeSent || state.closed) return;
                             state.closeSent = true;
-                            const request = call(record, "GM.openInTab", { close: true, tabId: state.id });
-                            request.then(value => {
-                                if (state.closeResolve) state.closeResolve(value);
-                            }, error => {
-                                if (state.closeReject) state.closeReject(error);
-                            });
-                            return request;
+                            call(record, "GM.openInTab", { close: true, tabId: state.id }).catch(error => console.error("[MonkeySharp] tab close failed", error));
                         };
                         const handle = {};
                         Object.defineProperties(handle, {
-                            id: { enumerable: true, get: () => state.id },
                             closed: { enumerable: true, get: () => state.closed },
-                            onclose: {
-                                enumerable: true,
-                                get: () => state.onclose,
-                                set: value => { state.onclose = value; }
-                            }
+                            onclose: { enumerable: true, get: () => state.onclose,
+                                set: value => { if (value !== null && typeof value !== "function") throw new TypeError("onclose must be a function or null."); state.onclose = value; } }
                         });
                         handle.close = function () {
-                            if (state.terminal || state.closed || state.closeRequested) return state.closePromise || Promise.resolve(false);
+                            if (state.terminal || state.closeRequested) return;
                             state.closeRequested = true;
-                            state.closePromise = new Promise((resolve, reject) => {
-                                state.closeResolve = resolve;
-                                state.closeReject = reject;
-                            });
-                            if (state.id) sendClose();
-                            return state.closePromise;
+                            sendClose();
                         };
                         record.tabHandlers.push(state);
-                        const ready = call(record, "GM.openInTab", {
-                            url: url,
-                            active: typeof options.active === "boolean" ? options.active : false,
-                            insert: Boolean(options.insert),
-                            setParent: Boolean(options.setParent)
+                        const ready = call(record, "GM.openInTab", { clientId: state.clientId, url,
+                            active: typeof options.active === "boolean" ? options.active : typeof options.loadInBackground === "boolean" ? !options.loadInBackground : false,
+                            insert: typeof options.insert === "undefined" ? false : options.insert, setParent: Boolean(options.setParent)
                         }).then(result => {
                             state.id = result && result.id;
+                            if (result && result.closed) state.finish();
                             if (state.closeRequested) sendClose();
                             return handle;
                         }).catch(error => {
-                            if (state.closeReject) state.closeReject(error);
+                            const index = record.tabHandlers.indexOf(state);
+                            if (index >= 0) record.tabHandlers.splice(index, 1);
                             throw error;
                         });
                         return { handle, ready };
@@ -293,11 +283,18 @@
                 if (enabled("GM.download")) api.download = function (details, name) {
                     return createDownloadOperation(record, details, name).promise;
                 };
-                if (enabled("GM.getTab")) api.getTab = async () => call(record, "GM.getTab", {});
-                if (enabled("GM.saveTab")) {
-                    api.saveTab = async value => call(record, "GM.saveTab", { value: serializableValue(value) });
-                }
-                if (enabled("GM.getTabs")) api.getTabs = async () => call(record, "GM.getTabs", {});
+                const tabStateRequest = function (action) {
+                    const result = (record.tabStateTail || Promise.resolve()).then(action);
+                    record.tabStateTail = result.catch(() => {});
+                    return result;
+                };
+                if (enabled("GM.getTab")) api.getTab = () => tabStateRequest(() => call(record, "GM.getTab", {}));
+                if (enabled("GM.saveTab")) api.saveTab = function (value) {
+                    if (!value || typeof value !== "object" || Array.isArray(value)) throw new TypeError("Tab state must be an object.");
+                    const snapshot = serializableValue(value);
+                    return tabStateRequest(() => call(record, "GM.saveTab", { value: snapshot })).then(() => undefined);
+                };
+                if (enabled("GM.getTabs")) api.getTabs = () => tabStateRequest(() => call(record, "GM.getTabs", {}));
             };
 
             const addLegacyAliases = function (api, facade) {
@@ -322,16 +319,19 @@
                 if (api.unregisterMenuCommand) facade.GM_unregisterMenuCommand = function (id) {
                     unregisterMenu(record, id).catch(error => console.error("[MonkeySharp] menu removal failed", error));
                 };
-                if (api.saveTab) facade.GM_saveTab = function (value) {
-                    api.saveTab(value).catch(error => console.error("[MonkeySharp] legacy saveTab failed", error));
+                if (api.saveTab) facade.GM_saveTab = function (value, callback) {
+                    if (typeof callback !== "undefined" && typeof callback !== "function") throw new TypeError("callback must be a function.");
+                    api.saveTab(value).then(() => { if (callback) callback(); }).catch(error => console.error("[MonkeySharp] legacy saveTab failed", error));
                 };
                 if (api.getTab) facade.GM_getTab = function (callback) {
                     if (typeof callback !== "function") throw new TypeError("callback must be a function.");
-                    api.getTab().then(value => callback(value, null)).catch(error => callback(null, legacyError(error)));
+                    api.getTab().then(value => invokeHostCallback(record, () => callback(value, null), undefined, undefined, "getTab"),
+                        error => invokeHostCallback(record, () => callback(null, legacyError(error)), undefined, undefined, "getTab"));
                 };
                 if (api.getTabs) facade.GM_getTabs = function (callback) {
                     if (typeof callback !== "function") throw new TypeError("callback must be a function.");
-                    api.getTabs().then(value => callback(value, null)).catch(error => callback(null, legacyError(error)));
+                    api.getTabs().then(value => invokeHostCallback(record, () => callback(value, null), undefined, undefined, "getTabs"),
+                        error => invokeHostCallback(record, () => callback(null, legacyError(error)), undefined, undefined, "getTabs"));
                 };
                 if (api.setClipboard) facade.GM_setClipboard = function (...args) {
                     setClipboard(record, ...args).catch(error => console.error("[MonkeySharp] clipboard failed", error));
@@ -340,11 +340,6 @@
                     notificationOperation(record, ...args).catch(error => console.error("[MonkeySharp] notification failed", error));
                 };
                 if (api.openInTab) facade.GM_openInTab = function (url, options) {
-                    if (typeof options === "boolean") options = { active: !options };
-                    options = options || {};
-                    if (typeof options.active !== "boolean" && typeof options.loadInBackground === "boolean") {
-                        options = Object.assign({}, options, { active: !options.loadInBackground });
-                    }
                     const operation = record.openTab(url, options);
                     operation.ready.catch(error => console.error("[MonkeySharp] legacy tab open failed", error));
                     return operation.handle;

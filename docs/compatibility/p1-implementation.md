@@ -11,7 +11,7 @@ Date: 2026-11-07. Work proceeds through steps 7–14, with one validated commit 
 | 11. Execution worlds and lifecycle | Complete within verified scope | [World/lifecycle matrix](evidence/execution-worlds-p1.json), [explicit limits](execution-worlds.md) |
 | 12. Authorization prompts | Complete | [Permission decision/interaction matrix](evidence/permissions-p1.json) |
 | 13. XHR and binary downloads | Complete | [Binary matrix](evidence/binary-transport-p1.json), [Binary reference](evidence/tampermonkey-5.5.1-binary-inputs.json) |
-| 14. DOM, log, tabs and windows | Pending | — |
+| 14. DOM, log, tabs and windows | Complete | [Page helper/WPF matrix](evidence/page-helpers-p1.json), [Reference](evidence/tampermonkey-5.5.1-page-helpers.json) |
 
 ## Step 7
 
@@ -84,3 +84,17 @@ TextDecoder preserves charset and split UTF-8 sequences. HTML MIME selects HTML 
 HTTP streams resolve at response headers, propagate later failure through the stream and fire terminal callbacks at network completion. Renderer reads are pull-driven with at most 64 KiB queued per chunk. Host spooling spills at 256 KiB and enforces the configurable 256 MiB total binary budget. This bounds bridge queues and disk use per body; it does not suspend CEF's underlying network source. Stream storage lives until EOF/cancel/execution end, while downloaded files resolve only after atomic commit. Binary download staging is execution-scoped, validates length and contiguous offsets, releases on rejection/navigation, and transfers ownership to the accepted download until its terminal event. Custom download services consume DownloadRequest.Body directly.
 
 Validation: 287 Core + 44 adapter + 42 Demo tests (373) passed on both 84/121 x64; 109 JS tests, all six SmokeHost/CDP combinations (twelve cases each), and 84/121 x64 WPF E2E passed. The strengthened fixed TM 5.5.1 reference and smoke-result negative gates passed. Raw logs: artifacts/p1-13-*. The native case covers exact upload/file bytes, multipart filenames, URLSearchParams, windows-1252, UTF-8 boundaries, HTML, delayed stream reads, response truncation after headers, and three Blob/File/blob URL downloads.
+
+## Step 14
+
+DOM helpers now share one local implementation across facades: legacy returns the node and modern a Promise of that node. Omitted addElement parents follow the pinned TM head placement; both helpers fall back to documentElement without head/body. Explicit parents and DOM properties remain supported. Native tests verify actual computed styles and nodes, while the existing CSP cases retain the documented style/source restrictions.
+
+Both logging forms send original variadic arguments directly to local console, preserving object references and circular values. A bounded, accessor-safe JSON snapshot feeds the optional host sink; host failures cannot change the local completion. The fixed TM 5.5.1 reference rejects circular log values, so the requested circular local logging behavior is an explicit improvement, not a claimed identical extension serialization path.
+
+Tab options share boolean/loadInBackground/active normalization, renderer-relative URLs, adjacent or numeric insertion and parent selection. Incognito creation still rejects before effects. Handles expose only close/closed/onclose; close returns undefined, early close queues once, host state determines closed, and pre-acknowledgment events correlate through a client ID. Callback subscriptions end with the execution without closing already opened user tabs. The pinned reference confirms the DOM parents and return shapes; its immediate early close needed a later retry, unlike the implemented queued close.
+
+Save/read requests serialize per execution and capture the saved object before queueing; legacy save accepts a commit callback. Demo's existing stable TabId/ScriptKey SQLite binding is verified across navigation, another script, close and startup cleanup. WPF verifies real relative/numeric/parent tab creation, one close event, actual focus/close, refusal to close the last tab, and truthful info (browser download mode, normal context, automatic updates disabled). No automatic scheduler was added because Demo's actual policy is disabled; unknown host policy remains omitted.
+
+Validation: 288 Core + 44 adapter + 43 Demo tests (375) passed on both 84/121 x64; 113 JS tests, six SmokeHost/CDP combinations with thirteen required cases each, both 84/121 x64 WPF gates, the strengthened fixed TM 5.5.1 reference, and smoke-result negative checks passed. Raw logs: artifacts/p1-14-*.
+
+P1 steps 7–14 are complete in the verified scope, each with its own validated commit. Step 15's broader delivery/third-party corpus milestone and P2 remain outside this execution. Existing strict full-GM document-start, OOPIF, transparent BFCache restoration, isolated child-frame native menus, historical isolated webRequest and private/partition enhancements remain explicit limits rather than passed claims. The focused execution transport review and its complete filtering table are in [the security review](execution-security-review.md).

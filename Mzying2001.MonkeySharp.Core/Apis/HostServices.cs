@@ -471,16 +471,19 @@ namespace Mzying2001.MonkeySharp.Core.Apis
     public sealed class OpenTabRequest
     {
         /// <summary>Initializes an open-tab request.</summary>
-        /// <param name="url">The absolute HTTP or HTTPS URL to open.</param>
+        /// <param name="url">The absolute HTTP(S) or about:blank URL to open.</param>
         /// <param name="active">Whether the new tab should become active.</param>
         /// <param name="insert">Whether to insert the tab next to the current tab.</param>
         /// <param name="setParent">Whether to associate the current tab as the parent.</param>
-        public OpenTabRequest(Uri url, bool active, bool insert, bool setParent)
+        /// <param name="insertIndex">An optional absolute tab-strip position, overriding adjacent insertion.</param>
+        public OpenTabRequest(Uri url, bool active, bool insert, bool setParent, int? insertIndex = null)
         {
             Url = url ?? throw new ArgumentNullException(nameof(url));
             Active = active;
             Insert = insert;
             SetParent = setParent;
+            if (insertIndex < 0) throw new ArgumentOutOfRangeException(nameof(insertIndex));
+            InsertIndex = insertIndex;
         }
 
         /// <summary>Gets the absolute URL to open.</summary>
@@ -491,6 +494,9 @@ namespace Mzying2001.MonkeySharp.Core.Apis
 
         /// <summary>Gets whether to insert the tab next to the current tab.</summary>
         public bool Insert { get; }
+
+        /// <summary>Gets the requested absolute tab-strip position, or null for boolean insertion.</summary>
+        public int? InsertIndex { get; }
 
         /// <summary>Gets whether to associate the current tab as the parent.</summary>
         public bool SetParent { get; }
@@ -714,6 +720,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
     /// <summary>
     /// Persists JSON tab state scoped to a userscript installation.
     /// </summary>
+    /// <remarks>Bind to a stable host tab identity across navigations and scope all values by ScriptKey.</remarks>
     public interface ITabStateService
     {
         /// <summary>Gets the state associated with the current tab.</summary>

@@ -39,6 +39,10 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                     "/page*\n// @match " + fixture.BaseUrl + "/frame\n// @grant GM_registerMenuCommand\n// @grant GM_unregisterMenuCommand\n// @run-at document-end\n// ==/UserScript==\n" +
                     "if (top.location.search === '?primary') { window.__mergedClicks = 0; const id = GM_registerMenuCommand('Merged command', () => window.__mergedClicks++, {id:'merged',title:'Merged tooltip',autoClose:false}); window.__removeMerged = () => GM_unregisterMenuCommand(id); window.__updateMerged = () => GM_registerMenuCommand('Updated command', () => window.__mergedClicks += 10, {id,title:'Updated tooltip',autoClose:true}); }",
                     "application://merged-menu-smoke", true, CancellationToken.None);
+                await runtime.Repository.InstallAsync("// ==UserScript==\n// @name zz-tabstate-isolation\n// @match " + fixture.BaseUrl +
+                    "/page*\n// @grant GM_getTab\n// @grant GM_saveTab\n// @grant GM_getTabs\n// @run-at document-end\n// ==/UserScript==\n" +
+                    "(async function(){ const state=await GM.getTab(); await GM.saveTab({isolated:true}); const all=await GM.getTabs(); window.__tabIsolation=typeof state.marker==='undefined' && Object.values(all).every(value=>value.isolated===true && typeof value.marker==='undefined'); })();",
+                    "application://tab-isolation-smoke", true, CancellationToken.None);
                 var primary = runtime.MainWindow.NewTab(fixture.BaseUrl + "/page?primary");
                 await WaitAsync(async () => await EvaluateBoolean(primary, "!!(window.__demo && window.__demo.ready)"));
                 await WaitAsync(() => Task.FromResult(string.Equals(primary.IconUrl, fixture.BaseUrl + "/favicon.ico", StringComparison.OrdinalIgnoreCase)));
@@ -46,6 +50,8 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                 checks["permissionRemembered"] = (await runtime.PermissionDecisions.ListAsync(CancellationToken.None)).Any(scope => scope.ScriptKey == installation.ScriptKey.ToString());
                 checks["storageResourcesXhrCookieWebRequest"] = await EvaluateBoolean(primary,
                     "window.__demo.storage && window.__demo.resources && window.__demo.xhr && window.__demo.cookie && window.__demo.webRequest");
+                await WaitAsync(async () => await EvaluateBoolean(primary, "window.__tabIsolation === true"));
+                checks["tabStateScriptIsolation"] = true;
                 checks["domAndInfo"] = await EvaluateBoolean(primary, "window.__demo.dom && window.__demo.info");
                 await WaitAsync(async () => await EvaluateBoolean(primary,
                     "document.querySelector('iframe').contentWindow.__demoFrame === true"));
@@ -84,10 +90,23 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                 await Evaluate(secondary, "location.href = '/page?reloaded'");
                 await WaitAsync(async () => await EvaluateBoolean(secondary,
                     "location.search === '?reloaded' && window.__demo && window.__demo.ready && window.__demo.runs === 2"));
+                await Evaluate(primary, "window.__testWindowFocus()");
+                await WaitAsync(() => Task.FromResult(runtime.MainWindow.SelectedTab == primary));
+                checks["windowFocus"] = true;
+                checks["tabStateNavigation"] = await EvaluateBoolean(secondary, "window.__demo.previousTabMarker === '?secondary'");
                 checks["undefinedNavigation"] = await EvaluateBoolean(secondary, "window.__demo.restoredUndefined && window.__demo.storage");
                 checks["sharedCookies"] = await EvaluateBoolean(secondary, "document.cookie.includes('demo-cookie=ready')");
                 await WaitAsync(async () => await EvaluateBoolean(primary, "window.__demo.tabClosed === true"));
                 checks["openInTab"] = true;
+                var tabsBeforeOptions = runtime.MainWindow.Tabs.Count;
+                await Evaluate(primary, "window.__testTabOptions()");
+                await WaitAsync(() => Task.FromResult(runtime.MainWindow.Tabs.Count == tabsBeforeOptions + 1));
+                var optionTab = runtime.MainWindow.Tabs[0];
+                checks["tabRelativeUrlAndPosition"] = optionTab.Address == fixture.BaseUrl + "/child" && optionTab.ParentTabId == primary.TabId && runtime.MainWindow.SelectedTab == primary;
+                await WaitAsync(async () => await EvaluateBoolean(primary, "typeof window.__closeOptionsTab === 'function'"));
+                await Evaluate(primary, "window.__closeOptionsTab()");
+                await WaitAsync(async () => await EvaluateBoolean(primary, "window.__demo.optionsClosed === 1"));
+                checks["tabCloseOnce"] = optionTab.IsClosed;
                 await WaitAsync(async () => await EvaluateBoolean(primary, "window.__demo.download === true"));
                 var downloaded = Directory.GetFiles(runtime.Paths.DownloadsDirectory, "demo-smoke*.txt");
                 checks["download"] = downloaded.Length == 1 && File.ReadAllText(downloaded[0]) == new string('d', 256 * 1024);
@@ -173,9 +192,14 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                 await WaitAsync(async () => await EvaluateBoolean(primary, "!!(window.__demo && window.__demo.ready)"));
                 checks["enableAndReload"] = true;
                 selector.SelectedItem = secondary;
-                runtime.MainWindow.CloseTab(secondary);
+                await Evaluate(secondary, "window.__testWindowClose()");
+                await WaitAsync(() => Task.FromResult(secondary.IsClosed));
+                checks["windowClose"] = true;
                 checks["closeTab"] = secondary.IsClosed;
                 checks["closeTabSelectsPrevious"] = runtime.MainWindow.SelectedTab == primary && selector.SelectedItem == primary;
+                await Evaluate(primary, "window.__testWindowClose()");
+                await Task.Delay(150);
+                checks["lastTabPolicy"] = !primary.IsClosed && runtime.MainWindow.Tabs.Count == 1;
                 for (var iteration = 0; iteration < 5; iteration++)
                 {
                     var closing = runtime.MainWindow.NewTab(fixture.BaseUrl + "/child");
@@ -282,6 +306,8 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
 // @grant GM_webRequest
 // @grant GM_info
 // @grant GM_log
+// @grant window.close
+// @grant window.focus
 // @run-at document-end
 // ==/UserScript==
 window.__demo = { runs: Number(sessionStorage.getItem('runs') || 0) + 1 };
@@ -298,12 +324,21 @@ sessionStorage.setItem('runs', String(window.__demo.runs));
     await GM.addStyle('body { color: rgb(20, 40, 60); }');
     await GM.addElement('div', { id: 'demo-marker', textContent: 'ready' });
     result.dom = !!document.getElementById('demo-marker');
-    result.info = !!GM.info && typeof GM.setClipboard === 'function';
+    result.info = !!GM.info && GM.info.scriptWillUpdate === false && GM.info.isIncognito === false && GM.info.downloadMode === 'browser' && typeof GM.setClipboard === 'function';
     await GM.cookie.set({ url: location.href, name: 'demo-cookie', value: 'ready', path: '/' });
     result.cookie = (await GM.cookie.list({ url: location.href })).some(cookie => cookie.name === 'demo-cookie');
     result.xhr = (await GM.xmlHttpRequest({ url: '__BASE__/resource' })).responseText === 'demo-resource';
     const webRule = GM.webRequest([{ selector: '__BASE__/__monkeysharp_block__', action: 'cancel' }], function (info, message, details) { result.webRequest = message === 'cancel'; });
     result.webRequest = !!webRule && typeof webRule.remove === 'function';
+    window.__testTabOptions = async function () {
+        const tab = await GM.openInTab('/child', { active: false, insert: 0, setParent: true });
+        result.optionsClosed = 0;
+        tab.onclose = function () { result.optionsClosed++; };
+        window.__closeOptionsTab = function () { tab.close(); tab.close(); };
+    };
+    window.__testWindowFocus = function () { return window.focus(); };
+    window.__testWindowClose = function () { return window.close(); };
+    result.previousTabMarker = (await GM.getTab()).marker;
     await GM.saveTab({ marker: location.search });
     result.tabState = (await GM.getTab()).marker === location.search && Object.keys(await GM.getTabs()).length >= 1;
     await GM.addValueChangeListener('shared', function (key, oldValue, newValue, remote) { result.remote = remote && newValue === undefined; });

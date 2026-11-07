@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "caseId": "page-helpers",
+  "immediateReturn": {
+    "legacyLog": "undefined",
+    "modernLog": "function",
+    "modernElement": "function",
+    "legacyClose": "undefined",
+    "modernClose": "undefined"
+  },
+  "promise": {
+    "logValue": "undefined"
+  },
+  "events": [],
+  "effects": {
+    "circularLog": false,
+    "spanParent": "HEAD",
+    "styleParent": "HEAD",
+    "scriptParent": "HEAD",
+    "linkParent": "HEAD",
+    "metaParent": "HEAD",
+    "styleNode": "STYLE",
+    "styleEffect": "9",
+    "modernElement": "modern",
+    "earlyClosed": false,
+    "closed": true,
+    "tabsBefore": 4,
+    "tabsAfter": 4
+  },
+  "fixtureHash": "2f1dc29e06e0ff25fc9bd771a9e963c7d63ef27bc29f4b27afa0832c20fc6ddb",
+  "contractSource": [
+    "https://www.tampermonkey.net/documentation.php?locale=en",
+    "Tampermonkey 5.5.1/MV3 runtime"
+  ],
+  "environment": {
+    "manager": "Tampermonkey",
+    "managerVersion": "5.5.1",
+    "chromiumVersion": "Edg/156.0.4314.58",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36 Edg/156.0.0.0",
+    "manifestVersion": 3,
+    "settings": {
+      "headless": true,
+      "userScriptsAccess": true,
+      "freshProfile": true
+    },
+    "commit": "78d916aeff297ff298adc1b7748ea156c3e8e578",
+    "platform": "x64",
+    "capabilities": {
+      "referenceReturnProbe": true
+    },
+    "world": "manager-selected"
+  },
+  "checks": {
+    "domParents": true,
+    "styleEffect": true,
+    "modernNode": true,
+    "closeReturns": true,
+    "closedAfterRetry": true,
+    "logReturns": true
+  },
+  "status": "passed"
+}

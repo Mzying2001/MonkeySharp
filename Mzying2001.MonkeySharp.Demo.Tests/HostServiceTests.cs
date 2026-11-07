@@ -137,6 +137,34 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
         });
 
         [Fact]
+        public Task NumericTabInsertionAndWindowActionsRespectActualTabLifetime() => OnDispatcher(async () =>
+        {
+            using (var fixture = await PersistenceTests.Fixture.Create())
+            {
+                var main = new MainWindowViewModel(new DiagnosticsViewModel(Dispatcher.CurrentDispatcher, fixture.Paths.LogsDirectory));
+                var origin = main.NewTab("https://origin.example/");
+                var window = new WpfWindowService(main, origin, Dispatcher.CurrentDispatcher);
+                Assert.False(await window.CloseAsync(null, CancellationToken.None));
+                Assert.Same(origin, Assert.Single(main.Tabs));
+                var service = new WpfTabService(main, origin, Dispatcher.CurrentDispatcher);
+                using (var handle = await service.OpenAsync(new OpenTabRequest(new Uri("about:blank"), true, false, true, 0), CancellationToken.None))
+                {
+                    Assert.Equal(handle.TabId, main.Tabs[0].TabId);
+                    Assert.NotSame(origin, main.SelectedTab);
+                    Assert.True(await window.FocusAsync(null, CancellationToken.None));
+                    Assert.Same(origin, main.SelectedTab);
+                    Assert.True(await window.CloseAsync(null, CancellationToken.None));
+                    Assert.False(await window.FocusAsync(null, CancellationToken.None));
+                    Assert.True(origin.IsClosed);
+                    var closures = 0; handle.OnClose += (_, __) => closures++;
+                    await handle.CloseAsync(CancellationToken.None); await handle.CloseAsync(CancellationToken.None);
+                    Assert.Equal(1, closures);
+                }
+                main.CloseAll();
+            }
+        });
+
+        [Fact]
         public Task MenuRegistrationHasUserVisibleCommandAndDeterministicRemoval() => OnDispatcher(async () =>
         {
             var tab = new BrowserTabViewModel("about:blank");

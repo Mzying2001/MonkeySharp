@@ -178,7 +178,7 @@ DOM/content 使用原生 context 验证的隔离派发，raw/JavaScript 使用�
 | 能力 / 现代成员 | 旧版名称 | 现代返回值 | 实现来源 |
 | --- | --- | --- | --- |
 | `GM.info` | `GM_info` | 冻结对象，不是函数 | Core |
-| `GM.log` | `GM_log` | `Promise<undefined>` | Core 日志回调 |
+| `GM.log` | `GM_log` | `Promise<undefined>` | 本地 console 及可选宿主接收器 |
 | `GM.getValue` | `GM_getValue` | `Promise<value>` | 值存储 |
 | `GM.setValue` | `GM_setValue` | `Promise<undefined>` | 值存储 |
 | `GM.deleteValue` | `GM_deleteValue` | `Promise<undefined>` | 值存储 |
@@ -205,7 +205,7 @@ DOM/content 使用原生 context 验证的隔离派发，raw/JavaScript 使用�
 | `GM.cookie` | `GM_cookie` | 含 list/set/delete 的命名空间 | CefSharp 默认服务 |
 | `GM.webRequest` | `GM_webRequest` | 立即返回可移除句柄 | CefSharp 默认服务 |
 | `unsafeWindow` | 同名 | 页面全局对象 | 精确授权 |
-| `window.close`、`window.focus` | 同名 | 各返回 `Promise<boolean>` | 窗口服务 |
+| `window.close`、`window.focus` | 同名 | undefined | 窗口服务 |
 | `window.onurlchange` | 同名 | 属性/事件注册 | Core |
 
 <a id="information-and-logging"></a>
@@ -231,9 +231,9 @@ script 包含 name、namespace、version、description、author、copyright、na
 
 **与 Tampermonkey 的差异：** 这是 MonkeySharp 自身的快照，包含来源标记和真实环境事实，不保证提供全部 [Tampermonkey GM_info 字段](https://www.tampermonkey.net/documentation.php?q=GM_info)、实时浏览器设置或扩展更新状态。
 
-### GM.log(value) / GM_log(value)
+### GM.log(...values) / GM_log(...values)
 
-value 使用 JSON.stringify/JSON.parse 克隆：顶层 undefined、函数、symbol、BigInt 和循环引用无效。日志规则与下方的存储值编码相互独立。现代方法在投递给宿主日志回调后返回 `Promise<undefined>`；未配置日志接收器时可能没有可见输出。GM_log 返回 undefined，同时输出到页面控制台，并将异步宿主失败记录到控制台。只接收一个值，不提供 console.log 的多参数格式化功能。
+两种形式都会立即将原始多参数传给本地 console，保留对象引用、循环结构及格式化能力。现代返回 Promise<undefined>，旧版返回 undefined。可选宿主接收器得到有界的 JSON 快照，循环、访问器及截断用标记表示；转换或宿主失败不影响已完成的本地日志。固定 TM 5.5.1 对照会拒绝循环对象；此处接受循环对象是明确的本地控制台行为。
 
 ```javascript
 // @grant GM.log
@@ -318,11 +318,11 @@ value 使用 JSON.stringify/JSON.parse 克隆：顶层 undefined、函数、symb
 
 ### GM.addElement(tagName, attributes?) / GM.addElement(parent, tagName, attributes?)
 
-旧版为相同重载的 GM_addElement；需要 GM.addElement 或其别名授权。tagName 是非空字符串。parent 必须具有 appendChild；省略时使用 document.body 或 document.documentElement。
+旧版为相同重载的 GM_addElement；需要 GM.addElement 或其别名授权。tagName 是非空字符串。parent 必须具有 appendChild；省略时使用 document.head 或 document.documentElement。
 
 attributes 是可选对象：textContent/innerHTML 设置内容，字符串 style 设置 style.cssText，已有 DOM 属性（包括函数事件处理器）直接赋值，其他字段转换成字符串后使用 setAttribute。现代返回 `Promise<Element>`，旧版立即返回 Element。非法输入和 DOM 失败会拒绝/抛出，而非返回 null。
 
-**与 Tampermonkey 的差异：** 这些是普通页面 DOM 操作，不提供扩展级 CSP 绕过。省略 addElement 父节点时优先使用 body，不应假定与 [Tampermonkey 辅助方法的插入位置及错误行为](https://www.tampermonkey.net/documentation.php?q=GM_addElement)相同。
+**与 Tampermonkey 的差异：** 这些是普通页面 DOM 操作，不提供扩展级 CSP 绕过。默认插入 head 的行为遵循固定版本对照；页面 CSP 仍决定源码及样式是否生效。参见 [Tampermonkey 辅助方法](https://www.tampermonkey.net/documentation.php?q=GM_addElement)。
 
 ```javascript
 // @grant GM.addStyle
@@ -503,20 +503,9 @@ GM_setClipboard('已复制', 'text', () => console.log('已写入'));
 
 ### GM.openInTab(url, options?) / GM_openInTab(url, options?)
 
-需要对应授权和标签页服务。url 是绝对 HTTP(S) 字符串。现代 options 支持布尔值 active（默认 **false**）、insert（false）、setParent（false）。insert:true 请求插入到来源标签页旁边，布局由宿主决定。
+需要对应授权和标签页服务。HTTP(S) 字符串按当前文档解析相对 URL，也支持 about:blank。两种形式统一接受 loadInBackground 布尔简写或 options 对象；active 默认 false，显式 active 优先于 loadInBackground。insert:true 插入来源页旁，false 追加，非负整数指定标签栏位置（Demo 限定在实际可用范围）；setParent:true 关联来源页，以便关闭后恢复选择。私密标签创建仍属后续能力，传入 incognito 会在打开前拒绝。
 
-**两种形式**都立即返回本地句柄：
-
-| 句柄成员 | 行为 |
-| --- | --- |
-| `id` | 初始为 null，打开后异步填入宿主字符串 ID。 |
-| `closed` | 初始 false，收到宿主关闭通知后变为 true。 |
-| `onclose` | 可以赋值函数，关闭时无参数调用。 |
-| `close()` | `Promise<boolean>`；过早调用会排队等到打开获得 ID。重复调用复用待处理结果或返回 false。 |
-
-打开失败会记录日志，或拒绝待处理的关闭请求；没有等待打开就绪的 Promise。执行实例释放时销毁句柄，但不一定关闭已打开的用户标签页；Demo 会保留它们。
-
-旧版还接受 GM_openInTab(url, loadInBackgroundBoolean) 及 options.loadInBackground；没有显式提供 active 时，设置 `active = !loadInBackground`，现代调用不进行这些转换。不支持 incognito 或数字插入位置。默认不激活的行为与[官方标签页 API](https://www.tampermonkey.net/documentation.php?q=GM_openInTab)一致，不属于兼容差异。
+现代打开完成后返回 Promise<TabHandle>；旧版立即返回本地句柄。句柄只有 close、closed 和 onclose。close() 返回 undefined，过早调用会排队等到打开确认，且只发送一次。closed 反映宿主实际关闭；onclose 无参数且仅触发一次。客户关联 ID 也覆盖打开确认前的关闭事件，宿主 ID 保留在桥接内部。现代打开失败拒绝 Promise，旧版记录日志。执行结束移除回调订阅，保留已经打开的用户标签页。
 
 ### GM.getTab()、GM.saveTab(value)、GM.getTabs()
 
@@ -525,7 +514,7 @@ GM_setClipboard('已复制', 'text', () => console.log('已写入'));
 | API | 参数 / 行为 | 现代返回值 | 旧版约定 |
 | --- | --- | --- | --- |
 | `GM.getTab()` | 读取本脚本当前标签页对象。 | `Promise<object>` | GM_getTab(callback) 返回 undefined；回调为 (value, null) 或 (null, error)。 |
-| `GM.saveTab(value)` | 必需 JSON 对象，替换状态；拒绝数组和基础类型。 | `Promise<undefined>` | GM_saveTab(value) 返回 undefined，失败记录日志；无完成回调重载。 |
+| `GM.saveTab(value)` | 必需 JSON 对象，替换状态；拒绝数组和基础类型。 | `Promise<undefined>` | GM_saveTab(value, callback?) 返回 undefined，提交后调用回调；失败记录日志。 |
 | `GM.getTabs()` | 读取本脚本存活标签页的状态映射，以宿主标签页 ID 为键。 | `Promise<object>` | GM_getTabs(callback) 返回 undefined，回调/错误约定同 getTab。 |
 
 旧版 getTab/getTabs 错误为结构化 {error, details, code} 对象。修改 getTab 返回的对象不会自动保存。Demo 初始状态为 {}，完整页面导航后保留状态，关闭标签页后删除；应用启动时清除过期状态，不恢复浏览器会话。
@@ -540,9 +529,9 @@ GM_setClipboard('已复制', 'text', () => console.log('已写入'));
     state.lastAction = "opened help";
     await GM.saveTab(state);
     console.log(await GM.getTabs());
-    const tab = GM.openInTab("https://example.com/", { active: true, setParent: true });
+    const tab = await GM.openInTab("https://example.com/", { active: true, setParent: true });
     tab.onclose = () => console.log("Help tab closed");
-    // Later, while this execution is active: await tab.close();
+    // Later, while this execution is active: tab.close();
 })().catch(console.error);
 ```
 
@@ -762,3 +751,5 @@ document-idle 在 DOMContentLoaded 后调度，不等待缓慢资源的 load。�
 文本按声明字符集增量解码，保留跨分块的多字节字符；HTML MIME 使用 HTML 解析器，无效 XML 返回 null。显式 redirect 或 anonymous 会启用 fetch 语义，忽略传输 timeout/进度且只报告 readyState 4。HTTP stream 的 Promise 在响应头和流可用时兑现，后续失败通过流传播；onload/onloadend 随网络完成触发。renderer 每次按需拉取最多 64 KiB，宿主在 256 KiB 后转存磁盘，并受总预算约束。这限制桥接队列，但 CEF URLRequest 本身不能暂停网络源。暂存流在 EOF、取消或执行结束时释放；非流响应仍在 renderer 内组装。进度回调不保证逐步 responseText。
 
 Blob/File 下载逐块等待宿主确认，再使用共用的保存、取消、临时文件和原子提交路径。provider 在终态前持有 DownloadRequest.Body，自定义下载服务应读取该字节源，不应通过 HTTP 访问 blob 标识。失败或导航清理未启动的暂存；已接受下载可在文档结束后继续，回调已分离。context 保留本地原始对象；固定 TM 5.5.1 对照会跨扩展边界复制对象，因此不声称引用身份一致。
+
+同一执行的标签状态保存和读取按调用顺序提交，旧版不 await 的调用也遵守顺序；保存先捕获 JSON 对象。Demo 按稳定 TabId 及脚本安装身份隔离状态，跨导航保持，标签关闭删除，应用重启清理。window.close/focus 在门面返回 undefined；Demo 允许聚焦存活页、关闭当前页，并拒绝脚本关闭最后一个标签。GM.info 的更新策略来自真实宿主配置，Demo 未启用自动调度，scriptWillUpdate 为 false；未配置策略的宿主省略该字段。

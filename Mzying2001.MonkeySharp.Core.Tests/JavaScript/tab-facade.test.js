@@ -69,12 +69,12 @@ test("openInTab handles are local, default inactive, and close before id is queu
     assert.equal(starts.length, 2);
     assert.equal(starts[0].active, false);
     assert.equal(starts[1].active, false);
-    assert.equal(globalThis.__modern.id, "tab-1");
+    assert.equal(globalThis.__modern.id, undefined);
     assert.equal(globalThis.__modern.closed, true);
     assert.equal(globalThis.__modernClosed, 1);
-    assert.equal(globalThis.__legacy.id, "tab-2");
+    assert.equal(globalThis.__legacy.id, undefined);
     assert.equal(globalThis.__legacy.closed, false);
-    assert.equal(typeof globalThis.__modernClose.then, "function");
+    assert.equal(globalThis.__modernClose, undefined);
 });
 
 test("legacy tab callbacks receive structured bridge errors", async () => {

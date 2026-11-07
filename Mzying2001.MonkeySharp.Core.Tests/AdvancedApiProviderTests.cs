@@ -604,6 +604,22 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Fact]
+        public async Task TabCreationCorrelatesClosureBeforeAcknowledgementAndPreservesNumericInsertion()
+        {
+            var installation = await InstallAsync("// @grant GM.openInTab");
+            var services = new FakeHostServices { CloseTabOnOpen = true };
+            using var provider = new HostInteractionApiProvider(tabs: services);
+            var events = new List<ApiNotificationEventArgs>();
+            provider.Notification += (_, value) => events.Add(value);
+            var id = Guid.NewGuid().ToString();
+            var result = await provider.InvokeAsync(Context(installation, "GM.openInTab", new { url = "about:blank", insert = 0, clientId = id }), CancellationToken.None);
+            Assert.True(Json(result.Json).GetProperty("closed").GetBoolean());
+            Assert.Equal(id, Json(Assert.Single(events).DataJson).GetProperty("clientId").GetString());
+            Assert.Equal(0, services.OpenedTab.InsertIndex);
+            Assert.False(services.OpenedTab.Active);
+        }
+
+        [Fact]
         public async Task BinaryDownloadStagesContiguousBoundedBytesAndTransfersOwnershipUntilTerminal()
         {
             var installation = await InstallAsync("// @grant GM.download");
@@ -721,6 +737,8 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             IMenuService, INotificationService, IClipboardService, ITabService, IDownloadService, IUserScriptWindowService
         {
             public string DownloadMode => "browser";
+            public bool CloseTabOnOpen;
+            public OpenTabRequest OpenedTab;
             private Action _menuCallback;
             public FakeMenuRegistration MenuRegistration { get; } = new FakeMenuRegistration();
             public string ClipboardText { get; private set; }
@@ -749,7 +767,10 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             public Task<ITabHandle> OpenAsync(OpenTabRequest request, CancellationToken cancellationToken)
             {
                 OpenTab = request;
-                return Task.FromResult<ITabHandle>(new FakeTabHandle("tab"));
+                OpenedTab = request;
+                var handle = new FakeTabHandle("tab");
+                if (CloseTabOnOpen) handle.CloseAsync(cancellationToken).GetAwaiter().GetResult();
+                return Task.FromResult<ITabHandle>(handle);
             }
             public Task<IDownloadOperation> CreateAsync(DownloadRequest request, CancellationToken cancellationToken)
             {

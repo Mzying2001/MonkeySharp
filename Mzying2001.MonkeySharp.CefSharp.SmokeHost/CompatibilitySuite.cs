@@ -65,6 +65,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             results["isolated"] = await RunCaseAsync("isolated", IsolatedAsync);
             results["replay"] = await RunCaseAsync("replay", ReplayAsync);
             results["csp"] = await RunCaseAsync("csp", CspAsync);
+            results["pageHelpers"] = await RunCaseAsync("pageHelpers", PageHelpersAsync);
             results["binary"] = await RunCaseAsync("binary", BinaryAsync);
             results["permissions"] = await RunCaseAsync("permissions", PermissionsAsync);
             results["frames"] = await RunCaseAsync("frames", FramesAsync);
@@ -91,6 +92,13 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                 url = _context?.Url.AbsoluteUri, state = _lastState
             }));
             return success;
+        }
+
+        private async Task PageHelpersAsync()
+        {
+            await NavigateAsync("/compat/page-helpers");
+            var result = await WaitResultAsync("globalThis.__pageHelpers || null");
+            foreach (var check in result.EnumerateObject().Where(value => value.Name != "done")) Check(check.Name, check.Value.GetBoolean());
         }
 
         private async Task BinaryAsync()

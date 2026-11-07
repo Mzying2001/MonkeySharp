@@ -175,7 +175,7 @@ Each row requires its capability family or exact legacy declaration unless state
 | Capability / modern member | Legacy name | Modern result | Implementation |
 | --- | --- | --- | --- |
 | `GM.info` | `GM_info` | Frozen object, not a function | Core |
-| `GM.log` | `GM_log` | `Promise<undefined>` | Core logging sink |
+| `GM.log` | `GM_log` | `Promise<undefined>` | Local console and optional host sink |
 | `GM.getValue` | `GM_getValue` | `Promise<value>` | Value store |
 | `GM.setValue` | `GM_setValue` | `Promise<undefined>` | Value store |
 | `GM.deleteValue` | `GM_deleteValue` | `Promise<undefined>` | Value store |
@@ -227,9 +227,9 @@ Read-only, recursively frozen installation snapshot. `GM_info === GM.info`. Both
 
 **Tampermonkey difference:** this is MonkeySharp's snapshot, with explicit provenance and actual environment facts; it does not promise every [Tampermonkey GM_info field](https://www.tampermonkey.net/documentation.php?q=GM_info), live browser settings, or extension update state.
 
-### GM.log(value) / GM_log(value)
+### GM.log(...values) / GM_log(...values)
 
-`value` is cloned using `JSON.stringify`/`JSON.parse`; top-level `undefined`, functions, symbols, BigInt, and cycles are invalid. This logging rule is separate from the storage value encoding below. Modern calls return `Promise<undefined>` after delivery to the host logging callback. If no sink is configured, delivery has no visible output. `GM_log` returns `undefined`, additionally writes to the page console, and reports asynchronous host failures to the console. Only one value is accepted; this is not console.log's variadic formatting API.
+Both forms immediately call the local console with all original arguments, preserving object identity, cycles and console formatting. Modern returns `Promise<undefined>`; legacy returns undefined. The optional host sink receives a bounded JSON-safe snapshot (cycles/accessors/truncation use markers), independently of local output. Host serialization or sink failure cannot reject a completed local log. The fixed TM 5.5.1 reference throws on circular input; accepting cycles is the explicit local-console behavior here.
 
 ```javascript
 // @grant GM.log
@@ -310,11 +310,11 @@ Requires the corresponding grant. `css` is a string. Creates a `<style>`, assign
 
 ### GM.addElement(tagName, attributes?) / GM.addElement(parent, tagName, attributes?)
 
-Legacy: `GM_addElement` with the same overloads; grant `GM.addElement` or its alias. `tagName` is a non-empty string. `parent` must have `appendChild`; if omitted, the parent is `document.body` or `document.documentElement`.
+Legacy: `GM_addElement` with the same overloads; grant `GM.addElement` or its alias. `tagName` is a non-empty string. `parent` must have `appendChild`; if omitted, the parent is `document.head` or `document.documentElement`.
 
 `attributes` is an optional object. `textContent`/`innerHTML` set content, string `style` sets `style.cssText`, existing DOM properties (including function event handlers) are assigned, and other fields use `setAttribute` with string conversion. Modern result: `Promise<Element>`; legacy: immediate `Element`. Invalid inputs and DOM failures reject/throw rather than returning `null`.
 
-**Tampermonkey difference:** these are ordinary page DOM operations, with no extension-based CSP bypass. The omitted addElement parent prefers the body; do not assume the [Tampermonkey helper's placement/error behavior](https://www.tampermonkey.net/documentation.php?q=GM_addElement).
+**Tampermonkey difference:** these are ordinary page DOM operations, with no extension-based CSP bypass. The default parent follows the pinned head placement; page CSP still governs source and style effects. See the [Tampermonkey helper](https://www.tampermonkey.net/documentation.php?q=GM_addElement).
 
 ```javascript
 // @grant GM.addStyle
@@ -488,20 +488,9 @@ GM_setClipboard('Copied', 'text', () => console.log('Written'));
 
 ### GM.openInTab(url, options?) / GM_openInTab(url, options?)
 
-Requires its grant and a tab service. `url` is an absolute HTTP(S) string. Modern `options` supports booleans `active` (default **false**), `insert` (false), `setParent` (false). `insert:true` requests insertion beside the originating tab; layout is host-specific.
+Requires its grant and a tab service. HTTP(S) strings resolve against the current document; `about:blank` is also supported. Both forms accept a boolean loadInBackground shorthand or an options object. `active` defaults to false; an explicit active wins over loadInBackground. `insert:true` requests the adjacent position, false appends, and a nonnegative integer requests an absolute tab-strip position (Demo clamps it to the available range). `setParent:true` associates the origin tab for selection after closure. Private tab creation remains a separate unsupported capability and is rejected before opening.
 
-Modern returns `Promise<TabHandle>` after opening; legacy returns a local handle immediately:
-
-| Handle member | Behavior |
-| --- | --- |
-| `id` | Initially `null`, populated with a host string ID after opening. |
-| `closed` | Initially false; becomes true on host closure notification. |
-| `onclose` | Assign a function, invoked without arguments when closed. |
-| `close()` | `Promise<boolean>`; an early close is queued until opening supplies an ID. Repeated calls reuse the pending result or return false. |
-
-Opening failures are logged, or reject a pending close request; there is no open-readiness Promise. Releasing the execution disposes its handle but does not necessarily close a user tab; the Demo keeps already opened tabs.
-
-Legacy also accepts `GM_openInTab(url, loadInBackgroundBoolean)` and an options `loadInBackground` field; if `active` is absent, it sets `active = !loadInBackground`. Modern calls do not perform those conversions. `incognito` and numeric insertion positions are unsupported. The default inactive behavior agrees with the [official tab API](https://www.tampermonkey.net/documentation.php?q=GM_openInTab); it is not a compatibility difference.
+Modern returns `Promise<TabHandle>` after opening; legacy returns a local handle immediately. The handle has only `close`, `closed`, and `onclose`. `close()` returns undefined, queues an early close until creation is acknowledged, and sends it once. `closed` reflects host closure; onclose fires once without arguments. A client correlation ID covers closure before the open acknowledgment. Internal host IDs stay inside the bridge. Modern opening failures reject; legacy failures are logged. Execution end removes callback subscriptions while keeping already opened user tabs.
 
 ### GM.getTab(), GM.saveTab(value), GM.getTabs()
 
@@ -510,10 +499,10 @@ Require each respective grant and a tab-state service. This is per-installation 
 | API | Parameters / behavior | Modern result | Legacy contract |
 | --- | --- | --- | --- |
 | `GM.getTab()` | Read this script's current tab object. | `Promise<object>` | `GM_getTab(callback)` returns undefined; callback `(value, null)` or `(null, error)`. |
-| `GM.saveTab(value)` | Required JSON object; replaces saved state. Arrays/primitives are rejected. | `Promise<undefined>` | `GM_saveTab(value)` returns undefined; failures logged; no completion-callback overload. |
+| `GM.saveTab(value)` | Required JSON object; replaces saved state. Arrays/primitives are rejected. | `Promise<undefined>` | `GM_saveTab(value, callback?)` returns undefined; callback follows the commit, failures are logged. |
 | `GM.getTabs()` | Get this script's live tab-state map, keyed by host tab ID. | `Promise<object>` | `GM_getTabs(callback)` returns undefined; same callback/error contract as getTab. |
 
-Legacy getTab/getTabs errors are structured `{error, details, code}` objects. Mutating an object returned by getTab does not save it. The Demo starts with `{}`, preserves tab data across full page navigation, removes closed tabs, and clears stale state on application startup; it does not restore browser sessions.
+Save/read calls from one execution are ordered, including legacy calls made without awaiting; save captures its JSON object before queueing. Legacy getTab/getTabs errors are structured `{error, details, code}` objects. Mutating an object returned by getTab does not save it. The Demo starts with `{}`, preserves tab data across full page navigation, removes closed tabs, and clears stale state on application startup; it does not restore browser sessions.
 
 ```javascript
 // @grant GM.openInTab
@@ -525,9 +514,9 @@ Legacy getTab/getTabs errors are structured `{error, details, code}` objects. Mu
     state.lastAction = "opened help";
     await GM.saveTab(state);
     console.log(await GM.getTabs());
-    const tab = GM.openInTab("https://example.com/", { active: true, setParent: true });
+    const tab = await GM.openInTab("https://example.com/", { active: true, setParent: true });
     tab.onclose = () => console.log("Help tab closed");
-    // Later, while this execution is active: await tab.close();
+    // Later, while this execution is active: tab.close();
 })().catch(console.error);
 ```
 

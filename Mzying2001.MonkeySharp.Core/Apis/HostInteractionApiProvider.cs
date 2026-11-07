@@ -130,17 +130,29 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                         var tabId = ProviderParameters.RequiredString(context.Parameters, "tabId");
                         return await CloseTabAsync(context, tabId, cancellationToken).ConfigureAwait(false);
                     }
-                    var tabUrl = ReadHttpUrl(context.Parameters, "url");
+                    if (context.Parameters.TryGetProperty("incognito", out _)) throw new UnsupportedApiException("Private tab creation is not available.");
+                    var tabAddress = ProviderParameters.RequiredString(context.Parameters, "url");
+                    var tabUrl = tabAddress == "about:blank" ? new Uri(tabAddress) : ReadHttpUrl(context.Parameters, "url");
+                    var tabClientId = ProviderParameters.OptionalString(context.Parameters, "clientId");
+                    if (tabClientId != null && !Guid.TryParse(tabClientId, out _)) throw ProviderParameters.Invalid("clientId must be a UUID.");
+                    int? insertIndex = null;
+                    var insert = false;
+                    if (context.Parameters.TryGetProperty("insert", out var insertion))
+                    {
+                        if (insertion.ValueKind == JsonValueKind.Number && insertion.TryGetInt32(out var index) && index >= 0) insertIndex = index;
+                        else if (insertion.ValueKind == JsonValueKind.True || insertion.ValueKind == JsonValueKind.False) insert = insertion.GetBoolean();
+                        else throw ProviderParameters.Invalid("insert must be a boolean or nonnegative integer.");
+                    }
                     var tab = await _tabs.OpenAsync(new OpenTabRequest(
                         tabUrl,
-                        ProviderParameters.OptionalBoolean(context.Parameters, "active", true),
-                        ProviderParameters.OptionalBoolean(context.Parameters, "insert"),
-                        ProviderParameters.OptionalBoolean(context.Parameters, "setParent")), cancellationToken)
+                        ProviderParameters.OptionalBoolean(context.Parameters, "active", false),
+                        insert,
+                        ProviderParameters.OptionalBoolean(context.Parameters, "setParent"), insertIndex), cancellationToken)
                         .ConfigureAwait(false);
                     if (tab == null || string.IsNullOrEmpty(tab.TabId))
                         throw new InvalidOperationException("The tab service returned no tab handle.");
-                    TrackTab(context, tab);
-                    return ApiResult.FromValue(new { id = tab.TabId });
+                    TrackTab(context, tab, tabClientId);
+                    return ApiResult.FromValue(new { id = tab.TabId, closed = tab.Closed });
                 case "GM.download":
                     var downloadOperation = ProviderParameters.OptionalString(context.Parameters, "operation");
                     if (downloadOperation == "createBody" || downloadOperation == "appendBody" || downloadOperation == "releaseBody") return TransferDownloadBody(context, downloadOperation, cancellationToken);
@@ -309,10 +321,10 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             return ApiResult.FromValue(true);
         }
 
-        private void TrackTab(ApiInvocationContext context, ITabHandle tab)
+        private void TrackTab(ApiInvocationContext context, ITabHandle tab, string clientId)
         {
             var key = context.ExecutionId + ":" + tab.TabId;
-            var registration = new TabRegistration(this, key, tab, context.Installation.ScriptKey, context.ExecutionId);
+            var registration = new TabRegistration(this, key, tab, context.Installation.ScriptKey, context.ExecutionId, clientId);
             lock (_sync) _tabHandles[key] = registration;
             registration.Subscribe();
             if (tab.Closed) registration.Terminalize();
@@ -525,21 +537,22 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             private readonly ScriptKey _scriptKey;
             private readonly string _executionId;
             private readonly EventHandler _closed;
-            public TabRegistration(HostInteractionApiProvider owner, string key, ITabHandle handle, ScriptKey scriptKey, string executionId) : base(owner, key)
+            private readonly string _clientId;
+            public TabRegistration(HostInteractionApiProvider owner, string key, ITabHandle handle, ScriptKey scriptKey, string executionId, string clientId) : base(owner, key)
             {
-                _handle = handle; _scriptKey = scriptKey; _executionId = executionId;
+                _handle = handle; _scriptKey = scriptKey; _executionId = executionId; _clientId = clientId;
                 _closed = (_, __) => Terminalize();
             }
             public void Subscribe() { _handle.OnClose += _closed; }
             public async Task CloseAsync(CancellationToken cancellationToken)
             {
                 await _handle.CloseAsync(cancellationToken).ConfigureAwait(false);
-                Terminalize();
+                if (_handle.Closed) Terminalize();
             }
             public void Terminalize()
             {
                 if (!TryTerminal()) return;
-                Owner.Notification?.Invoke(Owner, new ApiNotificationEventArgs(_scriptKey, _executionId, "tab-closed", JsonSerializer.Serialize(new { tabId = _handle.TabId })));
+                Owner.Notification?.Invoke(Owner, new ApiNotificationEventArgs(_scriptKey, _executionId, "tab-closed", JsonSerializer.Serialize(new { tabId = _handle.TabId, clientId = _clientId })));
                 Dispose();
             }
             public override void Dispose() { _handle.OnClose -= _closed; _handle.Dispose(); }

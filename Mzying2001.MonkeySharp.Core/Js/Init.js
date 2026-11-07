@@ -331,15 +331,8 @@
                         return true;
                     }
                     if (notification.event === "tab-closed") {
-                        record.tabHandlers.forEach(state => {
-                            if (state.id === data.tabId && !state.closed) {
-                                state.closed = true;
-                                state.terminal = true;
-                                if (typeof state.onclose === "function") {
-                                    try { state.onclose(); } catch (error) { console.error("[MonkeySharp] tab onclose failed", error); }
-                                }
-                                if (state.closeResolve) state.closeResolve(true);
-                            }
+                        record.tabHandlers.slice().forEach(state => {
+                            if (state.id === data.tabId || data.clientId && state.clientId === data.clientId) state.finish();
                         });
                         return true;
                     }
@@ -407,6 +400,8 @@
             const endExecution = function (record) {
                 record.disposed = true;
                 record.pageListeners.forEach(listener => listener.remove());
+                record.tabHandlers.forEach(state => { state.onclose = null; });
+                record.tabHandlers.length = 0;
                 record.handlers.clear();
                 record.valueListenerKeys.clear();
                 record.valueChangeSequences.clear();

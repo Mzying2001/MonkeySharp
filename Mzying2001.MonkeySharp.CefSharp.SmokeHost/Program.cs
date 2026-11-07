@@ -167,9 +167,9 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             "    try { await GM.xmlHttpRequest({ url: location.origin + '/slow', timeout: 50, ontimeout: function () { smoke.extended.timeout = true; } }); } catch (ignore) {}\n" +
             "    await new Promise(function (resolve) { var pending = GM.xmlHttpRequest({ url: location.origin + '/slow', onabort: function () { smoke.extended.abort = true; resolve(); }, onerror: resolve }); pending.catch(function () {}); setTimeout(function () { pending.abort(); }, 20); });\n" +
             "    smoke.apis.xmlhttpExtended = Object.keys(smoke.extended).length === 10 && Object.keys(smoke.extended).every(function (key) { return smoke.extended[key] === true; });\n" +
-            "    while (!smoke.notificationDone || !smoke.downloadProgress || !smoke.downloadCompleted || !smoke.cookieReadback || !smoke.tab.id) await new Promise(function (resolve) { setTimeout(resolve, 25); });\n" +
+            "    while (!smoke.notificationDone || !smoke.downloadProgress || !smoke.downloadCompleted || !smoke.cookieReadback || !smoke.tab.closed) await new Promise(function (resolve) { setTimeout(resolve, 25); });\n" +
             "    smoke.apis.notification = smoke.notificationDone === true;\n" +
-            "    smoke.apis.tab = Boolean(smoke.tab && smoke.tab.id);\n" +
+            "    smoke.apis.tab = Boolean(smoke.tab && typeof smoke.tab.close === 'function' && smoke.tab.closed);\n" +
             "    smoke.apis.download = smoke.downloadProgress === true && smoke.downloadCompleted === true;\n" +
             "    smoke.apis.cookie = smoke.cookieList === 1 && smoke.cookieReadback === true;\n" +
             "    smoke.apis.webRequest = Boolean(smoke.webRule) && typeof smoke.webRule.remove === 'function';\n" +
@@ -414,7 +414,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             _timeoutTimer.Stop();
             await _host.DetachAsync(CancellationToken.None).ConfigureAwait(true);
             var success = _initialFixturePassed && _mainFrameLoads >= 2 && _childFrameLoads >= 1 && _contextReleased >= 1 &&
-                !_host.IsAttached && _compatibilityResults != null && _compatibilityResults.Count == 12 && _compatibilityResults.Values.All(value => value);
+                !_host.IsAttached && _compatibilityResults != null && _compatibilityResults.Count == 13 && _compatibilityResults.Values.All(value => value);
             object fixture = null;
             if (!string.IsNullOrEmpty(_initialFixtureJson))
             {

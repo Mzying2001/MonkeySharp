@@ -71,12 +71,13 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
         private void CreateNewTab() => NewTab();
 
         public BrowserTabViewModel NewTab(string address = "about:blank", bool active = true,
-            BrowserTabViewModel origin = null, bool insert = false, bool setParent = false)
+            BrowserTabViewModel origin = null, bool insert = false, bool setParent = false, int? insertIndex = null)
         {
             if (_closing) throw new InvalidOperationException("The browser is closing.");
             var tab = new BrowserTabViewModel(address) { ParentTabId = setParent ? origin?.TabId : null };
             tab.PropertyChanged += TabPropertyChanged;
-            if (insert && origin != null && Tabs.Contains(origin)) Tabs.Insert(Tabs.IndexOf(origin) + 1, tab);
+            if (insertIndex.HasValue) Tabs.Insert(Math.Max(0, Math.Min(insertIndex.Value, Tabs.Count)), tab);
+            else if (insert && origin != null && Tabs.Contains(origin)) Tabs.Insert(Tabs.IndexOf(origin) + 1, tab);
             else Tabs.Add(tab);
             if (active || SelectedTab == null) SelectedTab = tab;
             return tab;

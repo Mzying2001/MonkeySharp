@@ -321,3 +321,9 @@ document-idle 在 DOMContentLoaded 后调度，不等待缓慢资源的 load。�
 文本按声明字符集增量解码，保留跨分块的多字节字符；HTML MIME 使用 HTML 解析器，无效 XML 返回 null。显式 redirect 或 anonymous 会启用 fetch 语义，忽略传输 timeout/进度且只报告 readyState 4。HTTP stream 的 Promise 在响应头和流可用时兑现，后续失败通过流传播；onload/onloadend 随网络完成触发。renderer 每次按需拉取最多 64 KiB，宿主在 256 KiB 后转存磁盘，并受总预算约束。这限制桥接队列，但 CEF URLRequest 本身不能暂停网络源。暂存流在 EOF、取消或执行结束时释放；非流响应仍在 renderer 内组装。进度回调不保证逐步 responseText。
 
 Blob/File 下载逐块等待宿主确认，再使用共用的保存、取消、临时文件和原子提交路径。provider 在终态前持有 DownloadRequest.Body，自定义下载服务应读取该字节源，不应通过 HTTP 访问 blob 标识。失败或导航清理未启动的暂存；已接受下载可在文档结束后继续，回调已分离。context 保留本地原始对象；固定 TM 5.5.1 对照会跨扩展边界复制对象，因此不声称引用身份一致。
+
+### 页面辅助方法与稳定标签服务
+
+addStyle/addElement 在本地执行：旧版返回节点，现代返回节点的 Promise。默认父节点优先 head，缺失时使用 documentElement；页面 CSP 仍生效。GM.log 将原始多参数交给本地 console，仅向 LogTo 发送有界、尽力投递的 JSON 快照。
+
+OpenTabRequest 支持相邻 Insert 和优先使用的绝对 InsertIndex。服务应报告实际 Closed 状态和一次关闭事件；renderer 客户关联 ID 覆盖确认前关闭。脚本句柄只有 close/closed/onclose，close/window.close/window.focus 返回 undefined。ITabStateService 必须绑定跨文档稳定的宿主标签身份，并按 ScriptKey 隔离数据。Demo 的共享 SQLite 服务绑定 BrowserTabViewModel.TabId，关闭删除，启动清理历史状态；WPF 窗口政策拒绝脚本关闭最后标签。AutomaticallyUpdatesScripts 应反映真实宿主策略；Demo 为 false，没有自动调度器，未知策略省略 info 字段。

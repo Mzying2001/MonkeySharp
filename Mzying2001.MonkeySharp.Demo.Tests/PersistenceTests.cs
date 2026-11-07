@@ -198,6 +198,11 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
                 await first.SaveAsync(script.ScriptKey, null, "{\"test\":1}", CancellationToken.None);
                 Assert.Equal("{}", await second.GetAsync(script.ScriptKey, null, CancellationToken.None));
                 Assert.Contains("first", (await second.GetAllAsync(script.ScriptKey, CancellationToken.None)).Keys);
+                var navigated = states.ForTab("first");
+                Assert.Equal("{\"test\":1}", await navigated.GetAsync(script.ScriptKey, null, CancellationToken.None));
+                var otherScript = Mzying2001.MonkeySharp.Core.Domain.ScriptKey.Parse(Guid.NewGuid().ToString());
+                Assert.Equal("{}", await navigated.GetAsync(otherScript, null, CancellationToken.None));
+                Assert.Empty(await navigated.GetAllAsync(otherScript, CancellationToken.None));
                 await Assert.ThrowsAsync<ArgumentException>(() => first.SaveAsync(script.ScriptKey, null, "[]", CancellationToken.None));
                 states.CloseTab("first");
                 Assert.Empty(await second.GetAllAsync(script.ScriptKey, CancellationToken.None));

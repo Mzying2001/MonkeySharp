@@ -237,7 +237,7 @@ namespace Mzying2001.MonkeySharp.Demo.Services
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 if (_origin.IsClosed) throw new OperationCanceledException();
-                var tab = _main.NewTab(request.Url.AbsoluteUri, request.Active, _origin, request.Insert, request.SetParent);
+                var tab = _main.NewTab(request.Url.AbsoluteUri, request.Active, _origin, request.Insert, request.SetParent, request.InsertIndex);
                 return (ITabHandle)new TabHandle(_main, tab, _dispatcher);
             });
         }

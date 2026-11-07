@@ -122,6 +122,13 @@ async function main() {
             stylesApplied: JSON.stringify(result.effects.styles) === JSON.stringify(["17", "23"]),
             promisesSettled: Object.values(result.promise).every(value => value.state === "fulfilled"),
             openedTabsClosed: result.effects.tabsBefore === result.effects.tabsAfter
+        } : result.caseId === "page-helpers" ? {
+            domParents: ["span", "style", "script", "link", "meta"].every(tag => result.effects[tag + "Parent"] === "HEAD"),
+            styleEffect: result.effects.styleEffect === "9",
+            modernNode: result.effects.modernElement === "modern" && result.immediateReturn.modernElement === "function",
+            closeReturns: result.immediateReturn.legacyClose === "undefined" && result.immediateReturn.modernClose === "undefined",
+            closedAfterRetry: result.effects.closed === true,
+            logReturns: result.immediateReturn.legacyLog === "undefined" && result.immediateReturn.modernLog === "function" && result.promise.logValue === "undefined"
         } : result.caseId === "binary-inputs" ? {
             blobText: result.effects.blobText === "blob text 你好",
             fileText: result.effects.fileText === "file text",

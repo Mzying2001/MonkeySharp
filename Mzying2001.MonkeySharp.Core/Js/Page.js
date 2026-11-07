@@ -130,35 +130,57 @@
                 });
             };
 
-            const addPageApi = function (record, enabled, api) {
-                if (enabled("GM.log")) api.log = async value => call(record, "GM.log", { value: serializableValue(value) });
+            const logHostValue = function (value, seen, depth, budget) {
+                if (budget.remaining-- <= 0) return "[Truncated]";
+                if (typeof value === "string") return value.length > 8192 ? value.slice(0, 8192) + "[Truncated]" : value;
+                if (value === null || typeof value === "boolean" || typeof value === "number") return value;
+                if (typeof value !== "object") return String(value);
+                if (seen.has(value)) return "[Circular]";
+                if (depth >= 4) return "[Object]";
+                seen.add(value);
+                const result = Array.isArray(value) ? [] : Object.create(null);
+                for (const key of Object.keys(value).slice(0, 50)) {
+                    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+                    result[key] = descriptor && "value" in descriptor ? logHostValue(descriptor.value, seen, depth + 1, budget) : "[Accessor]";
+                }
+                seen.delete(value);
+                return result;
             };
-
+            const addPageApi = function (record, enabled, api) {
+                if (enabled("GM.log")) api.log = async function (...args) {
+                    if (root.console && typeof root.console.log === "function") root.console.log(...args);
+                    // Host logging is a best-effort sink; it cannot change local console behavior.
+                    let value;
+                    try {
+                        const budget = { remaining: 256 };
+                        value = args.slice(0, 50).map(item => logHostValue(item, new WeakSet(), 0, budget));
+                        if (args.length === 1) value = value[0];
+                        if (JSON.stringify(value).length > 32768) value = "[Log truncated]";
+                    } catch (_) { value = "[Uninspectable log]"; }
+                    call(record, "GM.log", { value }).catch(error => {
+                        if (root.console && typeof root.console.warn === "function") root.console.warn("[MonkeySharp] host log failed", error);
+                    });
+                };
+            };
+            const createStyleNode = function (css) {
+                if (typeof css !== "string") throw new TypeError("css must be a string.");
+                const style = document.createElement("style");
+                style.textContent = css;
+                (document.head || document.documentElement).appendChild(style);
+                return style;
+            };
+            const createElementNode = function (parent, tagName, attributes) {
+                if (typeof parent === "string") { attributes = tagName; tagName = parent; parent = document.head || document.documentElement; }
+                if (!parent || typeof parent.appendChild !== "function") throw new TypeError("parent must be a DOM node.");
+                if (typeof tagName !== "string" || tagName.length === 0) throw new TypeError("tagName must be a string.");
+                const element = document.createElement(tagName);
+                applyElementAttributes(element, attributes);
+                parent.appendChild(element);
+                return element;
+            };
             const addDomApi = function (enabled, api) {
-                if (enabled("GM.addStyle")) {
-                    api.addStyle = async function (css) {
-                        if (typeof css !== "string") throw new TypeError("css must be a string.");
-                        const style = document.createElement("style");
-                        style.textContent = css;
-                        (document.head || document.documentElement).appendChild(style);
-                        return style;
-                    };
-                }
-                if (enabled("GM.addElement")) {
-                    api.addElement = async function (parent, tagName, attributes) {
-                        if (typeof parent === "string") {
-                            attributes = tagName;
-                            tagName = parent;
-                            parent = document.body || document.documentElement;
-                        }
-                        if (!parent || typeof parent.appendChild !== "function") throw new TypeError("parent must be a DOM node.");
-                        if (typeof tagName !== "string" || tagName.length === 0) throw new TypeError("tagName must be a string.");
-                        const element = document.createElement(tagName);
-                        applyElementAttributes(element, attributes);
-                        parent.appendChild(element);
-                        return element;
-                    };
-                }
+                if (enabled("GM.addStyle")) api.addStyle = async css => createStyleNode(css);
+                if (enabled("GM.addElement")) api.addElement = async (...args) => createElementNode(...args);
             };
 
             const addResourceApi = function (record, enabled, api) {
@@ -183,12 +205,7 @@
             };
 
             const addLegacyLog = function (api, facade) {
-                if (api.log) {
-                    facade.GM_log = function (value) {
-                        if (root.console && typeof root.console.log === "function") root.console.log(value);
-                        api.log(value).catch(error => console.error("[MonkeySharp] legacy log failed", error));
-                    };
-                }
+                if (api.log) facade.GM_log = function (...args) { api.log(...args); };
             };
 
             const addLegacyPage = function (record, api, facade) {
@@ -208,24 +225,6 @@
                         return record.resourceMirror[name].url;
                     };
                 }
-                if (api.addStyle) facade.GM_addStyle = function (css) {
-                    if (typeof css !== "string") throw new TypeError("css must be a string.");
-                    const style = document.createElement("style");
-                    style.textContent = css;
-                    (document.head || document.documentElement).appendChild(style);
-                    return style;
-                };
-                if (api.addElement) facade.GM_addElement = function (parent, tagName, attributes) {
-                    if (typeof parent === "string") {
-                        attributes = tagName;
-                        tagName = parent;
-                        parent = document.body || document.documentElement;
-                    }
-                    if (!parent || typeof parent.appendChild !== "function") throw new TypeError("parent must be a DOM node.");
-                    if (typeof tagName !== "string" || tagName.length === 0) throw new TypeError("tagName must be a string.");
-                    const element = document.createElement(tagName);
-                    applyElementAttributes(element, attributes);
-                    parent.appendChild(element);
-                    return element;
-                };
+                if (api.addStyle) facade.GM_addStyle = createStyleNode;
+                if (api.addElement) facade.GM_addElement = createElementNode;
             };
