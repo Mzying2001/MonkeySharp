@@ -244,7 +244,7 @@
     "tabsBefore": 4,
     "tabsAfter": 4
   },
-  "fixtureHash": "a82f2b68aa6e80d53a1e894c3438492df29010adbdff7902a8f33282042d563d",
+  "fixtureHash": "5a36a2af4a702f054eaa66a03dac3b225e9ec49c0373d16331f47a81976bb5d2",
   "contractSource": [
     "https://www.tampermonkey.net/documentation.php?locale=en",
     "Tampermonkey 5.5.1/MV3 runtime"
@@ -258,9 +258,11 @@
     "settings": {
       "headless": true,
       "userScriptsAccess": true,
-      "freshProfile": true
+      "freshProfile": true,
+      "ignoreLoopbackCertificateErrors": true,
+      "legacyPfxProvider": true
     },
-    "commit": "d17609038e84403cfeff41829983798a274d9949",
+    "commit": "780b61541dcd098a9e6ed8a641bada8f48908dff",
     "platform": "x64",
     "capabilities": {
       "referenceReturnProbe": true

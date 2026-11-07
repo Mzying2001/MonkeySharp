@@ -197,7 +197,8 @@ async function main() {
                 manager: "Tampermonkey", managerVersion: manifest.version,
                 chromiumVersion: browserVersion.product, userAgent: browserVersion.userAgent,
                 manifestVersion: manifest.manifest_version,
-                settings: { headless: true, userScriptsAccess: true, freshProfile: true },
+                settings: { headless: true, userScriptsAccess: true, freshProfile: true,
+                    ignoreLoopbackCertificateErrors: partitionProbe, legacyPfxProvider: process.execArgv.includes('--openssl-legacy-provider') },
                 commit: execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim(),
                 platform: process.arch, capabilities: { referenceReturnProbe: true }, world: "manager-selected"
             },

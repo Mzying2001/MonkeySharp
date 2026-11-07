@@ -102,7 +102,7 @@ browser.RequestHandler = requestHandlers;
 host.Attach(browser);
 ```
 
-只需组合已有应用处理器的槽位。浏览器已经初始化，或渲染处理器槽位被未复用的处理器占用时，`Attach` 会拒绝操作。存在 webRequest 服务时，请求处理器槽位也有同样要求，默认服务亦不例外。禁用或替换网络服务的说明见[请求处理器集成](docs/integration-reference.zh-CN.md#web-request)。
+只需组合已有应用处理器的槽位。已被未复用处理器占用的槽位会使 `Attach` 拒绝操作。应在初始化前附加以覆盖首批资源；晚附加会明确标记，无法补拦截已发送请求。存在 webRequest 服务时，请求处理器槽位也有同样要求，默认服务亦不例外。禁用或替换网络服务的说明见[请求处理器集成](docs/integration-reference.zh-CN.md#web-request)。
 
 ## 安全模型
 
@@ -206,7 +206,7 @@ node --test Mzying2001.MonkeySharp.Core.Tests/JavaScript/*.test.js
 
 使用 `-p:Platform=x86` 重复 .NET 命令；x86 配置会排除仅支持 x64 的 Demo 项目。测试其他受支持版本时，应向所有命令传入相同的 `CefSharpVersion` 属性。打包和真实 Chromium E2E 命令见[集成参考](docs/integration-reference.zh-CN.md#构建打包与验证)。
 
-CI 在 x64/x86 上覆盖 CefSharp `84.4.10`、`121.3.70` 和 `151.3.240`，运行 .NET/JavaScript 测试及真实 Chromium SmokeHost 门禁。WPF Demo 门禁使用默认版本并仅运行 x64。测试覆盖和 CI 日志说明见[兼容性门禁详情](docs/integration-reference.zh-CN.md#chromium-兼容性脚本包)。
+CI 在 x64/x86 上覆盖 CefSharp `84.4.10`、`121.3.70` 和 `151.3.240`，运行 .NET/JavaScript 测试及真实 Chromium SmokeHost 门禁。WPF Demo 在三个版本的 x64 上设门禁。见[兼容性门禁详情](docs/integration-reference.zh-CN.md#chromium-兼容性脚本包)及 [P2 交付记录](docs/compatibility/p2-delivery.md)。
 
 ## 许可证
 

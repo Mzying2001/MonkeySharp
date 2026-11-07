@@ -65,10 +65,15 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
             checks["privatePermissionCleared"] = prompts() > beforePrompts;
             checks["privateCacheCleared"] = fixture.RequestCount("/private-cache.js") == 3;
             await Close(runtime, fresh);
-            checks["privateLogsNotPersisted"] = Directory.GetFiles(runtime.Paths.LogsDirectory).All(path => !File.ReadAllText(path).Contains("PRIVATE_LOG_PROOF_NOT_PERSISTED"));
+            checks["privateLogsNotPersisted"] = Directory.GetFiles(runtime.Paths.LogsDirectory).All(path => !ReadSharedLog(path).Contains("PRIVATE_LOG_PROOF_NOT_PERSISTED"));
             await Close(runtime, normal);
         }
         private static Task Ready(BrowserTabViewModel tab) => DemoSmokeTest.WaitAsync(async () => await DemoSmokeTest.EvaluateBoolean(tab, "window.__privateCase && window.__privateCase.ready"));
+        private static string ReadSharedLog(string path)
+        {
+            using (var input = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+            using (var reader = new StreamReader(input)) return reader.ReadToEnd();
+        }
         private static async Task Close(DemoRuntime runtime, BrowserTabViewModel tab)
         { var view = (BrowserTabView)tab.Browser; runtime.MainWindow.CloseTab(tab); await view.DisposeAsync(); }
 

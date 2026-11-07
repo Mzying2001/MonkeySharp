@@ -1,12 +1,61 @@
 {
   "schemaVersion": 1,
   "entries": [
-    { "category": "dom-decoration", "status": "pending", "reason": "Pin licensed upstream source and local page prerequisites." },
-    { "category": "page-hook", "status": "pending", "reason": "Pin licensed upstream source and CSP requirements." },
-    { "category": "authenticated-xhr", "status": "pending", "reason": "Pin source and provide local authentication fixture." },
-    { "category": "download", "status": "pending", "reason": "Pin source, expected bytes and SHA-256." },
-    { "category": "storage-listener", "status": "pending", "reason": "Pin source and cross-instance scenario." },
-    { "category": "menu-configuration", "status": "pending", "reason": "Pin source and interaction scenario." },
-    { "category": "iframe-spa", "status": "pending", "reason": "Pin source and frame/navigation prerequisites." }
-  ]
+    {
+      "category": "dom-decoration",
+      "status": "pending",
+      "reason": "Pin licensed upstream source and local page prerequisites."
+    },
+    {
+      "category": "page-hook",
+      "status": "pending",
+      "reason": "Pin licensed upstream source and CSP requirements."
+    },
+    {
+      "category": "authenticated-xhr",
+      "status": "pending",
+      "reason": "Pin source and provide local authentication fixture."
+    },
+    {
+      "category": "download",
+      "status": "pending",
+      "reason": "Pin source, expected bytes and SHA-256."
+    },
+    {
+      "category": "storage-listener",
+      "status": "pending",
+      "reason": "Pin source and cross-instance scenario."
+    },
+    {
+      "category": "menu-configuration",
+      "status": "pending",
+      "reason": "Pin source and interaction scenario."
+    },
+    {
+      "category": "iframe-spa",
+      "status": "pending",
+      "reason": "Pin source and frame/navigation prerequisites."
+    }
+  ],
+  "localOriginal": {
+    "category": [
+      "dom-decoration",
+      "storage"
+    ],
+    "status": "passed",
+    "sourcePath": "local-notes/Userscripts/about-blank-search.user.js",
+    "name": "MonkeySharp Blank Page Search",
+    "version": "1.0.0",
+    "sha256": "d1faa1b36fa600f413b4e310b6a574f8586b97e3b0c450a36c4fd024ec8b816f",
+    "license": "User-provided local source; redistribution license not declared; source not committed",
+    "sourceModified": false,
+    "scenario": [
+      "about:blank DOM",
+      "engine choice persistence",
+      "empty submit without external navigation",
+      "full navigation retaining choice"
+    ],
+    "evidence": "evidence/p2-delivery.json",
+    "packageConsumerRuns": 6
+  }
 }

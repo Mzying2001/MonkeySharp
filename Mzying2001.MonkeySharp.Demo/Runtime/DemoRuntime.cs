@@ -99,8 +99,7 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
             if (_tabContexts.TryGetValue(tab.TabId, out var existing)) return existing;
             if (tab.IsIncognito && _privateRequestContext == null)
             {
-                _privateRequestContext = new RequestContext(new RequestContextSettings { CachePath = string.Empty,
-                    PersistSessionCookies = false, PersistUserPreferences = false });
+                _privateRequestContext = CefSharpRequestContexts.CreatePrivate();
                 _privateDecisions = new InMemoryUserScriptPermissionDecisionStore();
                 _privatePermissions = new InteractiveUserScriptPermissionPolicy(new SensitiveUserScriptPermissionsPolicy(), _privateDecisions, PermissionPrompt.ForPrivateContext());
                 _privateValues = new PrivateUserScriptValueStore(_values);

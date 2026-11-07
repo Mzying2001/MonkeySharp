@@ -146,6 +146,10 @@ CRUD support is recorded separately from this request limitation.
 
 Public-suffix data and its MPL-2.0 notice/provenance are embedded and included in
 packages; no new native API or higher minimum framework is introduced on the
-84 basic path. See Protocol/THIRD-PARTY-NOTICES.md in the adapter project.
+84 basic path. See the [third-party notice](../../Mzying2001.MonkeySharp.CefSharp/Protocol/THIRD-PARTY-NOTICES.md).
 
 Validation passed: 403 .NET tests at both 84/121 x64, 114 JS tests, all six SmokeHost/CDP combinations with 15 cases, and WPF84 rejection/WPF121 CRUD. The native request limitation and pinned-manager preservation failure are separate from passed CRUD checks. The new suffix data is pinned to Chromium121.0.6167.160 and151.0.7922.174.
+
+## 20. Final isolated delivery
+
+The six detached checkouts passed complete builds/tests, real Chromium/CDP, unique-version NuGet packaging and public consumers. All three x64 WPF gates passed, including private contexts; CI now keeps that 151 gate. The original local search script ran unchanged through each package consumer, with DOM, storage, empty submission and navigation effects verified. Its source remains local and unredistributed; the pending third-party corpus and historical/native limits remain explicit. See the final delivery record for package, path, SDK and provenance corrections.

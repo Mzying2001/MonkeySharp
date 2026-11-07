@@ -89,7 +89,7 @@ jobs:
           if-no-files-found: error
 
       - name: Run WPF Demo Chromium baseline
-        if: matrix.platform == 'x64' && (matrix.cefSharpVersion == '84.4.10' || matrix.cefSharpVersion == '121.3.70')
+        if: matrix.platform == 'x64'
         shell: pwsh
         run: >-
           pwsh -NoProfile -ExecutionPolicy Bypass -File

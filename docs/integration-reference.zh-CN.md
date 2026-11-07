@@ -6,6 +6,8 @@
 
 ## CefSharp 版本兼容性
 
+完整 P2 交付门禁使用 `scripts/compatibility/Run-Delivery.ps1`：各版本/平台采用独立短路径 checkout，核查 NuGet 内容，再以独立包版本运行仅用公开 API 的 Chromium 消费宿主。`-CorpusScript <path>` 原样安装本地真实脚本。范围、来源与剩余限制见[交付记录](compatibility/p2-delivery.md)；`-PackageOnly` 跳过基础门禁，仅供诊断。
+
 同一个适配器二进制文件无法兼容任意 CefSharp 版本。CefSharp 程序集具有强名称，而且公开接口曾在版本间发生变化，例如 `IBrowser.GetFrame(long)` 改为 `GetFrameByIdentifier(string)`，`IFrame.Identifier` 也从 `long` 改为 `string`。
 
 适配器默认使用 `121.3.70`，源码兼容层已针对 `84.4.10`、`121.3.70` 和 `151.3.240` 验证。应用程序应针对实际发布的版本重新构建并测试：
@@ -17,7 +19,7 @@ dotnet build Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csp
 
 适配器 NuGet 包将 `CefSharp.Common` 引用设为私有。使用者需要自行引用匹配的 `CefSharp.WinForms`、`CefSharp.Wpf` 或 `CefSharp.Common` 包，并在 .NET Framework 应用中允许常规绑定重定向。托管包、CEF 原生文件、MonkeySharp 适配器的版本和进程平台必须一致。
 
-CI 仅在目标分支为 `dev` 或 `main` 的 PR 上触发，针对 x64 和 x86 验证 `84.4.10`、`121.3.70`、`151.3.240`。每个矩阵项都会还原、构建并测试 solution，运行 JavaScript 协议测试，再用真实 Chromium 执行 SmokeHost。WPF Demo smoke 保留为默认 `121.3.70` 的 x64 验证。
+CI 仅在目标分支为 `dev` 或 `main` 的 PR 上触发，针对 x64 和 x86 验证 `84.4.10`、`121.3.70`、`151.3.240`。每个矩阵项都会还原、构建并测试 solution，运行 JavaScript 协议测试，再用真实 Chromium 执行 SmokeHost。WPF Demo 门禁覆盖三个版本的 x64。
 
 ## 授权与 API 契约
 

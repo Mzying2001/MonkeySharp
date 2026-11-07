@@ -47,7 +47,8 @@
     <EmbeddedResource Include="Js\Isolated.js" />
     <EmbeddedResource Include="Js\LifecycleEvents.js" />
     <EmbeddedResource Include="Protocol\psl-*.dat.gz" LogicalName="Mzying2001.MonkeySharp.CefSharp.Protocol.%(Filename)%(Extension)" />
-    <None Update="Protocol\psl-*.dat.gz;Protocol\public-suffix-snapshots.json;Protocol\THIRD-PARTY-NOTICES.md" Pack="true" PackagePath="third-party/public-suffix/" />
+    <None Remove="Protocol\psl-*.dat.gz;Protocol\public-suffix-snapshots.json;Protocol\THIRD-PARTY-NOTICES.md" />
+    <None Include="Protocol\psl-*.dat.gz;Protocol\public-suffix-snapshots.json;Protocol\THIRD-PARTY-NOTICES.md" Pack="true" PackagePath="third-party/public-suffix/" />
     <None Include="..\README.md">
       <Pack>true</Pack>
       <PackagePath>\</PackagePath>

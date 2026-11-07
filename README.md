@@ -102,7 +102,7 @@ browser.RequestHandler = requestHandlers;
 host.Attach(browser);
 ```
 
-Only compose slots that already have application handlers. `Attach` rejects an initialized browser or an occupied render handler that has not been multiplexed. The request handler requirement applies whenever a webRequest service is available, including the default service. See [request handler integration](docs/integration-reference.md#web-requests) for disabling or replacing network services.
+Only compose slots that already have application handlers. `Attach` rejects occupied handler slots that have not been multiplexed. Attach before initialization to cover initial resources; late attachment is explicitly marked and cannot intercept requests already sent. The request handler requirement applies whenever a webRequest service is available, including the default service. See [request handler integration](docs/integration-reference.md#web-request) for disabling or replacing network services.
 
 ## Security Model
 
@@ -206,7 +206,7 @@ node --test Mzying2001.MonkeySharp.Core.Tests/JavaScript/*.test.js
 
 Repeat the .NET commands with `-p:Platform=x86`; the x86 configuration excludes the x64-only Demo projects. Pass the same `CefSharpVersion` property to every command when testing another supported version. Packaging and real-Chromium E2E commands are in the [integration reference](docs/integration-reference.md#build-package-and-verify).
 
-CI covers CefSharp `84.4.10`, `121.3.70`, and `151.3.240` on x64 and x86 with .NET/JavaScript tests and real-Chromium SmokeHost gates. The WPF Demo gate runs on x64 with the default version. See [compatibility gate details](docs/integration-reference.md#chromium-compatibility-script-package) for test coverage and CI logs.
+CI covers CefSharp `84.4.10`, `121.3.70`, and `151.3.240` on x64 and x86 with .NET/JavaScript tests and real-Chromium SmokeHost gates. The WPF Demo gates run on x64 with all three versions. See [compatibility gate details](docs/integration-reference.md#chromium-compatibility-script-package) and the [P2 delivery record](docs/compatibility/p2-delivery.md).
 
 ## License
 
