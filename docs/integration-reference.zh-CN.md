@@ -6,7 +6,7 @@
 
 ## CefSharp 版本兼容性
 
-完整 P2 交付门禁使用 `scripts/compatibility/Run-Delivery.ps1`：各版本/平台采用独立短路径 checkout，核查 NuGet 内容，再以独立包版本运行仅用公开 API 的 Chromium 消费宿主。`-CorpusScript <path>` 原样安装本地真实脚本。范围、来源与剩余限制见[交付记录](compatibility/p2-delivery.md)；`-PackageOnly` 跳过基础门禁，仅供诊断。
+完整兼容性交付门禁使用 `scripts/compatibility/Run-Delivery.ps1`：各版本/平台采用独立短路径 checkout，核查 NuGet 内容，再以独立包版本运行仅用公开 API 的 Chromium 消费宿主。`-CorpusScript <path>` 原样安装本地真实脚本。范围、来源与剩余限制见[交付记录](compatibility/validation.md)；`-PackageOnly` 跳过基础门禁，仅供诊断。
 
 同一个适配器二进制文件无法兼容任意 CefSharp 版本。CefSharp 程序集具有强名称，而且公开接口曾在版本间发生变化，例如 `IBrowser.GetFrame(long)` 改为 `GetFrameByIdentifier(string)`，`IFrame.Identifier` 也从 `long` 改为 `string`。
 
@@ -55,13 +55,39 @@ context 和仅手动更新策略。`GM.info.version` 是管理器程序集版本
 
 `ResourceContent` 保留原始字节、MIME、可选 charset 及宿主解码文本。宿主文本优先，否则按 charset 解码，默认 UTF-8；二进制 data URL 使用原始字节。Demo 将准备内容与脚本原子持久化，重载时验证内容摘要，并为格式 2 数据库添加表而不删除数据。已有记录在初始化时一次性准备；内容不可用会明确中止初始化并保留数据库。安装内容服务的可信网络政策与 GM 请求授权分别处理。
 
-默认安装源码/内容总预算为 32 MiB；序列化资源包预算为 64 MiB，必要时按索引分块传输。用户代码只在完整重组后启动，缺块、重复索引或截断都会失败。详见 [P1 实施记录](compatibility/p1-implementation.md)。
+默认安装源码/内容总预算为 32 MiB；序列化资源包预算为 64 MiB，必要时按索引分块传输。用户代码只在完整重组后启动，缺块、重复索引或截断都会失败。详见 [资源与存储证据](compatibility/README.md#storage-and-resources)。
 
 `@require` 和 `@resource` 支持十六进制或标准 Base64 编码的 `md5`、`sha1`、`sha256`、`sha384`、`sha512` 摘要。支持 `#algorithm=value` 和 `#algorithm-value`，多个摘要可用逗号或分号分隔，并选择最后一个当前支持的声明。请求和缓存 URL 会移除 fragment。已声明完整性要求时，Core preparer、资源 API 和 Demo HTTP 缓存在资源首次使用前验证原始字节，读取缓存时再次校验。不支持的算法会产生 warning；声明格式错误、声明中没有可用的受支持摘要或摘要不匹配都会严格拒绝加载。未声明完整性要求的资源可以加载，不执行摘要校验。
 
 Demo 管理器提供手动“检查并安装更新”。检查源优先使用 `@updateURL`，下载源优先使用 `@downloadURL`；`@downloadURL none` 禁用检查。候选脚本必须具有相同且非空的 `@name`/`@namespace`，下载版本必须高于当前安装且不低于检查源版本。应用更新保留 ScriptKey、启用状态、安装时间和 GM 存储，只替换源码及来源/更新时间。更新检查使用 Demo 独立 HTTP 客户端，不继承浏览器登录 Cookie；没有后台定时任务，也不通过运行时 bridge 暴露更新 API。
 
 `@include` 和 `@exclude` 支持 `/.../` 包裹的正则，以文化无关方式匹配且执行上限为 100 ms；非法正则会产生 metadata error。`@match http*://host/path` 同时覆盖 HTTP 与 HTTPS。既有 glob 语义和排除规则优先级保持不变。
+
+<a id="storage-snapshots-and-listeners"></a>
+
+## 存储快照与监听
+
+宿主先订阅变更，再原子获取每脚本的值和水位。renderer 完整重组带索引的快照分块，并重放水位后的变更，之后才启动用户代码。序列按脚本和存储会话维护；每分区保留 4096 条变更，历史过期要求新快照，不伪造丢失的监听事件。
+
+renderer 将已确认镜像与有序 pending 变更分开维护，同步读取组合后的镜像。本地监听在 setter 返回前执行；现代写入 Promise 等待宿主提交及重放确认。失败写入被移除，再重放后续 pending，避免旧失败覆盖较新的本地或远端值。来源执行的提交回声去重，远端变更通知一次。重放历史丢失时恢复当前值并报告 MSC414_STORAGE_REPLAY_RESET，无法恢复已经丢失的历史回调。监听注册、移除立即在本地生效；执行及文档结束清理运行时拥有的监听。
+
+自定义存储必须遵守[宿主服务契约](#宿主服务契约)中的原子快照及批量要求。这是 MonkeySharp 的内部一致性保证，不宣称 Tampermonkey 事务或相同 IPC 延迟。详见[存储证据](compatibility/README.md#storage-and-resources)。
+
+## 已准备的执行条件
+
+`PreparedScriptRevision.UrlRules` 在激活前编译 URL 规则和可重复的 run-in 选择器，并跨 frame 复用，缓存随元数据生命周期释放。include glob 的 scheme/host 通配有边界，? 为普通字符，整体忽略大小写；正则支持公布的 ECMAScript 子集并限时 100 ms。超时以 MSR214_URL_RULE_TIMEOUT 拒绝该脚本。固定对照覆盖 IPv6、IDN、显式/通配端口、query/hash 及百分号编码的非保留字符。
+
+`RunIn` 为只读选择器列表。`CefSharpHostOptions.IsIncognito` 必须反映宿主实际拥有的 RequestContext；未知环境会以 MSR211_RUN_IN_UNAVAILABLE 拒绝受限执行。容器选择报告 MSM083_UNSUPPORTED_CONTAINER，未知选择器是安装错误。手动 context-menu 忽略 include/exclude，保留 match/exclude-match、noframes、隐私和信任检查；这些筛选不创建私密上下文。
+
+固定管理器中，@match 的 Unicode 主机声明被保留但不匹配规范化后的浏览器主机；应使用 Punycode。安装会以 MSM084_UNSUPPORTED_IDN_MATCH 提示该无效声明。Punycode 规则可匹配 IDN 浏览器 URL。
+
+## 交互式授权
+
+需要同意交互的宿主跨标签共享 `InteractiveUserScriptPermissionPolicy(new SensitiveUserScriptPermissionsPolicy(), decisionStore, prompt)`。同意不扩大声明范围：XHR 检查 connect，Cookie 检查 match/include，下载使用宿主政策。首请求及重定向进入同一决策路径。宿主显式 Allow/Deny 优先；Prompt 才读取记忆决定并异步交互。未配置解析器的 Prompt 是宿主配置错误，不等于静默拒绝；无 UI 宿主显式使用 RejectUserScriptPermissionPrompt。
+
+记忆键是稳定安装身份、权限类型及 HTTP(S) origin，不保存凭据、path/query。允许一次仅对当前合并等待批次有效，不能授权后续请求。单个等待者取消不影响其他文档的同批请求，全部取消才关闭提示。导航取消交互等待，授权结束后再次检查安装版本及启用状态。
+
+普通调用超时在授权后开始；CEF 传输与下载的截止计时在重定向权限等待时暂停并恢复剩余预算。Demo 添加 SQLite 权限表而不删除原数据，使用真实异步窗口，并提供权限按钮及按脚本撤销。撤销取消等待并刷新执行状态；WPF E2E 操作真实按钮。
 
 ## 网络 API
 
@@ -91,11 +117,19 @@ CefSharp 宿主默认提供 `GM.xmlHttpRequest`、`GM.cookie` 和 `GM.webRequest
 
 `proxy`、`cookiePartition` 和同步请求返回 `MSP006_NOT_SUPPORTED`。分区 CRUD 使用 CDP，但公开 IRequest 无法选择 URLRequest 的可信顶层分区。现代和 legacy XHR 输入校验使用同一错误码。
 
+### 二进制传输与流完成
+
+文本按声明字符集增量解码，保留跨分块的多字节字符；HTML MIME 使用 HTML 解析器，无效 XML 返回 null。显式 redirect 或 anonymous 会启用 fetch 语义，忽略传输 timeout/进度且只报告 readyState 4。HTTP stream 的 Promise 在响应头和流可用时兑现，后续失败通过流传播；onload/onloadend 随网络完成触发。renderer 每次按需拉取最多 64 KiB，宿主在 256 KiB 后转存磁盘，并受总预算约束。这限制桥接队列，但 CEF URLRequest 本身不能暂停网络源。暂存流在 EOF、取消或执行结束时释放；非流响应仍在 renderer 内组装。进度回调不保证逐步 responseText。
+
+CEF URLRequest 只接受一个 PostData element：小正文使用一个字节 element，较大正文使用一个临时文件 element，符合条件的重定向复用同一来源，终态释放。
+
+Blob/File 下载逐块等待宿主确认，再使用共用的保存、取消、临时文件和原子提交路径。provider 在终态前持有 DownloadRequest.Body，自定义下载服务应读取该字节源，不应通过 HTTP 访问 blob 标识。失败或导航清理未启动的暂存；已接受下载可在文档结束后继续，回调已分离。context 保留本地原始对象；固定 TM 5.5.1 对照会跨扩展边界复制对象，因此不声称引用身份一致。
+
 ### Cookie
 
 默认服务使用已附加浏览器的共享 CDP 会话及实际 RequestContext。访问前检查授权、宿主策略与脚本 URL 规则，返回后按 host-only/domain/path/secure 再过滤。SameSite 实际映射到 CDP，并读回 session/expiration 状态。set 检查引擎接受及实际身份/属性，delete 仅过期选中身份的准确 domain/path/partition，再验证不存在；不再反射回显输入或提供自有监听。
 
-现代 list 兑现实际 Cookie[]，set/delete 兑现 undefined。旧版 CRUD 返回 undefined，list 回调为 (cookies,error)，修改回调为 (error)。默认 path 是 URL 所在目录。已测 121/151 支持 partitionKey CRUD，84 及 firstPartyDomain 明确拒绝。直接创建服务使用 new CefSharpCookieService(host)，不再使用独立 RequestContext 构造器；自定义 ICookieService 仅实现 CRUD。详见 [Cookie 指南](usage-guide.zh-CN.md#cookie)及[真实证据](compatibility/cookie-findings.md)。
+现代 list 兑现实际 Cookie[]，set/delete 兑现 undefined。旧版 CRUD 返回 undefined，list 回调为 (cookies,error)，修改回调为 (error)。默认 path 是 URL 所在目录。已测 121/151 支持 partitionKey CRUD，84 及 firstPartyDomain 明确拒绝。直接创建服务使用 new CefSharpCookieService(host)，不再使用独立 RequestContext 构造器；自定义 ICookieService 仅实现 CRUD。详见 [Cookie 指南](usage-guide.zh-CN.md#cookie)及[真实证据](compatibility/cookies.md)。
 
 ### 分区 Cookie 范围
 
@@ -107,7 +141,7 @@ set/delete 接受同一 partitionKey 对象，修改中的空对象选择普通�
 
 自定义分区后端除 CRUD 外实现 IPartitionedCookieService.NormalizePartitionKeyAsync，在 Core 过滤前验证实际支持并规范化键。其他后端会拒绝 partitionKey，不会静默访问普通存储。
 
-所有已测版本的 XHR cookiePartition 仍不支持。原生请求探针没有公开顶层分区选择字段，发送普通 Cookie，并将 Partitioned 响应存入请求自身站点而非指定站点；该参数在网络发送前拒绝。CRUD 不等于请求分区支持，不使用拼接 Cookie 头模拟。见 [P2 记录](compatibility/p2-implementation.md#19-partitioned-cookie-scope)中的独立结果及固定参考的删除副作用差异。
+所有已测版本的 XHR cookiePartition 仍不支持。原生请求探针没有公开顶层分区选择字段，发送普通 Cookie，并将 Partitioned 响应存入请求自身站点而非指定站点；该参数在网络发送前拒绝。CRUD 不等于请求分区支持，不使用拼接 Cookie 头模拟。见 [Cookie 范围与证据](compatibility/cookies.md#partitioned-cookie-scope)中的独立结果及固定参考的删除副作用差异。
 
 ```javascript
 // @grant GM.cookie
@@ -131,7 +165,7 @@ listener 异步接收 `(action, status, details)`：action 为 `"cancel"`/`"redi
 
 静态 `@webRequest` JSON 在安装期编译，并通过 `host.NavigateAsync` 在导航前激活，无须等待用户源码执行；仓库变更撤销旧规则。静态规则遵循 URL、frame、run-in 和宿主权限策略，文档加载期间不能弹出交互授权。晚附加无法补拦截已发送的请求。
 
-目标依据[官方历史契约](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_webRequest)。固定 MV2 差分环境尚缺；OOPIF、isolated frame 动态页面拦截及 WebSocket 覆盖不计为通过，见 [P2 记录](compatibility/p2-implementation.md)。
+目标依据[官方历史契约](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_webRequest)。固定 MV2 差分环境尚缺；OOPIF、isolated frame 动态页面拦截及 WebSocket 覆盖不计为通过，见 [webRequest 范围与证据](compatibility/README.md#historical-webrequest)。
 
 ```javascript
 // @grant GM_webRequest
@@ -162,7 +196,7 @@ Demo 的 `TabContext` 绑定稳定 tab 身份、原生 RequestContext、隐私�
 
 GM 值遵循固定 TM 5.5.1 临时私密会话实测：每脚本首次私密访问时复制普通初值，此后私密写入及监听只在私密会话内流转，不回写普通存储，最后私密标签关闭后不保留。这里是初值副本，不是实时共享。tab 数据枚举也按隐私上下文隔离。
 
-私密 console/runtime 诊断及 tab 数据不写入普通 profile；禁用 CEF 外的私密 favicon 自动加载，Demo 禁用原生日志文件，私密下载历史在来源标签关闭时移除。用户明确下载保存的文件及明确复制的剪贴板内容保留。见[对照与真实上下文证据](compatibility/p2-implementation.md#18-private-contexts)。
+私密 console/runtime 诊断及 tab 数据不写入普通 profile；禁用 CEF 外的私密 favicon 自动加载，Demo 禁用原生日志文件，私密下载历史在来源标签关闭时移除。用户明确下载保存的文件及明确复制的剪贴板内容保留。见[对照与真实上下文证据](compatibility/README.md#private-contexts)。
 
 ## 标签音频
 
@@ -172,7 +206,7 @@ GM 值遵循固定 TM 5.5.1 临时私密会话实测：每脚本首次私密访�
 
 默认 CefSharp 服务在 84/121/151 提供真实静音读写，跨 frame 和导航保持同一标签状态。151 SmokeHost 的已测导航会将原生静音重置为 false，84/121 保持；服务反映真实状态，不承诺 151 导航保持静音。原生读写在 CEF UI 线程执行，每 200 ms 轮询其他宿主静音操作；短于轮询间隔的变化可能漏报。未知原因在状态中省略，在事件中标为 `"unknown"`。不提供 `isAudible`/`audible`：WebAudio 或音频流存在不能证明真实可听状态。`GM.info.compatibility.capabilities["GM.audio"]` 明确报告 `partial:mute-only;audible-unavailable`。
 
-宿主可通过 `UseTabAudioService` 注入独立的 `ITabAudioService`，或用 `EnableDefaultAudioService = false` 禁用原生默认服务；网络配置不控制音频。应用传入的服务仍归应用所有。证据见 [P2 音频记录](compatibility/p2-implementation.md#17-tab-audio)。
+宿主可通过 `UseTabAudioService` 注入独立的 `ITabAudioService`，或用 `EnableDefaultAudioService = false` 禁用原生默认服务；网络配置不控制音频。应用传入的服务仍归应用所有。证据见 [音频范围与证据](compatibility/README.md#tab-audio)。
 
 ```javascript
 // @grant GM.audio
@@ -219,7 +253,7 @@ var repository = new PersistentUserScriptRepository(persistence, parser);
 await repository.InitializeAsync(CancellationToken.None);
 ```
 
-Demo 使用数据库格式 2，拒绝旧开发数据库，不进行迁移或删除；请备份后手动重建。自定义值存储需采用下方的新类型契约。
+Demo 保留格式 2 数据，在初始化时增量添加准备内容和权限表；不支持的更早开发格式会明确拒绝，不自动删除，请备份后手动恢复。自定义值存储需采用下方的新类型契约。
 
 持久化实现必须保留 `ScriptKey`、安装顺序及时间戳，并原子提交变更。提交成功后即使收到取消也应成功完成；仓库变更通知在提交后发出。稳定的键用于维持脚本与 GM 存储的关联。具体的持久化及恢复实现见 [Demo 指南](../Mzying2001.MonkeySharp.Demo/README.md#portable-data-and-recovery)。
 
@@ -252,12 +286,20 @@ Demo 使用数据库格式 2，拒绝旧开发数据库，不进行迁移或删�
 
 `GM.download` 立即返回带 abort 的完成 Promise，`GM_download` 返回仅含 abort 的句柄；两者均支持回调。最终文件提交后才完成，详情为 `{url, name, loaded}`。返回形状及生命周期策略详见[下载使用指南](usage-guide.zh-CN.md#下载)。
 
+### 页面辅助方法与稳定标签服务
+
+addStyle/addElement 在本地执行：旧版返回节点，现代返回节点的 Promise。默认父节点优先 head，缺失时使用 documentElement；页面 CSP 仍生效。GM.log 将原始多参数交给本地 console，仅向 LogTo 发送有界、尽力投递的 JSON 快照。
+
+同一执行的标签状态保存和读取按调用顺序提交；保存先捕获 JSON 对象，旧版 save 支持提交回调。
+
+OpenTabRequest 支持相邻 Insert 和优先使用的绝对 InsertIndex。服务应报告实际 Closed 状态和一次关闭事件；renderer 客户关联 ID 覆盖确认前关闭。脚本句柄只有 close/closed/onclose，close/window.close/window.focus 返回 undefined。ITabStateService 必须绑定跨文档稳定的宿主标签身份，并按 ScriptKey 隔离数据。Demo 的共享 SQLite 服务绑定 BrowserTabViewModel.TabId，关闭删除，启动清理历史状态；WPF 窗口政策拒绝脚本关闭最后标签。AutomaticallyUpdatesScripts 应反映真实宿主策略；Demo 为 false，没有自动调度器，未知策略省略 info 字段。
+
 ## 生命周期与诊断
 
 `PrepareAsync()` 准备当前附加会话的共享 CDP；`NavigateAsync(url)` 等待准备后导航。
 使用该顺序时，浏览器应以 `about:blank` 初始化。`IsLateAttach` 与 `IsLatePreparation`
 分别标记附加、准备发生时初始化已完成。这些 API 不提高用户脚本的时序保证。
-参见[真实协议实验结论](compatibility/cdp-findings.md)。
+参见[真实协议实验结论](compatibility/execution-worlds.md#protocol-session-and-preparation)。
 
 适配器为每个框架文档建立身份，并对每个 `(document, frame, script, run-at)` 组合执行一次。`@run-at context-menu` 脚本会按当前 frame 匹配规则出现在 CefSharp 原生上下文菜单中，只有用户选择菜单项后才创建一次新的执行。导航、上下文释放和分离使文档能力失效并取消待处理调用；已接受下载继续作为宿主任务运行，文档回调停止。宿主释放时取消这些任务。
 
@@ -286,7 +328,15 @@ CefSharp 只能提供尽力而为的 document-start 钩子。相应执行产生 
 
 | 诊断 | 含义 |
 | --- | --- |
-| `MSC410_COMPATIBILITY_BOOTSTRAP_FAILED` | 快照准备失败或超时，对应同步别名不可用。 |
+| `MSC410_COMPATIBILITY_BOOTSTRAP_FAILED` | 快照准备失败或超时，用户代码不会启动。 |
+
+## 原生隔离世界与生命周期
+
+DOM/content 需求使用每安装脚本的独立 CDP 世界，身份来自原生 frame/loader/context 事件，派发绑定脚本及版本，源码/通知通过固定 context 代际的 remote object 投递。页面绑定拒绝隔离执行证明。raw/默认/Chromium JavaScript 需求仍使用页面世界和明确的 TrustedPageWorld 政策；DOM + unsafeWindow 冲突及未支持的 unwrap 会在源码启动前以 MSR215 拒绝，不静默退回 raw。
+
+document-idle 在 DOMContentLoaded 后调度，不等待缓慢资源的 load。沙箱 window 按脚本私有地回放 DOMContentLoaded/load 缓存，回放事件 isTrusted 为 false；idle 不回放更早的 DOMContentLoaded。监听支持 once、移除及 abort，执行结束清理运行时拥有的监听；直接在页面 DOM 上注册的监听由用户代码管理。源码、DOM、样式的 CSP 效果分别验证，不全站关闭 CSP。
+
+完整 GM 的 document-start 仍为 best effort，显式保证要求会拒绝。OOPIF 不支持时明确失败且没有 raw 回退；BFCache 缓存执行撤销，需要新导航。isolated 的历史 page-frame webRequest 不支持，子 frame 的隔离手动菜单尚未与原生 CEF 菜单 frame 映射。详见[执行证据和边界](compatibility/execution-worlds.md)。
 
 ## 桥协议
 
@@ -297,7 +347,7 @@ CefSharp 只能提供尽力而为的 document-start 钩子。相应执行产生 
 
 [Tampermonkey 契约清单](compatibility/api-contract.md) 区分目标行为与版本化实测证据。
 运行 `scripts/compatibility/Run-Baseline.ps1` 可清理并验证 84/x64 基线（含 WPF Demo）。
-CI 覆盖 84/x64 和 121/x64 的 Demo；报告核验实际程序集版本与进程架构。
+CI 覆盖 84/x64、121/x64 和 151/x64 的 Demo；报告核验实际程序集版本与进程架构。
 
 CI 已验证的工具链为 Windows Server 2022、.NET SDK `9.0.315` 和 Node.js `24`。这些是已测试版本，不代表最低要求。SDK 需要支持 `MonkeySharp.slnx`；Core 测试目标为 `net8.0`，CefSharp 测试及应用程序目标为 `net462`。真实 Chromium 验证需要 Windows 桌面会话。
 
@@ -328,62 +378,36 @@ dotnet pack Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.cspr
 powershell -NoProfile -ExecutionPolicy Bypass -File Mzying2001.MonkeySharp.Demo/Run-E2E.ps1 -CefSharpVersion 121.3.70
 ```
 
-验证全过程应使用同一版本值：`dotnet restore/build/test/pack` 使用 `-p:CefSharpVersion=<版本>`，PowerShell runner 使用 `-CefSharpVersion <版本>`。SmokeHost 应分别对 x64/x86 和 `84.4.10`、`121.3.70`、`151.3.240` 运行；Demo gate 覆盖 x64 的 `84.4.10` 和 `121.3.70`。在已有工作区切换版本前，先执行 `dotnet clean MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=<目标版本>`（位数使用目标平台），避免混用不同 CefSharp 版本的增量构建产物。SmokeHost runner 已使用选定版本执行 restore、clean、build，并核对实际运行的程序集版本和进程位数。两个验证入口都使用隔离 profile 和 `TrustedPageWorld`；它们是集成测试，不是安全沙箱。
+验证全过程应使用同一版本值：`dotnet restore/build/test/pack` 使用 `-p:CefSharpVersion=<版本>`，PowerShell runner 使用 `-CefSharpVersion <版本>`。SmokeHost 应分别对 x64/x86 和 `84.4.10`、`121.3.70`、`151.3.240` 运行；Demo gate 覆盖三个版本的 x64。在已有工作区切换版本前，先执行 `dotnet clean MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=<目标版本>`（位数使用目标平台），避免混用不同 CefSharp 版本的增量构建产物。SmokeHost runner 已使用选定版本执行 restore、clean、build，并核对实际运行的程序集版本和进程位数。两个验证入口都使用隔离 profile 和 `TrustedPageWorld`；它们是集成测试，不是安全沙箱。
 
 ### Chromium 兼容性脚本包
 
-SmokeHost 从 `Fixtures` 目录内嵌七个原创 `.user.js`，通过正常仓库安装流程运行。两个动态端口的 loopback HTTP 服务提供全部运行输入。脚本验证 MonkeySharp 公开契约，不包含第三方脚本或 Tampermonkey 差分运行结果。
+SmokeHost 从 `Fixtures` 目录内嵌原创 `.user.js`，通过正常仓库安装流程运行。两个动态端口的 loopback HTTP 服务提供全部运行输入。脚本验证 MonkeySharp 公开契约，不包含第三方脚本或 Tampermonkey 差分运行结果。
 
 适配器在匹配脚本前读取当前渲染器的 `location.href`，因为旧版 CefSharp 的上下文创建回调可能仍携带上一次导航的 URL。读取失败时跳过该文档，包括 load fallback 和上下文菜单执行。document-start 仍为 best effort。
 
 | 结果 ID | 必须提供的验证证据 |
 | --- | --- |
+| `prepared` | 离线准备版本、依赖作用域/字符集/SRI、完整资源及存储快照、首条语句同步读取。 |
+| `conditions` | 已准备 URL 规则、normal/private run-in 及手动菜单实际效果。 |
+| `isolated` | 每脚本独立全局、原生身份派发、同步准备、子框架及导航清理。 |
+| `replay` | 私有 window 生命周期回放及慢 load 前的 document-idle。 |
+| `csp` | 不全站绕过 CSP，分别检查源码、DOM 和样式效果。 |
+| `permissions` | 合并请求、允许一次、记忆拒绝、重定向及传输计时暂停。 |
+| `binary` | Blob/File/form 原始字节、字符集边界、文档解析、流及二进制下载。 |
+| `pageHelpers` | 实际 DOM/样式、本地日志、标签句柄及窗口辅助行为。 |
+| `audio` | 原生静音读回、监听、框架/导航及明确不可用的 audible。 |
+| `partitions` | 分版本分区 CRUD、读回、精确删除及独立的请求分区限制。 |
 | `frames` | 主 frame、同源子 frame、不同端口的异源子 frame 实际调用单键和批量 GM 存储，覆盖全部六个现代/旧式批量入口、带类型的 undefined、监听返回约定、跨实例通知及导航快照；每文档执行一次、`@noframes`、子 frame 导航及上下文释放。 |
 | `spaUrl` | `pushState`、`replaceState`、hash 导航与历史回退；两种 URL 回调、新旧 URL、宿主生命周期、grant 边界和不重复注入。 |
 | `download` | 现代 Promise/handle、legacy 回调；真实 HTTP 下载及文件字节校验、产生进度后取消、超时、HTTP 失败、唯一终态及临时文件清理。 |
-| `cookie` | 现代/legacy set、list、delete，监听与取消监听、共享 Chromium request context，以及匿名 XHR 不携带 cookie。 |
+| `cookie` | 现代/legacy CRUD、SameSite、实际 HTTP/TLS Cookie 效果、多路径精确删除，以及两个真实 RequestContext 的网络隔离。 |
 | `webRequest` | 浏览器原生 fetch 的取消/重定向、回调详情、服务端请求计数、主动移除及导航清理。 |
 
 下载服务仅用于测试：Chromium 执行 GM 调用，宿主服务将本地 HTTP 数据写入隔离临时目录，不测试 Chromium 下载界面。原有存储、XHR、通知、标签页和导航断言仍为必需。
 
-每个场景输出 `compatibility-case` JSON，包含 `caseId`、`success`、具名 `checks` 及失败上下文（`frameId`、`documentId`、`url`、`state`、`error`）。`smoke-summary.compatibility` 必须包含五项成功结果。runner 独立拒绝缺失/重复场景、失败断言、实际位数或 CefSharp 程序集版本不符、未 detach/dispose 和非零退出。轮询截止时间为 15 秒；宿主总超时 90 秒，runner 在 120 秒后终止停滞的进程树。
+每个场景输出 `compatibility-case` JSON，包含 `caseId`、`success`、具名 `checks` 及失败上下文（`frameId`、`documentId`、`url`、`state`、`error`）。`smoke-summary.compatibility` 必须包含全部 15 项成功结果。runner 独立拒绝缺失/重复场景、失败断言、实际位数或 CefSharp 程序集版本不符、未 detach/dispose 和非零退出。轮询截止时间为 15 秒；宿主总超时 90 秒，runner 在 120 秒后终止停滞的进程树。
 
 执行 `powershell -NoProfile -ExecutionPolicy Bypass -File Mzying2001.MonkeySharp.CefSharp.SmokeHost/Test-SmokeResults.ps1` 可在不启动浏览器的情况下验证结果解析。脚本同时支持 Windows PowerShell 和 PowerShell 7。
 
 日志保存到 `artifacts/smoke/<version>-<platform>/`（构建步骤有输出时的 `restore.log`、`clean.log`、`build.log`，以及 `stdout.log`、`stderr.log`、`results.jsonl`）；可通过 `-OutputDirectory` 覆盖路径。CI 在失败时也将该目录上传为 `chromium-<version>-<platform>`。定位问题时先查看失败的 `compatibility-case`，再检查相邻的生命周期、console 和 diagnostic 记录。
-
-## 已准备的执行条件
-
-`PreparedScriptRevision.UrlRules` 在激活前编译 URL 规则和可重复的 run-in 选择器，并跨 frame 复用，缓存随元数据生命周期释放。include glob 的 scheme/host 通配有边界，? 为普通字符，整体忽略大小写；正则支持公布的 ECMAScript 子集并限时 100 ms。超时以 MSR214_URL_RULE_TIMEOUT 拒绝该脚本。固定对照覆盖 IPv6、IDN、显式/通配端口、query/hash 及百分号编码的非保留字符。
-
-`RunIn` 为只读选择器列表。`CefSharpHostOptions.IsIncognito` 必须反映宿主实际拥有的 RequestContext；未知环境会以 MSR211_RUN_IN_UNAVAILABLE 拒绝受限执行。容器选择报告 MSM083_UNSUPPORTED_CONTAINER，未知选择器是安装错误。手动 context-menu 忽略 include/exclude，保留 match/exclude-match、noframes、隐私和信任检查；这些筛选不创建私密上下文。
-
-固定管理器中，@match 的 Unicode 主机声明被保留但不匹配规范化后的浏览器主机；应使用 Punycode。安装会以 MSM084_UNSUPPORTED_IDN_MATCH 提示该无效声明。Punycode 规则可匹配 IDN 浏览器 URL。
-
-## 原生隔离世界与生命周期
-
-DOM/content 需求使用每安装脚本的独立 CDP 世界，身份来自原生 frame/loader/context 事件，派发绑定脚本及版本，源码/通知通过固定 context 代际的 remote object 投递。页面绑定拒绝隔离执行证明。raw/默认/Chromium JavaScript 需求仍使用页面世界和明确的 TrustedPageWorld 政策；DOM + unsafeWindow 冲突及未支持的 unwrap 会在源码启动前以 MSR215 拒绝，不静默退回 raw。
-
-document-idle 在 DOMContentLoaded 后调度，不等待缓慢资源的 load。沙箱 window 按脚本私有地回放 DOMContentLoaded/load 缓存，回放事件 isTrusted 为 false；idle 不回放更早的 DOMContentLoaded。监听支持 once、移除及 abort，执行结束清理运行时拥有的监听；直接在页面 DOM 上注册的监听由用户代码管理。源码、DOM、样式的 CSP 效果分别验证，不全站关闭 CSP。
-
-完整 GM 的 document-start 仍为 best effort，显式保证要求会拒绝。OOPIF 不支持时明确失败且没有 raw 回退；BFCache 缓存执行撤销，需要新导航。isolated 的历史 page-frame webRequest 不支持，子 frame 的隔离手动菜单尚未与原生 CEF 菜单 frame 映射。详见[执行证据和边界](compatibility/execution-worlds.md)。
-
-## 交互式授权
-
-需要同意交互的宿主跨标签共享 `InteractiveUserScriptPermissionPolicy(new SensitiveUserScriptPermissionsPolicy(), decisionStore, prompt)`。同意不扩大声明范围：XHR 检查 connect，Cookie 检查 match/include，下载使用宿主政策。首请求及重定向进入同一决策路径。宿主显式 Allow/Deny 优先；Prompt 才读取记忆决定并异步交互。未配置解析器的 Prompt 是宿主配置错误，不等于静默拒绝；无 UI 宿主显式使用 RejectUserScriptPermissionPrompt。
-
-记忆键是稳定安装身份、权限类型及 HTTP(S) origin，不保存凭据、path/query。允许一次仅对当前合并等待批次有效，不能授权后续请求。单个等待者取消不影响其他文档的同批请求，全部取消才关闭提示。导航取消交互等待，授权结束后再次检查安装版本及启用状态。
-
-普通调用超时在授权后开始；CEF 传输与下载的截止计时在重定向权限等待时暂停并恢复剩余预算。Demo 添加 SQLite 权限表而不删除原数据，使用真实异步窗口，并提供权限按钮及按脚本撤销。撤销取消等待并刷新执行状态；WPF E2E 操作真实按钮。
-
-### 二进制传输与流完成
-
-文本按声明字符集增量解码，保留跨分块的多字节字符；HTML MIME 使用 HTML 解析器，无效 XML 返回 null。显式 redirect 或 anonymous 会启用 fetch 语义，忽略传输 timeout/进度且只报告 readyState 4。HTTP stream 的 Promise 在响应头和流可用时兑现，后续失败通过流传播；onload/onloadend 随网络完成触发。renderer 每次按需拉取最多 64 KiB，宿主在 256 KiB 后转存磁盘，并受总预算约束。这限制桥接队列，但 CEF URLRequest 本身不能暂停网络源。暂存流在 EOF、取消或执行结束时释放；非流响应仍在 renderer 内组装。进度回调不保证逐步 responseText。
-
-Blob/File 下载逐块等待宿主确认，再使用共用的保存、取消、临时文件和原子提交路径。provider 在终态前持有 DownloadRequest.Body，自定义下载服务应读取该字节源，不应通过 HTTP 访问 blob 标识。失败或导航清理未启动的暂存；已接受下载可在文档结束后继续，回调已分离。context 保留本地原始对象；固定 TM 5.5.1 对照会跨扩展边界复制对象，因此不声称引用身份一致。
-
-### 页面辅助方法与稳定标签服务
-
-addStyle/addElement 在本地执行：旧版返回节点，现代返回节点的 Promise。默认父节点优先 head，缺失时使用 documentElement；页面 CSP 仍生效。GM.log 将原始多参数交给本地 console，仅向 LogTo 发送有界、尽力投递的 JSON 快照。
-
-OpenTabRequest 支持相邻 Insert 和优先使用的绝对 InsertIndex。服务应报告实际 Closed 状态和一次关闭事件；renderer 客户关联 ID 覆盖确认前关闭。脚本句柄只有 close/closed/onclose，close/window.close/window.focus 返回 undefined。ITabStateService 必须绑定跨文档稳定的宿主标签身份，并按 ScriptKey 隔离数据。Demo 的共享 SQLite 服务绑定 BrowserTabViewModel.TabId，关闭删除，启动清理历史状态；WPF 窗口政策拒绝脚本关闭最后标签。AutomaticallyUpdatesScripts 应反映真实宿主策略；Demo 为 false，没有自动调度器，未知策略省略 info 字段。

@@ -10,8 +10,8 @@ test("original storage timing fixture matches the pinned Tampermonkey event orde
     const previous = globalThis.fetch;
     globalThis.fetch = (_url, request) => { resolve(JSON.parse(request.body)); return Promise.resolve(); };
     t.after(() => { globalThis.fetch = previous; });
-    const source = fs.readFileSync(path.resolve(__dirname, "../../docs/compatibility/fixtures/storage-timing.user.js"), "utf8");
-    const expected = JSON.parse(fs.readFileSync(path.resolve(__dirname, "../../docs/compatibility/evidence/tampermonkey-5.5.1-storage-timing.json"), "utf8"));
+    const source = fs.readFileSync(path.resolve(__dirname, "../../scripts/compatibility/fixtures/storage-timing.user.js"), "utf8");
+    const expected = JSON.parse(fs.readFileSync(path.resolve(__dirname, "../../scripts/compatibility/evidence/tampermonkey-5.5.1-storage-timing.json"), "utf8"));
     await install({ source });
     const actual = await evidence;
     assert.deepEqual(actual.events, expected.events);

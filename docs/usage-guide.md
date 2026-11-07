@@ -168,6 +168,10 @@ Legacy synchronous storage/resource reads require complete snapshots. Preparatio
 their services. [Integration details](integration-reference.md#api-contract-and-grants)
 describe trust, providers and actual environment facts.
 
+### Native isolated execution and lifecycle
+
+The sandbox window privately replays cached DOMContentLoaded/load events after listener registration, using untrusted synthetic events as observed in the reference. Document-idle does not replay the earlier DOMContentLoaded event. Window listeners support once/removal/abort and are cleared with their execution; direct page DOM listeners remain user-owned. Raw source evaluation and inserted styles remain subject to page CSP. Isolated source/DOM and style effects have separate browser evidence; the adapter never enables whole-page CSP bypass.
+
 ## API index
 
 Each row requires its capability family or exact legacy declaration unless stated otherwise. `Promise<T>` means use `await`; an immediate ID/handle is not a readiness guarantee for its background registration. Legacy names require their exact declarations. Details, errors, and examples follow.
@@ -440,6 +444,16 @@ XHR bodies are transferred in chunks; the default total limit is 256 MiB per bod
 })().catch(console.error);
 ```
 
+### Permission prompts
+
+Permission prompts identify the installed script, capability and exact target origin. The Demo offers allow once, remember allow, or remember deny. Allow once covers the currently waiting same-scope batch only. Use the Permissions button to revoke an installation's remembered decisions; tabs reload so cached execution state cannot retain a revoked decision. Navigation closes obsolete waits. Neither an interactive allow nor a stored allow can override connect or Cookie URL declarations.
+
+
+
+### Binary transport and stream completion
+
+Text decoding preserves split multibyte sequences and declared charsets. HTML MIME uses DOMParser's HTML parser; invalid XML returns null. HTTP stream Promises resolve when headers and the stream are available. Subsequent failures error the stream; onload/onloadend follow network completion independently of consumer speed. The renderer pulls at most 64 KiB at a time; the host spools unread bytes (256 KiB in memory, then disk) within the total budget. This bounds bridge queues; CEF URLRequest cannot pause the network source itself. Stream spools live until EOF/cancel/execution end. Non-stream responses are assembled in renderer memory. Progress does not guarantee partial responseText.
+
 ## Menus, notifications, and clipboard
 
 ### GM.registerMenuCommand(name, callback, options_or_accessKey?)
@@ -563,6 +577,8 @@ const handle = GM_download({
 // handle.abort();
 ```
 
+Blob/File downloads stage acknowledged 64 KiB chunks and share the file pipeline's save/abort/atomic commit semantics. The provider owns DownloadRequest.Body until the download's terminal event; custom services must read these bytes without dereferencing its blob identifier through HTTP. Incomplete staging is released on failure/navigation. Accepted downloads may outlive their document with callbacks detached. Callback context remains the original local object; the fixed TM 5.5.1 reference clones that object across its extension boundary, so object identity equivalence is not claimed.
+
 ## Cookies
 
 ### GM.cookie / GM_cookie
@@ -600,7 +616,7 @@ Set/delete accept the same partitionKey object. Empty objects select a normal id
 
 Custom partition backends implement IPartitionedCookieService.NormalizePartitionKeyAsync in addition to CRUD. It validates actual backend support and canonicalizes the key before Core filters results. Other backends reject partitionKey rather than silently treating it as normal storage.
 
-XHR cookiePartition remains unsupported on every tested version. The native request probe has no public top-level partition setter, sends the ordinary cookie, and stores a Partitioned response under the request's own site rather than the requested site. The option is rejected before network dispatch. CRUD support is not request-partition support; no Cookie-header simulation is used. The [P2 record](compatibility/p2-implementation.md#19-partitioned-cookie-scope) separates those results and the pinned reference's deletion side effect.
+XHR cookiePartition remains unsupported on every tested version. The native request probe has no public top-level partition setter, sends the ordinary cookie, and stores a Partitioned response under the request's own site rather than the requested site. The option is rejected before network dispatch. CRUD support is not request-partition support; no Cookie-header simulation is used. The [Cookie scope and evidence](compatibility/cookies.md#partitioned-cookie-scope) separates those results and the pinned reference's deletion side effect.
 
 ```javascript
 // @grant GM.cookie
@@ -622,7 +638,7 @@ The Demo's `TabContext` binds stable tab identity, the native RequestContext, pr
 
 Private GM values follow the pinned Tampermonkey 5.5.1 temporary-session behavior: each script receives a copy of its normal baseline on first private access, then private changes and listeners stay within the private session. Writes do not return to normal storage or persist after the last private tab closes. This is a copied baseline, not live sharing. Tab-state enumeration is also separated by privacy context.
 
-Private console/runtime diagnostics and tab data are not written to the normal profile. Automatic private favicon loading outside CEF is disabled, native file logging is disabled in the Demo, and private download history is removed when its tab closes. Files explicitly saved by a download and explicitly copied clipboard content remain user outputs. See the [reference and real-context evidence](compatibility/p2-implementation.md#18-private-contexts).
+Private console/runtime diagnostics and tab data are not written to the normal profile. Automatic private favicon loading outside CEF is disabled, native file logging is disabled in the Demo, and private download history is removed when its tab closes. Files explicitly saved by a download and explicitly copied clipboard content remain user outputs. See the [reference and real-context evidence](compatibility/README.md#private-contexts).
 
 ## Tab audio
 
@@ -632,7 +648,7 @@ Grant `GM.audio` or `GM_audio`. Modern `GM.audio.getState()` returns a Promise o
 
 The default CefSharp service supports mute on 84/121/151 and follows the native browser across frames and navigation. In the tested 151 SmokeHost navigation, CEF resets native mute to false; 84/121 retain it. The service reports the actual state and does not promise retention on 151. It reads native state on the CEF UI thread and polls every 200 ms for changes made by other host controls; transitions shorter than that interval may not be observed. Unknown reasons are omitted from state and identified as `"unknown"` in changes. `isAudible`/`audible` are omitted: WebAudio or stream existence is not a reliable audible source. `GM.info.compatibility.capabilities["GM.audio"]` reports `partial:mute-only;audible-unavailable`.
 
-Hosts can supply an independent `ITabAudioService` through `UseTabAudioService`, or disable the native default with `EnableDefaultAudioService = false`; network-service options do not control audio. Application-supplied services remain application-owned. See the [audio evidence](compatibility/p2-implementation.md#17-tab-audio).
+Hosts can supply an independent `ITabAudioService` through `UseTabAudioService`, or disable the native default with `EnableDefaultAudioService = false`; network-service options do not control audio. Application-supplied services remain application-owned. See the [audio evidence](compatibility/README.md#tab-audio).
 
 ```javascript
 // @grant GM.audio
@@ -657,7 +673,7 @@ Listeners run asynchronously with `(action, status, details)`: action is `"cance
 
 Static `@webRequest` JSON is compiled during installation and activated before navigation through `host.NavigateAsync`. It does not need user source to run; repository changes revoke old rules. Static rules follow script URL, frame, run-in, and host permission policy. A static rule cannot open an interactive permission prompt while loading the document. Attach after navigation cannot intercept resources already sent.
 
-This follows the [official historical API](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_webRequest). A pinned MV2 differential reference remains unavailable; OOPIF, isolated-frame dynamic page interception, and WebSocket coverage are not claimed. See [P2 evidence](compatibility/p2-implementation.md).
+This follows the [official historical API](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_webRequest). A pinned MV2 differential reference remains unavailable; OOPIF, isolated-frame dynamic page interception, and WebSocket coverage are not claimed. See [webRequest evidence](compatibility/README.md#historical-webrequest).
 
 ```javascript
 // @grant GM_webRequest
@@ -734,7 +750,7 @@ Defaults: ordinary bridge requests/responses are limited to 1 MiB each, resource
 | Symptom | Check |
 | --- | --- |
 | Script never runs | Enabled installation, positive URL match, exclusions, iframe rules, run-at, metadata errors; explicit grants also require host trust opt-in (`MSR201_BRIDGE_INTEGRITY_REQUIRED`). |
-| `GM` or one method is undefined | Grant state, exact spelling, profile, and host service. Missing APIs are usually absent, not stubs. |
+| `GM` or one method is undefined | Grant state, exact spelling, execution world, and host service. Missing APIs are usually absent, not stubs. |
 | User code fails before its first statement | Complete storage/resource preparation, snapshot chunk delivery, replay retention and configured byte/time budgets; `MSC410_COMPATIBILITY_BOOTSTRAP_FAILED`. Preparation failure does not remove granted APIs and continue. |
 | A legacy write seemed to succeed but data reverted | Async commit failed; inspect `MSC413_COMPATIBILITY_MUTATION_FAILED`; use awaited modern writes. |
 | A dependency is missing | Host dependency provider and `MSR400_DEPENDENCY_RESOLUTION_FAILED` / `MSR401_DEPENDENCY_PROVIDER_UNAVAILABLE`. |
@@ -747,14 +763,3 @@ Defaults: ordinary bridge requests/responses are limited to 1 MiB each, resource
 ## Reference sources
 
 MonkeySharp behavior was checked against the [grant catalog](../Mzying2001.MonkeySharp.Core/Compatibility/UserScriptGrantCatalog.cs), [JavaScript facade](../Mzying2001.MonkeySharp.Core/Js/Init.js), [Core API providers](../Mzying2001.MonkeySharp.Core/Apis/), [metadata parser](../Mzying2001.MonkeySharp.Core/Parsing/UserScriptMetadataParser.cs), [runtime info builder](../Mzying2001.MonkeySharp.Core/Runtime/UserScriptEngine.cs), [CefSharp services](../Mzying2001.MonkeySharp.CefSharp/), and [JavaScript contract tests](../Mzying2001.MonkeySharp.Core.Tests/JavaScript/). The [Demo guide](../Mzying2001.MonkeySharp.Demo/README.md) documents its concrete persistence and interaction services. Use these sources when upgrading the runtime or replacing host services.
-
-
-The sandbox window privately replays cached DOMContentLoaded/load events after listener registration, using untrusted synthetic events as observed in the reference. Document-idle does not replay the earlier DOMContentLoaded event. Window listeners support once/removal/abort and are cleared with their execution; direct page DOM listeners remain user-owned. Raw source evaluation and inserted styles remain subject to page CSP. Isolated source/DOM and style effects have separate browser evidence; the adapter never enables whole-page CSP bypass.
-
-Permission prompts identify the installed script, capability and exact target origin. The Demo offers allow once, remember allow, or remember deny. Allow once covers the currently waiting same-scope batch only. Use the Permissions button to revoke an installation's remembered decisions; tabs reload so cached execution state cannot retain a revoked decision. Navigation closes obsolete waits. Neither an interactive allow nor a stored allow can override connect or Cookie URL declarations.
-
-### Binary transport and stream completion
-
-Text decoding preserves split multibyte sequences and declared charsets. HTML MIME uses DOMParser's HTML parser; invalid XML returns null. HTTP stream Promises resolve when headers and the stream are available. Subsequent failures error the stream; onload/onloadend follow network completion independently of consumer speed. The renderer pulls at most 64 KiB at a time; the host spools unread bytes (256 KiB in memory, then disk) within the total budget. This bounds bridge queues; CEF URLRequest cannot pause the network source itself. Stream spools live until EOF/cancel/execution end. Non-stream responses are assembled in renderer memory. Progress does not guarantee partial responseText.
-
-Blob/File downloads stage acknowledged 64 KiB chunks and share the file pipeline's save/abort/atomic commit semantics. The provider owns DownloadRequest.Body until the download's terminal event; custom services must read these bytes without dereferencing its blob identifier through HTTP. Incomplete staging is released on failure/navigation. Accepted downloads may outlive their document with callbacks detached. Callback context remains the original local object; the fixed TM 5.5.1 reference clones that object across its extension boundary, so object identity equivalence is not claimed.

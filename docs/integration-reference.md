@@ -6,11 +6,11 @@ This reference collects the compatibility, network API, host service, migration,
 
 ## CefSharp Version Compatibility
 
-For the complete P2 delivery gate, run `scripts/compatibility/Run-Delivery.ps1`.
+For the complete compatibility delivery gate, run `scripts/compatibility/Run-Delivery.ps1`.
 It uses separate short-path checkouts for every native version/platform, verifies
 NuGet contents, then runs a public-API Chromium consumer against unique package
 versions. `-CorpusScript <path>` installs an existing local script unchanged.
-See the [delivery record](compatibility/p2-delivery.md) for scope, provenance and
+See the [delivery record](compatibility/validation.md) for scope, provenance and
 remaining limits. `-PackageOnly` skips baseline checks and is diagnostic only.
 
 The adapter cannot support arbitrary CefSharp versions from one binary. CefSharp assemblies are strong-named, and public interfaces have changed between releases. For example, `IBrowser.GetFrame(long)` became `GetFrameByIdentifier(string)`, while `IFrame.Identifier` changed from `long` to `string`.
@@ -71,13 +71,37 @@ Configure installation content with `new InMemoryUserScriptRepository(preparer: 
 
 `ResourceContent` retains original bytes, MIME, optional charset and optional host-decoded text. The host text takes precedence; otherwise charset selects the decoder, with UTF-8 as the default. Binary data URLs use the original bytes. The Demo atomically stores prepared content with the script, validates its content digests on reload, and upgrades format-2 databases with an additive table. Existing records are prepared once during initialization; unavailable content fails initialization explicitly and preserves the database. Installation providers own trusted network policy separately from GM network authorization.
 
-The preparer defaults to a 32 MiB combined source/content budget. Resource packages have a separate 64 MiB serialized bootstrap budget and use indexed response chunks when needed. User code starts only after complete reassembly; missing, duplicate or truncated chunks fail execution. See [P1 implementation evidence](compatibility/p1-implementation.md).
+The preparer defaults to a 32 MiB combined source/content budget. Resource packages have a separate 64 MiB serialized bootstrap budget and use indexed response chunks when needed. User code starts only after complete reassembly; missing, duplicate or truncated chunks fail execution. See [resource and storage evidence](compatibility/README.md#storage-and-resources).
 
 `@require` and `@resource` may carry `md5`, `sha1`, `sha256`, `sha384` or `sha512` hashes in hexadecimal or standard Base64. Both `#algorithm=value` and `#algorithm-value` forms are accepted, with comma/semicolon-separated hashes; the last supported declaration is selected. The fragment is stripped from the requested and cached URL. When integrity is declared, the installation preparer, resource API, and Demo HTTP cache verify original bytes before use, and cached bytes are verified again when read. An unsupported algorithm produces a warning; malformed declarations, no usable supported hash among the declarations, and digest mismatches fail closed and prevent the resource from loading. Resources without integrity declarations load without hash verification.
 
 The Demo manager offers a manual check-and-install action. `@updateURL` is preferred as the check source and `@downloadURL` as the download source; `@downloadURL none` disables checks. A candidate must have the same non-empty `@name` and `@namespace`, and the downloaded version must be newer than the installed one and no older than the checked version. Applying it preserves the installation key, enabled state, installation time, and GM storage while replacing source and update metadata. Checks use the Demo's separate HTTP client without browser login cookies; there is no background schedule or runtime bridge update API.
 
 For URL rules, slash-delimited regular expressions are supported in `@include` and `@exclude`. They use culture-invariant matching with a 100 ms execution limit, and an invalid expression is a metadata error. `@match http*://host/path` matches both HTTP and HTTPS. Existing glob rules and exclusion precedence are unchanged.
+
+## Storage snapshots and listeners
+
+The host atomically captures each script's values and watermark after subscribing to changes. Complete indexed snapshot chunks are reassembled and subsequent changes replayed before user code starts. Store sessions use per-script sequences and a 4096-change journal; expired history requires a fresh snapshot rather than invented listener events.
+
+The renderer maintains confirmed state plus ordered pending mutations. Local reads see that combined mirror; local listeners run before setters return, while modern writes wait for host commit/replay acknowledgment. Failed writes are removed and later pending writes replayed, so an old failure cannot overwrite newer local/remote state. Committed echoes are suppressed and remote changes notify once. Replay loss recovers current values and reports `MSC414_STORAGE_REPLAY_RESET`; unavailable historical callbacks cannot be recovered. Registration/removal takes local effect immediately, and execution/document cleanup revokes runtime-owned listeners.
+
+Custom stores must satisfy the [atomic snapshot/batch contract](#host-service-contracts). These batch guarantees belong to MonkeySharp; Tampermonkey transaction or identical IPC-latency guarantees are not claimed. See [storage evidence](compatibility/README.md#storage-and-resources).
+
+## Prepared execution conditions
+
+`PreparedScriptRevision.UrlRules` compiles URL rules and repeatable run-in selectors before activation. Matching reuses immutable rules across frames, with metadata-lifetime caching. Include globs use bounded scheme/host wildcards, literal question marks and case-insensitive comparison; `/expression/` uses the documented ECMAScript subset with a 100 ms timeout. Timeouts fail closed with `MSR214_URL_RULE_TIMEOUT`. IPv6, IDN, explicit/wildcard ports, queries, fragments and escaped unreserved characters are covered by the fixed manager fixture.
+
+`RunIn` is now a read-only selector list. `CefSharpHostOptions.IsIncognito` must report the real host-owned request context; an unknown context rejects restricted execution with `MSR211_RUN_IN_UNAVAILABLE`. Container declarations warn with `MSM083_UNSUPPORTED_CONTAINER`; unknown selector syntax is an installation error. Manual context-menu execution ignores include/exclude, while retaining match/exclude-match, noframes, privacy and trust checks. These checks do not create private contexts.
+
+Unicode host text in `@match` is retained but does not match normalized browser hosts in the pinned manager. Use Punycode; installation reports `MSM084_UNSUPPORTED_IDN_MATCH` for this ineffective declaration. Punycode rules match canonical IDN browser URLs.
+
+## Interactive authorization
+
+For consent-based hosts, share `InteractiveUserScriptPermissionPolicy(new SensitiveUserScriptPermissionsPolicy(), decisionStore, prompt)` across tabs. Declarations are checked before consent: XHR uses connect, Cookie uses match/include, and download uses its host policy. Initial requests and redirects pass the same decision path. Allow/Deny from an explicit host policy are authoritative; Prompt consults exact remembered scopes and then the asynchronous interaction. A bare unresolved Prompt is a host configuration error, not an implicit Deny. A host without UI explicitly supplies `RejectUserScriptPermissionPrompt`.
+
+Scopes use stable installation key + permission kind + canonical HTTP(S) origin, with no credentials, path or query. Allow-once applies only to the currently coalesced batch; completed prompts cannot authorize later requests. Remembered decisions can be revoked. One canceled waiter does not cancel another document's joined request; all canceled waiters close the prompt. Navigation cancels interactive waits, and installation revision/enabled state is checked again after consent.
+
+Generic execution timeout starts after authorization. CEF transfer and download deadlines pause while redirect permission waits and then resume their remaining active budget. Providers validate declarations before effects as well. Demo uses an additive SQLite decision table, real asynchronous permission windows and a permission-management button; revocation cancels pending prompts and reloads affected execution state. Its scripted E2E clicks the actual permission window and checks persistence.
 
 ## Network APIs
 
@@ -107,11 +131,19 @@ Long-running `execute` and waiting stream `readBody` operations are exempt from 
 
 `proxy`, `cookiePartition`, and synchronous requests return `MSP006_NOT_SUPPORTED`. Partition CRUD uses CDP, but the public IRequest surface cannot choose the trusted top-level partition for a URLRequest. The same code is used by modern and legacy XHR input validation.
 
+### Binary transport and stream completion
+
+Text decoding preserves split multibyte sequences and declared charsets. HTML MIME uses DOMParser's HTML parser; invalid XML returns null. HTTP stream Promises resolve when headers and the stream are available. Subsequent failures error the stream; onload/onloadend follow network completion independently of consumer speed. The renderer pulls at most 64 KiB at a time; the host spools unread bytes (256 KiB in memory, then disk) within the total budget. This bounds bridge queues; CEF URLRequest cannot pause the network source itself. Stream spools live until EOF/cancel/execution end. Non-stream responses are assembled in renderer memory. Progress does not guarantee partial responseText.
+
+CEF URLRequest accepts one PostData element: the adapter uses one bytes element for small uploads or one temporary-file element for larger bodies, reuses it across eligible redirects, and releases it at termination.
+
+Blob/File downloads stage acknowledged 64 KiB chunks and share the file pipeline's save/abort/atomic commit semantics. The provider owns DownloadRequest.Body until the download's terminal event; custom services must read these bytes without dereferencing its blob identifier through HTTP. Incomplete staging is released on failure/navigation. Accepted downloads may outlive their document with callbacks detached. Callback context remains the original local object; the fixed TM 5.5.1 reference clones that object across its extension boundary, so object identity equivalence is not claimed.
+
 ### Cookies
 
 The default service uses the attached browser's shared CDP session and actual RequestContext. Core checks grants, host policy and script URL rules before access, then filters returned host-only/domain/path/secure scope. SameSite is mapped to CDP and read back with session/expiration state. Set checks engine acceptance and actual identity/attributes; delete selects one identity, expires its exact domain/path/partition identity and verifies absence. No reflection-based input echo or custom listeners remain.
 
-Modern list resolves actual Cookie[]; set/delete resolve undefined. Legacy CRUD returns undefined and invokes (cookies,error) for list or (error) for mutations. The default path is the URL directory. partitionKey CRUD is available on tested 121/151 engines, while 84 and firstPartyDomain remain explicitly unsupported. Services created directly use new CefSharpCookieService(host), rather than a standalone RequestContext constructor. Custom ICookieService backends implement only CRUD. See the [Cookie guide](usage-guide.md#cookies) and [real Cookie evidence](compatibility/cookie-findings.md).
+Modern list resolves actual Cookie[]; set/delete resolve undefined. Legacy CRUD returns undefined and invokes (cookies,error) for list or (error) for mutations. The default path is the URL directory. partitionKey CRUD is available on tested 121/151 engines, while 84 and firstPartyDomain remain explicitly unsupported. Services created directly use new CefSharpCookieService(host), rather than a standalone RequestContext constructor. Custom ICookieService backends implement only CRUD. See the [Cookie guide](usage-guide.md#cookies) and [real Cookie evidence](compatibility/cookies.md).
 
 ### Partitioned Cookie scope
 
@@ -123,7 +155,7 @@ Set/delete accept the same partitionKey object. Empty objects select a normal id
 
 Custom partition backends implement IPartitionedCookieService.NormalizePartitionKeyAsync in addition to CRUD. It validates actual backend support and canonicalizes the key before Core filters results. Other backends reject partitionKey rather than silently treating it as normal storage.
 
-XHR cookiePartition remains unsupported on every tested version. The native request probe has no public top-level partition setter, sends the ordinary cookie, and stores a Partitioned response under the request's own site rather than the requested site. The option is rejected before network dispatch. CRUD support is not request-partition support; no Cookie-header simulation is used. The [P2 record](compatibility/p2-implementation.md#19-partitioned-cookie-scope) separates those results and the pinned reference's deletion side effect.
+XHR cookiePartition remains unsupported on every tested version. The native request probe has no public top-level partition setter, sends the ordinary cookie, and stores a Partitioned response under the request's own site rather than the requested site. The option is rejected before network dispatch. CRUD support is not request-partition support; no Cookie-header simulation is used. The [Cookie scope and evidence](compatibility/cookies.md#partitioned-cookie-scope) separates those results and the pinned reference's deletion side effect.
 
 ```javascript
 // @grant GM.cookie
@@ -147,7 +179,7 @@ Listeners run asynchronously with `(action, status, details)`: action is `"cance
 
 Static `@webRequest` JSON is compiled during installation and activated before navigation through `host.NavigateAsync`. It does not need user source to run; repository changes revoke old rules. Static rules follow script URL, frame, run-in, and host permission policy. A static rule cannot open an interactive permission prompt while loading the document. Attach after navigation cannot intercept resources already sent.
 
-This follows the [official historical API](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_webRequest). A pinned MV2 differential reference remains unavailable; OOPIF, isolated-frame dynamic page interception, and WebSocket coverage are not claimed. See [P2 evidence](compatibility/p2-implementation.md).
+This follows the [official historical API](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_webRequest). A pinned MV2 differential reference remains unavailable; OOPIF, isolated-frame dynamic page interception, and WebSocket coverage are not claimed. See [webRequest evidence](compatibility/README.md#historical-webrequest).
 
 ```javascript
 // @grant GM_webRequest
@@ -178,7 +210,7 @@ The Demo's `TabContext` binds stable tab identity, the native RequestContext, pr
 
 Private GM values follow the pinned Tampermonkey 5.5.1 temporary-session behavior: each script receives a copy of its normal baseline on first private access, then private changes and listeners stay within the private session. Writes do not return to normal storage or persist after the last private tab closes. This is a copied baseline, not live sharing. Tab-state enumeration is also separated by privacy context.
 
-Private console/runtime diagnostics and tab data are not written to the normal profile. Automatic private favicon loading outside CEF is disabled, native file logging is disabled in the Demo, and private download history is removed when its tab closes. Files explicitly saved by a download and explicitly copied clipboard content remain user outputs. See the [reference and real-context evidence](compatibility/p2-implementation.md#18-private-contexts).
+Private console/runtime diagnostics and tab data are not written to the normal profile. Automatic private favicon loading outside CEF is disabled, native file logging is disabled in the Demo, and private download history is removed when its tab closes. Files explicitly saved by a download and explicitly copied clipboard content remain user outputs. See the [reference and real-context evidence](compatibility/README.md#private-contexts).
 
 ## Tab audio
 
@@ -188,7 +220,7 @@ Grant `GM.audio` or `GM_audio`. Modern `GM.audio.getState()` returns a Promise o
 
 The default CefSharp service supports mute on 84/121/151 and follows the native browser across frames and navigation. In the tested 151 SmokeHost navigation, CEF resets native mute to false; 84/121 retain it. The service reports the actual state and does not promise retention on 151. It reads native state on the CEF UI thread and polls every 200 ms for changes made by other host controls; transitions shorter than that interval may not be observed. Unknown reasons are omitted from state and identified as `"unknown"` in changes. `isAudible`/`audible` are omitted: WebAudio or stream existence is not a reliable audible source. `GM.info.compatibility.capabilities["GM.audio"]` reports `partial:mute-only;audible-unavailable`.
 
-Hosts can supply an independent `ITabAudioService` through `UseTabAudioService`, or disable the native default with `EnableDefaultAudioService = false`; network-service options do not control audio. Application-supplied services remain application-owned. See the [audio evidence](compatibility/p2-implementation.md#17-tab-audio).
+Hosts can supply an independent `ITabAudioService` through `UseTabAudioService`, or disable the native default with `EnableDefaultAudioService = false`; network-service options do not control audio. Application-supplied services remain application-owned. See the [audio evidence](compatibility/README.md#tab-audio).
 
 ```javascript
 // @grant GM.audio
@@ -235,7 +267,7 @@ var repository = new PersistentUserScriptRepository(persistence, parser);
 await repository.InitializeAsync(CancellationToken.None);
 ```
 
-The Demo uses database format 2 and rejects older development databases without migration or deletion; back up and rebuild manually. Custom value stores must adopt the typed contract below.
+The Demo preserves format-2 records and adds prepared-content/permission tables during initialization. Unsupported older development databases are rejected without automatic deletion; back up before manual recovery. Custom value stores must adopt the typed contract below.
 
 The persistence implementation must preserve `ScriptKey`, installation order, and timestamps, and commit mutations atomically. Cancellation after a successful commit must complete successfully; repository change notifications follow commit. Stable keys retain the association with GM storage. See the [Demo guide](../Mzying2001.MonkeySharp.Demo/README.md#portable-data-and-recovery) for a concrete persistence and recovery implementation.
 
@@ -268,13 +300,21 @@ The runtime uses handle events to deliver script callbacks; completing a `Comple
 
 `GM.download` immediately returns an abortable completion Promise; `GM_download` returns an abort-only handle. Both support callbacks. Completion follows final file commit, with `{url, name, loaded}` details. See the [download guide](usage-guide.md#downloads) for return values and lifecycle policy.
 
+### Page helpers and stable tab services
+
+addStyle/addElement run locally: legacy returns nodes and modern returns Promises of those nodes. Omitted parents prefer head and fall back to documentElement; page CSP remains effective. GM.log forwards original variadic arguments to local console, with only a bounded best-effort JSON snapshot sent to LogTo.
+
+Tab save/read calls serialize per execution and capture the saved JSON object before queueing; legacy saves support a commit callback.
+
+OpenTabRequest supports adjacent Insert and absolute InsertIndex (the index wins). Services must report actual Closed state and one closure event; renderer client correlation covers closure before acknowledgment. Script handles expose close/closed/onclose, and close/window.close/window.focus return undefined. ITabStateService must bind to a stable host tab identity across documents and scope every value by ScriptKey. Demo already binds its shared SQLite service to BrowserTabViewModel.TabId, removes data at tab close and resets stale state on startup. Its WPF window policy refuses closing the last tab. AutomaticallyUpdatesScripts supplies a real host policy to info; Demo sets false and has no automatic scheduler. Unknown host policy remains omitted.
+
 ## Lifecycle and Diagnostics
 
 `PrepareAsync()` prepares the attachment's shared CDP session;
 `NavigateAsync(url)` waits for it before navigating. Start the browser at
 `about:blank` when using this sequence. `IsLateAttach` and `IsLatePreparation`
 identify initialization that already occurred. These APIs do not upgrade
-userscript timing guarantees. See the [real protocol findings](compatibility/cdp-findings.md).
+userscript timing guarantees. See the [real protocol findings](compatibility/execution-worlds.md#protocol-session-and-preparation).
 
 The adapter creates an identity per frame document and executes each `(document, frame, script, run-at)` once. `@run-at context-menu` scripts are listed by the native CefSharp context menu for the matching frame and execute a fresh invocation only after the user selects an entry. Navigation, context release and detach invalidate document capabilities and pending calls. Accepted downloads continue as host tasks with document callbacks muted; host disposal cancels them.
 
@@ -301,7 +341,13 @@ Snapshot preparation failures prevent user code from starting; byte-budget error
 
 | Diagnostic | Meaning |
 | --- | --- |
-| `MSC410_COMPATIBILITY_BOOTSTRAP_FAILED` | Snapshot preparation failed or timed out; the corresponding synchronous aliases are unavailable. |
+| `MSC410_COMPATIBILITY_BOOTSTRAP_FAILED` | Snapshot preparation failed or timed out; user code does not start. |
+
+## Native isolated execution
+
+The adapter uses native CDP frame/loader/context events, installation/revision scopes, context-ID bindings and remote global-object IDs for isolated source/delivery. Object IDs pin context generations and prevent numeric ID reuse from retargeting a response. The page binding accepts only active page-world document IDs; isolated proofs cannot pass through it. Shared protocol domains and other observers remain intact. `DocumentFrame` exposes actual `ExecutionWorld`, optional `ScriptScope` and `RevisionScope`; frame IDs are opaque and CDP IDs are never cast from CEF IDs. `UserScriptExecutionEnvironment` supplies service/privacy/update facts; execution-world info derives from the native frame.
+
+Call PrepareAsync/NavigateAsync from an about:blank control for early preparation. Late preparation is explicit and full GM remains best effort. Unsupported OOPIF routing fails without raw fallback; BFCache cached executions are revoked and require fresh navigation. Historical page-frame webRequest interception is unavailable from isolated contexts. The main-frame native context menu supports both worlds; isolated child-frame manual selection is not yet mapped to a native CEF menu frame. See [evidence and limits](compatibility/execution-worlds.md).
 
 ## Bridge Protocol
 
@@ -313,8 +359,8 @@ storage encodings and persistent installation identities remain unchanged.
 
 The [Tampermonkey contract inventory](compatibility/api-contract.md) separates
 target behavior from versioned evidence. Run `scripts/compatibility/Run-Baseline.ps1`
-for the clean 84/x64 baseline, including the WPF Demo. CI runs the Demo on both
-84/x64 and 121/x64; its report verifies the actual assembly version and architecture.
+for the clean 84/x64 baseline, including the WPF Demo. CI runs the Demo on
+84/x64, 121/x64 and 151/x64; its report verifies the actual assembly version and architecture.
 
 CI's verified toolchain is Windows Server 2022, .NET SDK `9.0.315`, and Node.js `24`. These are tested versions, not a statement of minimum requirements. Use an SDK that supports `MonkeySharp.slnx`; Core tests target `net8.0`, while CefSharp tests and applications target `net462`. Real-Chromium gates require a Windows desktop session.
 
@@ -345,16 +391,26 @@ Run the real-Chromium gates from a Windows desktop session:
 powershell -NoProfile -ExecutionPolicy Bypass -File Mzying2001.MonkeySharp.Demo/Run-E2E.ps1 -CefSharpVersion 121.3.70
 ```
 
-Use the same version value throughout validation: `-p:CefSharpVersion=<version>` for `dotnet restore/build/test/pack`, and `-CefSharpVersion <version>` for the PowerShell runners. Run the SmokeHost commands for x64 and x86 at `84.4.10`, `121.3.70`, and `151.3.240`; the Demo gate covers x64 at `84.4.10` and `121.3.70`. When switching versions in an existing checkout, first run `dotnet clean MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=<target-version>` (use the target platform) to avoid mixing incremental outputs from different CefSharp versions. The SmokeHost runner already restores, cleans and builds with the selected version, then verifies the running assembly version and process platform. Both gates use isolated profiles and `TrustedPageWorld`; they are integration checks, not security sandboxes.
+Use the same version value throughout validation: `-p:CefSharpVersion=<version>` for `dotnet restore/build/test/pack`, and `-CefSharpVersion <version>` for the PowerShell runners. Run the SmokeHost commands for x64 and x86 at `84.4.10`, `121.3.70`, and `151.3.240`; the Demo gate covers x64 at all three versions. When switching versions in an existing checkout, first run `dotnet clean MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=<target-version>` (use the target platform) to avoid mixing incremental outputs from different CefSharp versions. The SmokeHost runner already restores, cleans and builds with the selected version, then verifies the running assembly version and process platform. Both gates use isolated profiles and `TrustedPageWorld`; they are integration checks, not security sandboxes.
 
 ### Chromium Compatibility Script Package
 
-The SmokeHost embeds seven original `.user.js` fixtures from its `Fixtures` directory and installs them through the normal repository. Two ephemeral loopback HTTP servers provide all runtime inputs. These fixtures verify MonkeySharp's documented contract; they are not third-party scripts or differential results from Tampermonkey.
+The SmokeHost embeds the original `.user.js` fixtures from its `Fixtures` directory and installs them through the normal repository. Two ephemeral loopback HTTP servers provide all runtime inputs. These fixtures verify MonkeySharp's documented contract; they are not third-party scripts or differential results from Tampermonkey.
 
 The adapter resolves the current renderer's `location.href` before matching scripts, because older CefSharp releases can expose the previous navigation's URL in the context-created callback. If that lookup fails, the document is skipped, including load fallback and context-menu execution. Document-start remains best effort.
 
 | Result ID | Required evidence |
 | --- | --- |
+| `prepared` | Offline prepared revisions, dependency scope/charset/SRI, complete resource/storage snapshots and first-statement reads. |
+| `conditions` | Prepared URL rules, normal/private run-in and manually selected context-menu effects. |
+| `isolated` | Separate per-script globals, authenticated dispatch, synchronous readiness, child frames and navigation cleanup. |
+| `replay` | Private window lifecycle replay and document-idle before slow load. |
+| `csp` | Separate source, DOM and style effects without whole-page bypass. |
+| `permissions` | Coalescing, allow-once, remembered denial, redirect checks and transfer timeout pausing. |
+| `binary` | Exact Blob/File/form bytes, charset boundaries, document parsing, streams and binary downloads. |
+| `pageHelpers` | Real DOM/style, local logging, tab handles and window/helper behavior. |
+| `audio` | Native mute readback, listeners, frames/navigation and explicit audible unavailability. |
+| `partitions` | Version-specific partition CRUD/readback/deletion and independent request-partition limitations. |
 | `frames` | Single-key and bulk GM storage calls, including all six modern/legacy bulk entry points, typed undefined, listener return contracts, cross-instance notifications and navigation snapshots, in the main frame, a same-origin child and a child on another port; once-per-document execution, `@noframes`, child navigation and context release. |
 | `spaUrl` | `pushState`, `replaceState`, hash navigation and history back; both URL callback forms, old/new URLs, host lifecycle events, grant gating and no reinjection. |
 | `download` | Modern Promise/handle and legacy callbacks; actual HTTP downloads with exact file bytes, cancellation after progress, timeout, HTTP failure, one terminal callback and partial-file cleanup. |
@@ -363,42 +419,8 @@ The adapter resolves the current renderer's `location.href` before matching scri
 
 The download service is test-only: Chromium executes GM calls and the supplied host service transfers local HTTP bytes to an isolated temporary directory. It does not test Chromium's download UI. Existing storage/XHR/notification/tab/navigation checks remain required.
 
-Each case emits a `compatibility-case` JSON record containing `caseId`, `success`, named `checks`, and failure context (`frameId`, `documentId`, `url`, `state`, `error`). `smoke-summary.compatibility` must contain all five successful results. The runner independently rejects missing/duplicate cases, failed assertions, wrong process architecture or CefSharp assembly version, missing detach/disposal and nonzero exits. Polling has a 15-second deadline; the host has a 90-second watchdog and the runner kills a stalled process tree after 120 seconds.
+Each case emits a `compatibility-case` JSON record containing `caseId`, `success`, named `checks`, and failure context (`frameId`, `documentId`, `url`, `state`, `error`). `smoke-summary.compatibility` must contain all 15 successful results. The runner independently rejects missing/duplicate cases, failed assertions, wrong process architecture or CefSharp assembly version, missing detach/disposal and nonzero exits. Polling has a 15-second deadline; the host has a 90-second watchdog and the runner kills a stalled process tree after 120 seconds.
 
 Run `powershell -NoProfile -ExecutionPolicy Bypass -File Mzying2001.MonkeySharp.CefSharp.SmokeHost/Test-SmokeResults.ps1` to check result validation without launching a browser. Both Windows PowerShell and PowerShell 7 can run the scripts.
 
 Logs are written to `artifacts/smoke/<version>-<platform>/` (`restore.log`, `clean.log`, `build.log` when output is present, `stdout.log`, `stderr.log`, and `results.jsonl`); `-OutputDirectory` overrides the location. CI uploads that directory as `chromium-<version>-<platform>` even on failure. Inspect failed `compatibility-case` records first, then the adjacent lifecycle, console and diagnostic records.
-
-## Prepared execution conditions
-
-`PreparedScriptRevision.UrlRules` compiles URL rules and repeatable run-in selectors before activation. Matching reuses immutable rules across frames, with metadata-lifetime caching. Include globs use bounded scheme/host wildcards, literal question marks and case-insensitive comparison; `/expression/` uses the documented ECMAScript subset with a 100 ms timeout. Timeouts fail closed with `MSR214_URL_RULE_TIMEOUT`. IPv6, IDN, explicit/wildcard ports, queries, fragments and escaped unreserved characters are covered by the fixed manager fixture.
-
-`RunIn` is now a read-only selector list. `CefSharpHostOptions.IsIncognito` must report the real host-owned request context; an unknown context rejects restricted execution with `MSR211_RUN_IN_UNAVAILABLE`. Container declarations warn with `MSM083_UNSUPPORTED_CONTAINER`; unknown selector syntax is an installation error. Manual context-menu execution ignores include/exclude, while retaining match/exclude-match, noframes, privacy and trust checks. These checks do not create private contexts.
-
-Unicode host text in `@match` is retained but does not match normalized browser hosts in the pinned manager. Use Punycode; installation reports `MSM084_UNSUPPORTED_IDN_MATCH` for this ineffective declaration. Punycode rules match canonical IDN browser URLs.
-
-## Native isolated execution
-
-The adapter uses native CDP frame/loader/context events, installation/revision scopes, context-ID bindings and remote global-object IDs for isolated source/delivery. Object IDs pin context generations and prevent numeric ID reuse from retargeting a response. The page binding accepts only active page-world document IDs; isolated proofs cannot pass through it. Shared protocol domains and other observers remain intact. `DocumentFrame` exposes actual `ExecutionWorld`, optional `ScriptScope` and `RevisionScope`; frame IDs are opaque and CDP IDs are never cast from CEF IDs. `UserScriptExecutionEnvironment` supplies service/privacy/update facts; execution-world info derives from the native frame.
-
-Call PrepareAsync/NavigateAsync from an about:blank control for early preparation. Late preparation is explicit and full GM remains best effort. Unsupported OOPIF routing fails without raw fallback; BFCache cached executions are revoked and require fresh navigation. Historical page-frame webRequest interception is unavailable from isolated contexts. The main-frame native context menu supports both worlds; isolated child-frame manual selection is not yet mapped to a native CEF menu frame. See [evidence and limits](compatibility/execution-worlds.md).
-
-## Interactive authorization
-
-For consent-based hosts, share `InteractiveUserScriptPermissionPolicy(new SensitiveUserScriptPermissionsPolicy(), decisionStore, prompt)` across tabs. Declarations are checked before consent: XHR uses connect, Cookie uses match/include, and download uses its host policy. Initial requests and redirects pass the same decision path. Allow/Deny from an explicit host policy are authoritative; Prompt consults exact remembered scopes and then the asynchronous interaction. A bare unresolved Prompt is a host configuration error, not an implicit Deny. A host without UI explicitly supplies `RejectUserScriptPermissionPrompt`.
-
-Scopes use stable installation key + permission kind + canonical HTTP(S) origin, with no credentials, path or query. Allow-once applies only to the currently coalesced batch; completed prompts cannot authorize later requests. Remembered decisions can be revoked. One canceled waiter does not cancel another document's joined request; all canceled waiters close the prompt. Navigation cancels interactive waits, and installation revision/enabled state is checked again after consent.
-
-Generic execution timeout starts after authorization. CEF transfer and download deadlines pause while redirect permission waits and then resume their remaining active budget. Providers validate declarations before effects as well. Demo uses an additive SQLite decision table, real asynchronous permission windows and a permission-management button; revocation cancels pending prompts and reloads affected execution state. Its scripted E2E clicks the actual permission window and checks persistence.
-
-### Binary transport and stream completion
-
-Text decoding preserves split multibyte sequences and declared charsets. HTML MIME uses DOMParser's HTML parser; invalid XML returns null. HTTP stream Promises resolve when headers and the stream are available. Subsequent failures error the stream; onload/onloadend follow network completion independently of consumer speed. The renderer pulls at most 64 KiB at a time; the host spools unread bytes (256 KiB in memory, then disk) within the total budget. This bounds bridge queues; CEF URLRequest cannot pause the network source itself. Stream spools live until EOF/cancel/execution end. Non-stream responses are assembled in renderer memory. Progress does not guarantee partial responseText.
-
-Blob/File downloads stage acknowledged 64 KiB chunks and share the file pipeline's save/abort/atomic commit semantics. The provider owns DownloadRequest.Body until the download's terminal event; custom services must read these bytes without dereferencing its blob identifier through HTTP. Incomplete staging is released on failure/navigation. Accepted downloads may outlive their document with callbacks detached. Callback context remains the original local object; the fixed TM 5.5.1 reference clones that object across its extension boundary, so object identity equivalence is not claimed.
-
-### Page helpers and stable tab services
-
-addStyle/addElement run locally: legacy returns nodes and modern returns Promises of those nodes. Omitted parents prefer head and fall back to documentElement; page CSP remains effective. GM.log forwards original variadic arguments to local console, with only a bounded best-effort JSON snapshot sent to LogTo.
-
-OpenTabRequest supports adjacent Insert and absolute InsertIndex (the index wins). Services must report actual Closed state and one closure event; renderer client correlation covers closure before acknowledgment. Script handles expose close/closed/onclose, and close/window.close/window.focus return undefined. ITabStateService must bind to a stable host tab identity across documents and scope every value by ScriptKey. Demo already binds its shared SQLite service to BrowserTabViewModel.TabId, removes data at tab close and resets stale state on startup. Its WPF window policy refuses closing the last tab. AutomaticallyUpdatesScripts supplies a real host policy to info; Demo sets false and has no automatic scheduler. Unknown host policy remains omitted.

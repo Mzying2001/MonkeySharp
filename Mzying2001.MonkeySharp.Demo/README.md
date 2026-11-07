@@ -56,7 +56,7 @@ The Demo's `TabContext` binds stable tab identity, the native RequestContext, pr
 
 Private GM values follow the pinned Tampermonkey 5.5.1 temporary-session behavior: each script receives a copy of its normal baseline on first private access, then private changes and listeners stay within the private session. Writes do not return to normal storage or persist after the last private tab closes. This is a copied baseline, not live sharing. Tab-state enumeration is also separated by privacy context.
 
-Private console/runtime diagnostics and tab data are not written to the normal profile. Automatic private favicon loading outside CEF is disabled, native file logging is disabled in the Demo, and private download history is removed when its tab closes. Files explicitly saved by a download and explicitly copied clipboard content remain user outputs. See the [reference and real-context evidence](../docs/compatibility/p2-implementation.md#18-private-contexts).
+Private console/runtime diagnostics and tab data are not written to the normal profile. Automatic private favicon loading outside CEF is disabled, native file logging is disabled in the Demo, and private download history is removed when its tab closes. Files explicitly saved by a download and explicitly copied clipboard content remain user outputs. See the [reference and real-context evidence](../docs/compatibility/README.md#private-contexts).
 
 ## API integration boundaries
 
@@ -93,6 +93,6 @@ powershell -NoProfile -ExecutionPolicy Bypass -File Mzying2001.MonkeySharp.Demo/
 
 The E2E runner starts a real WPF application with loopback fixtures and a separate `SmokeRuns/<id>/Data` profile, never the normal browser profile. It leaves a JSON report under `artifacts/demo-smoke` and logs under the reported profile. It tests background tabs, tab switching, iframe injection, shared values/cookies, undefined persistence across tab creation/navigation, resources, XHR/webRequest, menus, notifications, real downloads, tab state, navigation, script enable/disable and final disposal. The test verifies Unicode text and HTML on the system clipboard, then restores its previous contents. Test-project shadow copying is disabled so SQLite's native library resolves from the deployed test output.
 
-CI runs the SmokeHost real-Chromium gate for CefSharp `84.4.10`, `121.3.70`, and `151.3.240` on x64 and x86. The WPF Demo smoke remains x64 on the default `121.3.70` version.
+CI runs the SmokeHost real-Chromium gate for CefSharp `84.4.10`, `121.3.70`, and `151.3.240` on x64 and x86. The WPF Demo gates cover all three versions on x64.
 
 Manual acceptance checks: install/edit/delete through the manager; reject the permission prompt; close with unsaved edits; confirm/cancel Save As; write text and HTML to the clipboard from a trusted script; verify browser login persistence after restart; lock/remove a source file and check the recovery diagnostics; launch a second process with the same profile and check the startup error.

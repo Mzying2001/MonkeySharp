@@ -1,0 +1,21 @@
+# Downloads
+
+Both calling forms share one client-identified operation. `GM.download` immediately returns its original abortable completion Promise; `GM_download` returns an abort-only handle. The host registers cancellation before awaiting operation creation, subscribes before Start and delivers one terminal result. Start acknowledgment cannot complete the public Promise. Callback exceptions are reported independently.
+
+`FileDownloadService` uses the adapter's CEF URLRequest/RequestContext HTTP service, sharing browser credentials and webRequest composition with XHR. Bounded chunks are written to a temporary file. Success follows flush, close and atomic move/replace; failure or cancellation removes staging files before terminal notification. Completion details are `{url, name, loaded}`, without local paths or internal IDs.
+
+Accepted tasks continue across document end, navigation, script disable and uninstall under captured authorization; redirect targets still need approval. Document callbacks are muted after execution ends. Host disposal cancels tasks, and the Demo drains them before releasing its browser context. This ownership policy is distinct from JavaScript callback delivery.
+
+## Binary inputs and completion
+
+Blob/File and blob URLs are resolved in their owning renderer. Acknowledged 64 KiB chunks stage binary downloads before handing the body to the accepted task. Incomplete staging is execution-scoped and released on failure/navigation. Custom download services read `DownloadRequest.Body` and retain it through termination rather than attempting HTTP access to a renderer blob identifier.
+
+XHR streams have a different completion boundary: their Promise resolves when headers and the stream are available; later errors propagate through the stream. Downloads resolve only after file commit. Renderer pulls and host spooling bound bridge queues and disk use but cannot pause CEF's underlying network source. See [binary transport](../integration-reference.md#binary-transport-and-stream-completion).
+
+## Evidence and reproduction
+
+The [native download matrix](../../scripts/compatibility/evidence/downloads-p0.json) records actual bytes and file hashes, authenticated redirects, anonymous denial, zero-byte files, immediate/transfer cancellation, timeout, disk failure, staging cleanup and completion after navigation. WPF checks exercise the actual save picker and cancellation; SmokeHost does not establish browser-extension download UI parity.
+
+The [binary matrix](../../scripts/compatibility/evidence/binary-transport-p1.json) and [pinned reference](../../scripts/compatibility/evidence/tampermonkey-5.5.1-binary-inputs.json) add Blob/File/blob URL cases. The reference clones callback context across its extension boundary; MonkeySharp keeps the original local object. Identical context-object identity is not claimed.
+
+Run the [baseline and native gates](validation.md). Script parameters and examples are in the [download guide](../usage-guide.md#downloads) / [中文](../usage-guide.zh-CN.md#downloads); host ownership and configuration are in the [integration reference](../integration-reference.md#host-service-contracts).

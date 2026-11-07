@@ -9,8 +9,8 @@ const { execFileSync } = require("node:child_process");
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
 
 async function main() {
-    const [browserPath, extensionPath, output = "artifacts/compatibility/reference-returns.json", fixturePath = "docs/compatibility/fixtures/returns.user.js"] = process.argv.slice(2);
-    if (!browserPath || !extensionPath) throw new Error("Usage: node Run-Reference.cjs <Edge executable> <Tampermonkey directory> [output.json]");
+    const [browserPath, extensionPath, output = "artifacts/compatibility/reference-returns.json", fixturePath = "scripts/compatibility/fixtures/returns.user.js"] = process.argv.slice(2);
+    if (!browserPath || !extensionPath) throw new Error("Usage: node Run-Reference.cjs <Edge executable> <Tampermonkey directory> [output.json] [fixture.user.js]");
     const manifest = JSON.parse(fs.readFileSync(path.join(extensionPath, "manifest.json"), "utf8"));
     if (manifest.version !== "5.5.1" || manifest.manifest_version !== 3) throw new Error("Reference requires Tampermonkey 5.5.1/MV3; record a new environment before changing this pin.");
     const extensionId = "iikmkjmpaadaobahmlepeloendndfphd";
@@ -41,7 +41,7 @@ async function main() {
             response.setHeader('Content-Type','text/plain');
             response.end(request.headers.cookie || '');
         } else if (/^\/fixture-content\/[a-z0-9.-]+$/.test(request.url)) {
-            const contentPath = path.join(root, "docs/compatibility/fixtures/content", path.basename(request.url));
+            const contentPath = path.join(root, "scripts/compatibility/fixtures/content", path.basename(request.url));
             if (!fs.existsSync(contentPath)) { response.statusCode = 404; response.end(); return; }
             response.setHeader("Content-Type", request.url.endsWith(".js") ? "text/javascript; charset=windows-1252" : "application/octet-stream");
             response.end(fs.readFileSync(contentPath));

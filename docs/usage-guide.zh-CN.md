@@ -10,7 +10,7 @@
 
 - [编写并安装脚本](#write-and-install-a-script)
 - [元数据](#metadata)
-- [执行、授权与兼容模式](#execution-grants-and-compatibility)
+- [执行、授权与兼容性](#execution-grants-and-compatibility)
 - [API 索引](#api-index)
 - [信息与日志](#information-and-logging)
 - [存储与值变更监听](#values-and-change-listeners)
@@ -152,7 +152,7 @@ Demo 手动更新时优先从 `@updateURL` 检查，其次使用 `@downloadURL`�
 
 <a id="execution-grants-and-compatibility"></a>
 
-## 执行、授权与兼容模式
+## 执行、授权与兼容性
 
 现在只有一套契约。[固定 Tampermonkey 5.5.1 证据](compatibility/api-contract.md) 确认：
 未声明、none、未知授权和 info-only 均提供 GM_info 与 GM.info，但保留不同元数据状态。
@@ -163,11 +163,19 @@ GM_getValue 还允许现代存储写入，但不会暴露未声明的 GM_setValu
 宿主服务和权限政策仍决定操作是否可用、是否获准。
 
 调用风格不强制 strict，也不选择世界；strict 由源码指令决定。顶层 this 为 window 门面，
-DOM/content 使用原生 context 验证的隔离派发，raw/JavaScript 使用受宿主信任政策约束的页面世界；完整 GM 的 document-start 不保证严格时序。
-尚不是生产特权沙箱。document-start 保持 best effort，显式要求保证时拒绝执行。
+但 none 使用固定 5.5.1 对照观察到的独立对象作为接收者。DOM/content 使用每脚本独立世界和原生 context 验证的派发；raw/默认/Chromium JavaScript 使用受宿主信任政策约束的页面世界。
+DOM 与 unsafeWindow 冲突、未支持的 unwrap 会在源码执行前拒绝。隔离世界提供脚本全局和派发身份边界，不是操作系统沙箱。document-start 保持 best effort，显式要求保证时拒绝执行。
 
-旧式同步存储和资源依赖完整快照，默认预算 1 MiB、准备超时 5 秒。宿主交互需要对应服务。
+旧式同步存储和资源依赖完整快照，总序列化预算默认 64 MiB、每份快照准备超时 5 秒；单条桥接消息默认 1 MiB，较大快照完整分块传输。宿主交互需要对应服务。
 [集成说明](integration-reference.zh-CN.md#授权与-api-契约) 说明信任、服务和真实环境信息。
+
+### 原生隔离世界与生命周期
+
+DOM/content 需求使用每安装脚本的独立 CDP 世界，身份来自原生 frame/loader/context 事件，派发绑定脚本及版本，源码/通知通过固定 context 代际的 remote object 投递。页面绑定拒绝隔离执行证明。raw/默认/Chromium JavaScript 需求仍使用页面世界和明确的 TrustedPageWorld 政策；DOM + unsafeWindow 冲突及未支持的 unwrap 会在源码启动前以 MSR215 拒绝，不静默退回 raw。
+
+document-idle 在 DOMContentLoaded 后调度，不等待缓慢资源的 load。沙箱 window 按脚本私有地回放 DOMContentLoaded/load 缓存，回放事件 isTrusted 为 false；idle 不回放更早的 DOMContentLoaded。监听支持 once、移除及 abort，执行结束清理运行时拥有的监听；直接在页面 DOM 上注册的监听由用户代码管理。源码、DOM、样式的 CSP 效果分别验证，不全站关闭 CSP。
+
+完整 GM 的 document-start 仍为 best effort，显式保证要求会拒绝。OOPIF 不支持时明确失败且没有 raw 回退；BFCache 缓存执行撤销，需要新导航。isolated 的历史 page-frame webRequest 不支持，子 frame 的隔离手动菜单尚未与原生 CEF 菜单 frame 映射。详见[执行证据和边界](compatibility/execution-worlds.md)。
 
 <a id="api-index"></a>
 
@@ -452,6 +460,16 @@ XHR 主体分块传输；默认每个请求/响应体限制为 256 MiB，前 256
 })().catch(console.error);
 ```
 
+### 权限提示
+
+权限提示显示安装脚本、权限和准确目标 origin。Demo 提供允许一次、记忆允许、拒绝并记住；允许一次仅覆盖当前同范围的合并等待批次。通过权限按钮撤销该安装的决定，标签页会刷新以清理旧执行状态。导航关闭失效等待，同意或记忆允许都不能绕过 connect 或 Cookie URL 声明。
+
+
+
+### 二进制传输与流完成
+
+文本按声明字符集增量解码，保留跨分块的多字节字符；HTML MIME 使用 HTML 解析器，无效 XML 返回 null。显式 redirect 或 anonymous 会启用 fetch 语义，忽略传输 timeout/进度且只报告 readyState 4。HTTP stream 的 Promise 在响应头和流可用时兑现，后续失败通过流传播；onload/onloadend 随网络完成触发。renderer 每次按需拉取最多 64 KiB，宿主在 256 KiB 后转存磁盘，并受总预算约束。这限制桥接队列，但 CEF URLRequest 本身不能暂停网络源。暂存流在 EOF、取消或执行结束时释放；非流响应仍在 renderer 内组装。进度回调不保证逐步 responseText。
+
 <a id="menus-notifications-and-clipboard"></a>
 
 ## 菜单、通知与剪贴板
@@ -535,6 +553,8 @@ GM_setClipboard('已复制', 'text', () => console.log('已写入'));
 })().catch(console.error);
 ```
 
+同一执行的标签状态保存和读取按调用顺序提交，旧版不 await 的调用也遵守顺序；保存先捕获 JSON 对象。Demo 按稳定 TabId 及脚本安装身份隔离状态，跨导航保持，标签关闭删除，应用重启清理。window.close/focus 在门面返回 undefined；Demo 允许聚焦存活页、关闭当前页，并拒绝脚本关闭最后一个标签。GM.info 的更新策略来自真实宿主配置，Demo 未启用自动调度，scriptWillUpdate 为 false；未配置策略的宿主省略该字段。
+
 <a id="downloads"></a>
 
 ## 下载
@@ -580,6 +600,10 @@ const handle = GM_download({
 // handle.abort();
 ```
 
+Blob/File 下载逐块等待宿主确认，再使用共用的保存、取消、临时文件和原子提交路径。provider 在终态前持有 DownloadRequest.Body，自定义下载服务应读取该字节源，不应通过 HTTP 访问 blob 标识。失败或导航清理未启动的暂存；已接受下载可在文档结束后继续，回调已分离。context 保留本地原始对象；固定 TM 5.5.1 对照会跨扩展边界复制对象，因此不声称引用身份一致。
+
+<a id="cookies"></a>
+
 ## Cookie
 
 ### GM.cookie / GM_cookie
@@ -607,7 +631,7 @@ await GM.cookie.delete({name:'session'}); // undefined，不返回删除布尔�
 GM_cookie.list({}, (cookies, error) => console.log(cookies, error));
 ```
 
-<a id="request-interception"></a>
+<a id="partitioned-cookie-scope"></a>
 
 ### 分区 Cookie 范围
 
@@ -619,7 +643,7 @@ set/delete 接受同一 partitionKey 对象，修改中的空对象选择普通�
 
 自定义分区后端除 CRUD 外实现 IPartitionedCookieService.NormalizePartitionKeyAsync，在 Core 过滤前验证实际支持并规范化键。其他后端会拒绝 partitionKey，不会静默访问普通存储。
 
-所有已测版本的 XHR cookiePartition 仍不支持。原生请求探针没有公开顶层分区选择字段，发送普通 Cookie，并将 Partitioned 响应存入请求自身站点而非指定站点；该参数在网络发送前拒绝。CRUD 不等于请求分区支持，不使用拼接 Cookie 头模拟。见 [P2 记录](compatibility/p2-implementation.md#19-partitioned-cookie-scope)中的独立结果及固定参考的删除副作用差异。
+所有已测版本的 XHR cookiePartition 仍不支持。原生请求探针没有公开顶层分区选择字段，发送普通 Cookie，并将 Partitioned 响应存入请求自身站点而非指定站点；该参数在网络发送前拒绝。CRUD 不等于请求分区支持，不使用拼接 Cookie 头模拟。见 [Cookie 范围与证据](compatibility/cookies.md#partitioned-cookie-scope)中的独立结果及固定参考的删除副作用差异。
 
 ```javascript
 // @grant GM.cookie
@@ -633,6 +657,8 @@ set/delete 接受同一 partitionKey 对象，修改中的空对象选择普通�
 })().catch(console.error);
 ```
 
+<a id="private-browsing"></a>
+
 ## 私密浏览
 
 `GM.openInTab(url, {incognito:true})` 及旧式调用请求真实私密上下文。Demo 提供 **私密＋** 按钮及私密标签标识。省略 incognito 时继承来源标签，false 显式打开普通标签。宿主通过 `ITabService.SupportsIncognito` 声明能力；不支持的服务在打开前拒绝私密请求。
@@ -641,7 +667,9 @@ Demo 的 `TabContext` 绑定稳定 tab 身份、原生 RequestContext、隐私�
 
 GM 值遵循固定 TM 5.5.1 临时私密会话实测：每脚本首次私密访问时复制普通初值，此后私密写入及监听只在私密会话内流转，不回写普通存储，最后私密标签关闭后不保留。这里是初值副本，不是实时共享。tab 数据枚举也按隐私上下文隔离。
 
-私密 console/runtime 诊断及 tab 数据不写入普通 profile；禁用 CEF 外的私密 favicon 自动加载，Demo 禁用原生日志文件，私密下载历史在来源标签关闭时移除。用户明确下载保存的文件及明确复制的剪贴板内容保留。见[对照与真实上下文证据](compatibility/p2-implementation.md#18-private-contexts)。
+私密 console/runtime 诊断及 tab 数据不写入普通 profile；禁用 CEF 外的私密 favicon 自动加载，Demo 禁用原生日志文件，私密下载历史在来源标签关闭时移除。用户明确下载保存的文件及明确复制的剪贴板内容保留。见[对照与真实上下文证据](compatibility/README.md#private-contexts)。
+
+<a id="tab-audio"></a>
 
 ## 标签音频
 
@@ -651,7 +679,7 @@ GM 值遵循固定 TM 5.5.1 临时私密会话实测：每脚本首次私密访�
 
 默认 CefSharp 服务在 84/121/151 提供真实静音读写，跨 frame 和导航保持同一标签状态。151 SmokeHost 的已测导航会将原生静音重置为 false，84/121 保持；服务反映真实状态，不承诺 151 导航保持静音。原生读写在 CEF UI 线程执行，每 200 ms 轮询其他宿主静音操作；短于轮询间隔的变化可能漏报。未知原因在状态中省略，在事件中标为 `"unknown"`。不提供 `isAudible`/`audible`：WebAudio 或音频流存在不能证明真实可听状态。`GM.info.compatibility.capabilities["GM.audio"]` 明确报告 `partial:mute-only;audible-unavailable`。
 
-宿主可通过 `UseTabAudioService` 注入独立的 `ITabAudioService`，或用 `EnableDefaultAudioService = false` 禁用原生默认服务；网络配置不控制音频。应用传入的服务仍归应用所有。证据见 [P2 音频记录](compatibility/p2-implementation.md#17-tab-audio)。
+宿主可通过 `UseTabAudioService` 注入独立的 `ITabAudioService`，或用 `EnableDefaultAudioService = false` 禁用原生默认服务；网络配置不控制音频。应用传入的服务仍归应用所有。证据见 [音频范围与证据](compatibility/README.md#tab-audio)。
 
 ```javascript
 // @grant GM.audio
@@ -663,6 +691,8 @@ GM 值遵循固定 TM 5.5.1 临时私密会话实测：每脚本首次私密访�
     await GM.audio.removeStateChangeListener(onAudio);
 })().catch(console.error);
 ```
+
+<a id="request-interception"></a>
 
 ## 请求拦截
 
@@ -676,7 +706,7 @@ listener 异步接收 `(action, status, details)`：action 为 `"cancel"`/`"redi
 
 静态 `@webRequest` JSON 在安装期编译，并通过 `host.NavigateAsync` 在导航前激活，无须等待用户源码执行；仓库变更撤销旧规则。静态规则遵循 URL、frame、run-in 和宿主权限策略，文档加载期间不能弹出交互授权。晚附加无法补拦截已发送的请求。
 
-目标依据[官方历史契约](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_webRequest)。固定 MV2 差分环境尚缺；OOPIF、isolated frame 动态页面拦截及 WebSocket 覆盖不计为通过，见 [P2 记录](compatibility/p2-implementation.md)。
+目标依据[官方历史契约](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_webRequest)。固定 MV2 差分环境尚缺；OOPIF、isolated frame 动态页面拦截及 WebSocket 覆盖不计为通过，见 [webRequest 范围与证据](compatibility/README.md#historical-webrequest)。
 
 ```javascript
 // @grant GM_webRequest
@@ -774,22 +804,3 @@ window.addEventListener("urlchange", onRoute);
 ## 参考来源
 
 MonkeySharp 行为依据[授权目录](../Mzying2001.MonkeySharp.Core/Compatibility/UserScriptGrantCatalog.cs)、[JavaScript 门面](../Mzying2001.MonkeySharp.Core/Js/Init.js)、[Core API 提供器](../Mzying2001.MonkeySharp.Core/Apis/)、[元数据解析器](../Mzying2001.MonkeySharp.Core/Parsing/UserScriptMetadataParser.cs)、[运行时信息构建](../Mzying2001.MonkeySharp.Core/Runtime/UserScriptEngine.cs)、[CefSharp 服务](../Mzying2001.MonkeySharp.CefSharp/)及 [JavaScript 行为测试](../Mzying2001.MonkeySharp.Core.Tests/JavaScript/)核对。具体持久化及交互服务见 [Demo 指南](../Mzying2001.MonkeySharp.Demo/README.md)。升级运行时或替换宿主服务时，可据此复核。
-
-
-## 原生隔离世界与生命周期
-
-DOM/content 需求使用每安装脚本的独立 CDP 世界，身份来自原生 frame/loader/context 事件，派发绑定脚本及版本，源码/通知通过固定 context 代际的 remote object 投递。页面绑定拒绝隔离执行证明。raw/默认/Chromium JavaScript 需求仍使用页面世界和明确的 TrustedPageWorld 政策；DOM + unsafeWindow 冲突及未支持的 unwrap 会在源码启动前以 MSR215 拒绝，不静默退回 raw。
-
-document-idle 在 DOMContentLoaded 后调度，不等待缓慢资源的 load。沙箱 window 按脚本私有地回放 DOMContentLoaded/load 缓存，回放事件 isTrusted 为 false；idle 不回放更早的 DOMContentLoaded。监听支持 once、移除及 abort，执行结束清理运行时拥有的监听；直接在页面 DOM 上注册的监听由用户代码管理。源码、DOM、样式的 CSP 效果分别验证，不全站关闭 CSP。
-
-完整 GM 的 document-start 仍为 best effort，显式保证要求会拒绝。OOPIF 不支持时明确失败且没有 raw 回退；BFCache 缓存执行撤销，需要新导航。isolated 的历史 page-frame webRequest 不支持，子 frame 的隔离手动菜单尚未与原生 CEF 菜单 frame 映射。详见[执行证据和边界](compatibility/execution-worlds.md)。
-
-权限提示显示安装脚本、权限和准确目标 origin。Demo 提供允许一次、记忆允许、拒绝并记住；允许一次仅覆盖当前同范围的合并等待批次。通过权限按钮撤销该安装的决定，标签页会刷新以清理旧执行状态。导航关闭失效等待，同意或记忆允许都不能绕过 connect 或 Cookie URL 声明。
-
-### 二进制传输与流完成
-
-文本按声明字符集增量解码，保留跨分块的多字节字符；HTML MIME 使用 HTML 解析器，无效 XML 返回 null。显式 redirect 或 anonymous 会启用 fetch 语义，忽略传输 timeout/进度且只报告 readyState 4。HTTP stream 的 Promise 在响应头和流可用时兑现，后续失败通过流传播；onload/onloadend 随网络完成触发。renderer 每次按需拉取最多 64 KiB，宿主在 256 KiB 后转存磁盘，并受总预算约束。这限制桥接队列，但 CEF URLRequest 本身不能暂停网络源。暂存流在 EOF、取消或执行结束时释放；非流响应仍在 renderer 内组装。进度回调不保证逐步 responseText。
-
-Blob/File 下载逐块等待宿主确认，再使用共用的保存、取消、临时文件和原子提交路径。provider 在终态前持有 DownloadRequest.Body，自定义下载服务应读取该字节源，不应通过 HTTP 访问 blob 标识。失败或导航清理未启动的暂存；已接受下载可在文档结束后继续，回调已分离。context 保留本地原始对象；固定 TM 5.5.1 对照会跨扩展边界复制对象，因此不声称引用身份一致。
-
-同一执行的标签状态保存和读取按调用顺序提交，旧版不 await 的调用也遵守顺序；保存先捕获 JSON 对象。Demo 按稳定 TabId 及脚本安装身份隔离状态，跨导航保持，标签关闭删除，应用重启清理。window.close/focus 在门面返回 undefined；Demo 允许聚焦存活页、关闭当前页，并拒绝脚本关闭最后一个标签。GM.info 的更新策略来自真实宿主配置，Demo 未启用自动调度，scriptWillUpdate 为 false；未配置策略的宿主省略该字段。

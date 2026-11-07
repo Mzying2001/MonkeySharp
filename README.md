@@ -13,6 +13,8 @@ One userscript contract provides both official calling forms over an asynchronou
 | Write or port a userscript | [Userscript guide](docs/usage-guide.md) |
 | Build, package, or verify the runtime | [Build and test](#build-and-test), then the [verification reference](docs/integration-reference.md#build-package-and-verify) |
 
+[Documentation index](docs/README.md) · [Compatibility and evidence](docs/compatibility/README.md)
+
 ## Packages
 
 | Package | Target frameworks | Purpose |
@@ -102,7 +104,7 @@ browser.RequestHandler = requestHandlers;
 host.Attach(browser);
 ```
 
-Only compose slots that already have application handlers. `Attach` rejects occupied handler slots that have not been multiplexed. Attach before initialization to cover initial resources; late attachment is explicitly marked and cannot intercept requests already sent. The request handler requirement applies whenever a webRequest service is available, including the default service. See [request handler integration](docs/integration-reference.md#web-request) for disabling or replacing network services.
+Only compose slots that already have application handlers. `Attach` rejects occupied handler slots that have not been multiplexed. Attach before initialization to cover initial resources; late attachment is explicitly marked and cannot intercept requests already sent. The request handler requirement applies whenever a webRequest service is available, including the default service. See [request handler integration](docs/integration-reference.md#web-requests) for disabling or replacing network services.
 
 ## Security Model
 
@@ -131,7 +133,7 @@ Metadata covers script identity, URL selection, execution timing, grants, depend
 
 `@require` and `@resource` are fetched and verified by a repository `UserScriptPreparer` before installation or update activates a revision. Executions reuse the prepared content offline and across frames. The Demo persists these revisions and offers manual script updates. Hash syntax, budgets and update rules are documented in the [integration reference](docs/integration-reference.md#resource-integrity-and-update-checks).
 
-Static `@webRequest` rules are compiled at installation and activated before prepared navigation. Dynamic `GM.webRequest(...)` replaces this execution's rules; `[]` revokes them. See the [P2 scope and evidence](docs/compatibility/p2-implementation.md).
+Static `@webRequest` rules are compiled at installation and activated before prepared navigation. Dynamic `GM.webRequest(...)` replaces this execution's rules; `[]` revokes them. See the [webRequest scope and evidence](docs/compatibility/README.md#historical-webrequest).
 
 ## GM API Support
 
@@ -191,7 +193,7 @@ See the [integration reference](docs/integration-reference.md#lifecycle-and-diag
 
 ## Migrating from v1
 
-Version 3 has source-breaking host service contracts and replaces `Injector`, `JScript`, `IDataStore`, and the WCF bridge. Storage keys must be migrated explicitly when retaining v1 data. See the [migration notes](docs/integration-reference.md#migration-notes) for the type mapping and service changes.
+Version 3 has source-breaking host service contracts and replaces `Injector`, `JScript`, `IDataStore`, and the WCF bridge. Storage keys must be migrated explicitly when retaining v1 data. See the current [host service contracts](docs/integration-reference.md#host-service-contracts) for typed storage and service requirements.
 
 ## Build and Test
 
@@ -206,7 +208,7 @@ node --test Mzying2001.MonkeySharp.Core.Tests/JavaScript/*.test.js
 
 Repeat the .NET commands with `-p:Platform=x86`; the x86 configuration excludes the x64-only Demo projects. Pass the same `CefSharpVersion` property to every command when testing another supported version. Packaging and real-Chromium E2E commands are in the [integration reference](docs/integration-reference.md#build-package-and-verify).
 
-CI covers CefSharp `84.4.10`, `121.3.70`, and `151.3.240` on x64 and x86 with .NET/JavaScript tests and real-Chromium SmokeHost gates. The WPF Demo gates run on x64 with all three versions. See [compatibility gate details](docs/integration-reference.md#chromium-compatibility-script-package) and the [P2 delivery record](docs/compatibility/p2-delivery.md).
+CI covers CefSharp `84.4.10`, `121.3.70`, and `151.3.240` on x64 and x86 with .NET/JavaScript tests and real-Chromium SmokeHost gates. The WPF Demo gates run on x64 with all three versions. See [compatibility gate details](docs/integration-reference.md#chromium-compatibility-script-package) and the [validation guide](docs/compatibility/validation.md).
 
 ## License
 

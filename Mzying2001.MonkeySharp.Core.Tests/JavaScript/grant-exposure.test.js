@@ -5,7 +5,7 @@ const path = require("node:path");
 const vm = require("node:vm");
 const template = require("./bootstrap-template");
 const catalog = require("../../Mzying2001.MonkeySharp.Core/Js/ApiCatalog.json");
-const directory = path.resolve(__dirname, "../../docs/compatibility");
+const directory = path.resolve(__dirname, "../../scripts/compatibility");
 
 for (const name of ["missing", "none", "legacy", "modern", "mixed", "unknown", "info-only"]) {
     test(`original exposure fixture matches the pinned runtime (${name})`, async () => {

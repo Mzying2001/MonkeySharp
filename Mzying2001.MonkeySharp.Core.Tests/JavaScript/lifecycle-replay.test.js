@@ -26,13 +26,13 @@ for (const stage of ["end", "idle"]) {
             } }
         });
         vm.runInContext(`(function(){${eventsModule}; globalThis.__MonkeySharpLifecycleEvents=createLifecycleEvents('document');})();`, context);
-        const source = fs.readFileSync(path.resolve(__dirname, `../../docs/compatibility/fixtures/lifecycle-${stage}.user.js`), "utf8");
+        const source = fs.readFileSync(path.resolve(__dirname, `../../scripts/compatibility/fixtures/lifecycle-${stage}.user.js`), "utf8");
         const payload = completePlan({ protocol: 2, documentId: "document", frameId: "main", runAt: stage === "end" ? "DocumentEnd" : "DocumentIdle", invocations: [{
             executionId: "execution", scriptKey: "script", capability: "capability", deliveryToken: "delivery", source, declaredGrants: ["GM_getValue"], grants: ["GM.getValue"], info: {}
         }] });
         vm.runInContext(template.replace("__MONKEYSHARP_PAYLOAD_BASE64__", Buffer.from(JSON.stringify(payload)).toString("base64")), context);
         const actual = await evidence;
-        const expected = JSON.parse(fs.readFileSync(path.resolve(__dirname, `../../docs/compatibility/evidence/tampermonkey-5.5.1-lifecycle-${stage}.json`), "utf8"));
+        const expected = JSON.parse(fs.readFileSync(path.resolve(__dirname, `../../scripts/compatibility/evidence/tampermonkey-5.5.1-lifecycle-${stage}.json`), "utf8"));
         assert.deepEqual(actual.events, expected.events);
         context.__MonkeySharpRuntime.endDocument("document");
         context.__MonkeySharpLifecycleEvents.dispose();

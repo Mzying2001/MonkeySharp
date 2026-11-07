@@ -13,6 +13,8 @@ MonkeySharp 3 是面向 CefSharp 嵌入式应用的用户脚本运行时。Core 
 | 编写或移植用户脚本 | [用户脚本使用指南](docs/usage-guide.zh-CN.md) |
 | 构建、打包或验证运行时 | [构建与测试](#构建与测试)，然后参阅[验证参考](docs/integration-reference.zh-CN.md#构建打包与验证) |
 
+[文档导航](docs/README.md) · [兼容性范围与证据](docs/compatibility/README.md)
+
 ## 软件包
 
 | 软件包 | 目标框架 | 用途 |
@@ -131,7 +133,7 @@ var host = new CefSharpUserScriptHostBuilder(repository)
 
 `@require` 和 `@resource` 由仓库的 `UserScriptPreparer` 在安装或更新激活前获取并校验。执行时跨 frame 复用已准备内容，支持离线重复执行。Demo 持久化这些版本并提供手动更新。摘要语法、预算和更新规则见[集成参考](docs/integration-reference.zh-CN.md#资源完整性与更新检查)。
 
-静态 `@webRequest` 在安装期编译、准备导航前激活；动态 `GM.webRequest(...)` 替换本执行规则，`[]` 撤销规则。范围与限制见 [P2 实施记录](docs/compatibility/p2-implementation.md)。
+静态 `@webRequest` 在安装期编译、准备导航前激活；动态 `GM.webRequest(...)` 替换本执行规则，`[]` 撤销规则。范围与限制见 [webRequest 范围与证据](docs/compatibility/README.md#historical-webrequest)。
 
 ## GM API 支持
 
@@ -191,7 +193,7 @@ host.Diagnostic += (_, diagnostic) =>
 
 ## 从 v1 迁移
 
-版本 3 的宿主服务契约不兼容旧源码，并替代了 `Injector`、`JScript`、`IDataStore` 和 WCF 桥接。保留 v1 数据时必须显式迁移存储键。类型对照及服务变更见[迁移说明](docs/integration-reference.zh-CN.md#迁移说明)。
+版本 3 的宿主服务契约不兼容旧源码，并替代了 `Injector`、`JScript`、`IDataStore` 和 WCF 桥接。保留 v1 数据时必须显式迁移存储键。当前的类型化存储及服务要求见[宿主服务契约](docs/integration-reference.zh-CN.md#宿主服务契约)。
 
 ## 构建与测试
 
@@ -206,7 +208,7 @@ node --test Mzying2001.MonkeySharp.Core.Tests/JavaScript/*.test.js
 
 使用 `-p:Platform=x86` 重复 .NET 命令；x86 配置会排除仅支持 x64 的 Demo 项目。测试其他受支持版本时，应向所有命令传入相同的 `CefSharpVersion` 属性。打包和真实 Chromium E2E 命令见[集成参考](docs/integration-reference.zh-CN.md#构建打包与验证)。
 
-CI 在 x64/x86 上覆盖 CefSharp `84.4.10`、`121.3.70` 和 `151.3.240`，运行 .NET/JavaScript 测试及真实 Chromium SmokeHost 门禁。WPF Demo 在三个版本的 x64 上设门禁。见[兼容性门禁详情](docs/integration-reference.zh-CN.md#chromium-兼容性脚本包)及 [P2 交付记录](docs/compatibility/p2-delivery.md)。
+CI 在 x64/x86 上覆盖 CefSharp `84.4.10`、`121.3.70` 和 `151.3.240`，运行 .NET/JavaScript 测试及真实 Chromium SmokeHost 门禁。WPF Demo 在三个版本的 x64 上设门禁。见[兼容性门禁详情](docs/integration-reference.zh-CN.md#chromium-兼容性脚本包)及 [验证说明](docs/compatibility/validation.md)。
 
 ## 许可证
 
