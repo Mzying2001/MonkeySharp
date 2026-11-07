@@ -251,10 +251,22 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                     true));
             }
 
+            if (!await _engine.IsInstallationActiveAsync(execution.Installation, cancellationToken).ConfigureAwait(false))
+                return Limit(ProtocolJson.Error(null, BridgeErrorCodes.SessionExpired, "The installation changed or was disabled.", true));
             var grants = execution.Installation.Definition.Metadata.Capabilities;
             var supported = SupportedApis().Where(api => (api == "GM.info" || grants.Contains(api)) &&
                 !(execution.Frame.ExecutionWorld == "isolated" && api == "GM.webRequest"));
             var compatibility = new Dictionary<string, object>();
+            using (var authorizationLifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, execution.Cancellation.Token))
+            {
+                var bootstrapMethods = new List<string>();
+                if (HasStorageCapability(grants)) bootstrapMethods.Add("GM.getValues");
+                if (HasResourceCapability(grants)) bootstrapMethods.Add("GM.getResourceText");
+                foreach (var method in bootstrapMethods)
+                    if (await AuthorizeAsync(new ApiAuthorizationRequest(execution.Installation, execution.Frame, method, null,
+                        "execution bootstrap", SupportedApis()), authorizationLifetime.Token).ConfigureAwait(false) != PermissionDecision.Allow)
+                        return Limit(ProtocolJson.Error(null, BridgeErrorCodes.PermissionDenied, "The host denied execution data preparation.", true));
+            }
             if (HasStorageCapability(grants))
             {
                 try
@@ -398,6 +410,8 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                 return Limit(ProtocolJson.Error(requestId, BridgeErrorCodes.MalformedMessage, "requestId must be a UUID."));
             if (!TryReadExecution(root, out var execution))
                 return Limit(ProtocolJson.Error(requestId, BridgeErrorCodes.SessionExpired, "The script execution session is not active."));
+            if (!await _engine.IsInstallationActiveAsync(execution.Installation, cancellationToken).ConfigureAwait(false))
+                return Limit(ProtocolJson.Error(requestId, BridgeErrorCodes.SessionExpired, "The installation changed or was disabled."));
             var method = ReadRequiredString(root, "method");
             if (execution.Frame.ExecutionWorld == "isolated" && method == "GM.webRequest")
                 return Limit(ProtocolJson.Error(requestId, BridgeErrorCodes.NotSupported, "Historical webRequest page-frame interception is not implemented for isolated contexts."));
@@ -409,12 +423,13 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                 return Limit(ProtocolJson.Error(requestId, beginError, "The request cannot be started."));
 
             var longRunningHttp = IsLongRunningHttpExecute(method, parameters);
-            using (var timeout = longRunningHttp ? null : new CancellationTokenSource(_options.RequestTimeout))
+            using (var timeout = longRunningHttp ? null : new CancellationTokenSource())
             using (var linked = CancellationTokenSource.CreateLinkedTokenSource(
                 RequestTokens(method, execution, pending, cancellationToken, timeout)))
             {
                 try
                 {
+                    if (method.StartsWith("runtime.", StringComparison.Ordinal)) timeout?.CancelAfter(_options.RequestTimeout);
                     if (method == "runtime.reportError")
                     {
                         HandleRuntimeError(execution, requestId, parameters);
@@ -490,10 +505,18 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                         ReadTarget(method, parameters, execution.Frame.Url),
                         Summarize(parameters),
                         SupportedApis());
-                    var decision = await _permissionPolicy.AuthorizeAsync(authorization, linked.Token).ConfigureAwait(false);
+                    PermissionDecision decision;
+                    using (var authorizationLifetime = CancellationTokenSource.CreateLinkedTokenSource(linked.Token, execution.Cancellation.Token))
+                    {
+                        decision = await AuthorizeAsync(authorization, authorizationLifetime.Token).ConfigureAwait(false);
+                        authorizationLifetime.Token.ThrowIfCancellationRequested();
+                    }
                     if (decision != PermissionDecision.Allow)
                         return Limit(ProtocolJson.Error(requestId, BridgeErrorCodes.PermissionDenied, "The host permission policy denied the request."));
+                    if (!await _engine.IsInstallationActiveAsync(execution.Installation, linked.Token).ConfigureAwait(false))
+                        return Limit(ProtocolJson.Error(requestId, BridgeErrorCodes.SessionExpired, "The installation changed while authorization was pending."));
 
+                    timeout?.CancelAfter(_options.RequestTimeout);
                     ApiResult result;
                     if (method == "GM.addValueChangeListener")
                         result = AddValueListener(execution, parameters);
@@ -571,15 +594,22 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             if ((method != "GM.download" && execution.Cancellation.IsCancellationRequested) ||
                 !execution.Installation.Definition.Metadata.Capabilities.Contains(method))
                 return false;
-            var authorization = new ApiAuthorizationRequest(
-                execution.Installation,
-                execution.Frame,
-                method,
-                target,
-                Summarize(parameters),
-                SupportedApis());
-            return await _permissionPolicy.AuthorizeAsync(authorization, cancellationToken)
-                .ConfigureAwait(false) == PermissionDecision.Allow;
+            if (!await _engine.IsInstallationActiveAsync(execution.Installation, cancellationToken).ConfigureAwait(false)) return false;
+            var canPrompt = !execution.Cancellation.IsCancellationRequested;
+            var authorization = new ApiAuthorizationRequest(execution.Installation, execution.Frame, method, target,
+                Summarize(parameters), SupportedApis(), canPrompt);
+            if (!canPrompt) return await AuthorizeAsync(authorization, cancellationToken).ConfigureAwait(false) == PermissionDecision.Allow;
+            using (var lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, execution.Cancellation.Token))
+                return await AuthorizeAsync(authorization, lifetime.Token).ConfigureAwait(false) == PermissionDecision.Allow;
+        }
+
+        private async Task<PermissionDecision> AuthorizeAsync(ApiAuthorizationRequest request, CancellationToken token)
+        {
+            if (!UserScriptPermissionTargets.IsDeclared(request)) return PermissionDecision.Deny;
+            var decision = await _permissionPolicy.AuthorizeAsync(request, token).ConfigureAwait(false);
+            if (decision == PermissionDecision.Prompt)
+                throw new BridgeProtocolException(BridgeErrorCodes.NotSupported, "The host must configure InteractiveUserScriptPermissionPolicy with a prompt or an explicit RejectUserScriptPermissionPrompt.");
+            return decision;
         }
 
         private static bool IsLongRunningHttpExecute(string method, JsonElement parameters)

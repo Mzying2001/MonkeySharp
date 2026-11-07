@@ -73,9 +73,11 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                 await values.SetAsync(preparedScript.ScriptKey.ToString(), "large", Mzying2001.MonkeySharp.Core.Storage.UserScriptValue.FromEncoded("s" + new string('v', 600000)), CancellationToken.None);
 
                 SmokeHttpDownloadService downloads = null;
+                using (var permissions = new SmokePermissionPolicy(otherFixture.Port))
                 {
                     using (var host = new CefSharpUserScriptHostBuilder(repository)
                         .UseValueStore(values)
+                        .UsePermissionPolicy(permissions)
                         .UseNotificationService(new SmokeNotificationService())
                         .UseTabService(new SmokeTabService())
                         .UseDownloadServiceFactory(http => downloads = new SmokeHttpDownloadService(fixture.Port, http))
@@ -99,7 +101,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                                 requestId = diagnostic.RequestId
                             }));
 
-                        using (var form = new SmokeForm(host, startUri, fixture, downloads))
+                        using (var form = new SmokeForm(host, startUri, fixture, downloads, otherFixture, permissions))
                             Application.Run(form);
                     }
                 }
@@ -206,7 +208,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
         private Dictionary<string, bool> _compatibilityResults;
         private readonly System.Windows.Forms.Timer _timeoutTimer;
 
-        public SmokeForm(CefSharpUserScriptHost host, Uri startUri, LocalHttpFixture fixture, SmokeHttpDownloadService downloads)
+        public SmokeForm(CefSharpUserScriptHost host, Uri startUri, LocalHttpFixture fixture, SmokeHttpDownloadService downloads, LocalHttpFixture otherFixture, SmokePermissionPolicy permissions)
         {
             _host = host ?? throw new ArgumentNullException(nameof(host));
             _startUri = startUri ?? throw new ArgumentNullException(nameof(startUri));
@@ -223,7 +225,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             // uninitialized browser and can register its bridge first.
             _host.Attach(_browser);
             _host.DocumentLifecycle += HostDocumentLifecycle;
-            _compatibility = new CompatibilitySuite(host, _browser, fixture, downloads);
+            _compatibility = new CompatibilitySuite(host, _browser, fixture, downloads, otherFixture, permissions);
             _browser.FrameLoadEnd += BrowserFrameLoadEnd;
             _browser.ConsoleMessage += (_, message) => Console.WriteLine(JsonSerializer.Serialize(new
             { type = "console", level = message.Level.ToString(), message = message.Message, source = message.Source, line = message.Line }));
@@ -412,7 +414,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             _timeoutTimer.Stop();
             await _host.DetachAsync(CancellationToken.None).ConfigureAwait(true);
             var success = _initialFixturePassed && _mainFrameLoads >= 2 && _childFrameLoads >= 1 && _contextReleased >= 1 &&
-                !_host.IsAttached && _compatibilityResults != null && _compatibilityResults.Count == 10 && _compatibilityResults.Values.All(value => value);
+                !_host.IsAttached && _compatibilityResults != null && _compatibilityResults.Count == 11 && _compatibilityResults.Values.All(value => value);
             object fixture = null;
             if (!string.IsNullOrEmpty(_initialFixtureJson))
             {
@@ -604,6 +606,14 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                         case "/compat/replay":
                             contentType = "text/html; charset=utf-8";
                             body = Encoding.UTF8.GetBytes("<!doctype html><html><head><script defer src='/compat/replay-defer'></script></head><body><img src='/compat/replay-image'></body></html>");
+                            break;
+                        case "/compat/permission-ok":
+                            body = Encoding.UTF8.GetBytes("permission-ok");
+                            break;
+                        case "/compat/permission-redirect":
+                            status = 302; statusText = "Found";
+                            headers.Add(new KeyValuePair<string, string>("Location", "http://127.0.0.1:" + OtherPort + "/compat/permission-denied"));
+                            body = new byte[0];
                             break;
                         case "/compat/csp":
                             contentType = "text/html; charset=utf-8";

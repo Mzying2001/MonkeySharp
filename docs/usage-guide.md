@@ -721,3 +721,5 @@ MonkeySharp behavior was checked against the [grant catalog](../Mzying2001.Monke
 
 
 The sandbox window privately replays cached DOMContentLoaded/load events after listener registration, using untrusted synthetic events as observed in the reference. Document-idle does not replay the earlier DOMContentLoaded event. Window listeners support once/removal/abort and are cleared with their execution; direct page DOM listeners remain user-owned. Raw source evaluation and inserted styles remain subject to page CSP. Isolated source/DOM and style effects have separate browser evidence; the adapter never enables whole-page CSP bypass.
+
+Permission prompts identify the installed script, capability and exact target origin. The Demo offers allow once, remember allow, or remember deny. Allow once covers the currently waiting same-scope batch only. Use the Permissions button to revoke an installation's remembered decisions; tabs reload so cached execution state cannot retain a revoked decision. Navigation closes obsolete waits. Neither an interactive allow nor a stored allow can override connect or Cookie URL declarations.

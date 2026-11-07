@@ -21,6 +21,8 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
         private readonly ChromiumWebBrowser _browser;
         private readonly LocalHttpFixture _fixture;
         private readonly SmokeHttpDownloadService _downloads;
+        private readonly LocalHttpFixture _otherFixture;
+        private readonly SmokePermissionPolicy _permissions;
         private readonly object _sync = new object();
         private readonly Dictionary<string, DocumentFrame> _frames = new Dictionary<string, DocumentFrame>();
         private readonly Dictionary<string, DocumentFrame> _isolatedFrames = new Dictionary<string, DocumentFrame>();
@@ -30,9 +32,10 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
         private DocumentFrame _context;
 
         public CompatibilitySuite(CefSharpUserScriptHost host, ChromiumWebBrowser browser,
-            LocalHttpFixture fixture, SmokeHttpDownloadService downloads)
+            LocalHttpFixture fixture, SmokeHttpDownloadService downloads, LocalHttpFixture otherFixture, SmokePermissionPolicy permissions)
         {
             _host = host; _browser = browser; _fixture = fixture; _downloads = downloads;
+            _otherFixture = otherFixture; _permissions = permissions;
             host.DocumentLifecycle += Lifecycle;
         }
 
@@ -62,6 +65,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             results["isolated"] = await RunCaseAsync("isolated", IsolatedAsync);
             results["replay"] = await RunCaseAsync("replay", ReplayAsync);
             results["csp"] = await RunCaseAsync("csp", CspAsync);
+            results["permissions"] = await RunCaseAsync("permissions", PermissionsAsync);
             results["frames"] = await RunCaseAsync("frames", FramesAsync);
             results["spaUrl"] = await RunCaseAsync("spaUrl", SpaAsync);
             results["download"] = await RunCaseAsync("download", DownloadAsync);
@@ -188,6 +192,17 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             Check("stylePolicyIntact", isolated.GetProperty("color").GetString() != "rgb(11, 22, 33)");
             Console.WriteLine(JsonSerializer.Serialize(new { type = "csp-observation", isolatedColor = isolated.GetProperty("color").GetString(),
                 rawSource = (await ReadAsync("document.documentElement.dataset.cspRaw === 'executed'")).Value.GetBoolean() }));
+        }
+
+        private async Task PermissionsAsync()
+        {
+            var before = _permissions.Prompts;
+            await NavigateAsync("/compat/permissions");
+            var result = await WaitResultAsync("globalThis.__permissions || null");
+            foreach (var name in new[] { "coalesced", "once", "redirectDenied", "rememberedDeny", "declarationDenied" }) Check(name, result.GetProperty(name).GetBoolean());
+            Check("promptScope", _permissions.Prompts - before == 4);
+            Check("noDeniedNetworkEffect", _otherFixture.RequestCount("/compat/permission-denied") == 0);
+            Check("allowedNetworkEffect", _fixture.RequestCount("/compat/permission-ok") == 3);
         }
 
         private void Lifecycle(object sender, DocumentLifecycleEventArgs args)

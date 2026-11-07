@@ -37,13 +37,14 @@ namespace Mzying2001.MonkeySharp.Core.Permissions
         /// <param name="target">The security-sensitive target, such as a URL or resource name.</param>
         /// <param name="parameterSummary">A non-sensitive summary of the request parameters.</param>
         /// <param name="hostCapabilities">The relevant capabilities available from the host.</param>
+        /// <param name="canPrompt">Whether the source document can still wait for interaction.</param>
         public ApiAuthorizationRequest(
             UserScriptInstallation installation,
             DocumentFrame frame,
             string method,
             string target,
             string parameterSummary,
-            IEnumerable<string> hostCapabilities)
+            IEnumerable<string> hostCapabilities, bool canPrompt = true)
         {
             Installation = installation ?? throw new ArgumentNullException(nameof(installation));
             Frame = frame ?? throw new ArgumentNullException(nameof(frame));
@@ -51,6 +52,7 @@ namespace Mzying2001.MonkeySharp.Core.Permissions
             Target = target;
             ParameterSummary = parameterSummary;
             HostCapabilities = new ReadOnlyCollection<string>(hostCapabilities.ToList());
+            CanPrompt = canPrompt;
         }
 
         /// <summary>Gets the requesting userscript installation.</summary>
@@ -70,6 +72,8 @@ namespace Mzying2001.MonkeySharp.Core.Permissions
 
         /// <summary>Gets the relevant capabilities available from the host.</summary>
         public IReadOnlyList<string> HostCapabilities { get; }
+        /// <summary>Gets whether the originating document still permits an interactive wait.</summary>
+        public bool CanPrompt { get; }
     }
 
     /// <summary>

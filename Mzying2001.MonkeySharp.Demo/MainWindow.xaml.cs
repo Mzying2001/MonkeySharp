@@ -2,6 +2,7 @@ using Mzying2001.MonkeySharp.Demo.Runtime;
 using Mzying2001.MonkeySharp.Demo.ViewModels;
 using Mzying2001.MonkeySharp.Demo.Views;
 using System;
+using System.Threading;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.ComponentModel;
@@ -73,6 +74,30 @@ namespace Mzying2001.MonkeySharp.Demo
                 _manager.Show();
             }
             else _manager.Activate();
+        }
+
+        private async void OpenPermissions(object sender, RoutedEventArgs args)
+        {
+            var entries = await _runtime.PermissionDecisions.ListAsync(CancellationToken.None);
+            var panel = new StackPanel { Margin = new Thickness(18) };
+            panel.Children.Add(new TextBlock { Text = "已记忆的脚本权限", FontSize = 18, FontWeight = FontWeights.SemiBold });
+            var window = new Window { Title = "MonkeySharp 权限", Owner = this, Width = 650, Height = 450,
+                Content = new ScrollViewer { Content = panel }, WindowStartupLocation = WindowStartupLocation.CenterOwner };
+            foreach (var group in entries.GroupBy(entry => entry.ScriptKey))
+            {
+                var key = group.Key;
+                panel.Children.Add(new TextBlock { Text = key, Margin = new Thickness(0, 16, 0, 4) });
+                foreach (var entry in group)
+                {
+                    var decision = await _runtime.PermissionDecisions.GetAsync(entry, CancellationToken.None);
+                    panel.Children.Add(new TextBlock { Text = entry.Kind + " · " + entry.Target + " · " + decision, TextWrapping = TextWrapping.Wrap });
+                }
+                var revoke = new Button { Content = "撤销此脚本的记忆决定", HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 6, 0, 0) };
+                revoke.Click += async (_, __) => { await _runtime.RevokePermissionsAsync(key); window.Close(); };
+                panel.Children.Add(revoke);
+            }
+            if (entries.Count == 0) panel.Children.Add(new TextBlock { Text = "没有已记忆的决定。", Margin = new Thickness(0, 15, 0, 0) });
+            window.Show();
         }
         private void AddressKeyDown(object sender, KeyEventArgs args)
         { if (args.Key == Key.Enter) { _runtime.MainWindow.NavigateCommand.Execute(null); args.Handled = true; } }

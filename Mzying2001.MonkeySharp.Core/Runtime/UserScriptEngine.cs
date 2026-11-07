@@ -240,6 +240,16 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
             }
         }
 
+        internal async Task<bool> IsInstallationActiveAsync(UserScriptInstallation installation, CancellationToken token)
+        {
+            try
+            {
+                var current = await _repository.GetAsync(installation.ScriptKey, token).ConfigureAwait(false);
+                return current.IsEnabled && current.RevisionId == installation.RevisionId;
+            }
+            catch (KeyNotFoundException) { return false; }
+        }
+
         private async Task<InjectionPlan> ProcessLifecycleCoreAsync(
             DocumentLifecycleEventArgs lifecycle,
             ICollection<UserScriptDiagnostic> diagnostics,

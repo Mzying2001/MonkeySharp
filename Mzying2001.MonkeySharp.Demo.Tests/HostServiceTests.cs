@@ -22,6 +22,37 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
 {
     public sealed class HostServiceTests
     {
+        [Fact]
+        public Task PermissionWindowUsesExplicitChoicesAndClosesOnCancellation() => OnDispatcher(async () =>
+        {
+            var repository = new Mzying2001.MonkeySharp.Core.Repository.InMemoryUserScriptRepository();
+            var script = await repository.InstallAsync(PersistenceTests.Source, "test", true, CancellationToken.None);
+            var frame = new Mzying2001.MonkeySharp.Core.Runtime.DocumentFrame("browser", "document", "main", new Uri("https://example.com/"), true,
+                Mzying2001.MonkeySharp.Core.Runtime.TimingGuarantee.BestEffortDocumentStart);
+            var request = new Mzying2001.MonkeySharp.Core.Permissions.ApiAuthorizationRequest(script, frame, "GM.download", "https://example.com/file", "summary", new[] { "GM.download" });
+            var scope = Mzying2001.MonkeySharp.Core.Permissions.UserScriptPermissionScope.From(request);
+            var prompt = new WpfPermissionPrompt(Dispatcher.CurrentDispatcher);
+            prompt.Opened += dialog =>
+            {
+                var panel = (StackPanel)dialog.Content;
+                var buttons = panel.Children.OfType<WrapPanel>().Single().Children.OfType<Button>().ToArray();
+                Assert.Equal(3, buttons.Length);
+                buttons.Single(button => (string)button.Content == "允许一次").RaiseEvent(new System.Windows.RoutedEventArgs(Button.ClickEvent));
+            };
+            var choice = await prompt.PromptAsync(request, scope, CancellationToken.None);
+            Assert.Equal(Mzying2001.MonkeySharp.Core.Permissions.PermissionDecision.Allow, choice.Decision);
+            Assert.False(choice.Remember);
+            using (var canceled = new CancellationTokenSource())
+            {
+                var second = new WpfPermissionPrompt(Dispatcher.CurrentDispatcher);
+                System.Windows.Window opened = null;
+                second.Opened += dialog => { opened = dialog; canceled.Cancel(); };
+                await Assert.ThrowsAnyAsync<OperationCanceledException>(() => second.PromptAsync(request, scope, canceled.Token));
+                await Dispatcher.CurrentDispatcher.InvokeAsync(() => { });
+                Assert.False(opened.IsVisible);
+            }
+        });
+
         [Theory]
         [InlineData(0, 1)]
         [InlineData(1, 0)]

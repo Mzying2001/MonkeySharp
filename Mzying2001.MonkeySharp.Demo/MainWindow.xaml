@@ -117,6 +117,7 @@
                         </ContentControl>
                     </StackPanel>
                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                        <Button Content="权限" Margin="0,0,4,0" Click="OpenPermissions" />
                         <Button Content="脚本管理器" Margin="0,0,4,0" Command="{Binding ScriptManagerCommand}" />
                         <Menu Background="Transparent" VerticalAlignment="Center">
                             <MenuItem Header="脚本菜单" ItemsSource="{Binding SelectedTab.MenuCommands}">

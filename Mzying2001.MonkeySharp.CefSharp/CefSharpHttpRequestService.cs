@@ -187,7 +187,8 @@ namespace Mzying2001.MonkeySharp.CefSharp
             private IUrlRequest _urlRequest;
             private IRequest _cefRequest;
             private Uri _currentUrl;
-            private Timer _timeout;
+            private PausableRequestTimeout _timeout;
+            private CancellationTokenRegistration _timeoutRegistration;
             private CancellationTokenRegistration _cancellationRegistration;
             private int _redirectCount;
             private int _completed;
@@ -221,9 +222,12 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 _cancellationRegistration = _cancellation.Token.Register(() =>
                     Fail(new OperationCanceledException(_cancellation.Token), true));
                 if (_request.Timeout.HasValue)
-                    _timeout = new Timer(_ => Fail(new BridgeProtocolException(
-                        BridgeErrorCodes.Timeout, "The HTTP request timed out."), true), null,
-                        _request.Timeout.Value, Timeout.InfiniteTimeSpan);
+                {
+                    _timeout = new PausableRequestTimeout(_request.Timeout.Value);
+                    _timeoutRegistration = _timeout.Token.Register(() => Fail(new BridgeProtocolException(
+                        BridgeErrorCodes.Timeout, "The HTTP request timed out."), true));
+                    _timeout.Start();
+                }
                 QueueUi(() => BeginOnUi(_request.Url));
             }
 
@@ -331,12 +335,14 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 if (target == null || (target.Scheme != Uri.UriSchemeHttp && target.Scheme != Uri.UriSchemeHttps))
                     throw new BridgeProtocolException(BridgeErrorCodes.PermissionDenied, "The redirect target is invalid.");
                 Task<bool> authorization;
+                var waiting = _timeout?.Pause();
                 try { authorization = _request.RedirectAllowed(target, _cancellation.Token); }
-                catch (Exception exception) { throw MapException(exception); }
+                catch (Exception exception) { waiting?.Dispose(); throw MapException(exception); }
                 if (authorization == null)
                     throw new InvalidOperationException("The redirect authorization callback returned no task.");
                 authorization.ContinueWith(task => QueueUi(() =>
                 {
+                    waiting?.Dispose();
                     if (IsCompleted) return;
                     if (task.IsCanceled)
                     {
@@ -543,6 +549,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             private void Fail(Exception exception, bool abort)
             {
                 if (Interlocked.Exchange(ref _completed, 1) != 0) return;
+                _timeoutRegistration.Dispose();
                 _timeout?.Dispose();
                 _cancellationRegistration.Dispose();
                 _cancellation.Dispose();
@@ -556,6 +563,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             private void Complete(UserScriptHttpResponse response)
             {
                 if (Interlocked.Exchange(ref _completed, 1) != 0) return;
+                _timeoutRegistration.Dispose();
                 _timeout?.Dispose();
                 _cancellationRegistration.Dispose();
                 _cancellation.Dispose();

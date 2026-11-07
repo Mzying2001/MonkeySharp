@@ -81,7 +81,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         {
             private readonly FileDownloadService _owner;
             private readonly DownloadRequest _request;
-            private readonly CancellationTokenSource _deadline = new CancellationTokenSource();
+            private readonly PausableRequestTimeout _deadline;
             private readonly CancellationTokenSource _cancellation;
             private readonly TaskCompletionSource<object> _completion = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
             private readonly object _sync = new object();
@@ -96,6 +96,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             internal Operation(FileDownloadService owner, DownloadRequest request, CancellationToken cancellationToken)
             {
                 _owner = owner; _request = request;
+                _deadline = new PausableRequestTimeout(request.Timeout ?? TimeSpan.FromMinutes(10));
                 _cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _deadline.Token);
             }
             public string DownloadId { get; } = Guid.NewGuid().ToString("N");
@@ -110,7 +111,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             public void Start()
             {
                 if (Interlocked.Exchange(ref _started, 1) != 0) return;
-                _deadline.CancelAfter(_request.Timeout ?? TimeSpan.FromMinutes(10));
+                _deadline.Start();
                 _ = Task.Run(RunAsync);
             }
 
@@ -141,7 +142,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                     _output = new FileStream(partial, FileMode.CreateNew, FileAccess.Write, FileShare.None, 64 * 1024);
                     var request = new UserScriptHttpRequest("GET", _request.Url,
                         _request.Headers.ToDictionary(item => item.Key, item => item.Value), null, null, null,
-                        _request.RedirectAllowed, new UserScriptHttpRequestOptions { Anonymous = _request.Anonymous });
+                        async (target, token) => { using (_deadline.Pause()) return await _request.RedirectAllowed(target, token).ConfigureAwait(false); }, new UserScriptHttpRequestOptions { Anonymous = _request.Anonymous });
                     var network = _owner._http.SendAsync(request, this, _cancellation.Token);
                     var response = await network.Completion.ConfigureAwait(false);
                     if (_responseError != null) throw _responseError;

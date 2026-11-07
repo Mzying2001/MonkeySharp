@@ -35,6 +35,7 @@ namespace Mzying2001.MonkeySharp.Demo.Persistence
                     {
                         // Additive migration preserves existing source, values and tab state.
                         Execute(connection, "CREATE TABLE IF NOT EXISTS prepared_revisions(script_key TEXT PRIMARY KEY REFERENCES scripts(script_key) ON DELETE CASCADE, payload TEXT NOT NULL);");
+                        Execute(connection, "CREATE TABLE IF NOT EXISTS permission_decisions(script_key TEXT NOT NULL,kind TEXT NOT NULL,target TEXT NOT NULL,decision INTEGER NOT NULL CHECK(decision IN (0,1)),PRIMARY KEY(script_key,kind,target));");
                         return;
                     }
                     using (var transaction = connection.BeginTransaction())
@@ -50,6 +51,7 @@ CREATE TABLE IF NOT EXISTS script_values(script_key TEXT NOT NULL,value_key TEXT
 CREATE TABLE IF NOT EXISTS tab_states(script_key TEXT NOT NULL,tab_id TEXT NOT NULL,json_value TEXT NOT NULL,
  updated_at TEXT NOT NULL,PRIMARY KEY(script_key,tab_id));
 CREATE TABLE IF NOT EXISTS prepared_revisions(script_key TEXT PRIMARY KEY REFERENCES scripts(script_key) ON DELETE CASCADE, payload TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS permission_decisions(script_key TEXT NOT NULL,kind TEXT NOT NULL,target TEXT NOT NULL,decision INTEGER NOT NULL CHECK(decision IN (0,1)),PRIMARY KEY(script_key,kind,target));
 PRAGMA user_version=2;";
                         command.ExecuteNonQuery();
                         transaction.Commit();

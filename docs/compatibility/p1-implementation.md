@@ -9,7 +9,7 @@ Date: 2026-11-07. Work proceeds through steps 7–14, with one validated commit 
 | 9. Synchronous storage and listeners | Complete | [Storage timing reference](evidence/tampermonkey-5.5.1-storage-timing.json), [Mirror validation](evidence/storage-mirror-p1.json) |
 | 10. Matching and metadata conditions | Complete | [URL reference](evidence/tampermonkey-5.5.1-matching-conditions.json), [Execution conditions matrix](evidence/execution-conditions-p1.json) |
 | 11. Execution worlds and lifecycle | Complete within verified scope | [World/lifecycle matrix](evidence/execution-worlds-p1.json), [explicit limits](execution-worlds.md) |
-| 12. Authorization prompts | Pending | — |
+| 12. Authorization prompts | Complete | [Permission decision/interaction matrix](evidence/permissions-p1.json) |
 | 13. XHR and binary downloads | Pending | — |
 | 14. DOM, log, tabs and windows | Pending | — |
 
@@ -66,3 +66,11 @@ The runtime privately replays cached window lifecycle events, matching the origi
 Validation: 279 Core + 44 adapter + 40 Demo tests at 84/121 x64, 105 JS tests, ten real browser compatibility cases in all six SmokeHost/CDP combinations, and 84/121 x64 WPF. A focused security review completed context research, data-flow assessment and mandatory filtering; no high-confidence HIGH/MEDIUM finding was retained. [Review table](execution-security-review.md).
 
 The [execution record](execution-worlds.md) explicitly excludes guaranteed full-GM start, unsupported OOPIF routing, transparent BFCache restoration, isolated child-frame native manual menu mapping and isolated historical page-frame webRequest interception. Unsupported combinations fail or revoke rather than using a wrong world; these capabilities are not counted as passed.
+
+## Step 12
+
+Authorization now combines declaration checks, explicit host policy, exact remembered scopes and asynchronous prompts. Host Allow/Deny are authoritative; Prompt is resolved through the shared coordinator. Missing resolution is a host configuration error, and non-interactive hosts explicitly configure the rejecting prompt. XHR connect, Cookie match/include and download policy remain separate contracts; consent cannot widen declarations. Current installation revision/enabled state is checked before and after authorization, preventing an obsolete waiting request from producing effects.
+
+The coordinator merges currently waiting requests of the same installation/capability/origin. Allow-once is not stored and cannot authorize later requests. Remembered choices use no URL credentials/path/query; SQLite decisions retain installation identity and are independently revocable. One canceled waiter does not dismiss other live requests; navigation/all-waiter cancellation closes obsolete interaction. Redirects use the same checks. Authorization waits do not consume generic request deadlines, and transfer/download budgets pause during redirect authorization and resume their remaining active time.
+
+Demo supplies actual asynchronous WPF allow-once/remember-allow/remember-deny windows and a Permissions UI for script-scoped revocation. Revocation cancels pending interactions and reloads execution state. The E2E drives real window buttons; SQLite tests verify persistence and exact isolation by installation, kind, origin/port and revocation. The real browser case proves coalescing, a second prompt after allow-once, denied redirects, remembered denial, connect rejection before prompting and zero denied-target server requests, with a 400 ms permission wait exceeding a 150 ms active transfer budget.

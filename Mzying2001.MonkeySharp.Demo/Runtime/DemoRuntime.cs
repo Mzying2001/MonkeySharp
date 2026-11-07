@@ -25,6 +25,9 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
         private SqliteDatabase _database;
         private SqliteUserScriptValueStore _values;
         private SqliteTabStateService _tabStates;
+        private InteractiveUserScriptPermissionPolicy _permissions;
+        public SqlitePermissionDecisionStore PermissionDecisions { get; private set; }
+        public WpfPermissionPrompt PermissionPrompt { get; private set; }
         private bool _cefInitialized;
         private bool _disposed;
         private DemoRuntime(AppDataPaths paths, Dispatcher dispatcher) { Paths = paths; _dispatcher = dispatcher; }
@@ -53,6 +56,9 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                 runtime._values = new SqliteUserScriptValueStore(runtime._database);
                 runtime._tabStates = new SqliteTabStateService(runtime._database);
                 runtime.Updates = new UserScriptUpdateService(runtime.Repository, runtime.Content);
+                runtime.PermissionDecisions = new SqlitePermissionDecisionStore(runtime._database);
+                runtime.PermissionPrompt = new WpfPermissionPrompt(dispatcher);
+                runtime._permissions = new InteractiveUserScriptPermissionPolicy(new SensitiveUserScriptPermissionsPolicy(), runtime.PermissionDecisions, runtime.PermissionPrompt);
                 await dispatcher.InvokeAsync(() =>
                 {
                     CefSharpSettings.WcfEnabled = false;
@@ -85,7 +91,7 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
             if (_disposed) throw new ObjectDisposedException(nameof(DemoRuntime));
             DownloadService downloads = null;
             var host = new CefSharpUserScriptHostBuilder(Repository)
-                .UseValueStore(_values).UsePermissionPolicy(new AllowDeclaredPermissionsPolicy())
+                .UseValueStore(_values).UsePermissionPolicy(_permissions)
                 .UseMenuService(new WpfMenuService(tab, _dispatcher))
                 .UseNotificationService(new WpfNotificationService(_dispatcher, Content, MainWindow, tab))
                 .UseClipboardService(new WpfClipboardService(_dispatcher))
@@ -121,6 +127,13 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
             }));
         }
 
+        public async Task RevokePermissionsAsync(string scriptKey = null)
+        {
+            _permissions.CancelPending();
+            await PermissionDecisions.RevokeAsync(scriptKey, CancellationToken.None);
+            await _dispatcher.InvokeAsync(() => { foreach (var tab in MainWindow.Tabs.ToArray()) tab.Browser?.Reload(); });
+        }
+
         public async Task ShutdownAsync()
         {
             if (_disposed) return;
@@ -128,6 +141,7 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
             if (Repository != null) Repository.Changed -= RepositoryChanged;
             if (MainWindow != null) await _dispatcher.InvokeAsync(MainWindow.CloseAll);
             foreach (var scope in _tabs.ToArray()) await scope.DisposeAsync();
+            _permissions?.Dispose();
             Content?.Dispose();
             _values?.Dispose();
             _database?.Dispose();

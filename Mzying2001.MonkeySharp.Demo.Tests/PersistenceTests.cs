@@ -16,6 +16,28 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
     public sealed class PersistenceTests
     {
         [Fact]
+        public async Task RememberedPermissionDecisionsPreserveExactScopesAndCanBeRevoked()
+        {
+            using (var fixture = await Fixture.Create())
+            {
+                var store = new SqlitePermissionDecisionStore(fixture.Database);
+                var first = new Mzying2001.MonkeySharp.Core.Permissions.UserScriptPermissionScope("installation-one", "GM.xmlHttpRequest", "https://example.com");
+                var other = new Mzying2001.MonkeySharp.Core.Permissions.UserScriptPermissionScope("installation-two", "GM.xmlHttpRequest", "https://example.com");
+                await store.SetAsync(first, Mzying2001.MonkeySharp.Core.Permissions.PermissionDecision.Allow, CancellationToken.None);
+                await store.SetAsync(other, Mzying2001.MonkeySharp.Core.Permissions.PermissionDecision.Deny, CancellationToken.None);
+                var reopened = new SqlitePermissionDecisionStore(fixture.Database);
+                Assert.Equal(Mzying2001.MonkeySharp.Core.Permissions.PermissionDecision.Allow, await reopened.GetAsync(first, CancellationToken.None));
+                Assert.Null(await reopened.GetAsync(new Mzying2001.MonkeySharp.Core.Permissions.UserScriptPermissionScope(first.ScriptKey, "GM.cookie", first.Target), CancellationToken.None));
+                Assert.Null(await reopened.GetAsync(new Mzying2001.MonkeySharp.Core.Permissions.UserScriptPermissionScope(first.ScriptKey, first.Kind, "https://example.com:8443"), CancellationToken.None));
+                await reopened.RevokeAsync(first.ScriptKey, CancellationToken.None);
+                Assert.Null(await store.GetAsync(first, CancellationToken.None));
+                Assert.Equal(Mzying2001.MonkeySharp.Core.Permissions.PermissionDecision.Deny, await store.GetAsync(other, CancellationToken.None));
+                await reopened.RevokeAsync(null, CancellationToken.None);
+                Assert.Empty(await reopened.ListAsync(CancellationToken.None));
+            }
+        }
+
+        [Fact]
         public async Task AtomicValueBatchRollsBackAllKeysAndSequenceOnSqliteFailure()
         {
             using (var fixture = await Fixture.Create())

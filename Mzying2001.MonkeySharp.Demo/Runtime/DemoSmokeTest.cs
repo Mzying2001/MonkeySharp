@@ -21,6 +21,14 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
     {
         internal static async Task RunAsync(DemoRuntime runtime, Dictionary<string, bool> checks)
         {
+            var permissionPrompts = 0;
+            runtime.PermissionPrompt.Opened += dialog =>
+            {
+                permissionPrompts++;
+                var panel = (StackPanel)dialog.Content;
+                var buttons = panel.Children.OfType<WrapPanel>().Single();
+                buttons.Children.OfType<Button>().Single(button => (string)button.Content == "记忆允许").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            };
             using (var fixture = new LocalHttpFixture())
             {
                 var source = Script.Replace("__BASE__", fixture.BaseUrl);
@@ -34,6 +42,8 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                 var primary = runtime.MainWindow.NewTab(fixture.BaseUrl + "/page?primary");
                 await WaitAsync(async () => await EvaluateBoolean(primary, "!!(window.__demo && window.__demo.ready)"));
                 await WaitAsync(() => Task.FromResult(string.Equals(primary.IconUrl, fixture.BaseUrl + "/favicon.ico", StringComparison.OrdinalIgnoreCase)));
+                checks["permissionPrompt"] = permissionPrompts > 0;
+                checks["permissionRemembered"] = (await runtime.PermissionDecisions.ListAsync(CancellationToken.None)).Any(scope => scope.ScriptKey == installation.ScriptKey.ToString());
                 checks["storageResourcesXhrCookieWebRequest"] = await EvaluateBoolean(primary,
                     "window.__demo.storage && window.__demo.resources && window.__demo.xhr && window.__demo.cookie && window.__demo.webRequest");
                 checks["domAndInfo"] = await EvaluateBoolean(primary, "window.__demo.dom && window.__demo.info");

@@ -156,7 +156,7 @@ ON CONFLICT(script_key) DO UPDATE SET source_origin=excluded.source_origin,is_en
                     using (var command = connection.CreateCommand())
                     {
                         command.Transaction = transaction;
-                        command.CommandText = "DELETE FROM scripts WHERE script_key=$key; DELETE FROM script_values WHERE script_key=$key; DELETE FROM tab_states WHERE script_key=$key;";
+                        command.CommandText = "DELETE FROM scripts WHERE script_key=$key; DELETE FROM script_values WHERE script_key=$key; DELETE FROM tab_states WHERE script_key=$key; DELETE FROM permission_decisions WHERE script_key=$key;";
                         command.Parameters.AddWithValue("$key", scriptKey.ToString());
                         command.ExecuteNonQuery();
                         cancellationToken.ThrowIfCancellationRequested();

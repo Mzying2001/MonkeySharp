@@ -1045,7 +1045,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 var repository = new InMemoryUserScriptRepository();
                 var grantLines = string.Join("\n", grants.Select(item => "// @grant " + item));
                 var source = MetadataAndMatchingTests.Script(
-                    "// @name bridge\n// @match https://example.com/*\n// @run-at document-end\n" + grantLines,
+                    "// @name bridge\n// @match https://example.com/*\n// @connect example.com\n// @run-at document-end\n" + grantLines,
                     "window.bridgeTest = \"'</script>\";");
                 await repository.InstallAsync(source, "test", true, CancellationToken.None);
                 var engine = new UserScriptEngine(repository);
@@ -1066,7 +1066,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 var repository = new InMemoryUserScriptRepository();
                 var grantLines = string.Join("\n", grants.Select(item => "// @grant " + item));
                 var source = MetadataAndMatchingTests.Script(
-                    "// @name bridge\n// @match https://example.com/*\n// @run-at document-end\n" + grantLines,
+                    "// @name bridge\n// @match https://example.com/*\n// @connect example.com\n// @run-at document-end\n" + grantLines,
                     "window.bridgeTest = \"'</script>\";");
                 await repository.InstallAsync(source, "test", true, CancellationToken.None);
                 var engine = new UserScriptEngine(repository);

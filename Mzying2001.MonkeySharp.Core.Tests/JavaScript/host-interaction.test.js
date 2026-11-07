@@ -61,6 +61,27 @@ test('early notification close before start acknowledgment settles false once', 
     assert.equal(h.requests.at(-1).params.title, 'title');
 });
 
+test('tag replacements preserve call order across delayed authorization acknowledgements', async () => {
+    let acknowledge;
+    let oldId;
+    const h = await install((request, notify) => {
+        if (request.method !== 'GM.notification') return;
+        if (request.params.title === 'old') {
+            oldId = request.params.clientId;
+            return new Promise(resolve => { acknowledge = resolve; });
+        }
+        notify('notification-done', { clientId: oldId, clicked: false });
+        notify('notification-done', { clientId: request.params.clientId, clicked: true });
+    });
+    const old = h.GM.notification({ text: 'old', title: 'old', tag: 'same' });
+    const replacement = h.GM.notification({ text: 'new', title: 'new', tag: 'same' });
+    assert.deepEqual(h.requests.map(request => request.params.title), ['old']);
+    acknowledge();
+    assert.equal(await old, false);
+    assert.equal(await replacement, true);
+    assert.deepEqual(h.requests.map(request => request.params.title), ['old', 'new']);
+});
+
 test('menu updates are serialized, keep IDs and remove returns undefined', async () => {
     const h = await install();
     let first = 0, updated = 0;

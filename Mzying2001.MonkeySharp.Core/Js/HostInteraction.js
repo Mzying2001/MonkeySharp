@@ -147,10 +147,17 @@
                 const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
                 const state = { details, clicked: false, terminal: false, resolve, reject };
                 record.notificationHandlers.set(clientId, state);
-                call(record, "GM.notification", { clientId, title: details.title || null, text: details.text || null,
+                const start = () => call(record, "GM.notification", { clientId, title: details.title || null, text: details.text || null,
                     imageUrl: details.imageUrl || details.image || null, tag: details.tag || null, url: details.url || null,
                     highlight: Boolean(details.highlight), silent: Boolean(details.silent), timeout: details.timeout
-                }).catch(error => { if (!state.terminal) { state.terminal = true; record.notificationHandlers.delete(clientId); reject(error); } });
+                });
+                const previous = details.tag && record.notificationTails.get(details.tag);
+                const started = previous ? previous.then(start) : start();
+                const acknowledged = started.catch(error => { if (!state.terminal) { state.terminal = true; record.notificationHandlers.delete(clientId); reject(error); } });
+                if (details.tag) {
+                    record.notificationTails.set(details.tag, acknowledged);
+                    acknowledged.finally(() => { if (record.notificationTails.get(details.tag) === acknowledged) record.notificationTails.delete(details.tag); });
+                }
                 return promise;
             };
             const setClipboard = function (record, text, info, callback) {

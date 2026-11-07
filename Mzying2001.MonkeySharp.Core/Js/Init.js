@@ -186,6 +186,7 @@
                     xhrHandlers: new Map(),
                     downloadHandlers: new Map(),
                     notificationHandlers: new Map(),
+                    notificationTails: new Map(),
                     tabHandlers: [],
                     webRequestHandlers: new Map(),
                     mutationTail: Promise.resolve(),
