@@ -87,6 +87,59 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             await Assert.ThrowsAsync<BridgeProtocolException>(() => provider.InvokeAsync(Context(installation, new { operation = "addListener" }), CancellationToken.None));
         }
 
+        [Fact]
+        public async Task CanonicalPartitionFilterIsAppliedAfterAnUnfilteredBackendResponse()
+        {
+            var installation = await Install();
+            var service = new PartitionedService();
+            using var provider = new CookieApiProvider(service);
+            var listed = await provider.InvokeAsync(Context(installation, new { details = new { partitionKey = new { topLevelSite = "https://sub.top-a.test:9443/input" } } }), CancellationToken.None);
+            using var document = JsonDocument.Parse(listed.Json);
+            Assert.Equal("https://sub.top-a.test:9443/input", service.OriginalKey.TopLevelSite);
+            Assert.Single(document.RootElement.EnumerateArray());
+            Assert.Equal("a", document.RootElement[0].GetProperty("value").GetString());
+            Assert.Equal("https://top-a.test", document.RootElement[0].GetProperty("partitionKey").GetProperty("topLevelSite").GetString());
+            var all = await provider.InvokeAsync(Context(installation, new { details = new { partitionKey = new { } } }), CancellationToken.None);
+            Assert.Equal(3, JsonDocument.Parse(all.Json).RootElement.GetArrayLength());
+            var normal = await provider.InvokeAsync(Context(installation, new { details = new { } }), CancellationToken.None);
+            Assert.Single(JsonDocument.Parse(normal.Json).RootElement.EnumerateArray());
+        }
+
+        [Fact]
+        public async Task SecurePartitionMutationsUseTheNormalizedIdentityAndPreserveVoidResults()
+        {
+            var installation = await Install();
+            var service = new PartitionedService();
+            using var provider = new CookieApiProvider(service);
+            await Assert.ThrowsAsync<BridgeProtocolException>(() => provider.InvokeAsync(Context(installation,
+                new { operation = "set", details = new { name = "sid", value = "a", partitionKey = new { topLevelSite = "https://top-a.test" } } }), CancellationToken.None));
+            Assert.Null(service.Mutation);
+            var result = await provider.InvokeAsync(Context(installation, new { operation = "set", details = new {
+                name = "sid", value = "a", secure = true, partitionKey = new { topLevelSite = "https://sub.top-a.test" } } }), CancellationToken.None);
+            Assert.Equal(ApiResult.Undefined.Json, result.Json);
+            Assert.Equal("https://top-a.test", service.Mutation.PartitionKey.TopLevelSite);
+            Assert.True(service.Mutation.PartitionKey.HasCrossSiteAncestor);
+            await Assert.ThrowsAsync<BridgeProtocolException>(() => provider.InvokeAsync(Context(installation,
+                new { details = new { partitionKey = new { topLevelSite = "file:///site" } } }), CancellationToken.None));
+        }
+
+        private sealed class PartitionedService : IPartitionedCookieService
+        {
+            public UserScriptCookiePartitionKey OriginalKey;
+            public UserScriptCookieMutation Mutation;
+            public Task<UserScriptCookiePartitionKey> NormalizePartitionKeyAsync(UserScriptCookiePartitionKey key, Uri url, CookiePartitionOperation operation, CancellationToken token)
+            {
+                OriginalKey = key;
+                return Task.FromResult(key.TopLevelSite == null ? key : new UserScriptCookiePartitionKey("https://top-a.test", operation == CookiePartitionOperation.List ? key.HasCrossSiteAncestor : (bool?)true));
+            }
+            public Task<IReadOnlyList<UserScriptCookie>> ListAsync(UserScriptCookieQuery query, CancellationToken token) => Task.FromResult<IReadOnlyList<UserScriptCookie>>(new[] {
+                new UserScriptCookie("sid", "plain", "example.com", "/", secure:true, hostOnly:true),
+                new UserScriptCookie("sid", "a", "example.com", "/", secure:true, hostOnly:true, partitionKey:new UserScriptCookiePartitionKey("https://top-a.test", true)),
+                new UserScriptCookie("sid", "b", "example.com", "/", secure:true, hostOnly:true, partitionKey:new UserScriptCookiePartitionKey("https://top-b.test", true)) });
+            public Task<UserScriptCookie> SetAsync(UserScriptCookieMutation mutation, CancellationToken token) { Mutation = mutation; return Task.FromResult<UserScriptCookie>(null); }
+            public Task<bool> DeleteAsync(UserScriptCookieMutation mutation, CancellationToken token) { Mutation = mutation; return Task.FromResult(true); }
+        }
+
         private static Task<UserScriptInstallation> Install() => new InMemoryUserScriptRepository().InstallAsync(
             MetadataAndMatchingTests.Script("// @name cookie\n// @match https://*.example.com/*\n// @grant GM.cookie"), "test", true, CancellationToken.None);
         private static ApiInvocationContext Context(UserScriptInstallation installation, object value)

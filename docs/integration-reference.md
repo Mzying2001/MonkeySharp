@@ -98,13 +98,37 @@ Request/response bodies and staged downloads default to a 256 MiB total limit (`
 
 Long-running `execute` and waiting stream `readBody` operations are exempt from `BridgeOptions.RequestTimeout`; other session operations use the ordinary timeout. All session requests, including `execute`, count toward `MaxPendingRequestsPerDocument`. The HTTP request's own `timeout` remains separate, except in `fetch` mode.
 
-`proxy`, `cookiePartition`, and synchronous requests return `MSP006_NOT_SUPPORTED`. Partitioned-cookie keys are browser-extension manager state that the public CefSharp request-context API does not expose. The same code is used by modern and legacy XHR input validation.
+`proxy`, `cookiePartition`, and synchronous requests return `MSP006_NOT_SUPPORTED`. Partition CRUD uses CDP, but the public IRequest surface cannot choose the trusted top-level partition for a URLRequest. The same code is used by modern and legacy XHR input validation.
 
 ### Cookies
 
-The default service uses the attached browser's shared CDP session and actual RequestContext. Core checks grants, host policy and script URL rules before access, then filters returned host-only/domain/path/secure scope. SameSite is mapped to CDP and read back with session/expiration state. Set checks engine acceptance and actual identity/attributes; delete selects one identity, deletes its exact domain/path and verifies absence. No reflection-based input echo or custom listeners remain.
+The default service uses the attached browser's shared CDP session and actual RequestContext. Core checks grants, host policy and script URL rules before access, then filters returned host-only/domain/path/secure scope. SameSite is mapped to CDP and read back with session/expiration state. Set checks engine acceptance and actual identity/attributes; delete selects one identity, expires its exact domain/path/partition identity and verifies absence. No reflection-based input echo or custom listeners remain.
 
-Modern list resolves actual Cookie[]; set/delete resolve undefined. Legacy CRUD returns undefined and invokes (cookies,error) for list or (error) for mutations. The default path is the URL directory. Partition/first-party parameters are rejected before effects; newer partition support remains separate. Services created directly use new CefSharpCookieService(host), rather than a standalone RequestContext constructor. Custom ICookieService backends implement only CRUD. See the [Cookie guide](usage-guide.md#cookies) and [real Cookie evidence](compatibility/cookie-findings.md).
+Modern list resolves actual Cookie[]; set/delete resolve undefined. Legacy CRUD returns undefined and invokes (cookies,error) for list or (error) for mutations. The default path is the URL directory. partitionKey CRUD is available on tested 121/151 engines, while 84 and firstPartyDomain remain explicitly unsupported. Services created directly use new CefSharpCookieService(host), rather than a standalone RequestContext constructor. Custom ICookieService backends implement only CRUD. See the [Cookie guide](usage-guide.md#cookies) and [real Cookie evidence](compatibility/cookie-findings.md).
+
+### Partitioned Cookie scope
+
+The default CDP backend supports serializable partitioned Cookie CRUD on the tested 121/151 engines. Chromium 84 rejects every explicit partitionKey before Cookie effects. Unspecified partitionKey selects unpartitioned cookies. For list, `{partitionKey:{}}` includes all serializable partitions and normal cookies; `{partitionKey:{topLevelSite:"https://top-a.test"}}` selects that site. An explicitly empty topLevelSite selects normal cookies.
+
+Set/delete accept the same partitionKey object. Empty objects select a normal identity for mutations. Partitioned set requires secure:true. Site inputs are normalized using fixed ICANN/private suffix snapshots from the matching native Chromium release, including wildcard and exception rules. Results contain the actual canonical partitionKey. Opaque/nonce keys are outside the supported contract.
+
+151 additionally accepts/returns hasCrossSiteAncestor. When omitted, list matches either ancestor variant, set derives it from the cookie URL and chosen site, and delete defaults to true as observed in the reference. Pass false explicitly to delete a same-site ancestor identity. 121 rejects that field because its protocol has no such dimension. Mutations and readback include the complete partition identity; deletion expires only that identity and verifies absence, preserving same-name siblings in other partitions and paths.
+
+Custom partition backends implement IPartitionedCookieService.NormalizePartitionKeyAsync in addition to CRUD. It validates actual backend support and canonicalizes the key before Core filters results. Other backends reject partitionKey rather than silently treating it as normal storage.
+
+XHR cookiePartition remains unsupported on every tested version. The native request probe has no public top-level partition setter, sends the ordinary cookie, and stores a Partitioned response under the request's own site rather than the requested site. The option is rejected before network dispatch. CRUD support is not request-partition support; no Cookie-header simulation is used. The [P2 record](compatibility/p2-implementation.md#19-partitioned-cookie-scope) separates those results and the pinned reference's deletion side effect.
+
+```javascript
+// @grant GM.cookie
+// @match https://cookies.example/*
+(async function () {
+    const details = {url:'https://cookies.example/',name:'session',value:'ready',secure:true,
+        sameSite:'no_restriction',partitionKey:{topLevelSite:'https://top.example'}};
+    await GM.cookie.set(details);
+    console.log(await GM.cookie.list(details));
+    await GM.cookie.delete(details);
+})().catch(console.error);
+```
 
 ### Web Requests
 

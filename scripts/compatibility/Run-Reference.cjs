@@ -3,6 +3,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const http = require("node:http");
+const https = require("node:https");
 const crypto = require("node:crypto");
 const { execFileSync } = require("node:child_process");
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
@@ -35,6 +36,10 @@ async function main() {
                 else { received.push(value); resolveEvidence(value); }
                 response.end("ok");
             });
+        } else if (request.url === '/partition-echo' || request.url === '/partition-receive') {
+            if (request.url === '/partition-receive') response.setHeader('Set-Cookie','partition-received=done; Path=/; Secure; SameSite=None; Partitioned');
+            response.setHeader('Content-Type','text/plain');
+            response.end(request.headers.cookie || '');
         } else if (/^\/fixture-content\/[a-z0-9.-]+$/.test(request.url)) {
             const contentPath = path.join(root, "docs/compatibility/fixtures/content", path.basename(request.url));
             if (!fs.existsSync(contentPath)) { response.statusCode = 404; response.end(); return; }
@@ -47,17 +52,24 @@ async function main() {
     };
     const server = http.createServer(requestHandler);
     await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+    const partitionProbe = path.basename(fixture) === 'partition-cookies.user.js';
+    let tls;
     const matching = path.basename(fixture) === "matching-conditions.user.js";
     const matchingScenarios = matching ? JSON.parse(fs.readFileSync(fixture.replace(/\.user\.js$/, ".json"), "utf8")) : [];
     const noAutomaticMatch = ["matching-default.user.js", "matching-all-urls.user.js"].includes(path.basename(fixture));
     const ipv6 = matching ? http.createServer(requestHandler) : null;
     let context;
     try {
+        if (partitionProbe) {
+            tls = https.createServer({pfx:fs.readFileSync(path.join(root,'Mzying2001.MonkeySharp.CefSharp.SmokeHost/Fixtures/loopback.pfx')),passphrase:'fixture'},requestHandler);
+            await new Promise(resolve => tls.listen(0,'127.0.0.1',resolve));
+        }
         if (ipv6) await new Promise((resolve, reject) => { ipv6.once("error", reject); ipv6.listen(0, "::1", resolve); });
         context = await chromium.launchPersistentContext(profile, {
             executablePath: path.resolve(browserPath), headless: true,
             args: [`--disable-extensions-except=${path.resolve(extensionPath)}`, `--load-extension=${path.resolve(extensionPath)}`, "--no-first-run",
-                ...(matching ? ["--no-proxy-server", "--host-resolver-rules=MAP xn--fsqu00a.xn--0zwm56d 127.0.0.1"] : [])]
+                ...(matching ? ["--no-proxy-server", "--host-resolver-rules=MAP xn--fsqu00a.xn--0zwm56d 127.0.0.1"] : []),
+                ...(partitionProbe ? ['--ignore-certificate-errors'] : [])]
         });
         let worker = context.serviceWorkers()[0] || await context.waitForEvent("serviceworker");
         if (await worker.evaluate(() => chrome.runtime.getManifest().version) !== manifest.version) throw new Error("Wrong running extension version.");
@@ -73,7 +85,7 @@ async function main() {
         await page.locator("input[type=file]").waitFor({ state: "attached" });
         // Import through Tampermonkey's own installation UI, not storage injection.
         const askPromise = context.waitForEvent("page", page => page.url().includes("/ask.html"));
-        const expand = value => value.replaceAll("__PORT__", String(server.address().port)).replaceAll("__IPV6_PORT__", String(ipv6 && ipv6.address().port));
+        const expand = value => value.replaceAll("__PORT__", String(server.address().port)).replaceAll("__IPV6_PORT__", String(ipv6 && ipv6.address().port)).replaceAll('__TLS_PORT__',String(tls && tls.address().port));
         const fixtureSource = expand(fs.readFileSync(fixture, "utf8"));
         await page.locator("input[type=file]").setInputFiles({ name: path.basename(fixture), mimeType: "text/javascript", buffer: Buffer.from(fixtureSource) });
         const ask = await askPromise;
@@ -155,6 +167,12 @@ async function main() {
             closeReturns: result.immediateReturn.legacyClose === "undefined" && result.immediateReturn.modernClose === "undefined",
             closedAfterRetry: result.effects.closed === true,
             logReturns: result.immediateReturn.legacyLog === "undefined" && result.immediateReturn.modernLog === "function" && result.promise.logValue === "undefined"
+        } : result.caseId === 'partition-cookies' ? {
+            noError:!result.effects.error,
+            partitionSelection:result.effects.defaults?.[0]?.value === 'plain' && result.effects.a?.[0]?.value === 'a' && result.effects.b?.[0]?.value === 'b',
+            requestSelection:result.effects.requestA?.includes('partition-proof=a') && !result.effects.requestA?.includes('partition-proof=b'),
+            responsePartition:result.effects.receivedA?.[0]?.value === 'done',
+            preciseDelete:!result.effects.afterDeleteA?.some(cookie => cookie.value === 'a') && result.effects.afterDeleteA?.some(cookie => cookie.value === 'b') && result.effects.afterDeleteA?.some(cookie => cookie.value === 'plain')
         } : result.caseId === "private-tabs" ? {
             noError: !result.effects.error,
             contexts: result.effects.normalIncognito === false && result.effects.private?.isIncognito === true,
@@ -193,6 +211,7 @@ async function main() {
         if (context) await context.close();
         await new Promise(resolve => server.close(resolve));
         if (ipv6) await new Promise(resolve => ipv6.close(resolve));
+        if (tls?.listening) await new Promise(resolve => tls.close(resolve));
     }
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

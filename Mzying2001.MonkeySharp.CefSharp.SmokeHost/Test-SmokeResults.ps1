@@ -7,10 +7,10 @@ $sample = @(
         storageMirror = $true; xhr = $true; xhrExtended = $true; notification = $true; tab = $true;
         download = $true; cookie = $true; webRequest = $true; navigation = $true;
         mainFrameLoads = 2; childFrameLoads = 1; contextReleased = 1;
-        compatibility = @{ audio = $true; pageHelpers = $true; binary = $true; permissions = $true; csp = $true; replay = $true; isolated = $true; conditions = $true; prepared = $true; frames = $true; spaUrl = $true; download = $true; cookie = $true; webRequest = $true } },
+        compatibility = @{ partitions = $true; audio = $true; pageHelpers = $true; binary = $true; permissions = $true; csp = $true; replay = $true; isolated = $true; conditions = $true; prepared = $true; frames = $true; spaUrl = $true; download = $true; cookie = $true; webRequest = $true } },
     @{ type = 'final-disposal'; disposed = $true; platform = 'x64'; cefSharpVersion = '121.3.70.0' }
 )
-foreach ($id in @('prepared', 'conditions', 'isolated', 'replay', 'csp', 'permissions', 'binary', 'pageHelpers', 'frames', 'spaUrl', 'download', 'cookie', 'webRequest', 'audio')) {
+foreach ($id in @('prepared', 'conditions', 'isolated', 'replay', 'csp', 'permissions', 'binary', 'pageHelpers', 'frames', 'spaUrl', 'download', 'cookie', 'webRequest', 'audio', 'partitions')) {
     $sample += @{ type = 'compatibility-case'; caseId = $id; success = $true; checks = @{ assertion = $true }; error = $null }
 }
 $sampleJson = ConvertTo-Json -InputObject $sample -Depth 20

@@ -162,6 +162,8 @@ var host = new CefSharpUserScriptHostBuilder(repository)
 
 缺少提供程序时，已声明 API 通常不会公开，直接桥接调用返回 `MSP006_NOT_SUPPORTED`；未声明的方法返回 `MSP004_GRANT_DENIED`。
 
+121/151 已验证分区 Cookie CRUD；84 及请求 cookiePartition 控制明确拒绝。见[分区范围](docs/usage-guide.zh-CN.md#分区-cookie-范围)。
+
 ## 宿主服务
 
 Builder 默认使用内存值存储。通过 `UseValueStore`、`UseMenuService` 等方法注册应用服务，提供持久化及其他能力。

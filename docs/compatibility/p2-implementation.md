@@ -10,7 +10,7 @@ corpus are separate evidence gaps; they are not counted as passing here.
 | 16. Historical webRequest | Implemented within the documented scope | [Six-engine matrix](evidence/webrequest-p2.json) |
 | 17. Tab audio | Mute capability validated; audible unavailable | [Six-engine matrix](evidence/audio-p2.json), [pinned TM reference](evidence/tampermonkey-5.5.1-audio.json) |
 | 18. Private tabs | Validated on the supported Demo gates | [Real contexts](evidence/private-contexts-p2.json), [pinned temporary-session reference](evidence/tampermonkey-5.5.1-private-tabs.json) |
-| 19. Partitioned Cookie/XHR | Pending | — |
+| 19. Partitioned Cookie/XHR | CRUD validated; request selector unavailable | [Native matrix](evidence/partition-cookies-p2.json), [reference with deletion difference](evidence/tampermonkey-5.5.1-partition-cookies.json) |
 | 20. Regression and delivery | Pending | — |
 
 ## 16. Historical webRequest and static rules
@@ -112,3 +112,40 @@ frame produces unknown ownership instead of escaping through a CEF callback.
 The adapter regression test covers that late callback path.
 
 Validation passed: 389 .NET tests at both 84/121 x64, 114 JS tests, all six SmokeHost/CDP combinations, and both WPF private-context gates. On 151, ownership is captured at the first OnBeforeResourceLoad because frame URLs may be unknown at handler construction. Static first-script interception and late-callback cleanup both pass. The Demo uses tabs within its WPF window; private WPF proof covers 84/121 x64 and retains the TrustedPageWorld boundary. Firefox containers are not supplied.
+
+## 19. Partitioned Cookie scope
+
+The existing CDP service now supports typed partition selectors on the tested
+121/151 engines. It uses native string/object protocol forms without branching
+in Core or JS. Fixed Chromium public-suffix snapshots normalize sites and derive
+151 set defaults accurately, including ICANN/private rules and exceptions.
+84 rejects explicit partition parameters before Cookie effects; 121 rejects the
+unavailable ancestor bit. Empty list filters cover serializable normal/partition
+identities; no opaque/nonce key support is claimed.
+
+Deletion expires exactly one complete identity, because older deleteCookies
+commands cannot select a partition. The real fixtures preserve ordinary and
+partition siblings during both ordinary and partitioned deletion. Set derives
+an omitted 151 ancestor bit, list treats it as a filter, and delete defaults to
+the cross-site ancestor identity as observed in the reference.
+
+The pinned 5.5.1 reference confirms CRUD selection, separate ancestor identities,
+request cookiePartition selection and incoming partition placement. Its checked
+preservation assertion fails: deleting partition A also removes the ordinary
+same-name cookie. The raw record remains failed for that assertion, not passed
+evidence. MonkeySharp intentionally preserves the other identity, consistent
+with its precise-delete requirement. The source fixture and result are kept
+without rewriting the observation.
+
+Native CEF probes inspect the public request surface and send/receive real TLS
+traffic. No top-level partition selector exists; the request sends ordinary
+state and stores a Partitioned response under its own site rather than top-a.
+Consequently request cookiePartition stays explicitly unsupported before send.
+No Cookie-header synthesis, jar swapping or second transport is introduced.
+CRUD support is recorded separately from this request limitation.
+
+Public-suffix data and its MPL-2.0 notice/provenance are embedded and included in
+packages; no new native API or higher minimum framework is introduced on the
+84 basic path. See Protocol/THIRD-PARTY-NOTICES.md in the adapter project.
+
+Validation passed: 403 .NET tests at both 84/121 x64, 114 JS tests, all six SmokeHost/CDP combinations with 15 cases, and WPF84 rejection/WPF121 CRUD. The native request limitation and pinned-manager preservation failure are separate from passed CRUD checks. The new suffix data is pinned to Chromium121.0.6167.160 and151.0.7922.174.

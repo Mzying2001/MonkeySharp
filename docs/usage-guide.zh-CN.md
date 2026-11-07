@@ -594,11 +594,11 @@ const handle = GM_download({
 
 省略 details/url 使用当前 frame URL。name 是可选精确列表过滤条件，set/delete 要求非空字符串。domain/path 是可选精确列表过滤条件。set 不传 domain 创建 host-only Cookie；显式 domain 必须覆盖目标 host，并在 Chromium 接受时创建 domain Cookie。默认 path 是 URL 所在目录（/nested/page 对应 /nested），与固定参考一致；显式路径以 / 开始。value 默认空字符串。expirationDate 是可选整数 Unix 秒，省略即 session Cookie。secure/httpOnly 默认 false。sameSite 接受 unspecified、no_restriction、lax、strict，实际映射到 CDP，而非回显输入。
 
-列表返回真实 name/value/domain/path、hostOnly、session、secure、httpOnly 及规范化 sameSite；持久 Cookie 含 Unix 秒 expirationDate，session Cookie 省略该字段。未知 first-party/partition 状态不伪造。set 检查协议结果，再读回完整身份及属性；策略拒绝或静默丢弃都报错。过期时间在过去的 set 验证 Cookie 已不存在。delete 选择一个可见身份（路径最长优先，同长时 host-only 优先），按准确 domain/path 删除并验证不存在；显式 domain/path 进一步限定，不会按名字批量误删。删除不存在项无副作用。
+列表返回真实 name/value/domain/path、hostOnly、session、secure、httpOnly 及规范化 sameSite；持久 Cookie 含 Unix 秒 expirationDate，session Cookie 省略该字段。未知 first-party/partition 状态不伪造。set 检查协议结果，再读回完整身份及属性；策略拒绝或静默丢弃都报错。过期时间在过去的 set 验证 Cookie 已不存在。delete 选择一个可见身份（路径最长优先，同长时 host-only 优先），过期准确 domain/path/partition 身份并验证不存在；显式 domain/path 进一步限定，不会按名字批量误删。删除不存在项无副作用。
 
 默认后端使用宿主共享 CDP 会话，对应已附加浏览器的真实 RequestContext。单次操作始终使用同一会话，不解除其他消费者的观察器。导航可取消文档调用，detach/dispose 使原生会话失效。直接宿主可使用 new CefSharpCookieService(host)，旧的仅 RequestContext 构造器已移除。自定义 ICookieService 仅实现 CRUD，并须提供经过验证的实际状态。
 
-partitionKey、cookiePartition、firstPartyDomain 在当前所有版本（包括 84）都于副作用前明确拒绝，分区支持保留给后续步骤。未分区后端过滤掉分区 Cookie，避免误改。旧版回调异常只单独报告一次，不改变已完成操作。请使用旧版命名空间的三个公开方法，不支持直接调用命名空间本身。
+partitionKey CRUD 在已测 121/151 支持，84 明确拒绝；cookiePartition、firstPartyDomain 仍不支持。省略分区键仅访问普通 Cookie。旧版回调异常只单独报告一次，不改变已完成操作。请使用旧版命名空间的三个公开方法，不支持直接调用命名空间本身。
 
 ```javascript
 await GM.cookie.set({name:'session',value:'ready',sameSite:'lax',path:'/'});
@@ -608,6 +608,30 @@ GM_cookie.list({}, (cookies, error) => console.log(cookies, error));
 ```
 
 <a id="request-interception"></a>
+
+### 分区 Cookie 范围
+
+默认 CDP 后端在已测 121/151 支持可序列化分区 Cookie CRUD。84 对所有显式 partitionKey 在 Cookie 副作用前拒绝。省略 partitionKey 仅选择普通 Cookie；list 的 `{partitionKey:{}}` 包含所有可序列化分区及普通 Cookie，`{partitionKey:{topLevelSite:"https://top-a.test"}}` 选择该站点；显式空 topLevelSite 选择普通 Cookie。
+
+set/delete 接受同一 partitionKey 对象，修改中的空对象选择普通身份。分区 set 要求 secure:true。站点按对应 Chromium 固定版本的 ICANN/私有后缀列表规范化，包含通配与例外规则；返回真实规范化 partitionKey。opaque/nonce 键不在支持范围内。
+
+151 还支持 hasCrossSiteAncestor。省略时 list 匹配两类 ancestor 身份，set 按 Cookie URL 与目标站点推导，delete 按固定参考默认 true；删除同站祖先身份须显式传 false。121 协议没有该维度，会明确拒绝该字段。修改及读回覆盖完整分区身份；删除通过过期准确身份并验证不存在，保留其他分区、路径中的同名 Cookie。
+
+自定义分区后端除 CRUD 外实现 IPartitionedCookieService.NormalizePartitionKeyAsync，在 Core 过滤前验证实际支持并规范化键。其他后端会拒绝 partitionKey，不会静默访问普通存储。
+
+所有已测版本的 XHR cookiePartition 仍不支持。原生请求探针没有公开顶层分区选择字段，发送普通 Cookie，并将 Partitioned 响应存入请求自身站点而非指定站点；该参数在网络发送前拒绝。CRUD 不等于请求分区支持，不使用拼接 Cookie 头模拟。见 [P2 记录](compatibility/p2-implementation.md#19-partitioned-cookie-scope)中的独立结果及固定参考的删除副作用差异。
+
+```javascript
+// @grant GM.cookie
+// @match https://cookies.example/*
+(async function () {
+    const details = {url:'https://cookies.example/',name:'session',value:'ready',secure:true,
+        sameSite:'no_restriction',partitionKey:{topLevelSite:'https://top.example'}};
+    await GM.cookie.set(details);
+    console.log(await GM.cookie.list(details));
+    await GM.cookie.delete(details);
+})().catch(console.error);
+```
 
 ## 私密浏览
 
@@ -706,7 +730,7 @@ window.addEventListener("urlchange", onRoute);
 | 通知 | 只使用支持字段；现代 Promise 在注册后兑现，而非关闭后。 |
 | 标签页 | 两种形式都立即返回句柄；通过 close/onclose 操作，不支持隐私模式和数字插入位置。 |
 | 下载 | 立即返回带 abort 的完成 Promise；Demo 共用浏览器网络上下文，文件提交后才完成。 |
-| Cookie | 没有 partitionKey 语义，默认 SameSite/第一方写入及变更订阅有限。 |
+| Cookie | 121/151 支持分区 CRUD；请求 cookiePartition、firstPartyDomain 及变更监听仍不可用。 |
 | webRequest | 改写动作对象及回调，显式注册运行时规则并保留移除句柄。 |
 | 其他管理器 API | 不内置扩展专属内容/部署 API；未知授权不会增加它们。音频按上文提供部分能力。 |
 

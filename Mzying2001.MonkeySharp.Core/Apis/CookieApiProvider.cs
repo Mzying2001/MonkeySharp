@@ -1,4 +1,4 @@
-using Mzying2001.MonkeySharp.Core.Bridge;
+﻿using Mzying2001.MonkeySharp.Core.Bridge;
 using Mzying2001.MonkeySharp.Core.Domain;
 using Mzying2001.MonkeySharp.Core.Matching;
 using Mzying2001.MonkeySharp.Core.Runtime;
@@ -16,12 +16,13 @@ namespace Mzying2001.MonkeySharp.Core.Apis
     public sealed class UserScriptCookieQuery
     {
         /// <summary>Initializes a cookie query for an absolute HTTP or HTTPS URL.</summary>
-        public UserScriptCookieQuery(Uri url, string name = null, string domain = null, string path = null)
+        public UserScriptCookieQuery(Uri url, string name = null, string domain = null, string path = null, UserScriptCookiePartitionKey partitionKey = null)
         {
             Url = ValidateUrl(url);
             Name = name;
             Domain = domain;
             Path = path;
+            PartitionKey = partitionKey;
         }
 
         /// <summary>Gets the URL whose cookie scope is queried.</summary>
@@ -32,10 +33,13 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         public string Domain { get; }
         /// <summary>Gets the optional exact cookie path.</summary>
         public string Path { get; }
+        /// <summary>Gets the partition filter, or null for unpartitioned cookies.</summary>
+        public UserScriptCookiePartitionKey PartitionKey { get; }
 
         /// <summary>Returns whether a cookie belongs to the query URL and optional constraints.</summary>
         public bool Matches(UserScriptCookie cookie)
         {
+            if (PartitionKey == null ? cookie.PartitionKey != null : !PartitionKey.Matches(cookie.PartitionKey)) return false;
             if (Name != null && !string.Equals(Name, cookie.Name, StringComparison.Ordinal)) return false;
             if (Domain != null && !string.Equals(Domain.TrimStart('.'), cookie.Domain.TrimStart('.'), StringComparison.OrdinalIgnoreCase)) return false;
             if (Path != null && !string.Equals(Path, cookie.Path, StringComparison.Ordinal)) return false;
@@ -74,7 +78,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         public UserScriptCookie(
             string name, string value, string domain, string path,
             DateTime? expirationDate = null, bool secure = false, bool httpOnly = false, string sameSite = null,
-            string firstPartyDomain = null, bool hostOnly = false, bool? session = null)
+            string firstPartyDomain = null, bool hostOnly = false, bool? session = null, UserScriptCookiePartitionKey partitionKey = null)
         {
             if (string.IsNullOrEmpty(name)) throw new ArgumentException("Cookie name is required.", nameof(name));
             Name = name;
@@ -86,6 +90,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             HttpOnly = httpOnly;
             SameSite = sameSite;
             FirstPartyDomain = firstPartyDomain;
+            PartitionKey = partitionKey;
             HostOnly = hostOnly;
             Session = session ?? !expirationDate.HasValue;
         }
@@ -108,6 +113,8 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         public string SameSite { get; }
         /// <summary>Gets the first-party domain associated with the cookie.</summary>
         public string FirstPartyDomain { get; }
+        /// <summary>Gets the canonical partition identity, or null when unpartitioned.</summary>
+        public UserScriptCookiePartitionKey PartitionKey { get; }
         /// <summary>Gets whether the cookie is restricted to the exact host.</summary>
         public bool HostOnly { get; }
         /// <summary>Gets whether the cookie is a session cookie.</summary>
@@ -121,7 +128,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         public UserScriptCookieMutation(
             Uri url, string name, string value = null, string domain = null, string path = null,
             DateTime? expirationDate = null, bool secure = false, bool httpOnly = false, string sameSite = null,
-            string firstPartyDomain = null)
+            string firstPartyDomain = null, UserScriptCookiePartitionKey partitionKey = null)
         {
             Url = UserScriptCookieQuery.ValidateUrl(url);
             if (string.IsNullOrEmpty(name)) throw new ArgumentException("Cookie name is required.", nameof(name));
@@ -139,6 +146,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             HttpOnly = httpOnly;
             SameSite = sameSite;
             FirstPartyDomain = firstPartyDomain;
+            PartitionKey = partitionKey;
         }
 
         /// <summary>Gets the target URL.</summary>
@@ -161,6 +169,8 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         public string SameSite { get; }
         /// <summary>Gets the first-party domain requested by the script.</summary>
         public string FirstPartyDomain { get; }
+        /// <summary>Gets the canonical partition identity, or null when unpartitioned.</summary>
+        public UserScriptCookiePartitionKey PartitionKey { get; }
         /// <summary>Gets whether the mutation targets an exact host.</summary>
         public bool HostOnly { get; }
         /// <summary>Gets whether a path was explicitly selected.</summary>
@@ -197,16 +207,25 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             if (context.Method != "GM.cookie") throw new UnsupportedApiException(context.Method);
             ProviderParameters.RequireObject(context.Parameters);
             var operation = ProviderParameters.OptionalString(context.Parameters, "operation") ?? "list";
+            if (operation != "list" && operation != "set" && operation != "delete") throw ProviderParameters.Invalid("Unknown cookie operation.");
             var details = context.Parameters.TryGetProperty("details", out var item) ? item : context.Parameters;
             ProviderParameters.RequireObject(details);
-            foreach (var unsupported in new[] { "partitionKey", "cookiePartition", "firstPartyDomain" })
+            foreach (var unsupported in new[] { "cookiePartition", "firstPartyDomain" })
                 if (details.TryGetProperty(unsupported, out _)) throw new UnsupportedApiException(unsupported + " is not supported by this cookie backend.");
             var text = ProviderParameters.OptionalString(details, "url") ?? context.Frame.Url?.AbsoluteUri;
             if (!Uri.TryCreate(text, UriKind.Absolute, out var url) || (url.Scheme != "http" && url.Scheme != "https"))
                 throw ProviderParameters.Invalid("url must be an absolute HTTP(S) URL.");
             EnsureAccessible(context, url);
+            UserScriptCookiePartitionKey partitionKey = null;
+            if (details.TryGetProperty("partitionKey", out var key))
+            {
+                if (!(_cookies is IPartitionedCookieService partitioned)) throw new UnsupportedApiException("This cookie backend does not support partitionKey.");
+                try { partitionKey = await partitioned.NormalizePartitionKeyAsync(ReadPartitionKey(key), url,
+                    operation == "list" ? CookiePartitionOperation.List : operation == "set" ? CookiePartitionOperation.Set : CookiePartitionOperation.Delete, cancellationToken).ConfigureAwait(false); }
+                catch (ArgumentException error) { throw ProviderParameters.Invalid(error.Message); }
+            }
             var query = new UserScriptCookieQuery(url, ProviderParameters.OptionalString(details, "name"),
-                ProviderParameters.OptionalString(details, "domain"), ProviderParameters.OptionalString(details, "path"));
+                ProviderParameters.OptionalString(details, "domain"), ProviderParameters.OptionalString(details, "path"), partitionKey);
             if (query.Domain != null && !UserScriptCookieQuery.DomainMatches(url.Host, query.Domain))
                 throw ProviderParameters.Invalid("Cookie domain is outside the authorized URL.");
             if (operation == "list")
@@ -225,13 +244,35 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 expiration = DateTimeOffset.FromUnixTimeSeconds((long)seconds).UtcDateTime;
             }
             var sameSite = NormalizeSameSite(ProviderParameters.OptionalString(details, "sameSite"));
+            if (operation == "set" && partitionKey != null && !ProviderParameters.OptionalBoolean(details, "secure"))
+                throw ProviderParameters.Invalid("Partitioned cookies require secure:true.");
             UserScriptCookieMutation mutation;
             try { mutation = new UserScriptCookieMutation(url, name, ProviderParameters.OptionalString(details, "value"), query.Domain,
-                query.Path, expiration, ProviderParameters.OptionalBoolean(details, "secure"), ProviderParameters.OptionalBoolean(details, "httpOnly"), sameSite); }
+                query.Path, expiration, ProviderParameters.OptionalBoolean(details, "secure"), ProviderParameters.OptionalBoolean(details, "httpOnly"), sameSite, partitionKey: partitionKey); }
             catch (ArgumentException error) { throw ProviderParameters.Invalid(error.Message); }
             if (operation == "set") await _cookies.SetAsync(mutation, cancellationToken).ConfigureAwait(false);
             else await _cookies.DeleteAsync(mutation, cancellationToken).ConfigureAwait(false);
             return ApiResult.Undefined;
+        }
+        private static UserScriptCookiePartitionKey ReadPartitionKey(JsonElement value)
+        {
+            ProviderParameters.RequireObject(value, "partitionKey");
+            foreach (var property in value.EnumerateObject())
+                if (property.Name != "topLevelSite" && property.Name != "hasCrossSiteAncestor") throw ProviderParameters.Invalid("Unknown partitionKey property: " + property.Name);
+            string site = null;
+            bool? ancestor = null;
+            if (value.TryGetProperty("topLevelSite", out var top))
+            {
+                if (top.ValueKind != JsonValueKind.String) throw ProviderParameters.Invalid("partitionKey.topLevelSite must be a string.");
+                site = top.GetString();
+            }
+            if (value.TryGetProperty("hasCrossSiteAncestor", out var bit))
+            {
+                if (bit.ValueKind != JsonValueKind.True && bit.ValueKind != JsonValueKind.False) throw ProviderParameters.Invalid("partitionKey.hasCrossSiteAncestor must be a boolean.");
+                ancestor = bit.GetBoolean();
+            }
+            try { return new UserScriptCookiePartitionKey(site, ancestor); }
+            catch (ArgumentException error) { throw ProviderParameters.Invalid(error.Message); }
         }
         internal static string NormalizeSameSite(string value)
         {
@@ -249,6 +290,12 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             var value = new Dictionary<string, object> { ["name"] = cookie.Name, ["value"] = cookie.Value, ["domain"] = cookie.Domain,
                 ["path"] = cookie.Path, ["secure"] = cookie.Secure, ["httpOnly"] = cookie.HttpOnly,
                 ["sameSite"] = cookie.SameSite ?? "unspecified", ["hostOnly"] = cookie.HostOnly, ["session"] = cookie.Session };
+            if (cookie.PartitionKey != null)
+            {
+                var key = new Dictionary<string, object> { ["topLevelSite"] = cookie.PartitionKey.TopLevelSite };
+                if (cookie.PartitionKey.HasCrossSiteAncestor.HasValue) key["hasCrossSiteAncestor"] = cookie.PartitionKey.HasCrossSiteAncestor.Value;
+                value["partitionKey"] = key;
+            }
             if (cookie.ExpirationDate.HasValue) value["expirationDate"] = new DateTimeOffset(cookie.ExpirationDate.Value.ToUniversalTime()).ToUnixTimeSeconds();
             return value;
         }
@@ -263,12 +310,14 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         public Task<IReadOnlyList<UserScriptCookie>> ListAsync(UserScriptCookieQuery query, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (query.PartitionKey != null) throw new UnsupportedApiException("The in-memory cookie backend is unpartitioned only.");
             lock (_sync) return Task.FromResult<IReadOnlyList<UserScriptCookie>>(_cookies.Where(query.Matches).ToArray());
         }
         /// <inheritdoc />
         public Task<UserScriptCookie> SetAsync(UserScriptCookieMutation mutation, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (mutation.PartitionKey != null) throw new UnsupportedApiException("The in-memory cookie backend is unpartitioned only.");
             lock (_sync)
             {
                 _cookies.RemoveAll(cookie => cookie.Name == mutation.Name && cookie.Domain == mutation.Domain && cookie.Path == mutation.Path);
@@ -282,6 +331,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         public Task<bool> DeleteAsync(UserScriptCookieMutation mutation, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (mutation.PartitionKey != null) throw new UnsupportedApiException("The in-memory cookie backend is unpartitioned only.");
             lock (_sync)
             {
                 var query = new UserScriptCookieQuery(mutation.Url, mutation.Name, mutation.HostOnly ? null : mutation.Domain, mutation.HasExplicitPath ? mutation.Path : null);

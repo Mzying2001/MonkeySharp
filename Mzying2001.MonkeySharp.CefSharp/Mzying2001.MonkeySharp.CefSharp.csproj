@@ -46,12 +46,15 @@
     <EmbeddedResource Include="Js\Lifecycle.js" />
     <EmbeddedResource Include="Js\Isolated.js" />
     <EmbeddedResource Include="Js\LifecycleEvents.js" />
+    <EmbeddedResource Include="Protocol\psl-*.dat.gz" LogicalName="Mzying2001.MonkeySharp.CefSharp.Protocol.%(Filename)%(Extension)" />
+    <None Update="Protocol\psl-*.dat.gz;Protocol\public-suffix-snapshots.json;Protocol\THIRD-PARTY-NOTICES.md" Pack="true" PackagePath="third-party/public-suffix/" />
     <None Include="..\README.md">
       <Pack>true</Pack>
       <PackagePath>\</PackagePath>
     </None>
   </ItemGroup>
   <ItemGroup>
+    <Reference Include="System.IO.Compression" />
     <!-- The host must own CefSharp.Common so its UI package and native CEF
          binaries stay on one exact version. The adapter still compiles
          against the selected version, but does not impose one transitively. -->

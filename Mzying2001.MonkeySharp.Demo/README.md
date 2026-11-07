@@ -65,6 +65,7 @@ Private console/runtime diagnostics and tab data are not written to the normal p
 | Values and value listeners | Normal tabs use the shared SQLite store; private sessions copy the normal baseline once into isolated memory. Private writes never persist or flow back to normal tabs. The normal store with typed values, key insertion order, serialized writes, atomic snapshots and committed change notifications; supports legacy storage mirrors. |
 | DOM, info, log | Existing Core facade; logs are also shown in the diagnostics panel. |
 | `@require`, `@resource` | Persistent per-installation/revision URL cache. SRI `md5`/`sha256` hashes are checked against original bytes before caching and on cache reads. HTTP(S), at most 10 redirects, 30-second timeout, 10 MiB per fetched item. |
+| Partitioned Cookie | CDP CRUD on tested 121/151; 84 rejects. XHR partition selection remains unsupported before sending. |
 | XHR, Cookie, webRequest | Existing CefSharp services follow the shared Chromium request context. Custom navigation handlers use the adapter's multiplexer, not a replacement request handler. |
 | Audio | The independent CefSharp service reads and changes native tab mute state. Listener removal, external host changes and partial capability reporting are covered; audible is omitted. |
 | Menus | Per-tab command collections, callbacks, access keys and disposal on execution end. |

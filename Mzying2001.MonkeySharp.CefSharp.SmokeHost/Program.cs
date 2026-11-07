@@ -415,7 +415,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             _timeoutTimer.Stop();
             await _host.DetachAsync(CancellationToken.None).ConfigureAwait(true);
             var success = _initialFixturePassed && _mainFrameLoads >= 2 && _childFrameLoads >= 1 && _contextReleased >= 1 &&
-                !_host.IsAttached && _compatibilityResults != null && _compatibilityResults.Count == 14 && _compatibilityResults.Values.All(value => value);
+                !_host.IsAttached && _compatibilityResults != null && _compatibilityResults.Count == 15 && _compatibilityResults.Values.All(value => value);
             object fixture = null;
             if (!string.IsNullOrEmpty(_initialFixtureJson))
             {
@@ -658,6 +658,11 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                             contentType = "text/javascript"; body = Encoding.UTF8.GetBytes("globalThis.staticBlocked=true;"); break;
                         case "/compat/net/static-target.js":
                             contentType = "text/javascript"; body = Encoding.UTF8.GetBytes("globalThis.staticTarget=true;"); break;
+                        case "/partition-receive":
+                            request.Headers.TryGetValue("Cookie", out var partitionCookie);
+                            body = Encoding.UTF8.GetBytes(partitionCookie ?? string.Empty);
+                            headers.Add(new KeyValuePair<string, string>("Set-Cookie", "partition-received=done; Path=/; Secure; SameSite=None; Partitioned"));
+                            break;
                         case "/compat/net/blocked":
                         case "/compat/net/original":
                         case "/compat/net/target":

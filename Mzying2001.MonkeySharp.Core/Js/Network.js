@@ -509,7 +509,7 @@
                     const invokeCookie = function (operation, details) {
                         if (typeof details === "undefined") details = {};
                         if (!details || typeof details !== "object" || Array.isArray(details)) return Promise.reject(new TypeError("cookie details must be an object."));
-                        for (const option of ["partitionKey", "cookiePartition", "firstPartyDomain"]) if (Object.prototype.hasOwnProperty.call(details, option)) return Promise.reject(notSupported(option + " is not supported by this cookie backend."));
+                        for (const option of ["cookiePartition", "firstPartyDomain"]) if (Object.prototype.hasOwnProperty.call(details, option)) return Promise.reject(notSupported(option + " is not supported by this cookie backend."));
                         return call(record, "GM.cookie", { operation, details: serializableValue(details) });
                     };
                     api.cookie = Object.freeze({ list: details => invokeCookie("list", details),

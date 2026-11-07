@@ -51,6 +51,10 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                 checks["storageResourcesXhrCookieWebRequest"] = await EvaluateBoolean(primary,
                     "window.__demo.storage && window.__demo.resources && window.__demo.xhr && window.__demo.cookie && window.__demo.webRequest");
                 checks["audioMuteOnly"] = await EvaluateBoolean(primary, "window.__demo.audio === true");
+                await Evaluate(primary, "(window.__testCookiePartitions(), true)");
+                await WaitAsync(async () => await EvaluateBoolean(primary, "window.__demo.partitionDone === true"));
+                checks["cookiePartitionCapability"] = await EvaluateBoolean(primary, typeof(global::CefSharp.Cef).Assembly.GetName().Version.Major == 84
+                    ? "window.__demo.partitionUnsupported === true" : "window.__demo.partitionCrud === true");
                 await WaitAsync(async () => await EvaluateBoolean(primary, "window.__tabIsolation === true"));
                 checks["tabStateScriptIsolation"] = true;
                 checks["domAndInfo"] = await EvaluateBoolean(primary, "window.__demo.dom && window.__demo.info");
@@ -282,6 +286,7 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
         private const string Script = @"// ==UserScript==
 // @name Demo all-services smoke
 // @match __BASE__/page*
+// @match https://127.0.0.1/*
 // @connect 127.0.0.1
 // @noframes
 // @require __BASE__/dependency.js
@@ -350,6 +355,16 @@ sessionStorage.setItem('runs', String(window.__demo.runs));
     };
     window.__testWindowFocus = function () { return window.focus(); };
     window.__testWindowClose = function () { return window.close(); };
+    window.__testCookiePartitions = async function () {
+        const details = {url:'__BASE__'.replace(/^http:/,'https:')+'/',name:'wpf-partition-proof',value:'ready',path:'/',secure:true,sameSite:'no_restriction',partitionKey:{topLevelSite:'https://top-a.test'}};
+        try {
+            await GM.cookie.set(details);
+            result.partitionCrud = (await GM.cookie.list(details))[0].value === 'ready';
+            await GM.cookie.delete(details);
+            result.partitionCrud = result.partitionCrud && (await GM.cookie.list(details)).length === 0;
+        } catch (error) { result.partitionUnsupported = error.code === 'MSP006_NOT_SUPPORTED'; }
+        result.partitionDone = true;
+    };
     result.previousTabMarker = (await GM.getTab()).marker;
     await GM.saveTab({ marker: location.search });
     result.tabState = (await GM.getTab()).marker === location.search && Object.keys(await GM.getTabs()).length >= 1;

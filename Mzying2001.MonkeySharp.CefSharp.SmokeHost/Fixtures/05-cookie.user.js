@@ -37,8 +37,8 @@
         await GM.cookie.delete({ name: 'same-path' });
         await legacy('delete', details);
         result.checks.deleted = !(await GM.cookie.list({ name: details.name })).length;
-        try { await GM.cookie.list({partitionKey:{}}); result.checks.partitionRejected = false; }
-        catch (error) { result.checks.partitionRejected = error.code === 'MSP006_NOT_SUPPORTED'; }
+        try { await GM.cookie.list({firstPartyDomain:'example.com'}); result.checks.unsupportedFirstParty = false; }
+        catch (error) { result.checks.unsupportedFirstParty = error.code === 'MSP006_NOT_SUPPORTED'; }
         globalThis.__httpsCookieProbe = async function (base) {
             try {
                 // A test hostname avoids Chromium's version-dependent HTTP-loopback Secure exception.

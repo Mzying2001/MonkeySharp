@@ -1,4 +1,4 @@
-using Mzying2001.MonkeySharp.Core.Apis;
+﻿using Mzying2001.MonkeySharp.Core.Apis;
 using Mzying2001.MonkeySharp.Core.Domain;
 using System;
 using System.Collections.Generic;
@@ -11,12 +11,56 @@ using System.Threading.Tasks;
 namespace Mzying2001.MonkeySharp.CefSharp
 {
     /// <summary>Cookie CRUD through the attached browser's shared CDP session and actual RequestContext.</summary>
-    public sealed class CefSharpCookieService : ICookieService, IDisposable
+    public sealed class CefSharpCookieService : IPartitionedCookieService, IDisposable
     {
         private readonly Func<CancellationToken, Task<CefSharpCdpSession>> _session;
         private readonly CancellationTokenSource _lifetime = new CancellationTokenSource();
         private readonly SemaphoreSlim _mutations = new SemaphoreSlim(1, 1);
         private int _disposed;
+        private readonly object _protocolLock = new object();
+        private Task<int> _protocol;
+
+        /// <inheritdoc />
+        public async Task<UserScriptCookiePartitionKey> NormalizePartitionKeyAsync(UserScriptCookiePartitionKey partitionKey,
+            Uri cookieUrl, CookiePartitionOperation operation, CancellationToken cancellationToken)
+        {
+            if (partitionKey == null) return null;
+            var major = await ProtocolAsync(cancellationToken).ConfigureAwait(false);
+            if (major != 121 && major != 151) throw new UnsupportedApiException("Partitioned Cookie CRUD is verified only on Chromium 121 and 151; this engine is " + major + ".");
+            if (major == 121 && partitionKey.HasCrossSiteAncestor.HasValue) throw new UnsupportedApiException("hasCrossSiteAncestor is not available in the Chromium 121 protocol.");
+            if (string.IsNullOrEmpty(partitionKey.TopLevelSite)) return operation == CookiePartitionOperation.List ? partitionKey : null;
+            var site = SchemefulSite.FromUrl(new Uri(partitionKey.TopLevelSite), major);
+            var ancestor = partitionKey.HasCrossSiteAncestor;
+            if (major == 151 && operation == CookiePartitionOperation.Set)
+            {
+                var crossSite = SchemefulSite.FromUrl(cookieUrl, major) != site;
+                if (ancestor == false && crossSite) throw new ArgumentException("hasCrossSiteAncestor cannot be false for a cross-site cookie URL.");
+                ancestor = ancestor ?? crossSite;
+            }
+            else if (major == 151 && operation == CookiePartitionOperation.Delete) ancestor = ancestor ?? true;
+            return new UserScriptCookiePartitionKey(site, ancestor);
+        }
+        private async Task<int> ProtocolAsync(CancellationToken token)
+        {
+            Task<int> protocol;
+            lock (_protocolLock)
+            {
+                if (_protocol == null || _protocol.IsCanceled || _protocol.IsFaulted) _protocol = ReadProtocolAsync();
+                protocol = _protocol;
+            }
+            var canceled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            using (token.Register(() => canceled.TrySetCanceled())) await await Task.WhenAny(protocol, canceled.Task).ConfigureAwait(false);
+            return await protocol.ConfigureAwait(false);
+        }
+        private async Task<int> ReadProtocolAsync()
+        {
+            var session = await _session(_lifetime.Token).ConfigureAwait(false);
+            var version = await session.ExecuteAsync("Browser.getVersion", cancellationToken: _lifetime.Token).ConfigureAwait(false);
+            var product = version.GetProperty("product").GetString();
+            var number = product.Substring(product.LastIndexOf('/') + 1).Split('.')[0];
+            if (!int.TryParse(number, out var major)) throw new InvalidOperationException("The native engine did not report a usable version.");
+            return major;
+        }
 
         /// <summary>Uses the host's attached browser session. This service never owns/disposes the shared session.</summary>
         public CefSharpCookieService(CefSharpUserScriptHost host)
@@ -31,9 +75,13 @@ namespace Mzying2001.MonkeySharp.CefSharp
             if (query == null) throw new ArgumentNullException(nameof(query));
             using (var linked = Link(cancellationToken))
             {
+                var key = await NormalizePartitionKeyAsync(query.PartitionKey, query.Url, CookiePartitionOperation.List, linked.Token).ConfigureAwait(false);
+                var normalized = new UserScriptCookieQuery(query.Url, query.Name, query.Domain, query.Path, key);
                 var session = await _session(linked.Token).ConfigureAwait(false);
-                var result = await session.ExecuteAsync("Network.getCookies", new { urls = new[] { query.Url.AbsoluteUri } }, linked.Token).ConfigureAwait(false);
-                return Cookies(result).Where(query.Matches).ToArray();
+                var result = query.PartitionKey == null
+                    ? await session.ExecuteAsync("Network.getCookies", new { urls = new[] { query.Url.AbsoluteUri } }, linked.Token).ConfigureAwait(false)
+                    : await session.ExecuteAsync("Network.getAllCookies", cancellationToken: linked.Token).ConfigureAwait(false);
+                return Cookies(result).Where(normalized.Matches).ToArray();
             }
         }
 
@@ -43,17 +91,15 @@ namespace Mzying2001.MonkeySharp.CefSharp
             Validate(mutation);
             using (var linked = Link(cancellationToken))
             {
+                mutation = WithPartition(mutation, await NormalizePartitionKeyAsync(mutation.PartitionKey, mutation.Url, CookiePartitionOperation.Set, linked.Token).ConfigureAwait(false));
+                if (mutation.PartitionKey != null && !mutation.Secure)
+                    throw new ArgumentException("Partitioned cookies require secure:true.");
                 await _mutations.WaitAsync(linked.Token).ConfigureAwait(false);
                 try
                 {
                     var session = await _session(linked.Token).ConfigureAwait(false);
-                    var parameters = new Dictionary<string, object> { ["url"] = mutation.Url.AbsoluteUri,
-                        ["name"] = mutation.Name, ["value"] = mutation.Value, ["path"] = mutation.Path,
-                        ["secure"] = mutation.Secure, ["httpOnly"] = mutation.HttpOnly };
-                    if (!mutation.HostOnly) parameters["domain"] = mutation.Domain;
-                    if (mutation.ExpirationDate.HasValue) parameters["expires"] = new DateTimeOffset(mutation.ExpirationDate.Value.ToUniversalTime()).ToUnixTimeSeconds();
+                    var parameters = await ParametersAsync(mutation, linked.Token).ConfigureAwait(false);
                     var sameSite = ToProtocolSameSite(mutation.SameSite);
-                    if (sameSite != null) parameters["sameSite"] = sameSite;
                     var result = await session.ExecuteAsync("Network.setCookie", parameters, linked.Token).ConfigureAwait(false);
                     if (result.TryGetProperty("success", out var accepted) && !accepted.GetBoolean())
                         throw new InvalidOperationException("The browser rejected the cookie.");
@@ -83,18 +129,26 @@ namespace Mzying2001.MonkeySharp.CefSharp
             Validate(mutation);
             using (var linked = Link(cancellationToken))
             {
+                mutation = WithPartition(mutation, await NormalizePartitionKeyAsync(mutation.PartitionKey, mutation.Url, CookiePartitionOperation.Delete, linked.Token).ConfigureAwait(false));
                 await _mutations.WaitAsync(linked.Token).ConfigureAwait(false);
                 try
                 {
                     var session = await _session(linked.Token).ConfigureAwait(false);
                     var query = new UserScriptCookieQuery(mutation.Url, mutation.Name, mutation.HostOnly ? null : mutation.Domain,
-                        mutation.HasExplicitPath ? mutation.Path : null);
+                        mutation.HasExplicitPath ? mutation.Path : null, mutation.PartitionKey);
                     var selected = (await AllAsync(session, linked.Token).ConfigureAwait(false)).Where(query.Matches)
                         .OrderByDescending(cookie => cookie.Path.Length).ThenByDescending(cookie => cookie.HostOnly).FirstOrDefault();
                     if (selected == null) return false;
-                    await session.ExecuteAsync("Network.deleteCookies", new { name = selected.Name, domain = selected.Domain, path = selected.Path }, linked.Token).ConfigureAwait(false);
+                    // Older deleteCookies commands cannot select a partition; expiration targets one
+                    // complete canonical identity on every supported engine without deleting siblings.
+                    var expired = new UserScriptCookieMutation(mutation.Url, selected.Name, string.Empty,
+                        selected.HostOnly ? null : selected.Domain, selected.Path, new DateTime(1970, 1, 1, 0, 0, 1, DateTimeKind.Utc),
+                        selected.Secure, selected.HttpOnly, selected.SameSite, partitionKey: selected.PartitionKey);
+                    var result = await session.ExecuteAsync("Network.setCookie", await ParametersAsync(expired, linked.Token).ConfigureAwait(false), linked.Token).ConfigureAwait(false);
+                    if (result.TryGetProperty("success", out var accepted) && !accepted.GetBoolean()) throw new InvalidOperationException("The browser rejected the selected cookie expiration.");
                     if ((await AllAsync(session, linked.Token).ConfigureAwait(false)).Any(cookie =>
-                        cookie.Name == selected.Name && cookie.Domain == selected.Domain && cookie.Path == selected.Path))
+                        cookie.Name == selected.Name && cookie.Domain == selected.Domain && cookie.Path == selected.Path &&
+                        UserScriptCookiePartitionKey.SameIdentity(cookie.PartitionKey, selected.PartitionKey)))
                         throw new InvalidOperationException("The browser did not remove the selected cookie.");
                     return true;
                 }
@@ -104,7 +158,31 @@ namespace Mzying2001.MonkeySharp.CefSharp
 
         private static bool Identity(UserScriptCookie cookie, UserScriptCookieMutation mutation) => cookie.Name == mutation.Name &&
             cookie.Path == mutation.Path && string.Equals(cookie.Domain.TrimStart('.'), mutation.Domain.TrimStart('.'), StringComparison.OrdinalIgnoreCase) &&
+            UserScriptCookiePartitionKey.SameIdentity(cookie.PartitionKey, mutation.PartitionKey) &&
             (mutation.HostOnly ? cookie.HostOnly : IPAddress.TryParse(mutation.Url.Host, out _) || !cookie.HostOnly);
+
+        private static UserScriptCookieMutation WithPartition(UserScriptCookieMutation mutation, UserScriptCookiePartitionKey key) =>
+            new UserScriptCookieMutation(mutation.Url, mutation.Name, mutation.Value, mutation.HostOnly ? null : mutation.Domain,
+                mutation.HasExplicitPath ? mutation.Path : null, mutation.ExpirationDate, mutation.Secure, mutation.HttpOnly,
+                mutation.SameSite, mutation.FirstPartyDomain, key);
+
+        private async Task<Dictionary<string, object>> ParametersAsync(UserScriptCookieMutation mutation, CancellationToken token)
+        {
+            var parameters = new Dictionary<string, object> { ["url"] = mutation.Url.AbsoluteUri,
+                ["name"] = mutation.Name, ["value"] = mutation.Value, ["path"] = mutation.Path,
+                ["secure"] = mutation.Secure, ["httpOnly"] = mutation.HttpOnly };
+            if (!mutation.HostOnly) parameters["domain"] = mutation.Domain;
+            if (mutation.ExpirationDate.HasValue) parameters["expires"] = new DateTimeOffset(mutation.ExpirationDate.Value.ToUniversalTime()).ToUnixTimeSeconds();
+            var sameSite = ToProtocolSameSite(mutation.SameSite);
+            if (sameSite != null) parameters["sameSite"] = sameSite;
+            if (mutation.PartitionKey != null)
+            {
+                var major = await ProtocolAsync(token).ConfigureAwait(false);
+                parameters["partitionKey"] = major == 121 ? (object)mutation.PartitionKey.TopLevelSite :
+                    new { topLevelSite = mutation.PartitionKey.TopLevelSite, hasCrossSiteAncestor = mutation.PartitionKey.HasCrossSiteAncestor.Value };
+            }
+            return parameters;
+        }
 
         private static async Task<IReadOnlyList<UserScriptCookie>> AllAsync(CefSharpCdpSession session, CancellationToken token)
             => Cookies(await session.ExecuteAsync("Network.getAllCookies", cancellationToken: token).ConfigureAwait(false)).ToArray();
@@ -113,16 +191,20 @@ namespace Mzying2001.MonkeySharp.CefSharp
         {
             foreach (var item in result.GetProperty("cookies").EnumerateArray())
             {
-                // Partitioned CRUD is a separate version-gated enhancement. Never mutate one accidentally.
-                if (item.TryGetProperty("partitionKey", out _) ||
-                    (item.TryGetProperty("partitionKeyOpaque", out var opaque) && opaque.GetBoolean())) continue;
+                if (item.TryGetProperty("partitionKeyOpaque", out var opaque) && opaque.GetBoolean()) continue;
+                UserScriptCookiePartitionKey partitionKey = null;
+                if (item.TryGetProperty("partitionKey", out var key))
+                {
+                    partitionKey = key.ValueKind == JsonValueKind.String ? new UserScriptCookiePartitionKey(key.GetString()) :
+                        new UserScriptCookiePartitionKey(key.GetProperty("topLevelSite").GetString(), key.GetProperty("hasCrossSiteAncestor").GetBoolean());
+                }
                 var domain = item.GetProperty("domain").GetString();
                 var session = item.GetProperty("session").GetBoolean();
                 DateTime? expiration = session ? (DateTime?)null : DateTimeOffset.FromUnixTimeSeconds((long)item.GetProperty("expires").GetDouble()).UtcDateTime;
                 yield return new UserScriptCookie(item.GetProperty("name").GetString(), item.GetProperty("value").GetString(), domain,
                     item.GetProperty("path").GetString(), expiration, item.GetProperty("secure").GetBoolean(), item.GetProperty("httpOnly").GetBoolean(),
                     item.TryGetProperty("sameSite", out var sameSite) ? FromProtocolSameSite(sameSite.GetString()) : "unspecified",
-                    hostOnly: !domain.StartsWith(".", StringComparison.Ordinal), session: session);
+                    hostOnly: !domain.StartsWith(".", StringComparison.Ordinal), session: session, partitionKey: partitionKey);
             }
         }
         private static string ToProtocolSameSite(string value)

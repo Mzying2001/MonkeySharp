@@ -38,8 +38,8 @@ function Assert-SmokeRecords {
         if ($fixtures.Count -ne 1 -or $fixtures[0].success -isnot [bool] -or !$fixtures[0].success) { throw "Legacy fixture failed or missing: $phase." }
     }
     $cases = @($Records | Where-Object { $_.type -eq 'compatibility-case' })
-    if ($cases.Count -ne 14) { throw 'Exactly fourteen compatibility cases are required.' }
-    foreach ($id in @('prepared', 'conditions', 'isolated', 'replay', 'csp', 'permissions', 'binary', 'pageHelpers', 'frames', 'spaUrl', 'download', 'cookie', 'webRequest', 'audio')) {
+    if ($cases.Count -ne 15) { throw 'Exactly fifteen compatibility cases are required.' }
+    foreach ($id in @('prepared', 'conditions', 'isolated', 'replay', 'csp', 'permissions', 'binary', 'pageHelpers', 'frames', 'spaUrl', 'download', 'cookie', 'webRequest', 'audio', 'partitions')) {
         $matches = @($cases | Where-Object { $_.caseId -eq $id })
         if ($matches.Count -ne 1 -or $matches[0].success -isnot [bool] -or !$matches[0].success -or $matches[0].error) { throw "Compatibility case failed or missing: $id." }
         $checks = @($matches[0].checks.PSObject.Properties)

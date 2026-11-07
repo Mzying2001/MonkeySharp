@@ -162,6 +162,8 @@ Legacy globals other than `GM_info` require exact declared names. Synchronous st
 
 If a declared API has no provider, it is normally absent and direct bridge calls return `MSP006_NOT_SUPPORTED`. Undeclared methods return `MSP004_GRANT_DENIED`.
 
+Partitioned Cookie CRUD is verified on 121/151; 84 and request cookiePartition controls reject explicitly. See [partition scope](docs/usage-guide.md#partitioned-cookie-scope).
+
 ## Host Services
 
 The builder uses an in-memory value store by default. Register application services with methods such as `UseValueStore` and `UseMenuService` to add persistence and capabilities.

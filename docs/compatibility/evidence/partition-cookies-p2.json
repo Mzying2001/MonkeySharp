@@ -1,0 +1,190 @@
+{
+  "schemaVersion": 1,
+  "caseId": "partition-cookies-p2",
+  "date": "2026-11-07",
+  "baseCommit": "d176090",
+  "fixtureSha256": "92ac1cd955ccb25f7907059e4979b365e5ecb3414708e32401015ed98d59d76f",
+  "runs": [
+    {
+      "version": "84.4.10",
+      "platform": "x64",
+      "crud": "unsupported-before-effects",
+      "checks": {
+        "listRejected": true,
+        "setRejected": true,
+        "deleteRejected": true,
+        "requestSelectorRejected": true,
+        "unsupportedRequestHasNoNetworkEffect": true
+      },
+      "requestProbe": null
+    },
+    {
+      "version": "84.4.10",
+      "platform": "x86",
+      "crud": "unsupported-before-effects",
+      "checks": {
+        "listRejected": true,
+        "setRejected": true,
+        "deleteRejected": true,
+        "requestSelectorRejected": true,
+        "unsupportedRequestHasNoNetworkEffect": true
+      },
+      "requestProbe": null
+    },
+    {
+      "version": "121.3.70",
+      "platform": "x64",
+      "crud": "passed",
+      "checks": {
+        "defaults": true,
+        "partitionA": true,
+        "partitionB": true,
+        "all": true,
+        "updated": true,
+        "legacy": true,
+        "normalDeletePreservesPartitions": true,
+        "partitionDeleteIsExact": true,
+        "ancestorUnsupported": true,
+        "cleaned": true,
+        "requestSelectorRejected": true,
+        "unsupportedRequestHasNoNetworkEffect": true
+      },
+      "requestProbe": {
+        "type": "partition-request-probe",
+        "engine": "Chrome/121.0.6167.160",
+        "requestedTopLevelSite": "https://top-a.test",
+        "selectorAvailable": false,
+        "sent": "smoke-cookie=changed; download-login=ready; native-partition-proof=plain",
+        "received": [
+          {
+            "Name": "partition-received",
+            "topLevelSite": "https://127.0.0.1",
+            "ancestor": null
+          }
+        ],
+        "status": "expected-engine-limitation"
+      }
+    },
+    {
+      "version": "121.3.70",
+      "platform": "x86",
+      "crud": "passed",
+      "checks": {
+        "defaults": true,
+        "partitionA": true,
+        "partitionB": true,
+        "all": true,
+        "updated": true,
+        "legacy": true,
+        "normalDeletePreservesPartitions": true,
+        "partitionDeleteIsExact": true,
+        "ancestorUnsupported": true,
+        "cleaned": true,
+        "requestSelectorRejected": true,
+        "unsupportedRequestHasNoNetworkEffect": true
+      },
+      "requestProbe": {
+        "type": "partition-request-probe",
+        "engine": "Chrome/121.0.6167.160",
+        "requestedTopLevelSite": "https://top-a.test",
+        "selectorAvailable": false,
+        "sent": "smoke-cookie=changed; download-login=ready; native-partition-proof=plain",
+        "received": [
+          {
+            "Name": "partition-received",
+            "topLevelSite": "https://127.0.0.1",
+            "ancestor": null
+          }
+        ],
+        "status": "expected-engine-limitation"
+      }
+    },
+    {
+      "version": "151.3.240",
+      "platform": "x64",
+      "crud": "passed",
+      "checks": {
+        "defaults": true,
+        "partitionA": true,
+        "partitionB": true,
+        "all": true,
+        "updated": true,
+        "legacy": true,
+        "normalDeletePreservesPartitions": true,
+        "partitionDeleteIsExact": true,
+        "ancestorIdentities": true,
+        "defaultDeleteAncestor": true,
+        "cleaned": true,
+        "requestSelectorRejected": true,
+        "unsupportedRequestHasNoNetworkEffect": true
+      },
+      "requestProbe": {
+        "type": "partition-request-probe",
+        "engine": "Chrome/151.0.7922.174",
+        "requestedTopLevelSite": "https://top-a.test",
+        "selectorAvailable": false,
+        "sent": "smoke-cookie=changed; download-login=ready; native-partition-proof=plain",
+        "received": [
+          {
+            "Name": "partition-received",
+            "topLevelSite": "https://127.0.0.1",
+            "ancestor": true
+          }
+        ],
+        "status": "expected-engine-limitation"
+      }
+    },
+    {
+      "version": "151.3.240",
+      "platform": "x86",
+      "crud": "passed",
+      "checks": {
+        "defaults": true,
+        "partitionA": true,
+        "partitionB": true,
+        "all": true,
+        "updated": true,
+        "legacy": true,
+        "normalDeletePreservesPartitions": true,
+        "partitionDeleteIsExact": true,
+        "ancestorIdentities": true,
+        "defaultDeleteAncestor": true,
+        "cleaned": true,
+        "requestSelectorRejected": true,
+        "unsupportedRequestHasNoNetworkEffect": true
+      },
+      "requestProbe": {
+        "type": "partition-request-probe",
+        "engine": "Chrome/151.0.7922.174",
+        "requestedTopLevelSite": "https://top-a.test",
+        "selectorAvailable": false,
+        "sent": "smoke-cookie=changed; download-login=ready; native-partition-proof=plain",
+        "received": [
+          {
+            "Name": "partition-received",
+            "topLevelSite": "https://127.0.0.1",
+            "ancestor": true
+          }
+        ],
+        "status": "expected-engine-limitation"
+      }
+    }
+  ],
+  "tests": {
+    "84-x64": 403,
+    "121-x64": 403,
+    "JavaScript": 114
+  },
+  "wpf": {
+    "84.4.10": "passed-explicit-partition-rejection",
+    "121.3.70": "passed-partition-crud"
+  },
+  "reference": "tampermonkey-5.5.1-partition-cookies.json",
+  "referenceDifference": "The pinned reference removes the ordinary sibling when deleting partition A; its preservation assertion remains failed. MonkeySharp preserves other identities.",
+  "limitations": [
+    "No arbitrary request cookiePartition selector in public CEF URLRequest",
+    "Opaque/nonce partition keys unsupported",
+    "Explicit ancestor bit unsupported in121",
+    "Partition CRUD is enabled only for the verified121/151 protocol shapes"
+  ]
+}

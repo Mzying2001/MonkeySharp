@@ -19,6 +19,7 @@ function waitFor(predicate) {
 
 test("modern GM.cookie and legacy GM_cookie share CRUD without listener extensions", async () => {
     const cookies = [];
+    const requests = [];
     globalThis.__MonkeySharpBridge = {
         dispatch: async requestJson => {
             const request = JSON.parse(requestJson);
@@ -26,6 +27,7 @@ test("modern GM.cookie and legacy GM_cookie share CRUD without listener extensio
                 type: "hello-result", protocol: 2, ok: true, limits: {}, apis: ["GM.cookie"]
             });
             const details = request.params.details || {};
+            requests.push(request);
             if (request.method !== "GM.cookie") return JSON.stringify({
                 type: "response", protocol: 2, requestId: request.requestId, ok: true,
                 result: { $monkeySharpType: "undefined" }
@@ -72,4 +74,7 @@ test("modern GM.cookie and legacy GM_cookie share CRUD without listener extensio
     globalThis.__cookieNamespace.set({name:'callback',value:'yes'}, globalThis.__cookieCallback);
     await new Promise(resolve => setTimeout(resolve, 20));
     assert.equal(callbackCount, 1);
+    const key = { topLevelSite: 'https://top.test', hasCrossSiteAncestor: true };
+    await new Promise((resolve, reject) => globalThis.__cookieNamespace.list({partitionKey:key}, (value, error) => error ? reject(error) : resolve(value)));
+    assert.deepEqual(requests.at(-1).params.details.partitionKey, key);
 });

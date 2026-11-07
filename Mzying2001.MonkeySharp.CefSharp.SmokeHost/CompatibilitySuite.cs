@@ -76,6 +76,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             results["cookie"] = await RunCaseAsync("cookie", CookieAsync);
             results["webRequest"] = await RunCaseAsync("webRequest", WebRequestAsync);
             results["audio"] = await RunCaseAsync("audio", AudioAsync);
+            results["partitions"] = await RunCaseAsync("partitions", PartitionsAsync);
             return results;
         }
 
@@ -405,7 +406,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             var required = name == "download"
                 ? new[] { "promise", "handle", "completed", "canceled", "timeout", "failure", "singleTerminal", "loginRedirect", "anonymous", "empty", "earlyCancel", "diskFailure" }
                 : name == "cookie"
-                    ? new[] { "setList", "legacy", "context", "noListeners", "preciseDelete", "deleted", "setUndefined", "partitionRejected" }
+                    ? new[] { "setList", "legacy", "context", "noListeners", "preciseDelete", "deleted", "setUndefined", "unsupportedFirstParty" }
                     : new[] { "staticFirstScript", "voidReturn", "cancel", "replacement", "redirect", "capture", "restored", "noCallbackAfterRevoke" };
             foreach (var check in required) Check(check, result.GetProperty("checks").GetProperty(check).GetBoolean());
         }
@@ -536,6 +537,41 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             await WaitAsync(async () => (await ReadAsync("document.readyState === 'complete'"))?.GetBoolean() == true);
             Check("disabledRevokesStatic", _fixture.RequestCount("/compat/net/static-blocked.js") == 1 &&
                 _fixture.RequestCount("/compat/net/static-old.js") == 1 && _fixture.RequestCount("/compat/net/static-target.js") == 1);
+        }
+
+        private async Task PartitionsAsync()
+        {
+            await NavigateAsync("/compat/partitions");
+            await WaitAsync(async () => (await ReadAsync("typeof globalThis.__runPartitionProbe === 'function'"))?.GetBoolean() == true);
+            var session = await _host.GetCdpSessionAsync(CancellationToken.None);
+            var version = (await session.ExecuteAsync("Browser.getVersion")).GetProperty("product").GetString();
+            var major = int.Parse(version.Substring(version.LastIndexOf('/') + 1).Split('.')[0], CultureInfo.InvariantCulture);
+            using (var tls = new LocalHttpFixture(true))
+            {
+                var url = tls.Start();
+                await ReadAsync("(globalThis.__runPartitionProbe(" + JsonSerializer.Serialize(url.GetLeftPart(UriPartial.Authority)) + "," +
+                    (major == 121 || major == 151 ? "true" : "false") + "," + (major == 151 ? "true" : "false") + "),true)");
+                var result = await WaitResultAsync("globalThis.__partitionCase");
+                if (result.TryGetProperty("error", out var error)) throw new InvalidOperationException(error.GetString());
+                foreach (var check in result.GetProperty("checks").EnumerateObject()) Check(check.Name, check.Value.GetBoolean());
+                Check("unsupportedRequestHasNoNetworkEffect", tls.RequestCount("/partition-receive") == 0);
+                if (major == 121 || major == 151)
+                {
+                    using (var cookies = new CefSharpCookieService(_host))
+                    {
+                        var target = new Uri(url, "/partition-receive");
+                        await cookies.SetAsync(new UserScriptCookieMutation(target, "native-partition-proof", "plain", path:"/", secure:true, sameSite:"no_restriction"), CancellationToken.None);
+                        await cookies.SetAsync(new UserScriptCookieMutation(target, "native-partition-proof", "a", path:"/", secure:true, sameSite:"no_restriction",
+                            partitionKey:new UserScriptCookiePartitionKey("https://top-a.test")), CancellationToken.None);
+                        var request = await PartitionRequestProbe.SendAsync(_browser.RequestContext, target, "https://top-a.test");
+                        var received = await cookies.ListAsync(new UserScriptCookieQuery(url, "partition-received", partitionKey:new UserScriptCookiePartitionKey()), CancellationToken.None);
+                        Console.WriteLine(JsonSerializer.Serialize(new { type = "partition-request-probe", engine = version,
+                            requestedTopLevelSite = "https://top-a.test", selectorAvailable = request.SelectorAvailable, sent = request.Text,
+                            received = received.Select(cookie => new { cookie.Name, topLevelSite = cookie.PartitionKey?.TopLevelSite, ancestor = cookie.PartitionKey?.HasCrossSiteAncestor }).ToArray(),
+                            status = request.SelectorAvailable && request.Text.Contains("native-partition-proof=a") && received.Any(cookie => cookie.PartitionKey?.TopLevelSite == "https://top-a.test") ? "passed" : "expected-engine-limitation" }));
+                    }
+                }
+            }
         }
 
         private async Task AudioAsync()

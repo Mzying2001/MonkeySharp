@@ -52,12 +52,13 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
             var deep = Root.Replace("\"/\"", "\"/deep\"");
             using (var harness = new Harness((method, parameters) =>
             {
-                if (method == "Network.deleteCookies")
+                if (method == "Network.setCookie")
                 {
-                    Assert.Equal("example.com", parameters.GetProperty("domain").GetString());
+                    Assert.False(parameters.TryGetProperty("domain", out _));
                     Assert.Equal("/deep", parameters.GetProperty("path").GetString());
-                    Assert.False(parameters.TryGetProperty("url", out _));
-                    deleted = true; return "{}";
+                    Assert.True(parameters.GetProperty("expires").GetDouble() < DateTimeOffset.UtcNow.ToUnixTimeSeconds());
+                    Assert.Equal("https://example.com/deep/page", parameters.GetProperty("url").GetString());
+                    deleted = true; return "{\"success\":true}";
                 }
                 return "{\"cookies\":[" + Root + (deleted ? "" : "," + deep) + "]}";
             }))
@@ -68,9 +69,79 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
         [Fact]
         public async Task FailedDeletionReadbackIsAnError()
         {
-            using (var harness = new Harness((method, _) => method == "Network.deleteCookies" ? "{}" : "{\"cookies\":[" + Root + "]}"))
+            using (var harness = new Harness((method, _) => method == "Network.setCookie" ? "{\"success\":true}" : "{\"cookies\":[" + Root + "]}"))
             using (var service = harness.Service())
                 await Assert.ThrowsAsync<InvalidOperationException>(() => service.DeleteAsync(new UserScriptCookieMutation(new Uri("https://example.com/"), "sid"), CancellationToken.None));
+        }
+
+        [Theory]
+        [InlineData(121)]
+        [InlineData(151)]
+        public async Task PartitionKeysUseTheNativeProtocolShapeAndActualReadback(int major)
+        {
+            var key = major == 121 ? "\"https://top-a.test\"" : "{\"topLevelSite\":\"https://top-a.test\",\"hasCrossSiteAncestor\":true}";
+            var cookie = Root.Replace("\"secure\":false", "\"secure\":true").TrimEnd('}') + ",\"partitionKey\":" + key + "}";
+            using (var harness = new Harness((method, parameters) =>
+            {
+                if (method == "Browser.getVersion") return "{\"product\":\"Chrome/" + major + ".0.0.0\"}";
+                if (method == "Network.setCookie")
+                {
+                    var actual = parameters.GetProperty("partitionKey");
+                    Assert.Equal(major == 121 ? JsonValueKind.String : JsonValueKind.Object, actual.ValueKind);
+                    if (major == 151) Assert.True(actual.GetProperty("hasCrossSiteAncestor").GetBoolean());
+                    return "{\"success\":true}";
+                }
+                return "{\"cookies\":[" + cookie + "]}";
+            }))
+            using (var service = harness.Service())
+            {
+                var actual = await service.SetAsync(new UserScriptCookieMutation(new Uri("https://example.com/"), "sid", "actual", secure:true,
+                    httpOnly:true, sameSite:"lax", partitionKey:new UserScriptCookiePartitionKey("https://sub.top-a.test:9443/path")), CancellationToken.None);
+                Assert.Equal("https://top-a.test", actual.PartitionKey.TopLevelSite);
+                Assert.Equal(major == 151 ? (bool?)true : null, actual.PartitionKey.HasCrossSiteAncestor);
+            }
+        }
+
+        [Fact]
+        public async Task OldEngineRejectsPartitionParametersBeforeCookieCommands()
+        {
+            using (var harness = new Harness((method, _) => method == "Browser.getVersion" ? "{\"product\":\"Chrome/84.0.4147.105\"}" : throw new InvalidOperationException("Cookie effect is forbidden.")))
+            using (var service = harness.Service())
+            {
+                await Assert.ThrowsAsync<Mzying2001.MonkeySharp.Core.Domain.UnsupportedApiException>(() => service.SetAsync(
+                    new UserScriptCookieMutation(new Uri("https://example.com/"), "sid", "value", secure:true, partitionKey:new UserScriptCookiePartitionKey("https://top.test")), CancellationToken.None));
+                Assert.Single(harness.Commands);
+                Assert.Equal("Browser.getVersion", harness.Commands[0].Item1);
+            }
+        }
+
+        [Fact]
+        public async Task AncestorDefaultsDistinguishSetFromDelete()
+        {
+            using (var harness = new Harness((method, _) => "{\"product\":\"Chrome/151.0.7922.174\"}"))
+            using (var service = harness.Service())
+            {
+                var key = new UserScriptCookiePartitionKey("https://example.com");
+                var url = new Uri("https://sub.example.com/path");
+                Assert.False((await service.NormalizePartitionKeyAsync(key, url, CookiePartitionOperation.Set, CancellationToken.None)).HasCrossSiteAncestor);
+                Assert.True((await service.NormalizePartitionKeyAsync(key, url, CookiePartitionOperation.Delete, CancellationToken.None)).HasCrossSiteAncestor);
+                Assert.Null((await service.NormalizePartitionKeyAsync(key, url, CookiePartitionOperation.List, CancellationToken.None)).HasCrossSiteAncestor);
+            }
+        }
+
+        [Theory]
+        [InlineData("https://a.b.example.co.uk:9443/path", "https://example.co.uk")]
+        [InlineData("https://co.uk", "https://co.uk")]
+        [InlineData("https://a.b.ck", "https://a.b.ck")]
+        [InlineData("https://a.www.ck", "https://www.ck")]
+        [InlineData("http://a.foo.github.io", "http://foo.github.io")]
+        [InlineData("https://127.0.0.1:9443", "https://127.0.0.1")]
+        [InlineData("https://[::1]:9443", "https://[::1]")]
+        [InlineData("https://a.b.example.com.", "https://example.com.")]
+        public void SchemefulSitesFollowPinnedSuffixWildcardsExceptionsAndPrivateRegistries(string input, string expected)
+        {
+            Assert.Equal(expected, SchemefulSite.FromUrl(new Uri(input), 121));
+            Assert.Equal(expected, SchemefulSite.FromUrl(new Uri(input), 151));
         }
 
         private sealed class Harness : IDisposable

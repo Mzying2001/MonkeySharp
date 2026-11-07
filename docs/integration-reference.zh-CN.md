@@ -87,13 +87,37 @@ CefSharp 宿主默认提供 `GM.xmlHttpRequest`、`GM.cookie` 和 `GM.webRequest
 
 长时间运行的 `execute` 和等待流数据的 `readBody` 操作豁免 `BridgeOptions.RequestTimeout`；其余会话操作仍使用普通请求超时。所有会话请求（包括 `execute`）都计入 `MaxPendingRequestsPerDocument`。HTTP 请求自身的 `timeout` 独立生效，`fetch` 模式除外。
 
-`proxy`、`cookiePartition` 和同步请求返回 `MSP006_NOT_SUPPORTED`。Cookie 分区键属于浏览器扩展管理器状态，CefSharp 公开请求上下文 API 不提供该状态。现代和 legacy XHR 输入校验使用同一错误码。
+`proxy`、`cookiePartition` 和同步请求返回 `MSP006_NOT_SUPPORTED`。分区 CRUD 使用 CDP，但公开 IRequest 无法选择 URLRequest 的可信顶层分区。现代和 legacy XHR 输入校验使用同一错误码。
 
 ### Cookie
 
-默认服务使用已附加浏览器的共享 CDP 会话及实际 RequestContext。访问前检查授权、宿主策略与脚本 URL 规则，返回后按 host-only/domain/path/secure 再过滤。SameSite 实际映射到 CDP，并读回 session/expiration 状态。set 检查引擎接受及实际身份/属性，delete 仅删除选中身份的准确 domain/path，再验证不存在；不再反射回显输入或提供自有监听。
+默认服务使用已附加浏览器的共享 CDP 会话及实际 RequestContext。访问前检查授权、宿主策略与脚本 URL 规则，返回后按 host-only/domain/path/secure 再过滤。SameSite 实际映射到 CDP，并读回 session/expiration 状态。set 检查引擎接受及实际身份/属性，delete 仅过期选中身份的准确 domain/path/partition，再验证不存在；不再反射回显输入或提供自有监听。
 
-现代 list 兑现实际 Cookie[]，set/delete 兑现 undefined。旧版 CRUD 返回 undefined，list 回调为 (cookies,error)，修改回调为 (error)。默认 path 是 URL 所在目录。分区及 first-party 参数在副作用前拒绝，后续分区支持独立实施。直接创建服务使用 new CefSharpCookieService(host)，不再使用独立 RequestContext 构造器；自定义 ICookieService 仅实现 CRUD。详见 [Cookie 指南](usage-guide.zh-CN.md#cookie)及[真实证据](compatibility/cookie-findings.md)。
+现代 list 兑现实际 Cookie[]，set/delete 兑现 undefined。旧版 CRUD 返回 undefined，list 回调为 (cookies,error)，修改回调为 (error)。默认 path 是 URL 所在目录。已测 121/151 支持 partitionKey CRUD，84 及 firstPartyDomain 明确拒绝。直接创建服务使用 new CefSharpCookieService(host)，不再使用独立 RequestContext 构造器；自定义 ICookieService 仅实现 CRUD。详见 [Cookie 指南](usage-guide.zh-CN.md#cookie)及[真实证据](compatibility/cookie-findings.md)。
+
+### 分区 Cookie 范围
+
+默认 CDP 后端在已测 121/151 支持可序列化分区 Cookie CRUD。84 对所有显式 partitionKey 在 Cookie 副作用前拒绝。省略 partitionKey 仅选择普通 Cookie；list 的 `{partitionKey:{}}` 包含所有可序列化分区及普通 Cookie，`{partitionKey:{topLevelSite:"https://top-a.test"}}` 选择该站点；显式空 topLevelSite 选择普通 Cookie。
+
+set/delete 接受同一 partitionKey 对象，修改中的空对象选择普通身份。分区 set 要求 secure:true。站点按对应 Chromium 固定版本的 ICANN/私有后缀列表规范化，包含通配与例外规则；返回真实规范化 partitionKey。opaque/nonce 键不在支持范围内。
+
+151 还支持 hasCrossSiteAncestor。省略时 list 匹配两类 ancestor 身份，set 按 Cookie URL 与目标站点推导，delete 按固定参考默认 true；删除同站祖先身份须显式传 false。121 协议没有该维度，会明确拒绝该字段。修改及读回覆盖完整分区身份；删除通过过期准确身份并验证不存在，保留其他分区、路径中的同名 Cookie。
+
+自定义分区后端除 CRUD 外实现 IPartitionedCookieService.NormalizePartitionKeyAsync，在 Core 过滤前验证实际支持并规范化键。其他后端会拒绝 partitionKey，不会静默访问普通存储。
+
+所有已测版本的 XHR cookiePartition 仍不支持。原生请求探针没有公开顶层分区选择字段，发送普通 Cookie，并将 Partitioned 响应存入请求自身站点而非指定站点；该参数在网络发送前拒绝。CRUD 不等于请求分区支持，不使用拼接 Cookie 头模拟。见 [P2 记录](compatibility/p2-implementation.md#19-partitioned-cookie-scope)中的独立结果及固定参考的删除副作用差异。
+
+```javascript
+// @grant GM.cookie
+// @match https://cookies.example/*
+(async function () {
+    const details = {url:'https://cookies.example/',name:'session',value:'ready',secure:true,
+        sameSite:'no_restriction',partitionKey:{topLevelSite:'https://top.example'}};
+    await GM.cookie.set(details);
+    console.log(await GM.cookie.list(details));
+    await GM.cookie.delete(details);
+})().catch(console.error);
+```
 
 ### Web Request
 

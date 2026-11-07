@@ -10,6 +10,7 @@
     <AssemblyName>MonkeySharp.CefSharp.SmokeHost</AssemblyName>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <CefSharpVersion Condition="'$(CefSharpVersion)' == ''">121.3.70</CefSharpVersion>
+    <DefineConstants Condition="$([MSBuild]::VersionLessThan('$(CefSharpVersion)', '100.0.0'))">$(DefineConstants);CEF_SHARP_LEGACY_REQUEST_FACTORY</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="CefSharp.WinForms" Version="$(CefSharpVersion)" />
