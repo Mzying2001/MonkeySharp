@@ -641,6 +641,11 @@ namespace Mzying2001.MonkeySharp.CefSharp
             _ownedStore?.Dispose();
         }
 
+        internal IBrowserHost GetAudioBrowserHost()
+        {
+            lock (_sync) return _browser == null || !_browser.IsBrowserInitialized || _browser.IsDisposed ? null : _browser.GetBrowser()?.GetHost();
+        }
+
         private DocumentFrame RequestFrame(IFrame frame, IRequest request)
         {
             if (frame == null || frame.IsDisposed) return null;

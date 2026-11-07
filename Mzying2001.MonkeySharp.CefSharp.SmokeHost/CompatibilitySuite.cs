@@ -75,6 +75,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             results["download"] = await RunCaseAsync("download", DownloadAsync);
             results["cookie"] = await RunCaseAsync("cookie", CookieAsync);
             results["webRequest"] = await RunCaseAsync("webRequest", WebRequestAsync);
+            results["audio"] = await RunCaseAsync("audio", AudioAsync);
             return results;
         }
 
@@ -535,6 +536,26 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             await WaitAsync(async () => (await ReadAsync("document.readyState === 'complete'"))?.GetBoolean() == true);
             Check("disabledRevokesStatic", _fixture.RequestCount("/compat/net/static-blocked.js") == 1 &&
                 _fixture.RequestCount("/compat/net/static-old.js") == 1 && _fixture.RequestCount("/compat/net/static-target.js") == 1);
+        }
+
+        private async Task AudioAsync()
+        {
+            await NavigateAsync("/compat/audio");
+            var result = await WaitResultAsync("globalThis.__audioCase");
+            if (result.TryGetProperty("error", out var error)) throw new InvalidOperationException(error.GetString());
+            foreach (var check in result.GetProperty("checks").EnumerateObject()) Check(check.Name, check.Value.GetBoolean());
+            await Cef.UIThreadTaskFactory.StartNew(() => _browser.GetBrowser().GetHost().SetAudioMuted(true));
+            await WaitAsync(async () => (await ReadAsync("globalThis.__audioCase.external.some(event => event.muted === 'unknown')"))?.GetBoolean() == true);
+            Check("otherHostMute", true);
+            var before = await Cef.UIThreadTaskFactory.StartNew(() => _browser.GetBrowser().GetHost().IsAudioMuted);
+            await NavigateAsync("/compat/audio-next");
+            result = await WaitResultAsync("globalThis.__audioCase");
+            var after = await Cef.UIThreadTaskFactory.StartNew(() => _browser.GetBrowser().GetHost().IsAudioMuted);
+            Check("navigationMatchesNative", result.GetProperty("checks").GetProperty("navigation").GetBoolean() &&
+                result.GetProperty("nativeNavigationMute").GetBoolean() == after);
+            Console.WriteLine(JsonSerializer.Serialize(new { type = "audio-navigation-probe", nativeBefore = before,
+                nativeAfter = after, status = before && after ? "passed" : "expected-engine-limitation" }));
+            await Cef.UIThreadTaskFactory.StartNew(() => _browser.GetBrowser().GetHost().SetAudioMuted(false));
         }
 
         public void Dispose() => _host.DocumentLifecycle -= Lifecycle;

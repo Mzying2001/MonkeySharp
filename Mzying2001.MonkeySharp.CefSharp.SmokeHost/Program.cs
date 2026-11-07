@@ -35,6 +35,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             // Test-only self-signed loopback TLS; never applied by the production adapter.
             settings.CefCommandLineArgs.Add("ignore-certificate-errors", "1");
             settings.CefCommandLineArgs.Add("host-resolver-rules", "MAP cookie.monkeysharp.test 127.0.0.1");
+            settings.CefCommandLineArgs.Add("autoplay-policy", "no-user-gesture-required");
             if (!Cef.Initialize(settings))
                 throw new InvalidOperationException("CefSharp initialization failed.");
 
@@ -414,7 +415,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             _timeoutTimer.Stop();
             await _host.DetachAsync(CancellationToken.None).ConfigureAwait(true);
             var success = _initialFixturePassed && _mainFrameLoads >= 2 && _childFrameLoads >= 1 && _contextReleased >= 1 &&
-                !_host.IsAttached && _compatibilityResults != null && _compatibilityResults.Count == 13 && _compatibilityResults.Values.All(value => value);
+                !_host.IsAttached && _compatibilityResults != null && _compatibilityResults.Count == 14 && _compatibilityResults.Values.All(value => value);
             object fixture = null;
             if (!string.IsNullOrEmpty(_initialFixtureJson))
             {
@@ -643,6 +644,10 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                         case "/compat/cookie-echo":
                             request.Headers.TryGetValue("Cookie", out var compatCookie);
                             body = Encoding.UTF8.GetBytes(compatCookie ?? string.Empty);
+                            break;
+                        case "/compat/audio":
+                            contentType = "text/html; charset=utf-8";
+                            body = Encoding.UTF8.GetBytes("<!doctype html><html><body><iframe src='/compat/audio-child'></iframe></body></html>");
                             break;
                         case "/compat/webrequest":
                             contentType = "text/html; charset=utf-8";

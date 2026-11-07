@@ -56,7 +56,7 @@ Resource URL spellings are intentionally different. No `GM.getResourceURL`,
 | `unsafeWindow` | property grant | page window | none | Actual execution world |
 | `window.close`, `window.focus` | exact grant | void | none | Host window policy |
 | `window.onurlchange` | exact grant | nullable capability | URL event | Same-document navigation |
-| `GM_audio.*`, `GM.audio.*` | mute/state/listener | callback; Promise | actual audio state | P2, not currently implemented; no invented minimum TM version |
+| `GM_audio.*`, `GM.audio.*` | mute/state/listener | callback; Promise | actual audio state | Mute implemented; audible omitted. Pinned 5.5.1 setMute resolves {isMuted}; no invented minimum TM version |
 
 ## Evidence and execution
 

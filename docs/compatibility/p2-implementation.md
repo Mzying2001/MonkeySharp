@@ -8,7 +8,7 @@ corpus are separate evidence gaps; they are not counted as passing here.
 | Step | Status | Evidence |
 | --- | --- | --- |
 | 16. Historical webRequest | Implemented within the documented scope | [Six-engine matrix](evidence/webrequest-p2.json) |
-| 17. Tab audio | Pending | — |
+| 17. Tab audio | Mute capability validated; audible unavailable | [Six-engine matrix](evidence/audio-p2.json), [pinned TM reference](evidence/tampermonkey-5.5.1-audio.json) |
 | 18. Private tabs | Pending | — |
 | 19. Partitioned Cookie/XHR | Pending | — |
 | 20. Regression and delivery | Pending | — |
@@ -52,3 +52,31 @@ Tampermonkey parity. OOPIF and isolated-frame dynamic page interception remain
 unverified/unavailable. The fixture probes WebSocket separately; listing a resource
 type in Core is not evidence that CEF dispatches that type through resource
 callbacks.
+
+## 17. Tab audio
+
+An independent ITabAudioService backs GM.audio/GM_audio. Exact function identity
+controls listener removal; registrations are execution-owned. The default CEF
+service reads IsAudioMuted and calls SetAudioMuted on the native UI thread,
+verifies results, and observes persistent external host changes on a 200 ms poll.
+Unknown causes are omitted from state and represented as unknown in changes.
+Rapid transitions between polls cannot be reconstructed.
+
+The pinned 5.5.1/MV3 experiment confirms modern Promise and legacy callback
+returns, extension/false listener events, and setMute resolving {isMuted:true}.
+That last result differs from the current official Promise<void> description;
+the implemented facade follows the pinned observable result. The legacy root
+is a function namespace, also observed in that reference.
+
+Audible is deliberately unavailable. The CEF mute interface provides no reliable
+aggregate audible observation; PCM/stream lifecycle has not established that
+contract. Tests exercise WebAudio and a zero-gain stream while verifying that
+neither fabricates audible fields. The info status explicitly says mute-only.
+Real browser tests also cover callback completion, duplicate/removing listeners,
+multiple frames, external native mute and navigation matching the actual native state.
+
+Validation passed: 384 .NET tests at both 84/121 x64, 114 JS tests, all six
+SmokeHost/CDP combinations (14 cases), and both WPF gates including native audio.
+The navigation probe records native true before navigation and false afterwards
+on 151; 84/121 retain true. This is an observed native-engine boundary, not passed
+retention support on 151. The facade reports the readback faithfully.

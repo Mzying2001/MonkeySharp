@@ -609,6 +609,27 @@ GM_cookie.list({}, (cookies, error) => console.log(cookies, error));
 
 <a id="request-interception"></a>
 
+## 标签音频
+
+授权 `GM.audio` 或 `GM_audio`。现代 `GM.audio.getState()` 兑现真实标签状态；`GM.audio.setMute({isMuted:true})` 在原生读回后兑现 `{isMuted:true}`，以固定 Tampermonkey 5.5.1 实测为准（官方文档写为 void）。旧式 `GM_audio.getState(callback)`、`GM_audio.setMute(details, callback?)` 返回 undefined，修改回调接收可选错误字符串。
+
+`addStateChangeListener(listener)`、`removeStateChangeListener(listener)` 按函数身份注册/移除。现代形式返回完成 Promise，旧式形式返回 undefined，可提供完成回调。监听应在修改前注册；事件含 `muted`（已知原因、`"unknown"` 或 false），只有可靠后端才提供 `audible`。导航和 detach 清理执行所属监听。
+
+默认 CefSharp 服务在 84/121/151 提供真实静音读写，跨 frame 和导航保持同一标签状态。151 SmokeHost 的已测导航会将原生静音重置为 false，84/121 保持；服务反映真实状态，不承诺 151 导航保持静音。原生读写在 CEF UI 线程执行，每 200 ms 轮询其他宿主静音操作；短于轮询间隔的变化可能漏报。未知原因在状态中省略，在事件中标为 `"unknown"`。不提供 `isAudible`/`audible`：WebAudio 或音频流存在不能证明真实可听状态。`GM.info.compatibility.capabilities["GM.audio"]` 明确报告 `partial:mute-only;audible-unavailable`。
+
+宿主可通过 `UseTabAudioService` 注入独立的 `ITabAudioService`，或用 `EnableDefaultAudioService = false` 禁用原生默认服务；网络配置不控制音频。应用传入的服务仍归应用所有。证据见 [P2 音频记录](compatibility/p2-implementation.md#17-tab-audio)。
+
+```javascript
+// @grant GM.audio
+(async function () {
+    const onAudio = change => console.log(change.muted);
+    await GM.audio.addStateChangeListener(onAudio);
+    await GM.audio.setMute({isMuted:true});
+    const state = await GM.audio.getState();
+    await GM.audio.removeStateChangeListener(onAudio);
+})().catch(console.error);
+```
+
 ## 请求拦截
 
 ### GM.webRequest(rules, listener?) / GM_webRequest(rules, listener?)
@@ -677,7 +698,7 @@ window.addEventListener("urlchange", onRoute);
 | 下载 | 立即返回带 abort 的完成 Promise；Demo 共用浏览器网络上下文，文件提交后才完成。 |
 | Cookie | 没有 partitionKey 语义，默认 SameSite/第一方写入及变更订阅有限。 |
 | webRequest | 改写动作对象及回调，显式注册运行时规则并保留移除句柄。 |
-| 其他管理器 API | 不内置 GM.audio/GM_audio 和扩展专属内容/部署 API；未知授权不会增加它们。 |
+| 其他管理器 API | 不内置扩展专属内容/部署 API；未知授权不会增加它们。音频按上文提供部分能力。 |
 
 这张表描述支持的约定及已知差异，不保证任意 Tampermonkey 脚本都能原样运行。应在实际宿主应用中验证所用功能。
 

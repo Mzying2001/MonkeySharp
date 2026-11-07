@@ -590,6 +590,27 @@ await GM.cookie.delete({name:'session'}); // undefined, no removal boolean
 GM_cookie.list({}, (cookies, error) => console.log(cookies, error));
 ```
 
+## Tab audio
+
+Grant `GM.audio` or `GM_audio`. Modern `GM.audio.getState()` returns a Promise of actual tab state. `GM.audio.setMute({isMuted:true})` resolves to `{isMuted:true}` after native readback, as observed in the pinned Tampermonkey 5.5.1 reference (its documentation describes void instead). Legacy `GM_audio.getState(callback)` and `GM_audio.setMute(details, callback?)` return undefined; mutation callbacks receive an optional error string.
+
+`addStateChangeListener(listener)` and `removeStateChangeListener(listener)` use the exact function identity. Modern calls resolve after registration/removal; legacy calls return undefined and accept a completion callback. Register before changing mute state. Events contain `muted` (known reason, `"unknown"`, or false), and `audible` only when a reliable backend supplies it. Listeners belong to their execution and are removed on navigation/detach.
+
+The default CefSharp service supports mute on 84/121/151 and follows the native browser across frames and navigation. In the tested 151 SmokeHost navigation, CEF resets native mute to false; 84/121 retain it. The service reports the actual state and does not promise retention on 151. It reads native state on the CEF UI thread and polls every 200 ms for changes made by other host controls; transitions shorter than that interval may not be observed. Unknown reasons are omitted from state and identified as `"unknown"` in changes. `isAudible`/`audible` are omitted: WebAudio or stream existence is not a reliable audible source. `GM.info.compatibility.capabilities["GM.audio"]` reports `partial:mute-only;audible-unavailable`.
+
+Hosts can supply an independent `ITabAudioService` through `UseTabAudioService`, or disable the native default with `EnableDefaultAudioService = false`; network-service options do not control audio. Application-supplied services remain application-owned. See the [audio evidence](compatibility/p2-implementation.md#17-tab-audio).
+
+```javascript
+// @grant GM.audio
+(async function () {
+    const onAudio = change => console.log(change.muted);
+    await GM.audio.addStateChangeListener(onAudio);
+    await GM.audio.setMute({isMuted:true});
+    const state = await GM.audio.getState();
+    await GM.audio.removeStateChangeListener(onAudio);
+})().catch(console.error);
+```
+
 ## Request interception
 
 ### GM.webRequest(rules, listener?) / GM_webRequest(rules, listener?)
@@ -654,7 +675,7 @@ window.addEventListener("urlchange", onRoute);
 | Downloads | Immediately returns an abortable completion Promise; Demo uses the shared browser network context and commits the file before completion. |
 | Cookies | No partitionKey semantics; default SameSite/first-party writes and change feeds are limited. |
 | webRequest | Rewrite action objects and callbacks; explicitly register runtime rules and retain the removal handle. |
-| Other manager APIs | `GM.audio`/`GM_audio` and extension-specific content/deployment APIs are not built in. Unknown grants do not add them. |
+| Other manager APIs | Extension-specific content/deployment APIs are not built in. Unknown grants do not add them. Audio is partial as described above. |
 
 This is a list of supported contracts and known differences, not a promise that every Tampermonkey script can run unchanged. Prefer testing each feature against the actual embedding application.
 

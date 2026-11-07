@@ -208,5 +208,12 @@
     "modernReturn": "value",
     "legacyReturn": "void",
     "family": "window.onurlchange"
+  },
+  {
+    "capability": "GM.audio",
+    "legacy": "GM_audio",
+    "modernReturn": "namespace",
+    "legacyReturn": "namespace",
+    "family": "GM.audio"
   }
 ]

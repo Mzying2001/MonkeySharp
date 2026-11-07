@@ -129,6 +129,11 @@ async function main() {
             closeReturns: result.immediateReturn.legacyClose === "undefined" && result.immediateReturn.modernClose === "undefined",
             closedAfterRetry: result.effects.closed === true,
             logReturns: result.immediateReturn.legacyLog === "undefined" && result.immediateReturn.modernLog === "function" && result.promise.logValue === "undefined"
+        } : result.caseId === "audio" ? {
+            noError: !result.effects.error,
+            muteReadback: result.effects.muted?.isMuted === true && result.effects.unmuted?.isMuted === false,
+            promiseReturns: result.immediateReturn.set === "function" && result.immediateReturn.add === "function" && result.immediateReturn.remove === "function",
+            callbackReturns: result.immediateReturn.legacySet === "undefined" && result.immediateReturn.legacyGet === "undefined"
         } : result.caseId === "binary-inputs" ? {
             blobText: result.effects.blobText === "blob text 你好",
             fileText: result.effects.fileText === "file text",

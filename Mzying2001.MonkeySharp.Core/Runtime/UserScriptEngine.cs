@@ -1,4 +1,4 @@
-using Mzying2001.MonkeySharp.Core.Domain;
+﻿using Mzying2001.MonkeySharp.Core.Domain;
 using Mzying2001.MonkeySharp.Core.Apis;
 using Mzying2001.MonkeySharp.Core.Security;
 using Mzying2001.MonkeySharp.Core.Compatibility;
@@ -570,7 +570,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                     ["isolatedWorld"] = frame.ExecutionWorld == "isolated",
                     ["capabilities"] = UserScriptGrantCatalog.KnownCanonicalGrants
                         .Where(name => name.StartsWith("GM.", StringComparison.Ordinal))
-                        .ToDictionary(name => name, name => frame.ExecutionWorld == "isolated" && name == "GM.webRequest" ? "isolated-frame-interception-unavailable" : _hostCapabilities.Contains(name) ? "available" :
+                        .ToDictionary(name => name, name => environment.CapabilityStatus.TryGetValue(name, out var status) ? status : frame.ExecutionWorld == "isolated" && name == "GM.webRequest" ? "isolated-frame-interception-unavailable" : _hostCapabilities.Contains(name) ? "available" :
                             environment.UnavailableCapabilities.TryGetValue(name, out var reason) ? reason : "service-unavailable"),
                     ["fields"] = new Dictionary<string, object>
                     {

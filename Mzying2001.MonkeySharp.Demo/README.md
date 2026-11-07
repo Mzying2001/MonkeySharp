@@ -56,6 +56,7 @@ Core's new `IUserScriptRepositoryPersistence`, `UserScriptPersistenceRecord`, an
 | DOM, info, log | Existing Core facade; logs are also shown in the diagnostics panel. |
 | `@require`, `@resource` | Persistent per-installation/revision URL cache. SRI `md5`/`sha256` hashes are checked against original bytes before caching and on cache reads. HTTP(S), at most 10 redirects, 30-second timeout, 10 MiB per fetched item. |
 | XHR, Cookie, webRequest | Existing CefSharp services follow the shared Chromium request context. Custom navigation handlers use the adapter's multiplexer, not a replacement request handler. |
+| Audio | The independent CefSharp service reads and changes native tab mute state. Listener removal, external host changes and partial capability reporting are covered; audible is omitted. |
 | Menus | Per-tab command collections, callbacks, access keys and disposal on execution end. |
 | Notifications | Nonmodal owned WPF windows with interaction-completion Promises, tag replacement, cancelable URL clicks, tab highlight, silent mode, timeout and bounded HTTP(S) images. No system toast registration required. |
 | Clipboard | Dispatcher/STA writes, Unicode text and CF_HTML, bounded retry on clipboard contention. |

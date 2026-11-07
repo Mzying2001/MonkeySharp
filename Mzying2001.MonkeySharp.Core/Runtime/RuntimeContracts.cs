@@ -1,4 +1,4 @@
-using Mzying2001.MonkeySharp.Core.Domain;
+﻿using Mzying2001.MonkeySharp.Core.Domain;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -347,10 +347,11 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
         /// <summary>Initializes an environment snapshot from actual host services and context.</summary>
         public UserScriptExecutionEnvironment(string downloadMode = "disabled", bool? isIncognito = null,
             bool? scriptWillUpdate = null,
-            IReadOnlyDictionary<string, string> unavailableCapabilities = null)
+            IReadOnlyDictionary<string, string> unavailableCapabilities = null, IReadOnlyDictionary<string, string> capabilityStatus = null)
         {
             if (downloadMode != "disabled" && downloadMode != "native" && downloadMode != "browser")
                 throw new ArgumentException("Unknown download mode.", nameof(downloadMode));
+            CapabilityStatus = new ReadOnlyDictionary<string, string>(capabilityStatus == null ? new Dictionary<string, string>() : capabilityStatus.ToDictionary(item => item.Key, item => item.Value));
             DownloadMode = downloadMode; IsIncognito = isIncognito; ScriptWillUpdate = scriptWillUpdate;
             UnavailableCapabilities = new ReadOnlyDictionary<string, string>(unavailableCapabilities == null
                 ? new Dictionary<string, string>() : unavailableCapabilities.ToDictionary(item => item.Key, item => item.Value));
@@ -363,5 +364,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
         public bool? ScriptWillUpdate { get; }
         /// <summary>Gets explicit engine or policy reasons for unavailable capabilities.</summary>
         public IReadOnlyDictionary<string, string> UnavailableCapabilities { get; }
+        /// <summary>Gets truthful partial-capability descriptions supplied by the host.</summary>
+        public IReadOnlyDictionary<string, string> CapabilityStatus { get; }
     }
 }

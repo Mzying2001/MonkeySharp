@@ -108,7 +108,7 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
             {
                 "GM.getResourceText", "GM.getResourceUrl", "GM.xmlHttpRequest", "GM.registerMenuCommand",
                 "GM.unregisterMenuCommand", "GM.notification", "GM.setClipboard", "GM.openInTab", "GM.download",
-                "GM.getTab", "GM.saveTab", "GM.getTabs", "GM.cookie", "GM.webRequest", "window.close", "window.focus"
+                "GM.getTab", "GM.saveTab", "GM.getTabs", "GM.cookie", "GM.webRequest", "GM.audio", "window.close", "window.focus"
             };
             var requestedHostCapabilities = metadata.Grants.Where(item => hostCapabilities.Contains(item, StringComparer.Ordinal)).ToList();
             if (metadata.Requires.Count != 0 || metadata.Resources.Count != 0 || requestedHostCapabilities.Count != 0)

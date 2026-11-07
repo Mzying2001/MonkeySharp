@@ -50,6 +50,7 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                 checks["permissionRemembered"] = (await runtime.PermissionDecisions.ListAsync(CancellationToken.None)).Any(scope => scope.ScriptKey == installation.ScriptKey.ToString());
                 checks["storageResourcesXhrCookieWebRequest"] = await EvaluateBoolean(primary,
                     "window.__demo.storage && window.__demo.resources && window.__demo.xhr && window.__demo.cookie && window.__demo.webRequest");
+                checks["audioMuteOnly"] = await EvaluateBoolean(primary, "window.__demo.audio === true");
                 await WaitAsync(async () => await EvaluateBoolean(primary, "window.__tabIsolation === true"));
                 checks["tabStateScriptIsolation"] = true;
                 checks["domAndInfo"] = await EvaluateBoolean(primary, "window.__demo.dom && window.__demo.info");
@@ -305,6 +306,7 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
 // @grant GM_getTabs
 // @grant GM_cookie
 // @grant GM_webRequest
+// @grant GM_audio
 // @grant GM_info
 // @grant GM_log
 // @grant window.close
@@ -329,6 +331,11 @@ sessionStorage.setItem('runs', String(window.__demo.runs));
     await GM.cookie.set({ url: location.href, name: 'demo-cookie', value: 'ready', path: '/' });
     result.cookie = (await GM.cookie.list({ url: location.href })).some(cookie => cookie.name === 'demo-cookie');
     result.xhr = (await GM.xmlHttpRequest({ url: '__BASE__/resource' })).responseText === 'demo-resource';
+    await GM.audio.setMute({ isMuted: true });
+    result.audio = (await GM.audio.getState()).isMuted === true;
+    await new Promise((resolve, reject) => GM_audio.setMute({ isMuted: false }, error => error ? reject(error) : resolve()));
+    const audioState = await GM.audio.getState();
+    result.audio = result.audio && audioState.isMuted === false && !('isAudible' in audioState) && GM.info.compatibility.capabilities['GM.audio'] === 'partial:mute-only;audible-unavailable';
     const webRequestReturnsVoid = GM.webRequest([{ selector: '__BASE__/__monkeysharp_block__', action: { cancel: true } }]) === undefined;
     await new Promise(resolve => setTimeout(resolve, 200));
     try { await fetch('__BASE__/__monkeysharp_block__'); result.webRequest = false; } catch (_) { result.webRequest = webRequestReturnsVoid; }

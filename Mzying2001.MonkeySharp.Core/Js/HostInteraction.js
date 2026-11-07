@@ -1,4 +1,4 @@
-            const invokeHostCallback = function (record, callback, receiver, value, name) {
+﻿            const invokeHostCallback = function (record, callback, receiver, value, name) {
                 if (typeof callback !== "function") return;
                 try { callback.call(receiver, value); }
                 catch (error) {
@@ -221,7 +221,41 @@
                 });
             };
 
+            const addAudioApi = function (record) {
+                const perform = (operation, parameters) => call(record, "GM.audio", Object.assign({ operation }, parameters));
+                return Object.freeze({
+                    setMute(details) {
+                        if (!details || typeof details.isMuted !== "boolean") return Promise.reject(new TypeError("isMuted must be a boolean."));
+                        return perform("setMute", { isMuted: details.isMuted });
+                    },
+                    getState: () => perform("getState"),
+                    addStateChangeListener(listener) {
+                        if (typeof listener !== "function") return Promise.reject(new TypeError("listener must be a function."));
+                        const previous = record.audioListeners.get(listener);
+                        if (previous) return previous.ready;
+                        const id = nextListenerId++;
+                        const state = { id };
+                        record.audioHandlers.set(id, listener);
+                        record.audioListeners.set(listener, state);
+                        state.ready = perform("addListener", { listenerId: id }).then(() => undefined, error => {
+                            record.audioHandlers.delete(id);
+                            if (record.audioListeners.get(listener) === state) record.audioListeners.delete(listener);
+                            throw error;
+                        });
+                        return state.ready;
+                    },
+                    removeStateChangeListener(listener) {
+                        if (typeof listener !== "function") return Promise.reject(new TypeError("listener must be a function."));
+                        const state = record.audioListeners.get(listener);
+                        if (!state) return Promise.resolve();
+                        record.audioListeners.delete(listener); record.audioHandlers.delete(state.id);
+                        return state.ready.then(() => perform("removeListener", { listenerId: state.id })).then(() => undefined);
+                    }
+                });
+            };
+
             const addHostApi = function (record, enabled, api) {
+                if (enabled("GM.audio")) api.audio = addAudioApi(record);
                 if (enabled("GM.registerMenuCommand")) api.registerMenuCommand = async function (name, callback, options) { return registerMenu(record, name, callback, options).ready; };
                 if (enabled("GM.unregisterMenuCommand")) api.unregisterMenuCommand = async id => unregisterMenu(record, id);
                 if (enabled("GM.notification")) api.notification = async function (...args) { return notificationOperation(record, ...args); };
@@ -311,6 +345,23 @@
             };
 
             const addLegacyHost = function (record, api, facade) {
+                if (api.audio) {
+                    const invoke = function (name, args, callback, stateResult) {
+                        if (callback !== undefined && typeof callback !== "function") throw new TypeError("callback must be a function.");
+                        api.audio[name](...args).then(value => {
+                            invokeHostCallback(record, callback, undefined, stateResult ? value : undefined, "audio " + name);
+                        }, error => {
+                            if (callback) invokeHostCallback(record, callback, undefined, stateResult ? undefined : String(error && error.message || error), "audio " + name);
+                            else console.error("[MonkeySharp] audio " + name + " failed", error);
+                        });
+                    };
+                    facade.GM_audio = Object.freeze(Object.assign(function () {}, {
+                        setMute: (details, callback) => invoke("setMute", [details], callback, false),
+                        getState: callback => invoke("getState", [], callback, true),
+                        addStateChangeListener: (listener, callback) => invoke("addStateChangeListener", [listener], callback, false),
+                        removeStateChangeListener: (listener, callback) => invoke("removeStateChangeListener", [listener], callback, false)
+                    }));
+                }
                 if (api.registerMenuCommand) facade.GM_registerMenuCommand = function (name, callback, options) {
                     const operation = registerMenu(record, name, callback, options);
                     operation.ready.catch(error => console.error("[MonkeySharp] menu registration failed", error));

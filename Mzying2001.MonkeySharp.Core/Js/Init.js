@@ -1,4 +1,4 @@
-(function () {
+﻿(function () {
     "use strict";
 
     const decodePayload = function (base64) {
@@ -189,6 +189,8 @@
                     notificationTails: new Map(),
                     tabHandlers: [],
                     webRequestHandlers: new Map(),
+                    audioHandlers: new Map(),
+                    audioListeners: new Map(),
                     mutationTail: Promise.resolve(),
                     storageMirror: null,
                     storageConfirmed: null,
@@ -344,6 +346,12 @@
                             invokeHostCallback(record, state.callbacks.onprogress, state.details, { loaded: data.loaded, total: data.total }, "download progress");
                         } else if (notification.event === "download-complete") state.finish("complete", data.result || {});
                         else state.finish(notification.event === "download-timeout" ? "timeout" : notification.event === "download-aborted" ? "aborted" : "error", data);
+                        return true;
+                    }
+                    if (notification.event === "audio-state") {
+                        const callback = record.audioHandlers.get(data.listenerId);
+                        if (!callback) return false;
+                        invokeHostCallback(record, callback, undefined, data.change, "audio state");
                         return true;
                     }
                     if (notification.event === "webrequest-result") {

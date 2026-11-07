@@ -1,4 +1,4 @@
-using Mzying2001.MonkeySharp.Core.Bridge;
+﻿using Mzying2001.MonkeySharp.Core.Bridge;
 using System;
 
 namespace Mzying2001.MonkeySharp.CefSharp
@@ -18,6 +18,9 @@ namespace Mzying2001.MonkeySharp.CefSharp
         /// webRequest, and cookie services when no explicit service is supplied.
         /// </summary>
         public bool EnableDefaultNetworkServices { get; set; } = true;
+
+        /// <summary>Gets or sets whether the adapter supplies its native mute-only audio service.</summary>
+        public bool EnableDefaultAudioService { get; set; } = true;
 
         /// <summary>Gets or sets whether document-start userscripts require guaranteed pre-page execution.</summary>
         public bool RequireGuaranteedDocumentStart { get; set; }

@@ -139,6 +139,27 @@ host.Attach(browser);
 
 The adapter rejects an occupied non-multiplexer slot. Setting `EnableDefaultNetworkServices = false` omits all three default network services; supplying `UseWebRequestService` still requires the handler composition above. Existing render handlers separately require a `RenderProcessMessageHandlerMultiplexer`, as shown in the [README](../README.md#existing-browser-handlers).
 
+## Tab audio
+
+Grant `GM.audio` or `GM_audio`. Modern `GM.audio.getState()` returns a Promise of actual tab state. `GM.audio.setMute({isMuted:true})` resolves to `{isMuted:true}` after native readback, as observed in the pinned Tampermonkey 5.5.1 reference (its documentation describes void instead). Legacy `GM_audio.getState(callback)` and `GM_audio.setMute(details, callback?)` return undefined; mutation callbacks receive an optional error string.
+
+`addStateChangeListener(listener)` and `removeStateChangeListener(listener)` use the exact function identity. Modern calls resolve after registration/removal; legacy calls return undefined and accept a completion callback. Register before changing mute state. Events contain `muted` (known reason, `"unknown"`, or false), and `audible` only when a reliable backend supplies it. Listeners belong to their execution and are removed on navigation/detach.
+
+The default CefSharp service supports mute on 84/121/151 and follows the native browser across frames and navigation. In the tested 151 SmokeHost navigation, CEF resets native mute to false; 84/121 retain it. The service reports the actual state and does not promise retention on 151. It reads native state on the CEF UI thread and polls every 200 ms for changes made by other host controls; transitions shorter than that interval may not be observed. Unknown reasons are omitted from state and identified as `"unknown"` in changes. `isAudible`/`audible` are omitted: WebAudio or stream existence is not a reliable audible source. `GM.info.compatibility.capabilities["GM.audio"]` reports `partial:mute-only;audible-unavailable`.
+
+Hosts can supply an independent `ITabAudioService` through `UseTabAudioService`, or disable the native default with `EnableDefaultAudioService = false`; network-service options do not control audio. Application-supplied services remain application-owned. See the [audio evidence](compatibility/p2-implementation.md#17-tab-audio).
+
+```javascript
+// @grant GM.audio
+(async function () {
+    const onAudio = change => console.log(change.muted);
+    await GM.audio.addStateChangeListener(onAudio);
+    await GM.audio.setMute({isMuted:true});
+    const state = await GM.audio.getState();
+    await GM.audio.removeStateChangeListener(onAudio);
+})().catch(console.error);
+```
+
 ## Host Service Contracts
 
 The builder is single-use. The application owns the repository, browser, and every object supplied through `UseValueStore`, `UsePermissionPolicy`, or a `Use...Service`/`Use...Provider` method. The host owns its engine, gateway, internally created providers, default network services, and default value store. Objects passed to `AddApiProvider` transfer to the gateway and are disposed when applicable.

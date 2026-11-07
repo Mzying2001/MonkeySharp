@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "caseId": "audio",
+  "immediateReturn": {
+    "modern": "object",
+    "legacy": "function",
+    "legacyGetMethod": "function",
+    "modernGetMethod": "function",
+    "add": "function",
+    "set": "function",
+    "legacyGet": "undefined",
+    "legacySet": "undefined",
+    "remove": "function"
+  },
+  "promise": {
+    "set": "object",
+    "setValue": {
+      "isMuted": true
+    },
+    "remove": "undefined"
+  },
+  "events": [
+    {
+      "muted": "extension"
+    },
+    {
+      "muted": false
+    }
+  ],
+  "effects": {
+    "initial": {
+      "isMuted": false,
+      "isAudible": false
+    },
+    "muted": {
+      "isMuted": true,
+      "muteReason": "extension",
+      "isAudible": false
+    },
+    "legacyState": {
+      "isMuted": true,
+      "muteReason": "extension",
+      "isAudible": false
+    },
+    "unmuted": {
+      "isMuted": false,
+      "isAudible": false
+    },
+    "tabsBefore": 4,
+    "tabsAfter": 4
+  },
+  "fixtureHash": "24d12dfdad5edb3f2357a48cf7458e5085486d29fdfde9cd5ffa9b9d6ddc000f",
+  "contractSource": [
+    "https://www.tampermonkey.net/documentation.php?locale=en",
+    "Tampermonkey 5.5.1/MV3 runtime"
+  ],
+  "environment": {
+    "manager": "Tampermonkey",
+    "managerVersion": "5.5.1",
+    "chromiumVersion": "Edg/156.0.4314.58",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36 Edg/156.0.0.0",
+    "manifestVersion": 3,
+    "settings": {
+      "headless": true,
+      "userScriptsAccess": true,
+      "freshProfile": true
+    },
+    "commit": "af3281f12adc417404e322a9cda8a006acf24d86",
+    "platform": "x64",
+    "capabilities": {
+      "referenceReturnProbe": true
+    },
+    "world": "manager-selected"
+  },
+  "checks": {
+    "noError": true,
+    "muteReadback": true,
+    "promiseReturns": true,
+    "callbackReturns": true
+  },
+  "status": "passed"
+}

@@ -32,6 +32,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
         private IUserScriptWindowService _window;
         private ICookieService _cookies;
         private IWebRequestService _webRequests;
+        private ITabAudioService _audio;
         private bool _built;
 
         /// <summary>Initializes a host builder.</summary>
@@ -155,6 +156,10 @@ namespace Mzying2001.MonkeySharp.CefSharp
             return this;
         }
 
+        /// <summary>Uses an application-owned service for the current tab's audio.</summary>
+        public CefSharpUserScriptHostBuilder UseTabAudioService(ITabAudioService audio)
+        { _audio = audio ?? throw new ArgumentNullException(nameof(audio)); return this; }
+
         /// <summary>Enables <c>GM.webRequest</c> with a host web request service.</summary>
         public CefSharpUserScriptHostBuilder UseWebRequestService(IWebRequestService webRequests)
         {
@@ -206,11 +211,16 @@ namespace Mzying2001.MonkeySharp.CefSharp
                         unavailableCapabilities: _options.EnableDefaultNetworkServices ? null : new Dictionary<string, string>
                         {
                             ["GM.xmlHttpRequest"] = "policy-disabled", ["GM.cookie"] = "policy-disabled", ["GM.webRequest"] = "policy-disabled"
-                        })
+                        }, capabilityStatus: _audio != null && !_audio.SupportsAudible ? new Dictionary<string, string> { ["GM.audio"] = "partial:mute-only;audible-unavailable" } : null)
                 });
             var ownedServices = new List<IDisposable>();
             try
             {
+                if (_audio == null && _options.EnableDefaultAudioService)
+                {
+                    _audio = new CefSharpTabAudioService(() => builtHost?.GetAudioBrowserHost());
+                    ownedServices.Add((IDisposable)_audio);
+                }
                 var effectiveWebRequests = _webRequests;
                 if (effectiveWebRequests == null && _options.EnableDefaultNetworkServices)
                 {
@@ -254,6 +264,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                         _tabState,
                         _window, _options.Bridge));
                 }
+                if (_audio != null) providers.Add(new TabAudioApiProvider(_audio));
                 if (effectiveCookies != null)
                     providers.Add(new CookieApiProvider(effectiveCookies));
                 if (effectiveWebRequests != null)
