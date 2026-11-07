@@ -180,7 +180,7 @@ namespace Mzying2001.MonkeySharp.Demo.Services
                 _owner._dispatcher.BeginInvoke(new Action(() =>
                 {
                     if (_closed != 0) return;
-                    if (!preventDefault && _request.Url != null) _owner._main.NewTab(_request.Url.AbsoluteUri);
+                    if (!preventDefault && _request.Url != null) _owner._main.NewTab(_request.Url.AbsoluteUri, origin: _owner._origin);
                     Dispose();
                 }));
             }
@@ -220,6 +220,7 @@ namespace Mzying2001.MonkeySharp.Demo.Services
 
     public sealed class WpfTabService : ITabService
     {
+        public bool SupportsIncognito => true;
         private readonly MainWindowViewModel _main;
         private readonly BrowserTabViewModel _origin;
         private readonly Dispatcher _dispatcher;
@@ -237,7 +238,7 @@ namespace Mzying2001.MonkeySharp.Demo.Services
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 if (_origin.IsClosed) throw new OperationCanceledException();
-                var tab = _main.NewTab(request.Url.AbsoluteUri, request.Active, _origin, request.Insert, request.SetParent, request.InsertIndex);
+                var tab = _main.NewTab(request.Url.AbsoluteUri, request.Active, _origin, request.Insert, request.SetParent, request.InsertIndex, request.Incognito);
                 return (ITabHandle)new TabHandle(_main, tab, _dispatcher);
             });
         }

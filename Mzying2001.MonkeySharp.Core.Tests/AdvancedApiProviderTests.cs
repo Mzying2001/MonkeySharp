@@ -649,6 +649,24 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             await Assert.ThrowsAsync<BridgeProtocolException>(() => Invoke(new { operation = "createBody", clientId = next, url = "blob:https://example.com/source", length = 400001 }));
         }
 
+        [Fact]
+        public async Task PrivateTabOptionRequiresHostSupportAndIsNeverDropped()
+        {
+            var installation = await InstallAsync("// @grant GM_openInTab");
+            var services = new FakeHostServices();
+            using (var provider = new HostInteractionApiProvider(tabs: services))
+            {
+                await Assert.ThrowsAsync<UnsupportedApiException>(() => provider.InvokeAsync(Context(installation,
+                    "GM.openInTab", new { url = "https://example.com/private", incognito = true }), CancellationToken.None));
+                Assert.Null(services.OpenTab);
+                services.SupportsIncognito = true;
+                await provider.InvokeAsync(Context(installation, "GM.openInTab", new { url = "https://example.com/private", incognito = true }), CancellationToken.None);
+                Assert.True(services.OpenTab.Incognito);
+                await provider.InvokeAsync(Context(installation, "GM.openInTab", new { url = "https://example.com/normal", incognito = false }), CancellationToken.None);
+                Assert.False(services.OpenTab.Incognito);
+            }
+        }
+
         private static async Task<UserScriptInstallation> InstallAsync(string extraMetadata)
         {
             var repository = new InMemoryUserScriptRepository();
@@ -736,6 +754,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         private sealed class FakeHostServices :
             IMenuService, INotificationService, IClipboardService, ITabService, IDownloadService, IUserScriptWindowService
         {
+            public bool SupportsIncognito { get; set; }
             public string DownloadMode => "browser";
             public bool CloseTabOnOpen;
             public OpenTabRequest OpenedTab;

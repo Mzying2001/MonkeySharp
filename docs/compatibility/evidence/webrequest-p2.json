@@ -3,7 +3,7 @@
   "caseId": "webrequest-p2",
   "date": "2026-11-07",
   "baseCommit": "500e83bd041150f1be80cd25df1984b557e4aba3",
-  "fixtureSha256": "1b7bb95db9ec3411fc4f39147829a750bc3eb3b8eba7431cf48ae100d5bb19cc",
+  "fixtureSha256": "d7a6653e22f297b7d7025288da1032b0ee9f57f32f1096731436a234695b6524",
   "runs": [
     {
       "version": "84.4.10",

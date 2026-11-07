@@ -648,17 +648,23 @@ namespace Mzying2001.MonkeySharp.CefSharp
 
         private DocumentFrame RequestFrame(IFrame frame, IRequest request)
         {
-            if (frame == null || frame.IsDisposed) return null;
-            lock (_sync)
+            try
             {
-                if (_browser == null) return null;
-                var id = GetFrameIdentifier(frame);
-                var navigation = request.ResourceType.ToString() == "SubFrame" || request.ResourceType.ToString() == "MainFrame";
-                if (!navigation && _sessions.TryGetValue(id, out var session) && session.Frame.Url.AbsoluteUri == frame.Url) return session.Frame;
-                if (!Uri.TryCreate(navigation ? request.Url : frame.Url, UriKind.Absolute, out var url)) return null;
-                return new DocumentFrame(_browserSessionId, "navigation:" + id, id, url, frame.IsMain,
-                    TimingGuarantee.BestEffortDocumentStart, BridgeIntegrityGuarantee.Verified);
+                if (frame == null || frame.IsDisposed || !frame.IsValid) return null;
+                lock (_sync)
+                {
+                    if (_browser == null) return null;
+                    var id = GetFrameIdentifier(frame);
+                    var navigation = request.ResourceType.ToString() == "SubFrame" || request.ResourceType.ToString() == "MainFrame";
+                    if (!navigation && _sessions.TryGetValue(id, out var session) && session.Frame.Url.AbsoluteUri == frame.Url) return session.Frame;
+                    if (!Uri.TryCreate(navigation ? request.Url : frame.Url, UriKind.Absolute, out var url)) return null;
+                    return new DocumentFrame(_browserSessionId, "navigation:" + id, id, url, frame.IsMain,
+                        TimingGuarantee.BestEffortDocumentStart, BridgeIntegrityGuarantee.Verified);
+                }
             }
+            // Native wrappers can become invalid between IsValid and Identifier.
+            // Unknown ownership cannot inherit another document's rules.
+            catch (Exception) { return null; }
         }
 
         private void ContextCreated(IWebBrowser browser, IBrowser cefBrowser, IFrame cefFrame, bool probeDocument = true)

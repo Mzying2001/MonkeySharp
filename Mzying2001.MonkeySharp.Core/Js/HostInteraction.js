@@ -267,8 +267,7 @@
                         if (typeof options === "boolean") options = { active: !options };
                         if (typeof options === "undefined") options = {};
                         if (!options || typeof options !== "object" || Array.isArray(options)) throw new TypeError("options must be a boolean or object.");
-                        if (typeof options.incognito !== "undefined") throw notSupported("Private tab creation is not available.");
-                        for (const option of ["active", "loadInBackground", "setParent"]) if (typeof options[option] !== "undefined" && typeof options[option] !== "boolean") throw new TypeError(option + " must be a boolean.");
+                        for (const option of ["active", "loadInBackground", "setParent", "incognito"]) if (typeof options[option] !== "undefined" && typeof options[option] !== "boolean") throw new TypeError(option + " must be a boolean.");
                         if (typeof options.insert !== "undefined" && typeof options.insert !== "boolean" && (!Number.isInteger(options.insert) || options.insert < 0 || options.insert > 2147483647)) throw new TypeError("insert must be a boolean or nonnegative integer.");
                         const state = { clientId: uuid(), id: null, closed: false, terminal: false, closeRequested: false, closeSent: false, onclose: null };
                         state.finish = function () {
@@ -299,7 +298,7 @@
                         record.tabHandlers.push(state);
                         const ready = call(record, "GM.openInTab", { clientId: state.clientId, url,
                             active: typeof options.active === "boolean" ? options.active : typeof options.loadInBackground === "boolean" ? !options.loadInBackground : false,
-                            insert: typeof options.insert === "undefined" ? false : options.insert, setParent: Boolean(options.setParent)
+                            insert: typeof options.insert === "undefined" ? false : options.insert, setParent: Boolean(options.setParent), incognito: options.incognito
                         }).then(result => {
                             state.id = result && result.id;
                             if (result && result.closed) state.finish();

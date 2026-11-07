@@ -81,8 +81,12 @@ test('tabs normalize both overloads and relative URLs, queue early close, and co
     assert.equal(h.requests.at(-1).params.active, true);
     assert.equal(h.requests.at(-1).params.setParent, true);
     assert.equal((await h.GM.openInTab('/closed')).closed, true);
+    await h.GM.openInTab('/private', { incognito: true });
+    assert.equal(h.requests.at(-1).params.incognito, true);
+    await h.GM.openInTab('/normal', { incognito: false });
+    assert.equal(h.requests.at(-1).params.incognito, false);
     const before = h.requests.length;
-    assert.throws(() => h.GM.openInTab('/bad', { incognito: true }), { code: 'MSP006_NOT_SUPPORTED' });
+    assert.throws(() => h.GM.openInTab('/bad', { incognito: 'true' }), { name: 'TypeError' });
     assert.throws(() => h.GM.openInTab('/bad', { insert: -1 }));
     assert.equal(h.requests.length, before);
 });

@@ -130,7 +130,13 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                         var tabId = ProviderParameters.RequiredString(context.Parameters, "tabId");
                         return await CloseTabAsync(context, tabId, cancellationToken).ConfigureAwait(false);
                     }
-                    if (context.Parameters.TryGetProperty("incognito", out _)) throw new UnsupportedApiException("Private tab creation is not available.");
+                    bool? incognito = null;
+                    if (context.Parameters.TryGetProperty("incognito", out var privacy))
+                    {
+                        if (privacy.ValueKind != JsonValueKind.True && privacy.ValueKind != JsonValueKind.False) throw ProviderParameters.Invalid("incognito must be a boolean.");
+                        incognito = privacy.GetBoolean();
+                        if (incognito.Value && !_tabs.SupportsIncognito) throw new UnsupportedApiException("This tab service does not create private browsing contexts.");
+                    }
                     var tabAddress = ProviderParameters.RequiredString(context.Parameters, "url");
                     var tabUrl = tabAddress == "about:blank" ? new Uri(tabAddress) : ReadHttpUrl(context.Parameters, "url");
                     var tabClientId = ProviderParameters.OptionalString(context.Parameters, "clientId");
@@ -147,7 +153,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                         tabUrl,
                         ProviderParameters.OptionalBoolean(context.Parameters, "active", false),
                         insert,
-                        ProviderParameters.OptionalBoolean(context.Parameters, "setParent"), insertIndex), cancellationToken)
+                        ProviderParameters.OptionalBoolean(context.Parameters, "setParent"), insertIndex, incognito), cancellationToken)
                         .ConfigureAwait(false);
                     if (tab == null || string.IsNullOrEmpty(tab.TabId))
                         throw new InvalidOperationException("The tab service returned no tab handle.");

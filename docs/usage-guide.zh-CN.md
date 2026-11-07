@@ -503,7 +503,7 @@ GM_setClipboard('已复制', 'text', () => console.log('已写入'));
 
 ### GM.openInTab(url, options?) / GM_openInTab(url, options?)
 
-需要对应授权和标签页服务。HTTP(S) 字符串按当前文档解析相对 URL，也支持 about:blank。两种形式统一接受 loadInBackground 布尔简写或 options 对象；active 默认 false，显式 active 优先于 loadInBackground。insert:true 插入来源页旁，false 追加，非负整数指定标签栏位置（Demo 限定在实际可用范围）；setParent:true 关联来源页，以便关闭后恢复选择。私密标签创建仍属后续能力，传入 incognito 会在打开前拒绝。
+需要对应授权和标签页服务。HTTP(S) 字符串按当前文档解析相对 URL，也支持 about:blank。两种形式统一接受 loadInBackground 布尔简写或 options 对象；active 默认 false，显式 active 优先于 loadInBackground。insert:true 插入来源页旁，false 追加，非负整数指定标签栏位置（Demo 限定在实际可用范围）；setParent:true 关联来源页，以便关闭后恢复选择。incognito:true 请求真实私密上下文，Demo 在省略时继承来源标签；不支持的宿主在打开前拒绝。
 
 现代打开完成后返回 Promise<TabHandle>；旧版立即返回本地句柄。句柄只有 close、closed 和 onclose。close() 返回 undefined，过早调用会排队等到打开确认，且只发送一次。closed 反映宿主实际关闭；onclose 无参数且仅触发一次。客户关联 ID 也覆盖打开确认前的关闭事件，宿主 ID 保留在桥接内部。现代打开失败拒绝 Promise，旧版记录日志。执行结束移除回调订阅，保留已经打开的用户标签页。
 
@@ -608,6 +608,16 @@ GM_cookie.list({}, (cookies, error) => console.log(cookies, error));
 ```
 
 <a id="request-interception"></a>
+
+## 私密浏览
+
+`GM.openInTab(url, {incognito:true})` 及旧式调用请求真实私密上下文。Demo 提供 **私密＋** 按钮及私密标签标识。省略 incognito 时继承来源标签，false 显式打开普通标签。宿主通过 `ITabService.SupportsIncognito` 声明能力；不支持的服务在打开前拒绝私密请求。
+
+Demo 的 `TabContext` 绑定稳定 tab 身份、原生 RequestContext、隐私状态、值存储、权限策略和 tab 数据。一次私密会话内的标签共享独立内存 RequestContext，Cookie 和缓存与普通浏览隔离；权限记忆及 tab 数据只在内存中。最后一个私密标签关闭并排空宿主任务后释放上下文、清除会话。`@run-in`、`GM.info.isIncognito`、网络 API 和标签打开均使用同一真实上下文。
+
+GM 值遵循固定 TM 5.5.1 临时私密会话实测：每脚本首次私密访问时复制普通初值，此后私密写入及监听只在私密会话内流转，不回写普通存储，最后私密标签关闭后不保留。这里是初值副本，不是实时共享。tab 数据枚举也按隐私上下文隔离。
+
+私密 console/runtime 诊断及 tab 数据不写入普通 profile；禁用 CEF 外的私密 favicon 自动加载，Demo 禁用原生日志文件，私密下载历史在来源标签关闭时移除。用户明确下载保存的文件及明确复制的剪贴板内容保留。见[对照与真实上下文证据](compatibility/p2-implementation.md#18-private-contexts)。
 
 ## 标签音频
 

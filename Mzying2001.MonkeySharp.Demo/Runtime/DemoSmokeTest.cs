@@ -192,6 +192,8 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                 await runtime.Repository.SetEnabledAsync(installation.ScriptKey, true, CancellationToken.None);
                 await WaitAsync(async () => await EvaluateBoolean(primary, "!!(window.__demo && window.__demo.ready)"));
                 checks["enableAndReload"] = true;
+                await PrivateContextSmokeTest.RunAsync(runtime, fixture, checks, () => permissionPrompts);
+                await WaitAsync(async () => await EvaluateBoolean(primary, "window.__demo && window.__demo.ready"));
                 selector.SelectedItem = secondary;
                 await WaitAsync(async () => await EvaluateBoolean(secondary, "window.__demo && window.__demo.ready && typeof window.__testWindowClose === 'function'"));
                 await Evaluate(secondary, "window.__testWindowClose()");
@@ -248,7 +250,7 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
             }
         }
 
-        private static async Task WaitAsync(Func<Task<bool>> condition)
+        internal static async Task WaitAsync(Func<Task<bool>> condition)
         {
             var deadline = DateTime.UtcNow.AddSeconds(25);
             while (DateTime.UtcNow < deadline)
@@ -265,12 +267,12 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
             var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(image));
             using (var output = File.Create(path)) encoder.Save(output);
         }
-        private static async Task<bool> EvaluateBoolean(BrowserTabViewModel tab, string script)
+        internal static async Task<bool> EvaluateBoolean(BrowserTabViewModel tab, string script)
         {
             var result = await Evaluate(tab, "Boolean(" + script + ")");
             return result is bool value && value;
         }
-        private static async Task<object> Evaluate(BrowserTabViewModel tab, string script)
+        internal static async Task<object> Evaluate(BrowserTabViewModel tab, string script)
         {
             if (!(tab.Browser is BrowserTabView view) || !view.IsJavaScriptReady) return null;
             var result = await view.EvaluateAsync(script);

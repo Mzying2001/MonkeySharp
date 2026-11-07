@@ -919,6 +919,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
 
     internal sealed class SmokeTabService : ITabService
     {
+        public bool SupportsIncognito => false;
         private int _nextId;
 
         public Task<ITabHandle> OpenAsync(OpenTabRequest request, CancellationToken cancellationToken)

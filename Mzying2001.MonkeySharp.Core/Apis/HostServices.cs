@@ -479,7 +479,8 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         /// <param name="insert">Whether to insert the tab next to the current tab.</param>
         /// <param name="setParent">Whether to associate the current tab as the parent.</param>
         /// <param name="insertIndex">An optional absolute tab-strip position, overriding adjacent insertion.</param>
-        public OpenTabRequest(Uri url, bool active, bool insert, bool setParent, int? insertIndex = null)
+        /// <param name="incognito">An explicit privacy context, or null to inherit the source tab.</param>
+        public OpenTabRequest(Uri url, bool active, bool insert, bool setParent, int? insertIndex = null, bool? incognito = null)
         {
             Url = url ?? throw new ArgumentNullException(nameof(url));
             Active = active;
@@ -487,6 +488,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             SetParent = setParent;
             if (insertIndex < 0) throw new ArgumentOutOfRangeException(nameof(insertIndex));
             InsertIndex = insertIndex;
+            Incognito = incognito;
         }
 
         /// <summary>Gets the absolute URL to open.</summary>
@@ -503,6 +505,8 @@ namespace Mzying2001.MonkeySharp.Core.Apis
 
         /// <summary>Gets whether to associate the current tab as the parent.</summary>
         public bool SetParent { get; }
+        /// <summary>Gets an explicit privacy context, or null to inherit the originating tab.</summary>
+        public bool? Incognito { get; }
     }
 
     /// <summary>
@@ -526,6 +530,8 @@ namespace Mzying2001.MonkeySharp.Core.Apis
     /// </summary>
     public interface ITabService
     {
+        /// <summary>Gets whether this host creates genuine private browsing contexts.</summary>
+        bool SupportsIncognito { get; }
         /// <summary>Opens a browser tab and returns a lifecycle handle.</summary>
         /// <param name="request">The tab request.</param>
         /// <param name="cancellationToken">A token that cancels the operation.</param>

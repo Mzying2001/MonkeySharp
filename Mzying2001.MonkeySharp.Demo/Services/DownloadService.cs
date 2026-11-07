@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using Mzying2001.MonkeySharp.Core.Apis;
 using Mzying2001.MonkeySharp.Demo.ViewModels;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -35,13 +36,16 @@ namespace Mzying2001.MonkeySharp.Demo.Services
         private readonly string _directory;
         private readonly Dispatcher _dispatcher;
         private readonly MainWindowViewModel _main;
+        private readonly bool _isPrivate;
+        private readonly List<DownloadItemViewModel> _privateItems = new List<DownloadItemViewModel>();
         private bool _disposed;
 
         public DownloadService(string directory, Dispatcher dispatcher, MainWindowViewModel main,
             IHttpRequestService http,
-            Func<DownloadRequest, CancellationToken, Task<DownloadDestination>> destination = null)
+            Func<DownloadRequest, CancellationToken, Task<DownloadDestination>> destination = null, bool isPrivate = false)
         {
             _directory = Path.GetFullPath(directory); _dispatcher = dispatcher; _main = main;
+            _isPrivate = isPrivate;
             Directory.CreateDirectory(_directory);
             _pipeline = new FileDownloadService(http, destination ?? SelectDestinationAsync);
         }
@@ -53,12 +57,17 @@ namespace Mzying2001.MonkeySharp.Demo.Services
             var operation = await _pipeline.CreateAsync(request, cancellationToken).ConfigureAwait(false);
             var name = SafeFileName(string.IsNullOrWhiteSpace(request.Name) ? Path.GetFileName(request.Url.AbsolutePath) : request.Name);
             var item = new DownloadItemViewModel(name, operation.Abort);
-            Post(() => _main.Downloads.Add(item));
+            Post(() =>
+            {
+                if (_isPrivate && _disposed) return;
+                _main.Downloads.Add(item);
+                if (_isPrivate) _privateItems.Add(item);
+            });
             operation.Progress += (_, progress) => Post(() => { item.Loaded = progress.Loaded; item.Status = "\u4e0b\u8f7d\u4e2d"; });
             operation.Completed += (_, __) => Post(() => item.Status = "\u5b8c\u6210");
             operation.Aborted += (_, __) => Post(() => item.Status = "\u5df2\u53d6\u6d88");
             operation.TimedOut += (_, __) => Post(() => item.Status = "\u8d85\u65f6");
-            operation.Failed += (_, failure) => Post(() => { item.Status = "\u5931\u8d25"; _main.Diagnostics.Report(failure.Error.Message); });
+            operation.Failed += (_, failure) => Post(() => { item.Status = "\u5931\u8d25"; if (!_isPrivate) _main.Diagnostics.Report(failure.Error.Message); });
             return operation;
         }
 
@@ -84,6 +93,7 @@ namespace Mzying2001.MonkeySharp.Demo.Services
         {
             if (_disposed) return;
             _disposed = true; _pipeline.Dispose();
+            if (_isPrivate) Post(() => { foreach (var item in _privateItems) _main.Downloads.Remove(item); _privateItems.Clear(); });
         }
         public Task DrainAsync() => _pipeline.DrainAsync();
 

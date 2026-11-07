@@ -128,6 +128,16 @@ host.Attach(browser);
 
 适配器会拒绝已被非 multiplexer 处理器占用的槽位。设置 `EnableDefaultNetworkServices = false` 会同时禁用三个默认网络服务；通过 `UseWebRequestService` 注入服务时仍须按上述方式组合处理器。已有渲染处理器还须单独使用 `RenderProcessMessageHandlerMultiplexer`，示例见 [README](../README.zh-CN.md#已有的浏览器处理器)。
 
+## 私密浏览
+
+`GM.openInTab(url, {incognito:true})` 及旧式调用请求真实私密上下文。Demo 提供 **私密＋** 按钮及私密标签标识。省略 incognito 时继承来源标签，false 显式打开普通标签。宿主通过 `ITabService.SupportsIncognito` 声明能力；不支持的服务在打开前拒绝私密请求。
+
+Demo 的 `TabContext` 绑定稳定 tab 身份、原生 RequestContext、隐私状态、值存储、权限策略和 tab 数据。一次私密会话内的标签共享独立内存 RequestContext，Cookie 和缓存与普通浏览隔离；权限记忆及 tab 数据只在内存中。最后一个私密标签关闭并排空宿主任务后释放上下文、清除会话。`@run-in`、`GM.info.isIncognito`、网络 API 和标签打开均使用同一真实上下文。
+
+GM 值遵循固定 TM 5.5.1 临时私密会话实测：每脚本首次私密访问时复制普通初值，此后私密写入及监听只在私密会话内流转，不回写普通存储，最后私密标签关闭后不保留。这里是初值副本，不是实时共享。tab 数据枚举也按隐私上下文隔离。
+
+私密 console/runtime 诊断及 tab 数据不写入普通 profile；禁用 CEF 外的私密 favicon 自动加载，Demo 禁用原生日志文件，私密下载历史在来源标签关闭时移除。用户明确下载保存的文件及明确复制的剪贴板内容保留。见[对照与真实上下文证据](compatibility/p2-implementation.md#18-private-contexts)。
+
 ## 标签音频
 
 授权 `GM.audio` 或 `GM_audio`。现代 `GM.audio.getState()` 兑现真实标签状态；`GM.audio.setMute({isMuted:true})` 在原生读回后兑现 `{isMuted:true}`，以固定 Tampermonkey 5.5.1 实测为准（官方文档写为 void）。旧式 `GM_audio.getState(callback)`、`GM_audio.setMute(details, callback?)` 返回 undefined，修改回调接收可选错误字符串。

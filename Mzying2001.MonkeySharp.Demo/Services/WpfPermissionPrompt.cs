@@ -13,7 +13,10 @@ namespace Mzying2001.MonkeySharp.Demo.Services
         private readonly Dispatcher _dispatcher;
         public event Action<Window> Opened;
         public WpfPermissionPrompt(Dispatcher dispatcher) { _dispatcher = dispatcher; }
-        public async Task<UserScriptPermissionChoice> PromptAsync(ApiAuthorizationRequest request, UserScriptPermissionScope scope, CancellationToken token)
+        public Task<UserScriptPermissionChoice> PromptAsync(ApiAuthorizationRequest request, UserScriptPermissionScope scope, CancellationToken token)
+            => PromptCoreAsync(request, scope, token, false);
+        public IUserScriptPermissionPrompt ForPrivateContext() => new PrivatePrompt(this);
+        private async Task<UserScriptPermissionChoice> PromptCoreAsync(ApiAuthorizationRequest request, UserScriptPermissionScope scope, CancellationToken token, bool isPrivate)
         {
             Window dialog = null;
             var completion = new TaskCompletionSource<UserScriptPermissionChoice>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -25,6 +28,7 @@ namespace Mzying2001.MonkeySharp.Demo.Services
                     var panel = new StackPanel { Margin = new Thickness(20) };
                     panel.Children.Add(new TextBlock { Text = request.Installation.Definition.Metadata.Name, FontSize = 18, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
                     panel.Children.Add(new TextBlock { Text = scope.Kind + "\n" + scope.Target, Margin = new Thickness(0, 12, 0, 12), TextWrapping = TextWrapping.Wrap });
+                    if (isPrivate) panel.Children.Add(new TextBlock { Text = "本次私密会话：记忆决定会在最后一个私密标签关闭后清除。", TextWrapping = TextWrapping.Wrap });
                     panel.Children.Add(new TextBlock { Text = "允许一次仅适用于当前合并等待的请求；记忆决定仅适用于此安装、权限和目标。导航会取消失效的等待。", MaxWidth = 440, TextWrapping = TextWrapping.Wrap });
                     var buttons = new WrapPanel { Margin = new Thickness(0, 16, 0, 0) };
                     Action<string, PermissionDecision, bool> add = (label, decision, remember) =>
@@ -37,7 +41,7 @@ namespace Mzying2001.MonkeySharp.Demo.Services
                     add("记忆允许", PermissionDecision.Allow, true);
                     add("拒绝并记住", PermissionDecision.Deny, true);
                     panel.Children.Add(buttons);
-                    dialog = new Window { Title = "MonkeySharp 权限请求", Content = panel, Width = 520, SizeToContent = SizeToContent.Height,
+                    dialog = new Window { Title = isPrivate ? "MonkeySharp 私密权限请求" : "MonkeySharp 权限请求", Content = panel, Width = 520, SizeToContent = SizeToContent.Height,
                         ResizeMode = ResizeMode.NoResize, WindowStartupLocation = WindowStartupLocation.CenterOwner };
                     if (Application.Current?.MainWindow != null && Application.Current.MainWindow.IsVisible) dialog.Owner = Application.Current.MainWindow;
                     dialog.Closed += (_, __) => completion.TrySetResult(new UserScriptPermissionChoice(PermissionDecision.Deny));
@@ -46,6 +50,13 @@ namespace Mzying2001.MonkeySharp.Demo.Services
                 });
                 return await completion.Task;
             }
+        }
+        private sealed class PrivatePrompt : IUserScriptPermissionPrompt
+        {
+            private readonly WpfPermissionPrompt _owner;
+            public PrivatePrompt(WpfPermissionPrompt owner) { _owner = owner; }
+            public Task<UserScriptPermissionChoice> PromptAsync(ApiAuthorizationRequest request, UserScriptPermissionScope scope, CancellationToken token)
+                => _owner.PromptCoreAsync(request, scope, token, true);
         }
     }
 }

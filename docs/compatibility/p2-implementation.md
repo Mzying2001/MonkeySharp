@@ -9,7 +9,7 @@ corpus are separate evidence gaps; they are not counted as passing here.
 | --- | --- | --- |
 | 16. Historical webRequest | Implemented within the documented scope | [Six-engine matrix](evidence/webrequest-p2.json) |
 | 17. Tab audio | Mute capability validated; audible unavailable | [Six-engine matrix](evidence/audio-p2.json), [pinned TM reference](evidence/tampermonkey-5.5.1-audio.json) |
-| 18. Private tabs | Pending | — |
+| 18. Private tabs | Validated on the supported Demo gates | [Real contexts](evidence/private-contexts-p2.json), [pinned temporary-session reference](evidence/tampermonkey-5.5.1-private-tabs.json) |
 | 19. Partitioned Cookie/XHR | Pending | — |
 | 20. Regression and delivery | Pending | — |
 
@@ -80,3 +80,35 @@ SmokeHost/CDP combinations (14 cases), and both WPF gates including native audio
 The navigation probe records native true before navigation and false afterwards
 on 151; 84/121 retain true. This is an observed native-engine boundary, not passed
 retention support on 151. The facade reports the readback faithfully.
+
+## 18. Private contexts
+
+The Demo binds each tab to an actual TabContext. A private group uses a new
+in-memory RequestContext, independent permissions and tab state, and a private
+value store. All private browsers drain and detach before the last one releases
+that context. Explicit incognito options are preserved by both facades and Core;
+hosts that lack genuine private creation reject before opening.
+
+The pinned 5.5.1/MV3 split-mode experiment confirms that private code reads the
+normal baseline but its writes stay private. Normal legacy and modern reads
+remain unchanged, including after restarting the manager. This matches the
+[maintainer's explanation](https://github.com/Tampermonkey/tampermonkey/issues/2432)
+that private data must not return to regular sessions. The implementation lazily
+copies each script's atomic normal snapshot at first private access, then uses
+only the private in-memory journal and listeners until session disposal.
+
+Native WPF tests cover info/run-in consistency, normal/private Cookie and HTTP
+separation, cache isolation/sharing/last-close clearing, memory-only remembered
+permissions, stable private tab data, copied GM values with no normal writes,
+coexisting tabs, explicit tab handles and fresh private sessions. Private logs
+and favicons avoid persistent profile paths; native file logging is disabled.
+Explicitly saved downloads remain, while their private transient history is
+removed when the owning tab closes.
+
+The stress fixture also exposed a stale-frame boundary in the step-16 request
+adapter. It now captures immutable ownership when a resource request starts and
+does not read a destroyed frame from completion callbacks. An invalid native
+frame produces unknown ownership instead of escaping through a CEF callback.
+The adapter regression test covers that late callback path.
+
+Validation passed: 389 .NET tests at both 84/121 x64, 114 JS tests, all six SmokeHost/CDP combinations, and both WPF private-context gates. On 151, ownership is captured at the first OnBeforeResourceLoad because frame URLs may be unknown at handler construction. Static first-script interception and late-callback cleanup both pass. The Demo uses tabs within its WPF window; private WPF proof covers 84/121 x64 and retains the TrustedPageWorld boundary. Firefox containers are not supplied.

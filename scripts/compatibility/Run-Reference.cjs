@@ -22,14 +22,17 @@ async function main() {
     let resolveEvidence;
     const evidence = new Promise(resolve => { resolveEvidence = resolve; });
     const received = [];
+    let privateEvidence;
+    let privateReloadEvidence;
     const requestHandler = (request, response) => {
-        if (request.url === "/evidence" && request.method === "POST") {
+        if ((request.url === "/evidence" || request.url === "/private-evidence" || request.url === "/reload-evidence") && request.method === "POST") {
             const chunks = [];
             request.on("data", chunk => chunks.push(chunk));
             request.on("end", () => {
                 const value = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-                received.push(value);
-                resolveEvidence(value);
+                if (request.url === "/reload-evidence") privateReloadEvidence = value;
+                else if (request.url === "/private-evidence") privateEvidence = value;
+                else { received.push(value); resolveEvidence(value); }
                 response.end("ok");
             });
         } else if (/^\/fixture-content\/[a-z0-9.-]+$/.test(request.url)) {
@@ -56,12 +59,16 @@ async function main() {
             args: [`--disable-extensions-except=${path.resolve(extensionPath)}`, `--load-extension=${path.resolve(extensionPath)}`, "--no-first-run",
                 ...(matching ? ["--no-proxy-server", "--host-resolver-rules=MAP xn--fsqu00a.xn--0zwm56d 127.0.0.1"] : [])]
         });
-        const worker = context.serviceWorkers()[0] || await context.waitForEvent("serviceworker");
+        let worker = context.serviceWorkers()[0] || await context.waitForEvent("serviceworker");
         if (await worker.evaluate(() => chrome.runtime.getManifest().version) !== manifest.version) throw new Error("Wrong running extension version.");
         const page = await context.newPage();
         await page.goto(`edge://extensions/?id=${extensionId}`);
-        await page.evaluate(id => new Promise((resolve, reject) => chrome.developerPrivate.updateExtensionConfiguration(
-            { extensionId: id, userScriptsAccess: true }, () => chrome.runtime.lastError ? reject(new Error(chrome.runtime.lastError.message)) : resolve())), extensionId);
+        const privateProbe = path.basename(fixture) === 'private-tabs.user.js';
+        const restarted = privateProbe ? context.waitForEvent('serviceworker', {timeout:5000}).catch(() => null) : null;
+        await page.evaluate(({id, privateProbe}) => new Promise((resolve, reject) => chrome.developerPrivate.updateExtensionConfiguration(
+            { extensionId: id, userScriptsAccess: true, ...(privateProbe ? {incognitoAccess:true} : {}) }, () => chrome.runtime.lastError ? reject(new Error(chrome.runtime.lastError.message)) : resolve())),
+            {id:extensionId, privateProbe});
+        if (restarted) worker = await restarted || worker;
         await page.goto(`chrome-extension://${extensionId}/options.html`);
         await page.locator("input[type=file]").waitFor({ state: "attached" });
         // Import through Tampermonkey's own installation UI, not storage injection.
@@ -77,6 +84,11 @@ async function main() {
         const session = await context.newCDPSession(target);
         const browserVersion = await session.send("Browser.getVersion");
         const tabsBefore = await worker.evaluate(() => chrome.tabs.query({}).then(tabs => tabs.length));
+        const privateSnapshot = privateProbe ? new Promise(resolve => setTimeout(async () => {
+            try { resolve(await worker.evaluate(async () => ({
+                allowed: await new Promise(resolve => chrome.extension.isAllowedIncognitoAccess(resolve))
+            }))); } catch (error) { resolve({error:String(error)}); }
+        }, 3000)) : null;
         let deadline;
         let result;
         if (matching) {
@@ -100,6 +112,20 @@ async function main() {
             result = await Promise.race([evidence, new Promise((_, reject) => { deadline = setTimeout(() => reject(new Error("No userscript evidence within 20 seconds.")), 20000); })]).finally(() => clearTimeout(deadline));
         }
         result.effects.tabsBefore = tabsBefore;
+        if (result.caseId === "private-tabs") {
+            result.effects.private = privateEvidence;
+            result.effects.privateSnapshot = await privateSnapshot;
+            const newWorker = context.waitForEvent('serviceworker');
+            await worker.evaluate(() => { setTimeout(() => chrome.runtime.reload(), 0); });
+            worker = await newWorker;
+            await target.goto(`http://127.0.0.1:${server.address().port}/private-check`);
+            const reloadDeadline = Date.now() + 10000;
+            while (!privateReloadEvidence && Date.now() < reloadDeadline) {
+                await target.waitForTimeout(500);
+                if (!privateReloadEvidence) await target.reload();
+            }
+            result.effects.afterManagerReload = privateReloadEvidence;
+        }
         result.effects.tabsAfter = await worker.evaluate(() => chrome.tabs.query({}).then(tabs => tabs.length));
         const checks = matching ? {
             allCasesRecorded: result.effects.cases.length === matchingScenarios.length,
@@ -129,6 +155,11 @@ async function main() {
             closeReturns: result.immediateReturn.legacyClose === "undefined" && result.immediateReturn.modernClose === "undefined",
             closedAfterRetry: result.effects.closed === true,
             logReturns: result.immediateReturn.legacyLog === "undefined" && result.immediateReturn.modernLog === "function" && result.promise.logValue === "undefined"
+        } : result.caseId === "private-tabs" ? {
+            noError: !result.effects.error,
+            contexts: result.effects.normalIncognito === false && result.effects.private?.isIncognito === true,
+            copiedBaseline: result.effects.private?.normal === "shared-from-normal",
+            isolatedWrites: result.effects.fromPrivate === null && result.effects.modernFromPrivate === null && result.effects.afterManagerReload?.fromPrivate === null
         } : result.caseId === "audio" ? {
             noError: !result.effects.error,
             muteReadback: result.effects.muted?.isMuted === true && result.effects.unmuted?.isMuted === false,

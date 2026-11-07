@@ -70,11 +70,14 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
         [RelayCommand]
         private void CreateNewTab() => NewTab();
 
+        [RelayCommand]
+        private void CreatePrivateTab() => NewTab(incognito: true);
+
         public BrowserTabViewModel NewTab(string address = "about:blank", bool active = true,
-            BrowserTabViewModel origin = null, bool insert = false, bool setParent = false, int? insertIndex = null)
+            BrowserTabViewModel origin = null, bool insert = false, bool setParent = false, int? insertIndex = null, bool? incognito = null)
         {
             if (_closing) throw new InvalidOperationException("The browser is closing.");
-            var tab = new BrowserTabViewModel(address) { ParentTabId = setParent ? origin?.TabId : null };
+            var tab = new BrowserTabViewModel(address, incognito ?? origin?.IsIncognito ?? false) { ParentTabId = setParent ? origin?.TabId : null };
             tab.PropertyChanged += TabPropertyChanged;
             if (insertIndex.HasValue) Tabs.Insert(Math.Max(0, Math.Min(insertIndex.Value, Tabs.Count)), tab);
             else if (insert && origin != null && Tabs.Contains(origin)) Tabs.Insert(Tabs.IndexOf(origin) + 1, tab);

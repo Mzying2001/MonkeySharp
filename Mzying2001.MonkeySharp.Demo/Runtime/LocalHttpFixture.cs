@@ -63,6 +63,12 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                         case "/page":
                             body = "<!doctype html><html><head><title>MonkeySharp E2E</title><link rel='icon' href='/favicon.ico'></head><body><h1>Local userscript fixture</h1><iframe src='/frame'></iframe></body></html>";
                             mime = "text/html; charset=utf-8"; break;
+                        case "/private-normal": case "/private-main": case "/private-second":
+                            body = "<!doctype html><html><head><script src='/private-cache.js'></script></head><body>Private context fixture</body></html>";
+                            mime = "text/html; charset=utf-8"; break;
+                        case "/private-cache.js":
+                            body = "globalThis.privateCacheLoaded=true;"; mime = "application/javascript";
+                            extra = "Cache-Control: public, max-age=86400\r\n"; break;
                         case "/favicon.ico":
                             body = string.Empty;
                             responseBytes = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAAcSURBVDhPYzCMqv1PCR41YNQAEB41YBgYUPsfADNDBx9pB+vtAAAAAElFTkSuQmCC");

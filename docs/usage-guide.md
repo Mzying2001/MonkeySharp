@@ -488,7 +488,7 @@ GM_setClipboard('Copied', 'text', () => console.log('Written'));
 
 ### GM.openInTab(url, options?) / GM_openInTab(url, options?)
 
-Requires its grant and a tab service. HTTP(S) strings resolve against the current document; `about:blank` is also supported. Both forms accept a boolean loadInBackground shorthand or an options object. `active` defaults to false; an explicit active wins over loadInBackground. `insert:true` requests the adjacent position, false appends, and a nonnegative integer requests an absolute tab-strip position (Demo clamps it to the available range). `setParent:true` associates the origin tab for selection after closure. Private tab creation remains a separate unsupported capability and is rejected before opening.
+Requires its grant and a tab service. HTTP(S) strings resolve against the current document; `about:blank` is also supported. Both forms accept a boolean loadInBackground shorthand or an options object. `active` defaults to false; an explicit active wins over loadInBackground. `insert:true` requests the adjacent position, false appends, and a nonnegative integer requests an absolute tab-strip position (Demo clamps it to the available range). `setParent:true` associates the origin tab for selection after closure. `incognito:true` requests a private context; omitted values inherit the source tab in the Demo. Unsupported tab services reject private requests before effects.
 
 Modern returns `Promise<TabHandle>` after opening; legacy returns a local handle immediately. The handle has only `close`, `closed`, and `onclose`. `close()` returns undefined, queues an early close until creation is acknowledged, and sends it once. `closed` reflects host closure; onclose fires once without arguments. A client correlation ID covers closure before the open acknowledgment. Internal host IDs stay inside the bridge. Modern opening failures reject; legacy failures are logged. Execution end removes callback subscriptions while keeping already opened user tabs.
 
@@ -590,6 +590,16 @@ await GM.cookie.delete({name:'session'}); // undefined, no removal boolean
 GM_cookie.list({}, (cookies, error) => console.log(cookies, error));
 ```
 
+## Private browsing
+
+`GM.openInTab(url, {incognito:true})` and the legacy form request an actual private context. The Demo also provides a **私密＋** button and marks private tabs. Omitted `incognito` inherits the originating tab; false explicitly opens a normal tab. Hosts declare `ITabService.SupportsIncognito`; a private request is rejected before opening when the service does not support it.
+
+The Demo's `TabContext` binds stable tab identity, the native RequestContext, privacy state, value store, permission policy and tab-state service. All private tabs in one live session share a separate in-memory RequestContext. Cookies and cache are isolated from normal browsing; permission decisions and tab data stay in memory. The last private tab closes and drains its host before releasing that context and clearing the private session. `@run-in`, `GM.info.isIncognito`, network APIs and tab opening all use that same actual context.
+
+Private GM values follow the pinned Tampermonkey 5.5.1 temporary-session behavior: each script receives a copy of its normal baseline on first private access, then private changes and listeners stay within the private session. Writes do not return to normal storage or persist after the last private tab closes. This is a copied baseline, not live sharing. Tab-state enumeration is also separated by privacy context.
+
+Private console/runtime diagnostics and tab data are not written to the normal profile. Automatic private favicon loading outside CEF is disabled, native file logging is disabled in the Demo, and private download history is removed when its tab closes. Files explicitly saved by a download and explicitly copied clipboard content remain user outputs. See the [reference and real-context evidence](compatibility/p2-implementation.md#18-private-contexts).
+
 ## Tab audio
 
 Grant `GM.audio` or `GM_audio`. Modern `GM.audio.getState()` returns a Promise of actual tab state. `GM.audio.setMute({isMuted:true})` resolves to `{isMuted:true}` after native readback, as observed in the pinned Tampermonkey 5.5.1 reference (its documentation describes void instead). Legacy `GM_audio.getState(callback)` and `GM_audio.setMute(details, callback?)` return undefined; mutation callbacks receive an optional error string.
@@ -671,7 +681,7 @@ window.addEventListener("urlchange", onRoute);
 | XHR | Check unsupported proxy/partition controls; adapt progress/XML behavior; inspect HTTP status explicitly. |
 | Menu / clipboard | Options and ID updates, interaction-completion notifications, and text/HTML clipboard info/callback overloads. |
 | Notifications | Use supported detail fields; modern resolution is registration, not dismissal. |
-| Tabs | Modern returns a Promise; legacy returns an immediate handle; use close/onclose; private mode and numeric insertion positions are absent. |
+| Tabs | Modern returns a Promise; legacy returns an immediate handle; use close/onclose; numeric insertion positions and real private contexts are supported by the Demo. |
 | Downloads | Immediately returns an abortable completion Promise; Demo uses the shared browser network context and commits the file before completion. |
 | Cookies | No partitionKey semantics; default SameSite/first-party writes and change feeds are limited. |
 | webRequest | Rewrite action objects and callbacks; explicitly register runtime rules and retain the removal handle. |

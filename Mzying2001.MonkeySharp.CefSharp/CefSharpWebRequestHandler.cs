@@ -85,6 +85,8 @@ namespace Mzying2001.MonkeySharp.CefSharp
         private sealed class ResourceHandler : IResourceRequestHandler
         {
             private readonly CefSharpWebRequestHandler _owner;
+            private DocumentFrame _frame;
+            private bool _ownershipCaptured;
 
             public ResourceHandler(CefSharpWebRequestHandler owner)
             {
@@ -93,6 +95,13 @@ namespace Mzying2001.MonkeySharp.CefSharp
             public ICookieAccessFilter GetCookieAccessFilter(IWebBrowser chromiumWebBrowser, IBrowser browser, IFrame frame, IRequest request) { return null; }
             public CefReturnValue OnBeforeResourceLoad(IWebBrowser chromiumWebBrowser, IBrowser browser, IFrame frame, IRequest request, IRequestCallback callback)
             {
+                // Frame URL is not ready at GetResourceRequestHandler on every CEF version.
+                // Freeze ownership at the first decision, then never query a late native frame.
+                if (!_ownershipCaptured)
+                {
+                    _frame = _owner._frame?.Invoke(frame, request);
+                    _ownershipCaptured = true;
+                }
                 var evaluation = _owner.EvaluateAsync(CreateEvent(WebRequestPhase.OnBeforeRequest, frame, request));
                 _owner.Evaluate(CreateEvent(WebRequestPhase.OnBeforeSendHeaders, frame, request));
                 if (evaluation.IsCompleted)
@@ -155,7 +164,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     phase == WebRequestPhase.OnCompleted ||
                     phase == WebRequestPhase.OnErrorOccurred;
                 return new WebRequestEvent(phase, request.Identifier, url ?? request.Url, request.Method, ResourceName(request.ResourceType.ToString()),
-                    responsePhase ? ToHeaders(response) : ToHeaders(request), response?.StatusCode, error, _owner._frame?.Invoke(frame, request));
+                    responsePhase ? ToHeaders(response) : ToHeaders(request), response?.StatusCode, error, _frame);
             }
             private static string ResourceName(string type)
             {

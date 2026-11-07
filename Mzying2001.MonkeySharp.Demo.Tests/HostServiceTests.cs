@@ -323,6 +323,27 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
             }
         });
 
+        [Fact]
+        public Task PrivateDownloadsKeepSavedFilesAndClearTransientHistory() => OnDispatcher(async () =>
+        {
+            using (var fixture = await PersistenceTests.Fixture.Create())
+            {
+                var main = new MainWindowViewModel(new DiagnosticsViewModel(Dispatcher.CurrentDispatcher, fixture.Paths.LogsDirectory));
+                var service = new DownloadService(fixture.Paths.DownloadsDirectory, Dispatcher.CurrentDispatcher, main, new DownloadTestHttp(), isPrivate: true);
+                var operation = await service.CreateAsync(new DownloadRequest(ScriptKey.Parse(Guid.NewGuid().ToString()),
+                    new Uri("https://example.com/private"), "explicit-private-save.bin", false), CancellationToken.None);
+                operation.Start();
+                await operation.Completion;
+                await Dispatcher.CurrentDispatcher.InvokeAsync(() => { });
+                Assert.Single(main.Downloads);
+                service.Dispose();
+                await service.DrainAsync();
+                await Dispatcher.CurrentDispatcher.InvokeAsync(() => { });
+                Assert.Empty(main.Downloads);
+                Assert.True(File.Exists(Path.Combine(fixture.Paths.DownloadsDirectory, "explicit-private-save.bin")));
+            }
+        });
+
         private sealed class DownloadTestHttp : IHttpRequestService
         {
             public int Requests;

@@ -53,7 +53,7 @@ skip execution with `MSR401_DEPENDENCY_PROVIDER_UNAVAILABLE`.
 `IDownloadService.DownloadMode` reports the implemented native/browser/disabled
 backend semantics. `IsIncognito` resolves actual context state, and
 `AutomaticallyUpdatesScripts` reports actual host policy. Unknown states are
-omitted from info. The Demo reports its shared normal context and manual-only
+omitted from info. The Demo reports each tab's actual normal/private context and manual-only
 update policy. `GM.info.version` is the manager assembly version; script
 version remains in `GM.info.script.version`. API availability and explicit
 policy/engine reasons are recorded in `GM.info.compatibility.capabilities`.
@@ -138,6 +138,16 @@ host.Attach(browser);
 ```
 
 The adapter rejects an occupied non-multiplexer slot. Setting `EnableDefaultNetworkServices = false` omits all three default network services; supplying `UseWebRequestService` still requires the handler composition above. Existing render handlers separately require a `RenderProcessMessageHandlerMultiplexer`, as shown in the [README](../README.md#existing-browser-handlers).
+
+## Private browsing
+
+`GM.openInTab(url, {incognito:true})` and the legacy form request an actual private context. The Demo also provides a **私密＋** button and marks private tabs. Omitted `incognito` inherits the originating tab; false explicitly opens a normal tab. Hosts declare `ITabService.SupportsIncognito`; a private request is rejected before opening when the service does not support it.
+
+The Demo's `TabContext` binds stable tab identity, the native RequestContext, privacy state, value store, permission policy and tab-state service. All private tabs in one live session share a separate in-memory RequestContext. Cookies and cache are isolated from normal browsing; permission decisions and tab data stay in memory. The last private tab closes and drains its host before releasing that context and clearing the private session. `@run-in`, `GM.info.isIncognito`, network APIs and tab opening all use that same actual context.
+
+Private GM values follow the pinned Tampermonkey 5.5.1 temporary-session behavior: each script receives a copy of its normal baseline on first private access, then private changes and listeners stay within the private session. Writes do not return to normal storage or persist after the last private tab closes. This is a copied baseline, not live sharing. Tab-state enumeration is also separated by privacy context.
+
+Private console/runtime diagnostics and tab data are not written to the normal profile. Automatic private favicon loading outside CEF is disabled, native file logging is disabled in the Demo, and private download history is removed when its tab closes. Files explicitly saved by a download and explicitly copied clipboard content remain user outputs. See the [reference and real-context evidence](compatibility/p2-implementation.md#18-private-contexts).
 
 ## Tab audio
 

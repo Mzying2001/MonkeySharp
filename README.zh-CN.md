@@ -37,6 +37,8 @@ MonkeySharp 3 是面向 CefSharp 嵌入式应用的用户脚本运行时。Core 
 
 `Mzying2001.MonkeySharp.Demo` 是可运行的 `net462`/`x64` WPF 浏览器，包含持久化脚本、后台标签页、原生管理器、SQLite 存储和所支持宿主服务的实现。
 
+私密标签使用独立内存上下文、临时权限和普通 GM 初值副本，私密写入不会回流普通存储。见[私密浏览](docs/usage-guide.zh-CN.md#私密浏览)。
+
 ```powershell
 dotnet build Mzying2001.MonkeySharp.Demo/Mzying2001.MonkeySharp.Demo.csproj -c Release -p:Platform=x64
 & .\Mzying2001.MonkeySharp.Demo\bin\x64\Release\net462\Mzying2001.MonkeySharp.Demo.exe

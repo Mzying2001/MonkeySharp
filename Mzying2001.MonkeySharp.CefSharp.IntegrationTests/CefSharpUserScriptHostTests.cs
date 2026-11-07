@@ -627,6 +627,28 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
             }
         }
 
+        [Fact]
+        public void LateResourceCallbacksKeepTheOriginalOwnershipSnapshot()
+        {
+            var original = new DocumentFrame("browser", "original-document", "frame", new Uri("https://example.test/"), true, TimingGuarantee.BestEffortDocumentStart);
+            var resolutions = 0;
+            var snapshots = new List<WebRequestEvent>();
+            var service = new Mock<IWebRequestService>();
+            service.Setup(item => item.Evaluate(It.IsAny<WebRequestEvent>())).Returns<WebRequestEvent>(item => { snapshots.Add(item); return new WebRequestDecision(); });
+            using (var handler = new CefSharpWebRequestHandler(service.Object, (_, __) => { resolutions++; if (resolutions > 1) throw new InvalidOperationException("Native frame has gone."); return original; }))
+            {
+                var request = CreateWebRequest();
+                var disabled = false;
+                using (var resource = handler.GetResourceRequestHandler(null, null, null, request.Object, false, false, "", ref disabled))
+                {
+                    resource.OnBeforeResourceLoad(null, null, null, request.Object, null);
+                    resource.OnResourceLoadComplete(null, null, null, request.Object, null, UrlRequestStatus.Canceled, 0);
+                }
+                Assert.Equal(1, resolutions);
+                Assert.All(snapshots, snapshot => Assert.Same(original, snapshot.Frame));
+            }
+        }
+
         private static Mock<IRequest> CreateWebRequest()
         {
             var request = new Mock<IRequest>();
@@ -993,6 +1015,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
             IDownloadService,
             ITabStateService
         {
+            public bool SupportsIncognito => false;
             public string DownloadMode => "native";
             public Task<ResourceContent> GetScriptAsync(
                 UserScriptInstallation installation,
