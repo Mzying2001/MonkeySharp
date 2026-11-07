@@ -1,4 +1,4 @@
-using CefSharp;
+﻿using CefSharp;
 using Mzying2001.MonkeySharp.Core.Apis;
 using Mzying2001.MonkeySharp.Core.Bridge;
 using Mzying2001.MonkeySharp.Core.Domain;
@@ -50,7 +50,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
         IUserScriptDiagnosticSource,
         IDisposable
     {
-        private const string HttpResourceType = "XHR";
+        private const string HttpResourceType = "xhr";
         private static readonly HashSet<string> RestrictedRequestHeaders = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "Host", "Content-Length", "Connection", "Proxy-Connection",
@@ -312,18 +312,8 @@ namespace Mzying2001.MonkeySharp.CefSharp
                             FollowRedirectOnUi(redirect, cefRequest);
                             return;
                         }
-                        ApplyHeaders(cefRequest, before.Headers);
-                        var headers = _webRequests.Evaluate(CreateEvent(WebRequestPhase.OnBeforeSendHeaders, url, cefRequest));
-                        if (headers.Kind == WebRequestActionKind.Block)
-                            throw new BridgeProtocolException(BridgeErrorCodes.PermissionDenied,
-                                "The HTTP request was blocked by a webRequest rule.");
-                        if (headers.Kind == WebRequestActionKind.Redirect && !string.IsNullOrEmpty(headers.RedirectUrl))
-                        {
-                            var redirect = Resolve(url, headers.RedirectUrl);
-                            FollowRedirectOnUi(redirect, cefRequest);
-                            return;
-                        }
-                        ApplyHeaders(cefRequest, headers.Headers);
+
+
                     }
 
                     _urlRequest = new global::CefSharp.UrlRequest(cefRequest, this, context);
@@ -386,14 +376,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     callback.Continue(_request.Options.Username, _request.Options.Password ?? string.Empty);
                     return true;
                 }
-                if (_webRequests == null) return false;
-                var url = _currentUrl?.AbsoluteUri ?? _request.Url.AbsoluteUri;
-                var requestId = responseIdentifier(null);
-                var decision = _webRequests.Evaluate(new WebRequestEvent(
-                    WebRequestPhase.OnAuthRequired, requestId, url, _currentMethod, HttpResourceType));
-                if (decision.Kind != WebRequestActionKind.AuthResponse) return false;
-                callback.Continue(decision.Username, decision.Password);
-                return true;
+                return false;
             }
 
             public void OnUploadProgress(IUrlRequest request, long current, long total)
@@ -489,11 +472,6 @@ namespace Mzying2001.MonkeySharp.CefSharp
                         var headersDecision = _webRequests.Evaluate(new WebRequestEvent(
                             WebRequestPhase.OnHeadersReceived, responseIdentifier(request), _currentUrl.AbsoluteUri,
                             _currentMethod, HttpResourceType, responseHeaders, response.StatusCode));
-                        if (headersDecision.Kind == WebRequestActionKind.Block)
-                            throw new BridgeProtocolException(BridgeErrorCodes.PermissionDenied,
-                                "The HTTP response was blocked by a webRequest rule.");
-                        foreach (var header in headersDecision.Headers)
-                            responseHeaders[header.Key] = header.Value;
                         _webRequests.Evaluate(new WebRequestEvent(
                             WebRequestPhase.OnResponseStarted, responseIdentifier(request), _currentUrl.AbsoluteUri,
                             _currentMethod, HttpResourceType, responseHeaders, response.StatusCode));
@@ -605,7 +583,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             private WebRequestEvent CreateEvent(WebRequestPhase phase, Uri url, IRequest request)
             {
                 return new WebRequestEvent(phase, request.Identifier, url.AbsoluteUri, request.Method,
-                    HttpResourceType, ToHeaders(request));
+                    HttpResourceType, ToHeaders(request), frame: _request.OriginFrame);
             }
 
             private static void ApplyHeaders(IRequest request, IReadOnlyDictionary<string, string> headers)

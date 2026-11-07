@@ -1,4 +1,4 @@
-using CefSharp;
+﻿using CefSharp;
 using Mzying2001.MonkeySharp.Core.Apis;
 using Mzying2001.MonkeySharp.Core.Bridge;
 using Mzying2001.MonkeySharp.Core.Permissions;
@@ -257,7 +257,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 if (effectiveCookies != null)
                     providers.Add(new CookieApiProvider(effectiveCookies));
                 if (effectiveWebRequests != null)
-                    providers.Add(new WebRequestApiProvider(effectiveWebRequests));
+                    providers.Add(new WebRequestApiProvider(effectiveWebRequests, _repository));
                 var gateway = new UserScriptBridgeGateway(
                     engine,
                     store,
@@ -272,7 +272,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     ownsStore ? store as IDisposable : null,
                     effectiveWebRequests,
                     contextAccessor,
-                    ownedServices, _repository);
+                    ownedServices, _repository, _permissionPolicy);
                 return builtHost;
             }
             catch

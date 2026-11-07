@@ -1,9 +1,10 @@
-using CefSharp;
+﻿using CefSharp;
 using Mzying2001.MonkeySharp.Core.Apis;
 using Mzying2001.MonkeySharp.Core.Bridge;
 using Mzying2001.MonkeySharp.Core.Domain;
 using Mzying2001.MonkeySharp.Core.Runtime;
 using Mzying2001.MonkeySharp.Core.Repository;
+using Mzying2001.MonkeySharp.Core.Permissions;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -54,6 +55,9 @@ namespace Mzying2001.MonkeySharp.CefSharp
         private CefSharpIsolatedExecutor _isolated;
         private Task _isolatedPreparation;
         private string _rawDocumentMarker;
+        private StaticWebRequestRules _staticWebRequests;
+        private Task _staticWebRequestPreparation;
+        private readonly IUserScriptPermissionPolicy _permissionPolicy;
 
         /// <summary>Gets whether preparation began after the browser was initialized.</summary>
         public bool IsLatePreparation { get; private set; }
@@ -64,6 +68,9 @@ namespace Mzying2001.MonkeySharp.CefSharp
         /// <summary>Prepares the browser-scoped protocol session before business navigation.</summary>
         public async Task PrepareAsync(CancellationToken cancellationToken = default(CancellationToken))
         {
+            Task rules;
+            lock (_sync) rules = _staticWebRequestPreparation;
+            if (rules != null) await rules.ConfigureAwait(false);
             await GetCdpSessionAsync(cancellationToken).ConfigureAwait(false);
             await InitializeIsolatedIfNeededAsync().ConfigureAwait(false);
         }
@@ -167,7 +174,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             IDisposable ownedStore,
             IWebRequestService webRequestService = null,
             CefSharpRequestContextAccessor requestContextAccessor = null,
-            IReadOnlyList<IDisposable> ownedServices = null, IUserScriptRepository repository = null)
+            IReadOnlyList<IDisposable> ownedServices = null, IUserScriptRepository repository = null, IUserScriptPermissionPolicy permissionPolicy = null)
         {
             _engine = engine ?? throw new ArgumentNullException(nameof(engine));
             _gateway = gateway ?? throw new ArgumentNullException(nameof(gateway));
@@ -176,6 +183,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             _requestContextAccessor = requestContextAccessor ?? new CefSharpRequestContextAccessor();
             _ownedServices = ownedServices ?? new List<IDisposable>();
             _webRequestService = webRequestService;
+            _permissionPolicy = permissionPolicy ?? new AllowDeclaredPermissionsPolicy();
             _repository = repository ?? throw new ArgumentNullException(nameof(repository));
             _repository.Changed += RepositoryChanged;
             _bridge = gateway;
@@ -265,7 +273,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             var ownsRequestMultiplexer = false;
             if (_webRequestService != null)
             {
-                webRequestHandler = new CefSharpWebRequestHandler(_webRequestService);
+                webRequestHandler = new CefSharpWebRequestHandler(_webRequestService, RequestFrame);
                 requestMultiplexer = browser.RequestHandler as CefSharpWebRequestHandlerMultiplexer;
                 if (requestMultiplexer == null)
                 {
@@ -307,6 +315,12 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     _requestContextAccessor.Current = requestContext;
                     _requestContextAccessor.IsAttached = true;
                     _attachmentGeneration++;
+                    if (_webRequestService != null)
+                    {
+                        _staticWebRequests = new StaticWebRequestRules(_repository, _webRequestService, _permissionPolicy,
+                            _browserSessionId, () => _options.IsIncognito?.Invoke(_requestContextAccessor.Current));
+                        _staticWebRequestPreparation = _staticWebRequests.InitializeAsync(_attachmentCancellation.Token);
+                    }
                 }
                 Observe(InitializeIsolatedIfNeededAsync(), "MSC230_ISOLATED_PREPARATION_FAILED", null);
             }
@@ -375,6 +389,9 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 _isolatedPreparation = null;
                 cdpPreparation = _cdpPreparation;
                 _cdpPreparation = null;
+                _staticWebRequests?.Dispose();
+                _staticWebRequests = null;
+                _staticWebRequestPreparation = null;
                 _sessions.Clear();
                 _browser = null;
                 _multiplexer = null;
@@ -622,6 +639,21 @@ namespace Mzying2001.MonkeySharp.CefSharp
             for (var index = _ownedServices.Count - 1; index >= 0; index--)
                 _ownedServices[index].Dispose();
             _ownedStore?.Dispose();
+        }
+
+        private DocumentFrame RequestFrame(IFrame frame, IRequest request)
+        {
+            if (frame == null || frame.IsDisposed) return null;
+            lock (_sync)
+            {
+                if (_browser == null) return null;
+                var id = GetFrameIdentifier(frame);
+                var navigation = request.ResourceType.ToString() == "SubFrame" || request.ResourceType.ToString() == "MainFrame";
+                if (!navigation && _sessions.TryGetValue(id, out var session) && session.Frame.Url.AbsoluteUri == frame.Url) return session.Frame;
+                if (!Uri.TryCreate(navigation ? request.Url : frame.Url, UriKind.Absolute, out var url)) return null;
+                return new DocumentFrame(_browserSessionId, "navigation:" + id, id, url, frame.IsMain,
+                    TimingGuarantee.BestEffortDocumentStart, BridgeIntegrityGuarantee.Verified);
+            }
         }
 
         private void ContextCreated(IWebBrowser browser, IBrowser cefBrowser, IFrame cefFrame, bool probeDocument = true)

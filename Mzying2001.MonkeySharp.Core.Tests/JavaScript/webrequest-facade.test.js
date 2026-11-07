@@ -1,4 +1,4 @@
-const completePlan = require("./test-plan");
+﻿const completePlan = require("./test-plan");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -22,8 +22,8 @@ test("GM.webRequest uses Tampermonkey selectors, actions, and listener arguments
         executionId: "web-execution", scriptKey: "77777777-7777-7777-7777-777777777777",
         source: [
             "globalThis.__webPromise = (async function () {",
-            "  globalThis.__modern = GM.webRequest([{selector:'https://example.com/*', action:'cancel'}, {selector:{match:'https://example.com/*', exclude:'https://example.com/ignore'}, action:{from:'/old',to:'/new'}}], (info, message, details) => globalThis.__webArgs = [info, message, details]);",
-            "  globalThis.__legacy = GM_webRequest({selector:'https://legacy.example/*', action:'cancel'}, () => globalThis.__legacyCalled = true);",
+            "  globalThis.__modern = GM.webRequest([{selector:'https://example.com/*', action:'cancel'}, {selector:{match:'https://example.com/*', exclude:'https://example.com/ignore'}, action:{redirect:{from:'/old',to:'/new'}}}], (info, message, details) => globalThis.__webArgs = [info, message, details]);",
+            "  globalThis.__legacy = GM_webRequest([{selector:'https://legacy.example/*', action:'cancel'}], (info, message, details) => globalThis.__webArgs = [info, message, details]);",
             "})();"
         ].join("\n"),
         grants: ["GM.webRequest"], declaredGrants: ["GM_webRequest"], info: {}, capability: "web-capability", deliveryToken: "web-delivery",
@@ -32,22 +32,20 @@ test("GM.webRequest uses Tampermonkey selectors, actions, and listener arguments
     await globalThis.__webPromise;
     await new Promise(resolve => setTimeout(resolve, 10));
     assert.equal(calls.filter(item => item.params.operation === "register").length, 2);
-    const registration = calls.find(item => item.params.operation === "register");
+    const registration = calls.filter(item => item.params.operation === "register")[1];
     assert.equal(registration.params.rules[0].action, "cancel");
-    assert.deepEqual(registration.params.rules[1].action, { from: "/old", to: "/new" });
-    assert.equal(typeof globalThis.__modern.remove, "function");
-    assert.equal(typeof globalThis.__legacy.remove, "function");
+    assert.deepEqual(calls[0].params.rules[1].action, { redirect: { from: "/old", to: "/new" } });
+    assert.equal(globalThis.__modern, undefined);
+    assert.equal(globalThis.__legacy, undefined);
     assert.equal(globalThis.__MonkeySharpRuntime.receive({
         type: "notification", protocol: 2, executionId: "web-execution", deliveryToken: "web-delivery",
         event: "webrequest-result", data: {
             listenerId: registration.params.listenerId,
-            info: { requestId: 3, url: "https://example.com/old", method: "GET", type: "script" },
-            message: "redirect", details: { redirectUrl: "https://example.com/new" }
+            info: "redirect", message: "ok", details: { url: "https://example.com/old", redirect_url: "https://example.com/new" }
         }
     }), true);
-    assert.equal(globalThis.__webArgs[0].requestId, 3);
-    assert.equal(globalThis.__webArgs[1], "redirect");
-    assert.equal(globalThis.__webArgs[2].redirectUrl, "https://example.com/new");
-    assert.equal(globalThis.__modern.id, "registration-1");
-    globalThis.__modern.remove();
+    assert.equal(globalThis.__webArgs[0], "redirect");
+    assert.equal(globalThis.__webArgs[1], "ok");
+    assert.equal(globalThis.__webArgs[2].redirect_url, "https://example.com/new");
+
 });

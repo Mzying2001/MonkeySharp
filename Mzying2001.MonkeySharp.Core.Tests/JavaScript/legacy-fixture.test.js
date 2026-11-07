@@ -131,9 +131,11 @@ test("the shared legacy userscript fixture exercises callback and modern facade 
     assert.equal(state.modernNotificationDone, true);
     assert.equal(receive("webrequest-result", {
         listenerId: webRequestRegistrations[0].listenerId,
-        info: { url: "https://example.com/old" }, message: "redirect", details: { redirectUrl: "/new" }
+        info: "redirect", message: "ok", details: { url: "https://example.com/old", redirect_url: "/new" }
     }), true);
-    assert.equal(state.webRequestEvent.details.redirectUrl, "/new");
+    assert.equal(state.webRequestEvent.info, "redirect");
+    assert.equal(state.webRequestEvent.message, "ok");
+    assert.equal(state.webRequestEvent.details.redirect_url, "/new");
 
     globalThis.__MonkeySharpRuntime.urlChanged({ url: "https://example.com/next", oldURL: "https://example.com/" });
     assert.equal(state.urlChange.url, "https://example.com/next");

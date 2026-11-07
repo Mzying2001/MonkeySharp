@@ -1,4 +1,4 @@
-using Mzying2001.MonkeySharp.Core.Apis;
+﻿using Mzying2001.MonkeySharp.Core.Apis;
 using Mzying2001.MonkeySharp.Core.Domain;
 using Mzying2001.MonkeySharp.Core.Security;
 using System;
@@ -19,6 +19,8 @@ namespace Mzying2001.MonkeySharp.Core.Repository
         internal PreparedScriptRevision(UserScriptDefinition definition, IEnumerable<ResourceContent> dependencies,
             IDictionary<string, ResourceContent> resources)
         {
+            WebRequestRules = Array.AsReadOnly(definition.Metadata.WebRequest.Select(rule =>
+                Apis.WebRequestApiProvider.CompileRule(JsonSerializer.SerializeToElement(new { selector = rule.Selector, action = rule.Action }), definition.Metadata)).ToArray());
             UrlRules = Matching.UserScriptUrlRules.Compile(definition.Metadata);
             Dependencies = new ReadOnlyCollection<ResourceContent>(dependencies.ToArray());
             Resources = new ReadOnlyDictionary<string, ResourceContent>(new Dictionary<string, ResourceContent>(resources, StringComparer.Ordinal));
@@ -37,6 +39,8 @@ namespace Mzying2001.MonkeySharp.Core.Repository
 
         /// <summary>Gets the URL and context conditions compiled with this revision.</summary>
         public Matching.UserScriptUrlRules UrlRules { get; }
+        /// <summary>Gets bounded static rules compiled before activation.</summary>
+        public IReadOnlyList<Apis.WebRequestRule> WebRequestRules { get; }
 
         /// <summary>Gets the executable source with dependency order, scope and statement boundaries preserved.</summary>
         public string Source { get; }

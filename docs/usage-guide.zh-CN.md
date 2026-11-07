@@ -116,7 +116,7 @@
 | `@homepage`、`@homepageURL`、`@website`、`@source`、`@supportURL` | 项目及支持链接。主页优先级为 homepageURL、homepage、website、source。 |
 | `@downloadURL`、`@updateURL` | 更新信息。Demo 提供手动检查并安装，运行时不安排自动更新。`@downloadURL none` 禁止检查。 |
 | `@antifeature type description` | 功能披露信息，支持 `@antifeature:locale` 本地化声明。 |
-| `@webRequest JSON` | 校验后的 selector/action 元数据，可通过 `GM.info.script.webRequest` 查看，**不会**激活拦截；请使用 `GM.webRequest` 注册。 |
+| `@webRequest JSON` | 安装期编译 selector/action JSON，导航前激活；同时写入 `GM.info.script.webRequest`。 |
 | `@run-in selector` | 可重复 normal-tabs/incognito-tabs，按 OR 合并。单一隐私条件要求宿主明确实际上下文；两者同时声明覆盖支持的两种环境。容器选择会诊断且不匹配 Chromium 上下文。 |
 | `@inject-into`、`@sandbox`、`@unwrap` | 执行世界声明，遵循适配器公布的限制。 |
 
@@ -203,7 +203,7 @@ DOM/content 使用原生 context 验证的隔离派发，raw/JavaScript 使用�
 | `GM.getTabs` | `GM_getTabs` | `Promise<object>` | 标签页状态服务 |
 | `GM.download` | `GM_download` | `Promise<DownloadDetails> & {abort()}` | 下载服务 |
 | `GM.cookie` | `GM_cookie` | 含 list/set/delete 的命名空间 | CefSharp 默认服务 |
-| `GM.webRequest` | `GM_webRequest` | 立即返回可移除句柄 | CefSharp 默认服务 |
+| `GM.webRequest` | `GM_webRequest` | undefined；替换/撤销规则 | CefSharp 默认服务 |
 | `unsafeWindow` | 同名 | 页面全局对象 | 精确授权 |
 | `window.close`、`window.focus` | 同名 | undefined | 窗口服务 |
 | `window.onurlchange` | 同名 | 属性/事件注册 | Core |
@@ -613,39 +613,24 @@ GM_cookie.list({}, (cookies, error) => console.log(cookies, error));
 
 ### GM.webRequest(rules, listener?) / GM_webRequest(rules, listener?)
 
-授权 GM.webRequest 或 GM_webRequest，需要 webRequest 服务，CefSharp 默认提供。rules 可以是单个规则对象或数组，每项包含 selector 和 action。注册彼此独立，执行结束时释放；新建注册不会替换之前的句柄。
+动态规则须授权 `GM.webRequest` 或 `GM_webRequest`。两种入口返回 `undefined`；重新调用替换本执行的规则和 listener，`GM.webRequest([])` 撤销规则。rules 是 `{selector, action}` 数组；selector 可以是 include 通配符、`/regexp/`，或含字符串/数组的 `{include, match, exclude}`，排除优先。仅拦截 `sub_frame`、`script`、`xhr`、`websocket`。
 
-| 输入 | 支持的格式 |
-| --- | --- |
-| 字符串 selector | URL 通配符、match 风格模式或斜杠包围的 .NET 正则。 |
-| 对象 selector | include、match、exclude 各接受字符串或字符串数组；排除优先，include/match 是或关系，也允许只给 exclude。 |
-| `action: "cancel"` | 取消匹配请求。 |
-| `action: "https://example.com/new"` | 静态 HTTP(S) 重定向。 |
-| `action: {from: "...", to: "..."}` | 将 URL 中首次出现且区分大小写的字面 from 替换为 to，不解析正则或展开捕获；两个字符串都必须非空。 |
-| `listener(info, message, details)` | 可选函数，观察取消/重定向匹配；返回值不能改变网络决定。 |
+action 支持 `"cancel"`、`{cancel:true}`、`{redirect:"https://example.com/new"}` 或 `{redirect:{from:"(https://[^/]+)/old/(.*)",to:"$1/new/$2"}}`。重定向使用受限 ECMAScript 正则、100 ms 超时及 JavaScript 捕获替换；展开后的目标再次校验脚本 URL 范围及宿主授权。不提供头修改或认证动作。
 
-重定向目标必须通过脚本正向 URL 规则及排除规则；静态目标在注册时检查，执行时也会检查。计算出的目标无效或不满足规则时，默认服务会**阻止该请求**。应使用范围明确的 selector。默认适配器评估浏览器资源回调，没有 Tampermonkey 文档所述的四种资源类型限制。MonkeySharp 默认服务中，数组靠后的规则优先级更高。已经发生的请求不能补拦截。
+listener 异步接收 `(action, status, details)`：action 为 `"cancel"`/`"redirect"`，status 为 `"ok"`/`"error"`，details 包含 `rule`、`url`、`redirect_url`、`description`，返回值不改变网络决定。动态规则限定于 browser/frame/document/execution，导航、更新、禁用、卸载及 detach 均会撤销。没有可信归属的请求不会套用其他 frame 的规则。
 
-两种形式都立即返回 {id, remove()}。id 初始为 null，之后变为宿主字符串；remove() 返回 `Promise<boolean>`，可在注册完成前调用。没有 listener 时不允许空规则。注册失败记录日志，或拒绝已经等待的移除请求。
+静态 `@webRequest` JSON 在安装期编译，并通过 `host.NavigateAsync` 在导航前激活，无须等待用户源码执行；仓库变更撤销旧规则。静态规则遵循 URL、frame、run-in 和宿主权限策略，文档加载期间不能弹出交互授权。晚附加无法补拦截已发送的请求。
 
-回调参数为：
-
-- info：{requestId, url, method, type}。
-- message："cancel" 或 "redirect"。
-- details：{phase, redirectUrl, error}，具体值取决于请求通知。这是匹配规则的观察信息，不代表重定向后的请求已成功加载。
-
-**与 Tampermonkey 的差异：**[官方 API](https://www.tampermonkey.net/documentation.php?q=GM_webRequest)使用 {cancel:true}/{redirect: ...} 动作对象、基于正则的重定向替换，以及 (actionString, "ok"|"error", details) 回调。这些**不是** MonkeySharp 的约定，必须使用上表中的字面替换、动作格式和回调对象。MonkeySharp 增加了可移除句柄，不自动应用静态 @webRequest，脚本门面也不暴露任意头修改/认证动作。Tampermonkey 自身还受扩展清单和浏览器版本影响，不能据此推断 MonkeySharp 的可用性。
+目标依据[官方历史契约](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_webRequest)。固定 MV2 差分环境尚缺；OOPIF、isolated frame 动态页面拦截及 WebSocket 覆盖不计为通过，见 [P2 记录](compatibility/p2-implementation.md)。
 
 ```javascript
-// @grant GM.webRequest
-// The script also needs @match https://example.com/* for these redirect targets.
-const registration = GM.webRequest([
-    { selector: "https://example.com/tracker/*", action: "cancel" },
-    { selector: "https://example.com/old/*", action: { from: "/old/", to: "/new/" } }
-], (info, message, details) => {
-    console.log(info.url, message, details.redirectUrl);
-});
-// Later: registration.remove().catch(console.error);
+// @grant GM_webRequest
+// @match https://example.com/*
+GM_webRequest([
+  {selector: "https://example.com/tracker/*", action: {cancel:true}},
+  {selector: "https://example.com/old/*", action: {redirect:{from:"/old/(.*)", to:"/new/$1"}}}
+], (action, status, details) => console.log(action, status, details.url));
+// 撤销：GM_webRequest([]);
 ```
 
 <a id="window-extensions"></a>

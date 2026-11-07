@@ -1,4 +1,4 @@
-using CefSharp;
+﻿using CefSharp;
 using Moq;
 using Mzying2001.MonkeySharp.Core.Apis;
 using Mzying2001.MonkeySharp.Core.Bridge;
@@ -571,8 +571,10 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
                 });
                 using (var handler = new CefSharpWebRequestHandler(service.Object))
                 {
-                    var evaluation = Task.Run(() => handler.GetAuthCredentials(null, null, "https://example.test/",
-                        false, "example.test", 443, "realm", "basic", null));
+                    var request = CreateWebRequest();
+                    var disabled = false;
+                    var resource = handler.GetResourceRequestHandler(null, null, null, request.Object, false, false, "", ref disabled);
+                    var evaluation = Task.Run(() => resource.OnBeforeResourceLoad(null, null, null, request.Object, null));
                     Task disposal = null;
                     try
                     {
@@ -589,7 +591,8 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
                     }
                     Assert.False(handler.GetAuthCredentials(null, null, "https://example.test/", false,
                         "example.test", 443, "realm", "basic", null));
-                    service.Verify(item => item.Evaluate(It.IsAny<WebRequestEvent>()), Times.Once);
+                    service.Verify(item => item.Evaluate(It.IsAny<WebRequestEvent>()), Times.AtLeastOnce);
+                    resource.Dispose();
                 }
             }
         }

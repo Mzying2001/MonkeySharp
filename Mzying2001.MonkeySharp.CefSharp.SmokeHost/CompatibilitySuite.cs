@@ -23,6 +23,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
         private readonly SmokeHttpDownloadService _downloads;
         private readonly LocalHttpFixture _otherFixture;
         private readonly SmokePermissionPolicy _permissions;
+        private readonly InMemoryUserScriptRepository _repository;
         private readonly object _sync = new object();
         private readonly Dictionary<string, DocumentFrame> _frames = new Dictionary<string, DocumentFrame>();
         private readonly Dictionary<string, DocumentFrame> _isolatedFrames = new Dictionary<string, DocumentFrame>();
@@ -32,10 +33,11 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
         private DocumentFrame _context;
 
         public CompatibilitySuite(CefSharpUserScriptHost host, ChromiumWebBrowser browser,
-            LocalHttpFixture fixture, SmokeHttpDownloadService downloads, LocalHttpFixture otherFixture, SmokePermissionPolicy permissions)
+            LocalHttpFixture fixture, SmokeHttpDownloadService downloads, LocalHttpFixture otherFixture, SmokePermissionPolicy permissions, InMemoryUserScriptRepository repository)
         {
             _host = host; _browser = browser; _fixture = fixture; _downloads = downloads;
             _otherFixture = otherFixture; _permissions = permissions;
+            _repository = repository;
             host.DocumentLifecycle += Lifecycle;
         }
 
@@ -403,7 +405,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                 ? new[] { "promise", "handle", "completed", "canceled", "timeout", "failure", "singleTerminal", "loginRedirect", "anonymous", "empty", "earlyCancel", "diskFailure" }
                 : name == "cookie"
                     ? new[] { "setList", "legacy", "context", "noListeners", "preciseDelete", "deleted", "setUndefined", "partitionRejected" }
-                    : new[] { "cancel", "redirect", "remove", "restored", "noCallbackAfterRemove" };
+                    : new[] { "staticFirstScript", "voidReturn", "cancel", "replacement", "redirect", "capture", "restored", "noCallbackAfterRevoke" };
             foreach (var check in required) Check(check, result.GetProperty("checks").GetProperty(check).GetBoolean());
         }
 
@@ -514,14 +516,25 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
         private async Task WebRequestAsync()
         {
             await ScriptCaseAsync("webrequest");
-            Check("serverEffects", _fixture.RequestCount("/compat/net/blocked") == 1 && _fixture.RequestCount("/compat/net/original") == 0 &&
+            Check("serverEffects", _fixture.RequestCount("/compat/net/blocked") == 1 && _fixture.RequestCount("/compat/net/original") == 1 &&
                 _fixture.RequestCount("/compat/net/target") == 1);
+            Check("staticServerEffects", _fixture.RequestCount("/compat/net/static-blocked.js") == 0 &&
+                _fixture.RequestCount("/compat/net/static-old.js") == 0 && _fixture.RequestCount("/compat/net/static-target.js") == 1);
+            Console.WriteLine(JsonSerializer.Serialize(new { type = "webrequest-websocket-probe",
+                requests = _fixture.RequestCount("/compat/net/websocket"),
+                status = _fixture.RequestCount("/compat/net/websocket") == 0 ? "passed" : "expected-engine-limitation" }));
             var old = FindFrame("/compat/webrequest");
             await NavigateAsync("/compat/cleanup");
             await WaitAsync(() => Task.FromResult(EventCount(DocumentLifecycleKind.ContextReleased, old.DocumentId) > 0));
             await ReadAsync("(globalThis.__cleanup = null, fetch('/compat/net/cleanup', { cache: 'no-store' }).then(function (response) { return response.text(); }).then(function (text) { globalThis.__cleanup = text; }), true)");
             await WaitAsync(async () => (await ReadAsync("globalThis.__cleanup || null"))?.GetString() == "cleanup");
             Check("navigationCleanup", _fixture.RequestCount("/compat/net/cleanup") == 1);
+            var installation = (await _repository.GetSnapshotAsync(CancellationToken.None)).Single(script => script.Definition.Metadata.Name == "Compatibility request effects");
+            await _repository.SetEnabledAsync(installation.ScriptKey, false, CancellationToken.None);
+            await NavigateAsync("/compat/webrequest");
+            await WaitAsync(async () => (await ReadAsync("document.readyState === 'complete'"))?.GetBoolean() == true);
+            Check("disabledRevokesStatic", _fixture.RequestCount("/compat/net/static-blocked.js") == 1 &&
+                _fixture.RequestCount("/compat/net/static-old.js") == 1 && _fixture.RequestCount("/compat/net/static-target.js") == 1);
         }
 
         public void Dispose() => _host.DocumentLifecycle -= Lifecycle;

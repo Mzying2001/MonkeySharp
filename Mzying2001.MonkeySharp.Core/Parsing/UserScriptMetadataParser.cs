@@ -1,4 +1,4 @@
-using Mzying2001.MonkeySharp.Core.Domain;
+﻿using Mzying2001.MonkeySharp.Core.Domain;
 using Mzying2001.MonkeySharp.Core.Compatibility;
 using Mzying2001.MonkeySharp.Core.Security;
 using Mzying2001.MonkeySharp.Core.Matching;
@@ -563,13 +563,12 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
                     using (var document = JsonDocument.Parse(entry.Value))
                     {
                         var root = document.RootElement;
-                        if (root.ValueKind != JsonValueKind.Object ||
-                            !root.TryGetProperty("selector", out var selector) ||
-                            !root.TryGetProperty("action", out var action) ||
-                            !IsValidWebRequestSelector(selector) ||
-                            !IsValidWebRequestAction(action))
-                            throw new FormatException("A webRequest rule requires a valid selector and action.");
-                        result.Add(new UserScriptWebRequestRule(selector, action));
+                        var rules = root.ValueKind == JsonValueKind.Array ? root.EnumerateArray().ToArray() : new[] { root };
+                        foreach (var rule in rules)
+                        {
+                            Apis.WebRequestApiProvider.CompileRule(rule, null);
+                            result.Add(new UserScriptWebRequestRule(rule.GetProperty("selector"), rule.GetProperty("action")));
+                        }
                     }
                 }
                 catch (JsonException exception)
@@ -580,7 +579,7 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
                         "@webRequest is not valid JSON: " + exception.Message,
                         entry.Line));
                 }
-                catch (FormatException exception)
+                catch (BridgeProtocolException exception)
                 {
                     diagnostics.Add(new MetadataDiagnostic(
                         "MSM062_INVALID_WEBREQUEST",
@@ -590,57 +589,6 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
                 }
             }
             return result.AsReadOnly();
-        }
-
-        private static bool IsValidWebRequestSelector(JsonElement value)
-        {
-            if (value.ValueKind == JsonValueKind.String)
-                return !string.IsNullOrWhiteSpace(value.GetString());
-            if (value.ValueKind != JsonValueKind.Object)
-                return false;
-            var found = false;
-            foreach (var name in new[] { "include", "match", "exclude" })
-            {
-                if (!value.TryGetProperty(name, out var item))
-                    continue;
-                found = true;
-                if (item.ValueKind == JsonValueKind.String)
-                {
-                    if (string.IsNullOrWhiteSpace(item.GetString())) return false;
-                }
-                else if (item.ValueKind == JsonValueKind.Array)
-                {
-                    if (!item.EnumerateArray().Any(element => element.ValueKind != JsonValueKind.String ||
-                        string.IsNullOrWhiteSpace(element.GetString()))) return false;
-                }
-                else return false;
-            }
-            return found;
-        }
-
-        private static bool IsValidWebRequestAction(JsonElement value)
-        {
-            if (value.ValueKind == JsonValueKind.String)
-                return string.Equals(value.GetString(), "cancel", StringComparison.OrdinalIgnoreCase) ||
-                    IsHttpUrl(value.GetString());
-            if (value.ValueKind != JsonValueKind.Object)
-                return false;
-            if (value.TryGetProperty("cancel", out var cancel) &&
-                cancel.ValueKind == JsonValueKind.True)
-                return true;
-            if (!value.TryGetProperty("redirect", out var redirect))
-                return false;
-            if (redirect.ValueKind == JsonValueKind.String)
-                return IsHttpUrl(redirect.GetString()) || !string.IsNullOrWhiteSpace(redirect.GetString());
-            return redirect.ValueKind == JsonValueKind.Object &&
-                redirect.TryGetProperty("from", out var from) && from.ValueKind == JsonValueKind.String &&
-                redirect.TryGetProperty("to", out var to) && to.ValueKind == JsonValueKind.String;
-        }
-
-        private static bool IsHttpUrl(string value)
-        {
-            return Uri.TryCreate(value, UriKind.Absolute, out var uri) &&
-                (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
         }
 
         private static void ValidateConnects(

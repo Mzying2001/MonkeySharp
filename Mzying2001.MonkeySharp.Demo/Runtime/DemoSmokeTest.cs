@@ -192,6 +192,7 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                 await WaitAsync(async () => await EvaluateBoolean(primary, "!!(window.__demo && window.__demo.ready)"));
                 checks["enableAndReload"] = true;
                 selector.SelectedItem = secondary;
+                await WaitAsync(async () => await EvaluateBoolean(secondary, "window.__demo && window.__demo.ready && typeof window.__testWindowClose === 'function'"));
                 await Evaluate(secondary, "window.__testWindowClose()");
                 await WaitAsync(() => Task.FromResult(secondary.IsClosed));
                 checks["windowClose"] = true;
@@ -328,8 +329,10 @@ sessionStorage.setItem('runs', String(window.__demo.runs));
     await GM.cookie.set({ url: location.href, name: 'demo-cookie', value: 'ready', path: '/' });
     result.cookie = (await GM.cookie.list({ url: location.href })).some(cookie => cookie.name === 'demo-cookie');
     result.xhr = (await GM.xmlHttpRequest({ url: '__BASE__/resource' })).responseText === 'demo-resource';
-    const webRule = GM.webRequest([{ selector: '__BASE__/__monkeysharp_block__', action: 'cancel' }], function (info, message, details) { result.webRequest = message === 'cancel'; });
-    result.webRequest = !!webRule && typeof webRule.remove === 'function';
+    const webRequestReturnsVoid = GM.webRequest([{ selector: '__BASE__/__monkeysharp_block__', action: { cancel: true } }]) === undefined;
+    await new Promise(resolve => setTimeout(resolve, 200));
+    try { await fetch('__BASE__/__monkeysharp_block__'); result.webRequest = false; } catch (_) { result.webRequest = webRequestReturnsVoid; }
+    GM.webRequest([]);
     window.__testTabOptions = async function () {
         const tab = await GM.openInTab('/child', { active: false, insert: 0, setParent: true });
         result.optionsClosed = 0;

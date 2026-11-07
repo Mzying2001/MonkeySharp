@@ -52,7 +52,7 @@ Resource URL spellings are intentionally different. No `GM.getResourceURL`,
 | `GM_cookie.list`, `GM.cookie.list` | optional URL/name/domain/path filters | void; Promise | cookies, error; cookie array / rejection | Authorized actual RequestContext; [Cookie](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_cookie) |
 | `GM_cookie.set`, `GM.cookie.set` | cookie details | void; Promise | error only; void / rejection | Engine-accepted write; partition unsupported on 84 |
 | `GM_cookie.delete`, `GM.cookie.delete` | URL/name | void; Promise | error only; void / rejection | Exact selected Cookie deletion; no public boolean |
-| `GM_webRequest`, `GM.webRequest` | rules, listener | historical result pending | info, message, details | Historical Chromium/MV2 only; separate environment; [webRequest](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_webRequest) |
+| `GM_webRequest`, `GM.webRequest` | rules, listener | void; void (MV2 differential pending) | action, ok/error, details | Historical Chromium/MV2 only; separate environment; [webRequest](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_webRequest) |
 | `unsafeWindow` | property grant | page window | none | Actual execution world |
 | `window.close`, `window.focus` | exact grant | void | none | Host window policy |
 | `window.onurlchange` | exact grant | nullable capability | URL event | Same-document navigation |

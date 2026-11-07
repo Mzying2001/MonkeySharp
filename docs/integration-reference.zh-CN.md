@@ -97,22 +97,25 @@ CefSharp 宿主默认提供 `GM.xmlHttpRequest`、`GM.cookie` 和 `GM.webRequest
 
 ### Web Request
 
-声明 `@grant GM.webRequest` 或 `@grant GM_webRequest`。默认内存服务会挂载 `CefSharpWebRequestHandler`。注册使用 Tampermonkey selector/action 合约并返回可移除 handle。字符串 selector 是 URL glob（或 `/regexp/`）；对象 selector 支持字符串或数组形式的 `include`、WebExtension `match` 和 `exclude`。action 支持 `cancel`、静态 HTTP(S) 重定向，或 `{ from, to }` 动态替换。重定向目标会在注册时及实际求值时按脚本 URL 规则检查。JavaScript 回调不会阻塞网络线程。
+动态规则须授权 `GM.webRequest` 或 `GM_webRequest`。两种入口返回 `undefined`；重新调用替换本执行的规则和 listener，`GM.webRequest([])` 撤销规则。rules 是 `{selector, action}` 数组；selector 可以是 include 通配符、`/regexp/`，或含字符串/数组的 `{include, match, exclude}`，排除优先。仅拦截 `sub_frame`、`script`、`xhr`、`websocket`。
 
-静态 `@webRequest` 元数据会被解析并写入 `GM.info.script.webRequest` 供检查，但不会注册到网络服务。脚本需要活动注册时必须使用 `GM.webRequest(...)`。
+action 支持 `"cancel"`、`{cancel:true}`、`{redirect:"https://example.com/new"}` 或 `{redirect:{from:"(https://[^/]+)/old/(.*)",to:"$1/new/$2"}}`。重定向使用受限 ECMAScript 正则、100 ms 超时及 JavaScript 捕获替换；展开后的目标再次校验脚本 URL 范围及宿主授权。不提供头修改或认证动作。
+
+listener 异步接收 `(action, status, details)`：action 为 `"cancel"`/`"redirect"`，status 为 `"ok"`/`"error"`，details 包含 `rule`、`url`、`redirect_url`、`description`，返回值不改变网络决定。动态规则限定于 browser/frame/document/execution，导航、更新、禁用、卸载及 detach 均会撤销。没有可信归属的请求不会套用其他 frame 的规则。
+
+静态 `@webRequest` JSON 在安装期编译，并通过 `host.NavigateAsync` 在导航前激活，无须等待用户源码执行；仓库变更撤销旧规则。静态规则遵循 URL、frame、run-in 和宿主权限策略，文档加载期间不能弹出交互授权。晚附加无法补拦截已发送的请求。
+
+目标依据[官方历史契约](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_webRequest)。固定 MV2 差分环境尚缺；OOPIF、isolated frame 动态页面拦截及 WebSocket 覆盖不计为通过，见 [P2 记录](compatibility/p2-implementation.md)。
 
 ```javascript
-const registration = GM.webRequest([
-  { selector: "https://example.com/*", action: "cancel" },
-  { selector: { match: "https://example.com/*", exclude: "https://example.com/ignore" },
-    action: { from: "/old", to: "/new" } }
-], (info, message, details) => {
-  console.log(info.url, message, details);
-});
-registration.remove();
+// @grant GM_webRequest
+// @match https://example.com/*
+GM_webRequest([
+  {selector: "https://example.com/tracker/*", action: {cancel:true}},
+  {selector: "https://example.com/old/*", action: {redirect:{from:"/old/(.*)", to:"/new/$1"}}}
+], (action, status, details) => console.log(action, status, details.url));
+// 撤销：GM_webRequest([]);
 ```
-
-`GM_webRequest(rules, listener)` 是同一注册函数的 legacy 别名。listener 使用 `(info, message, details)`，只报告 `cancel` 或 `redirect` 结果。
 
 只要存在 web request 服务（包括默认服务），`Attach` 就要求浏览器尚未初始化，且 `RequestHandler` 槽位为空或使用 `CefSharpWebRequestHandlerMultiplexer`。已有应用程序处理器时，在附加宿主前组合：
 

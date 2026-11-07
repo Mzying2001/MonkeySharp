@@ -112,7 +112,7 @@ The header begins with `// ==UserScript==` and ends with `// ==/UserScript==`. P
 | `@homepage`, `@homepageURL`, `@website`, `@source`, `@supportURL` | Source/support links. Homepage priority is `homepageURL`, `homepage`, `website`, then `source`. |
 | `@downloadURL`, `@updateURL` | Update information. The Demo offers manual check/install; the runtime does not schedule automatic updates. `@downloadURL none` disables checking. |
 | `@antifeature type description` | Disclosure information, including localized `@antifeature:locale` declarations. |
-| `@webRequest JSON` | Validated selector/action metadata, exposed in `GM.info.script.webRequest`. It does **not** activate interception. Register with `GM.webRequest`. |
+| `@webRequest JSON` | Prepared selector/action JSON; activated before navigation and exposed in `GM.info.script.webRequest`. |
 | `@run-in selector` | Repeatable `normal-tabs`/`incognito-tabs` conditions, combined with OR. Restricted execution requires a known host privacy context; declaring both covers either supported context. Container selectors are diagnosed and do not match Chromium contexts. |
 | `@inject-into`, `@sandbox`, `@unwrap` | Execution-world declarations; see the documented adapter limits. |
 
@@ -200,7 +200,7 @@ Each row requires its capability family or exact legacy declaration unless state
 | `GM.getTabs` | `GM_getTabs` | `Promise<object>` | Tab-state service |
 | `GM.download` | `GM_download` | `Promise<DownloadDetails> & {abort()}` | Download service |
 | `GM.cookie` | `GM_cookie` | Namespace with list/set/delete | CefSharp default |
-| `GM.webRequest` | `GM_webRequest` | Removable handle immediately | CefSharp default |
+| `GM.webRequest` | `GM_webRequest` | undefined; replace/revoke rules | CefSharp default |
 | `unsafeWindow` | Same name | Page global object | Exact grant |
 | `window.close`, `window.focus` | Same names | `undefined` | Window service |
 | `window.onurlchange` | Same name | Property/event registration | Core |
@@ -594,39 +594,24 @@ GM_cookie.list({}, (cookies, error) => console.log(cookies, error));
 
 ### GM.webRequest(rules, listener?) / GM_webRequest(rules, listener?)
 
-Grant `GM.webRequest` or `GM_webRequest`; needs a webRequest service, supplied by CefSharp by default. `rules` is a rule object or array of objects, each with `selector` and `action`. Registrations are independent and released when the execution ends; creating a new one does not replace earlier handles.
+Grant `GM.webRequest` or `GM_webRequest` for dynamic rules. Both calls return `undefined`; re-registering replaces this execution's rules and listener, and `GM.webRequest([])` revokes them. Rules are an array of `{selector, action}` objects. Selectors accept an include glob or `/regexp/`, or `{include, match, exclude}` with strings/arrays. Exclusions win. Only `sub_frame`, `script`, `xhr`, and `websocket` are eligible.
 
-| Input | Supported contract |
-| --- | --- |
-| String `selector` | URL glob, match-style pattern, or slash-delimited .NET regex. |
-| Object `selector` | `include`, `match`, `exclude`, each a string or array of strings; exclusions win. Include/match are alternatives. Exclude-only selectors are permitted. |
-| `action: "cancel"` | Cancel a matching request. |
-| `action: "https://example.com/new"` | Static HTTP(S) redirect. |
-| `action: {from: "...", to: "..."}` | Replace the first case-sensitive literal occurrence of `from` in the URL with `to`; no regex or capture expansion. Both strings must be non-empty. |
-| `listener(info, message, details)` | Optional function observing cancel/redirect matches; its return value cannot change the network decision. |
+Actions are `"cancel"`, `{cancel:true}`, `{redirect:"https://example.com/new"}`, or `{redirect:{from:"(https://[^/]+)/old/(.*)",to:"$1/new/$2"}}`. Redirect expressions use the bounded ECMAScript subset documented for metadata, with a 100 ms limit and JavaScript capture substitution. Expanded destinations must pass the installation's URL rules and host authorization. Unsupported header-edit and authentication actions are absent.
 
-Redirect destinations must be covered by the script's positive URL rules and exclusions, checked for static registration and at evaluation. The default service **blocks** a request if its computed redirect target is invalid or outside those rules. Use narrowly scoped selectors; the default adapter evaluates browser resource callbacks, without Tampermonkey's documented four-resource-type restriction. Later rules in an array have higher priority in MonkeySharp's default service. Requests that already happened before registration cannot be intercepted.
+Listeners run asynchronously with `(action, status, details)`: action is `"cancel"`/`"redirect"`, status is `"ok"`/`"error"`, and details includes `rule`, `url`, `redirect_url`, and `description`. They cannot change the decision. Dynamic rules belong to one browser/frame/document/execution and are revoked on navigation, update, disable, uninstall, or detach. Requests without trusted ownership do not inherit another frame's rules.
 
-Both facades return `{id, remove()}` immediately. `id` is initially null, later a host string; `remove()` returns `Promise<boolean>`, and can be called before registration completes. Empty rules without a listener are invalid. Registration failures are logged, or reject an already pending removal.
+Static `@webRequest` JSON is compiled during installation and activated before navigation through `host.NavigateAsync`. It does not need user source to run; repository changes revoke old rules. Static rules follow script URL, frame, run-in, and host permission policy. A static rule cannot open an interactive permission prompt while loading the document. Attach after navigation cannot intercept resources already sent.
 
-The callback arguments are:
-
-- `info`: `{requestId, url, method, type}`.
-- `message`: `"cancel"` or `"redirect"`.
-- `details`: `{phase, redirectUrl, error}`; fields depend on the request notification. This reports matching rule observations, not confirmation that a redirected request subsequently loaded successfully.
-
-**Tampermonkey differences:** the [official API](https://www.tampermonkey.net/documentation.php?q=GM_webRequest) uses `{cancel:true}` / `{redirect: ...}` action objects, regex-based redirect substitutions, and `(actionString, "ok"|"error", details)` callbacks. Those contracts are **not** MonkeySharp's: use its literal replacements, action forms, and callback object above. MonkeySharp adds removable handles, does not automatically install static `@webRequest`, and does not expose arbitrary header-edit/authentication actions through this script facade. Tampermonkey's availability also depends on extension manifest/browser version; do not infer MonkeySharp availability from it.
+This follows the [official historical API](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_webRequest). A pinned MV2 differential reference remains unavailable; OOPIF, isolated-frame dynamic page interception, and WebSocket coverage are not claimed. See [P2 evidence](compatibility/p2-implementation.md).
 
 ```javascript
-// @grant GM.webRequest
-// The script also needs @match https://example.com/* for these redirect targets.
-const registration = GM.webRequest([
-    { selector: "https://example.com/tracker/*", action: "cancel" },
-    { selector: "https://example.com/old/*", action: { from: "/old/", to: "/new/" } }
-], (info, message, details) => {
-    console.log(info.url, message, details.redirectUrl);
-});
-// Later: registration.remove().catch(console.error);
+// @grant GM_webRequest
+// @match https://example.com/*
+GM_webRequest([
+  {selector: "https://example.com/tracker/*", action: {cancel:true}},
+  {selector: "https://example.com/old/*", action: {redirect:{from:"/old/(.*)", to:"/new/$1"}}}
+], (action, status, details) => console.log(action, status, details.url));
+// Later: GM_webRequest([]);
 ```
 
 ## Window extensions

@@ -146,7 +146,7 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
                 statuses.Remove(difference);
                 statuses.Add(new CompatibilityStatusViewModel(
                     difference.Category,
-                    difference.Message + "静态 @webRequest 仅写入 GM.info，不会自动安装网络规则。",
+                    difference.Message + "静态 @webRequest 在导航前安装；仅拦截 sub_frame/script/xhr/websocket，受宿主授权及版本边界限制。",
                     difference.Brush));
             }
             return statuses;

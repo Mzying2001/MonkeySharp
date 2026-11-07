@@ -1,4 +1,4 @@
-            const notSupported = function (message) {
+﻿            const notSupported = function (message) {
                 const error = new Error(message);
                 error.code = "MSP006_NOT_SUPPORTED";
                 return error;
@@ -518,51 +518,21 @@
                 }
                 if (enabled("GM.webRequest")) {
                     api.webRequest = function (rules, listener) {
-                        if (!Array.isArray(rules)) rules = [rules];
+                        if (!Array.isArray(rules)) throw new TypeError("rules must be an array.");
                         if (typeof listener !== "undefined" && typeof listener !== "function") {
                             throw new TypeError("listener must be a function.");
                         }
                         const listenerId = typeof listener === "function" ? nextListenerId++ : 0;
                         if (listenerId) record.webRequestHandlers.set(listenerId, listener);
-                        const state = { id: null, removeRequested: false, removePromise: null, removeResolve: null, removeReject: null };
-                        const sendRemove = function () {
-                            if (!state.id) return state.removePromise || Promise.resolve(false);
-                            const request = call(record, "GM.webRequest", { operation: "remove", id: state.id });
-                            request.then(value => {
-                                if (state.removeResolve) state.removeResolve(value);
-                                if (listenerId) record.webRequestHandlers.delete(listenerId);
-                            }, error => {
-                                if (state.removeReject) state.removeReject(error);
-                            });
-                            return request;
-                        };
-                        const handle = {};
-                        Object.defineProperties(handle, {
-                            id: { enumerable: true, get: () => state.id }
-                        });
-                        handle.remove = function () {
-                            if (state.removeRequested) return state.removePromise || Promise.resolve(false);
-                            state.removeRequested = true;
-                            state.removePromise = new Promise((resolve, reject) => {
-                                state.removeResolve = resolve;
-                                state.removeReject = reject;
-                            });
-                            if (state.id) sendRemove();
-                            return state.removePromise;
-                        };
+                        const previous = record.webRequestListenerId;
+                        record.webRequestListenerId = listenerId;
+                        if (previous) record.webRequestHandlers.delete(previous);
                         call(record, "GM.webRequest", {
-                            operation: "register",
-                            rules: serializableValue(rules),
-                            listenerId: listenerId || undefined
-                        }).then(result => {
-                            state.id = result && result.id;
-                            if (state.removeRequested) sendRemove();
+                            operation: "register", rules: serializableValue(rules), listenerId: listenerId || undefined
                         }).catch(error => {
                             if (listenerId) record.webRequestHandlers.delete(listenerId);
-                            if (state.removeReject) state.removeReject(error);
-                            else console.error("[MonkeySharp] webRequest registration failed", error);
+                            console.error("[MonkeySharp] webRequest registration failed", error);
                         });
-                        return handle;
                     };
                 }
             };

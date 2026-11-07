@@ -129,7 +129,7 @@ Metadata covers script identity, URL selection, execution timing, grants, depend
 
 `@require` and `@resource` are fetched and verified by a repository `UserScriptPreparer` before installation or update activates a revision. Executions reuse the prepared content offline and across frames. The Demo persists these revisions and offers manual script updates. Hash syntax, budgets and update rules are documented in the [integration reference](docs/integration-reference.md#resource-integrity-and-update-checks).
 
-Static `@webRequest` metadata is validated and included in `GM.info`, but does not install interception rules. Use `GM.webRequest(...)` for active registrations.
+Static `@webRequest` rules are compiled at installation and activated before prepared navigation. Dynamic `GM.webRequest(...)` replaces this execution's rules; `[]` revokes them. See the [P2 scope and evidence](docs/compatibility/p2-implementation.md).
 
 ## GM API Support
 
@@ -150,7 +150,7 @@ This table summarizes availability. Parameters, return values, callbacks, and [T
 | `GM.download` / `GM_download` | Conditional | Requires `IDownloadService`. Modern calls immediately return an abortable completion Promise; both forms support callbacks. Demo shares the browser network context. See [downloads](docs/usage-guide.md#downloads). |
 | `GM.getTab`, `GM.saveTab`, `GM.getTabs` and aliases | Conditional | Require `ITabStateService`. |
 | `GM.cookie` / `GM_cookie` | CefSharp default | Verified CRUD through shared CDP in the attached RequestContext, with SameSite and exact deletion. No custom listeners or partition support. |
-| `GM.webRequest` / `GM_webRequest` | CefSharp default | Runtime registrations with removable handles and cancel/redirect result callbacks. |
+| `GM.webRequest` / `GM_webRequest` | CefSharp default | Scoped cancel/redirect rules, capture substitution, asynchronous result callbacks, and static metadata rules. No removal handle. |
 | `window.close`, `window.focus` | Conditional | Require their exact grants and `IUserScriptWindowService`; the host may refuse to close the last tab. |
 | `window.onurlchange` | Core | Requires the exact grant; observes `pushState`, `replaceState`, `popstate`, and `hashchange` URL changes. |
 | `unsafeWindow` | Trusted page world only | Exposed only for its exact grant. |

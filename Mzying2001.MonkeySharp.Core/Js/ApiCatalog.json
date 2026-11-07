@@ -184,8 +184,8 @@
   {
     "capability": "GM.webRequest",
     "legacy": "GM_webRequest",
-    "modernReturn": "historical",
-    "legacyReturn": "historical",
+    "modernReturn": "void",
+    "legacyReturn": "void",
     "family": "GM.webRequest"
   },
   {

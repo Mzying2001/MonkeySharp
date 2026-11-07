@@ -1,4 +1,4 @@
-using Mzying2001.MonkeySharp.Core.Bridge;
+﻿using Mzying2001.MonkeySharp.Core.Bridge;
 using Mzying2001.MonkeySharp.Core.Domain;
 using Mzying2001.MonkeySharp.Core.Security;
 using Mzying2001.MonkeySharp.Core.Runtime;
@@ -202,7 +202,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                         Fetch = fetch,
                         Binary = OptionalBoolean(context.Parameters, "binary"),
                         ResponseType = ReadResponseType(context.Parameters)
-                    }),
+                    }, context.Frame),
                 RaiseHttpNotification,
                 ReportHttpNotificationFailure, _options.MaxBinaryTransferBytes);
             lock (_sessionLock)
@@ -520,7 +520,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                             Request.Timeout,
                             Request.MaxResponseBytes,
                             Request.RedirectAllowed,
-                            Request.Options);
+                            Request.Options, Request.OriginFrame);
                     }
                 }
             }

@@ -108,22 +108,25 @@ Modern list resolves actual Cookie[]; set/delete resolve undefined. Legacy CRUD 
 
 ### Web Requests
 
-Declare `@grant GM.webRequest` or `@grant GM_webRequest`. The default in-memory service mounts a `CefSharpWebRequestHandler`. Registration uses the Tampermonkey selector/action contract and returns a removable handle. String selectors are URL globs (or `/regexp/`); object selectors support `include`, WebExtension `match`, and `exclude` strings or arrays. Actions are `cancel`, a static HTTP(S) redirect, or `{ from, to }` dynamic replacement. Redirect targets are checked against the script's URL rules at registration and evaluation time. JavaScript callbacks never block the network thread.
+Grant `GM.webRequest` or `GM_webRequest` for dynamic rules. Both calls return `undefined`; re-registering replaces this execution's rules and listener, and `GM.webRequest([])` revokes them. Rules are an array of `{selector, action}` objects. Selectors accept an include glob or `/regexp/`, or `{include, match, exclude}` with strings/arrays. Exclusions win. Only `sub_frame`, `script`, `xhr`, and `websocket` are eligible.
 
-Static `@webRequest` metadata is parsed and included in `GM.info.script.webRequest` for inspection, but it is deliberately not registered with the network service. Use `GM.webRequest(...)` when a script needs an active registration.
+Actions are `"cancel"`, `{cancel:true}`, `{redirect:"https://example.com/new"}`, or `{redirect:{from:"(https://[^/]+)/old/(.*)",to:"$1/new/$2"}}`. Redirect expressions use the bounded ECMAScript subset documented for metadata, with a 100 ms limit and JavaScript capture substitution. Expanded destinations must pass the installation's URL rules and host authorization. Unsupported header-edit and authentication actions are absent.
+
+Listeners run asynchronously with `(action, status, details)`: action is `"cancel"`/`"redirect"`, status is `"ok"`/`"error"`, and details includes `rule`, `url`, `redirect_url`, and `description`. They cannot change the decision. Dynamic rules belong to one browser/frame/document/execution and are revoked on navigation, update, disable, uninstall, or detach. Requests without trusted ownership do not inherit another frame's rules.
+
+Static `@webRequest` JSON is compiled during installation and activated before navigation through `host.NavigateAsync`. It does not need user source to run; repository changes revoke old rules. Static rules follow script URL, frame, run-in, and host permission policy. A static rule cannot open an interactive permission prompt while loading the document. Attach after navigation cannot intercept resources already sent.
+
+This follows the [official historical API](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_webRequest). A pinned MV2 differential reference remains unavailable; OOPIF, isolated-frame dynamic page interception, and WebSocket coverage are not claimed. See [P2 evidence](compatibility/p2-implementation.md).
 
 ```javascript
-const registration = GM.webRequest([
-  { selector: "https://example.com/*", action: "cancel" },
-  { selector: { match: "https://example.com/*", exclude: "https://example.com/ignore" },
-    action: { from: "/old", to: "/new" } }
-], (info, message, details) => {
-  console.log(info.url, message, details);
-});
-registration.remove();
+// @grant GM_webRequest
+// @match https://example.com/*
+GM_webRequest([
+  {selector: "https://example.com/tracker/*", action: {cancel:true}},
+  {selector: "https://example.com/old/*", action: {redirect:{from:"/old/(.*)", to:"/new/$1"}}}
+], (action, status, details) => console.log(action, status, details.url));
+// Later: GM_webRequest([]);
 ```
-
-`GM_webRequest(rules, listener)` is the legacy alias of the same registration function. Listener calls use `(info, message, details)` and report only `cancel` or `redirect` results.
 
 Whenever a web request service is available, including the default service, `Attach` requires an empty `RequestHandler` slot or a `CefSharpWebRequestHandlerMultiplexer`. Attach before initialization to observe the initial document; later attachment is explicitly marked. Compose an existing application handler before attaching:
 

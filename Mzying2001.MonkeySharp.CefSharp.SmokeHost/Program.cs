@@ -101,7 +101,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                                 requestId = diagnostic.RequestId
                             }));
 
-                        using (var form = new SmokeForm(host, startUri, fixture, downloads, otherFixture, permissions))
+                        using (var form = new SmokeForm(host, startUri, fixture, downloads, otherFixture, permissions, repository))
                             Application.Run(form);
                     }
                 }
@@ -145,7 +145,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             "    await GM.cookie.list({ url: location.href });\n" +
             "    await GM.cookie.set({ url: location.href, name: 'smoke-cookie', value: 'changed' });\n" +
             "    await GM.cookie.set({ url: location.href, name: 'smoke-cookie', value: 'changed' }); smoke.cookieReadback = (await GM.cookie.list({url:location.href,name:'smoke-cookie'}))[0].value === 'changed';\n" +
-            "    smoke.webRule = GM.webRequest([{ selector: location.origin + '/__monkeysharp_block__', action: 'cancel' }], function (info, message, details) { smoke.webRequestEvents = (smoke.webRequestEvents || 0) + (message === 'cancel' ? 1 : 0); });\n" +
+            "    smoke.webRule = GM.webRequest([{ selector: location.origin + '/__monkeysharp_block__', action: 'cancel' }], function (info, message, details) { smoke.webRequestEvents = (smoke.webRequestEvents || 0) + (info === 'cancel' && message === 'ok' ? 1 : 0); });\n" +
             "    var beacon = document.createElement('img'); beacon.src = location.origin + '/webrequest-beacon'; document.body.appendChild(beacon);\n" +
             "    await GM.notification({ title: 'MonkeySharp smoke', text: 'notification', onclick: function () { smoke.notificationClicked = true; }, ondone: function () { smoke.notificationDone = true; } });\n" +
             "    smoke.tab = await GM.openInTab(location.href, { active: false });\n" +
@@ -172,7 +172,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             "    smoke.apis.tab = Boolean(smoke.tab && typeof smoke.tab.close === 'function' && smoke.tab.closed);\n" +
             "    smoke.apis.download = smoke.downloadProgress === true && smoke.downloadCompleted === true;\n" +
             "    smoke.apis.cookie = smoke.cookieList === 1 && smoke.cookieReadback === true;\n" +
-            "    smoke.apis.webRequest = Boolean(smoke.webRule) && typeof smoke.webRule.remove === 'function';\n" +
+            "    smoke.apis.webRequest = smoke.webRule === undefined;\n" +
             "    smoke.done = true;\n" +
             "    window.__monkeySharpSmokeResult = smoke; document.documentElement.dataset.monkeySharpSmoke = JSON.stringify(smoke);\n" +
             "  })().catch(function (error) { smoke.error = String(error && error.message || error); window.__monkeySharpSmokeResult = smoke; });\n" +
@@ -208,7 +208,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
         private Dictionary<string, bool> _compatibilityResults;
         private readonly System.Windows.Forms.Timer _timeoutTimer;
 
-        public SmokeForm(CefSharpUserScriptHost host, Uri startUri, LocalHttpFixture fixture, SmokeHttpDownloadService downloads, LocalHttpFixture otherFixture, SmokePermissionPolicy permissions)
+        public SmokeForm(CefSharpUserScriptHost host, Uri startUri, LocalHttpFixture fixture, SmokeHttpDownloadService downloads, LocalHttpFixture otherFixture, SmokePermissionPolicy permissions, InMemoryUserScriptRepository repository)
         {
             _host = host ?? throw new ArgumentNullException(nameof(host));
             _startUri = startUri ?? throw new ArgumentNullException(nameof(startUri));
@@ -225,7 +225,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             // uninitialized browser and can register its bridge first.
             _host.Attach(_browser);
             _host.DocumentLifecycle += HostDocumentLifecycle;
-            _compatibility = new CompatibilitySuite(host, _browser, fixture, downloads, otherFixture, permissions);
+            _compatibility = new CompatibilitySuite(host, _browser, fixture, downloads, otherFixture, permissions, repository);
             _browser.FrameLoadEnd += BrowserFrameLoadEnd;
             _browser.ConsoleMessage += (_, message) => Console.WriteLine(JsonSerializer.Serialize(new
             { type = "console", level = message.Level.ToString(), message = message.Message, source = message.Source, line = message.Line }));
@@ -644,6 +644,15 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                             request.Headers.TryGetValue("Cookie", out var compatCookie);
                             body = Encoding.UTF8.GetBytes(compatCookie ?? string.Empty);
                             break;
+                        case "/compat/webrequest":
+                            contentType = "text/html; charset=utf-8";
+                            body = Encoding.UTF8.GetBytes("<!doctype html><html><head><script src='/compat/net/static-blocked.js'></script>" +
+                                "<script src='/compat/net/static-old.js'></script></head><body>Static rule first-request fixture</body></html>");
+                            break;
+                        case "/compat/net/static-blocked.js":
+                            contentType = "text/javascript"; body = Encoding.UTF8.GetBytes("globalThis.staticBlocked=true;"); break;
+                        case "/compat/net/static-target.js":
+                            contentType = "text/javascript"; body = Encoding.UTF8.GetBytes("globalThis.staticTarget=true;"); break;
                         case "/compat/net/blocked":
                         case "/compat/net/original":
                         case "/compat/net/target":

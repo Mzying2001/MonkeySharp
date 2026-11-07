@@ -1,4 +1,4 @@
-using Mzying2001.MonkeySharp.Core.Domain;
+﻿using Mzying2001.MonkeySharp.Core.Domain;
 using Mzying2001.MonkeySharp.Core.Runtime;
 using System;
 using System.Collections.Generic;
@@ -178,7 +178,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             TimeSpan? timeout,
             long? maxResponseBytes,
             Func<Uri, CancellationToken, Task<bool>> redirectAllowed,
-            UserScriptHttpRequestOptions options = null)
+            UserScriptHttpRequestOptions options = null, DocumentFrame originFrame = null)
         {
             if (string.IsNullOrWhiteSpace(method)) throw new ArgumentException("The HTTP method is required.", nameof(method));
             if (maxResponseBytes.HasValue && maxResponseBytes.Value <= 0)
@@ -191,6 +191,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             Timeout = timeout;
             MaxResponseBytes = maxResponseBytes;
             RedirectAllowed = redirectAllowed ?? throw new ArgumentNullException(nameof(redirectAllowed));
+            OriginFrame = originFrame;
             Options = options ?? new UserScriptHttpRequestOptions();
         }
 
@@ -217,6 +218,8 @@ namespace Mzying2001.MonkeySharp.Core.Apis
 
         /// <summary>Gets optional request controls.</summary>
         public UserScriptHttpRequestOptions Options { get; }
+        /// <summary>Gets trusted ownership supplied by Core, never by script parameters.</summary>
+        public DocumentFrame OriginFrame { get; }
     }
 
     /// <summary>Contains HTTP response metadata returned by a userscript host service.</summary>
