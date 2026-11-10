@@ -197,7 +197,7 @@ document-idle 在 DOMContentLoaded 后调度，不等待缓慢资源的 load。�
 | `GM.addValueChangeListener` | `GM_addValueChangeListener` | `Promise<number>` | Core |
 | `GM.removeValueChangeListener` | `GM_removeValueChangeListener` | `Promise<undefined>` | Core |
 | `GM.addStyle` | `GM_addStyle` | `Promise<HTMLStyleElement>` | 页面 DOM |
-| `GM.addElement` | `GM_addElement` | `Promise<Element>` | 页面 DOM |
+| `GM.addElement` | `GM_addElement` | `Promise<Element/null>` | 页面 DOM |
 | `GM.getResourceText` | `GM_getResourceText` | `Promise<string>` | 资源提供器 |
 | `GM.getResourceUrl` | `GM_getResourceURL` | `Promise<string>` | 资源提供器 |
 | `GM.xmlHttpRequest` | `GM_xmlhttpRequest` | 可 abort 的 `Promise<Response>` | CefSharp 默认服务 |
@@ -326,9 +326,9 @@ script 包含 name、namespace、version、description、author、copyright、na
 
 ### GM.addElement(tagName, attributes?) / GM.addElement(parent, tagName, attributes?)
 
-旧版为相同重载的 GM_addElement；需要 GM.addElement 或其别名授权。tagName 是非空字符串。parent 必须具有 appendChild；省略时使用 document.head 或 document.documentElement。
+旧版为相同重载的 GM_addElement；需要 GM.addElement 或其别名授权。tagName 是字符串。parent 必须具有 appendChild；省略时依次选择可用的 document.head、document.body、document.documentElement。
 
-attributes 是可选对象：textContent/innerHTML 设置内容，字符串 style 设置 style.cssText，已有 DOM 属性（包括函数事件处理器）直接赋值，其他字段转换成字符串后使用 setAttribute。现代返回 `Promise<Element>`，旧版立即返回 Element。非法输入和 DOM 失败会拒绝/抛出，而非返回 null。
+attributes 是可选对象：textContent/innerHTML 设置内容，字符串 style 设置 style.cssText，已有 DOM 属性（包括函数事件处理器）直接赋值，其他字段转换成字符串后使用 setAttribute。现代返回 `Promise<Element/null>`，旧版立即返回 Element/null。创建、属性赋值或插入的 DOM 异常（包括空 tag 或非法 tag）返回 null，现代 Promise 完成为 null；参数类型错误及内部编程错误仍抛出/拒绝。使用节点前应检查 null。参见[固定版本对照](compatibility/p0-follow-up.md)。
 
 **与 Tampermonkey 的差异：** 这些是普通页面 DOM 操作，不提供扩展级 CSP 绕过。默认插入 head 的行为遵循固定版本对照；页面 CSP 仍决定源码及样式是否生效。参见 [Tampermonkey 辅助方法](https://www.tampermonkey.net/documentation.php?q=GM_addElement)。
 

@@ -38,7 +38,7 @@ Resource URL spellings are intentionally different. No `GM.getResourceURL`,
 | `GM_getResourceText`, `GM.getResourceText` | declared name | text; Promise | text / rejection | Prepared resources |
 | `GM_getResourceURL`, `GM.getResourceUrl` | declared name | URL; Promise | URL / rejection | Prepared resources; valid data URL |
 | `GM_addStyle`, `GM.addStyle` | CSS | node; Promise<node> | preserve live node | Renderer; CSP effect separately verified |
-| `GM_addElement`, `GM.addElement` | tag, attributes; parent, tag, attributes | node/null; Promise<node> | preserve live node | Renderer; CSP effect separately verified |
+| `GM_addElement`, `GM.addElement` | tag, attributes; parent, tag, attributes | node/null; Promise<node/null> | DOM failure returns/fulfills null; normalization errors throw/reject | Renderer; CSP effect separately verified |
 | `GM_xmlhttpRequest`, `GM.xmlHttpRequest` | details | abort handle; abortable Promise | ordered lifecycle, final response / error | CEF network / actual RequestContext; [XHR](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_xmlhttpRequest) |
 | `GM_download`, `GM.download` | details; URL, name | abort handle; abortable Promise | progress; committed-file details / error | CEF network + host saving; anonymous TM 5.5+, Blob/File TM 5.4.6226+; [download](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_download) |
 | `GM_notification`, `GM.notification` | details, ondone; text, title, image, onclick | void; Promise | click/default prevention, done; boolean clicked result (false on timeout verified) | Notification service; tag/url TM 5.0+; [notification](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_notification) |

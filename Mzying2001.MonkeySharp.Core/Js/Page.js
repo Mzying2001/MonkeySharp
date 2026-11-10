@@ -170,13 +170,20 @@
                 return style;
             };
             const createElementNode = function (parent, tagName, attributes) {
-                if (typeof parent === "string") { attributes = tagName; tagName = parent; parent = document.head || document.documentElement; }
+                if (typeof parent === "string") { attributes = tagName; tagName = parent; parent = document.head || document.body || document.documentElement; }
+                if (typeof tagName !== "string") throw new TypeError("tagName must be a string.");
                 if (!parent || typeof parent.appendChild !== "function") throw new TypeError("parent must be a DOM node.");
-                if (typeof tagName !== "string" || tagName.length === 0) throw new TypeError("tagName must be a string.");
-                const element = document.createElement(tagName);
-                applyElementAttributes(element, attributes);
-                parent.appendChild(element);
-                return element;
+                try {
+                    const element = document.createElement(tagName);
+                    applyElementAttributes(element, attributes);
+                    parent.appendChild(element);
+                    return element;
+                } catch (error) {
+                    // Creation, attribute and insertion failures are part of the DOM contract.
+                    // Parameter getters and internal programming errors must still propagate.
+                    if (typeof DOMException === "function" && error instanceof DOMException) return null;
+                    throw error;
+                }
             };
             const addDomApi = function (enabled, api) {
                 if (enabled("GM.addStyle")) api.addStyle = async css => createStyleNode(css);

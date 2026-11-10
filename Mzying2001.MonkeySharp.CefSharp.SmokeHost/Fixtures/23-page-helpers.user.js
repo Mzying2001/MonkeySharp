@@ -28,8 +28,14 @@
         const promise = GM.addElement(document.body, 'input', { value: 'value', checked: true, 'data-helper': 'present' });
         const modern = await promise;
         r.modernNode = typeof promise.then === 'function' && modern.parentNode === document.body && modern.value === 'value' && modern.checked && modern.dataset.helper === 'present';
+        r.invalidTag = GM_addElement('bad tag', {}) === null && await GM.addElement('bad tag', {}) === null;
+        r.invalidAttribute = GM_addElement('span', { 'bad name': 'x' }) === null && await GM.addElement('span', { 'bad name': 'x' }) === null;
+        r.invalidParent = GM_addElement(document.createTextNode('text'), 'span', {}) === null && await GM.addElement(document.createTextNode('text'), 'span', {}) === null;
+        r.emptyTag = GM_addElement('', {}) === null && await GM.addElement('', {}) === null;
         const head = document.head, body = document.body;
-        head.remove(); body.remove();
+        head.remove();
+        r.bodyFallback = GM_addElement('span', {}).parentNode === body;
+        body.remove();
         try {
             const fallback = GM_addElement('span', { textContent: 'fallback' });
             const fallbackStyle = await GM.addStyle('html { --fallback: 13; }');

@@ -7,7 +7,7 @@ async function install(dispatch, document) {
     let api;
     const logs = [], requests = [];
     const grants = ['GM.log', 'GM.addStyle', 'GM.addElement', 'GM.openInTab', 'GM.getTab', 'GM.saveTab', 'GM.getTabs'];
-    const context = vm.createContext({ atob, TextDecoder, crypto, URL, document, location: { href: 'https://example.com/path/page' },
+    const context = vm.createContext({ atob, TextDecoder, crypto, URL, DOMException, document, location: { href: 'https://example.com/path/page' },
         console: { log: (...args) => logs.push(args), error() {}, warn() {} }, capture: value => { api = value; } });
     const notify = data => context.__MonkeySharpRuntime.receive({ type: 'notification', protocol: 2,
         executionId: 'page', deliveryToken: 'delivery', event: 'tab-closed', data });
@@ -52,10 +52,32 @@ test('DOM helpers use head, explicit parent and documentElement fallback with no
     assert.equal(typeof modern.then, 'function');
     assert.equal((await modern).parentNode, doc.body);
     assert.equal(h.style('body {}').parentNode, doc.head);
-    doc.head = null; doc.body = null;
+    doc.head = null;
+    assert.equal(h.element('span', {}).parentNode, doc.body);
+    doc.body = null;
     assert.equal(h.element('span', {}).parentNode, doc.documentElement);
     assert.equal((await h.GM.addStyle('html {}')).parentNode, doc.documentElement);
     assert.equal(h.requests.length, 0);
+});
+
+test('element DOM failures return null in both forms while normalization and programming errors remain visible', async () => {
+    const dom = name => new DOMException('DOM operation failed', name);
+    const doc = { head: { appendChild(node) { if (node.tagName === 'append') throw dom('HierarchyRequestError'); } },
+        createElement(tagName) {
+            if (tagName === 'bad tag' || tagName === '') throw dom('InvalidCharacterError');
+            return { tagName, setAttribute(name) { if (name === 'bad name') throw dom('InvalidCharacterError'); } };
+        } };
+    const h = await install(undefined, doc);
+    for (const args of [['bad tag', {}], ['', {}], ['span', { 'bad name': 'x' }], ['append', {}]]) {
+        assert.equal(h.element(...args), null);
+        assert.equal(await h.GM.addElement(...args), null);
+    }
+    assert.throws(() => h.element(42, {}), { name: 'TypeError' });
+    await assert.rejects(h.GM.addElement(42, {}), { name: 'TypeError' });
+    const attributes = { get title() { throw new Error('getter bug'); } };
+    assert.throws(() => h.element('span', attributes), /getter bug/);
+    await assert.rejects(h.GM.addElement('span', attributes), /getter bug/);
+    assert.equal(h.element('span', {}).tagName, 'span');
 });
 
 test('tabs normalize both overloads and relative URLs, queue early close, and correlate pre-ack closure once', async () => {

@@ -190,7 +190,7 @@ Each row requires its capability family or exact legacy declaration unless state
 | `GM.addValueChangeListener` | `GM_addValueChangeListener` | `Promise<number>` | Core |
 | `GM.removeValueChangeListener` | `GM_removeValueChangeListener` | `Promise<undefined>` | Core |
 | `GM.addStyle` | `GM_addStyle` | `Promise<HTMLStyleElement>` | Page DOM |
-| `GM.addElement` | `GM_addElement` | `Promise<Element>` | Page DOM |
+| `GM.addElement` | `GM_addElement` | `Promise<Element/null>` | Page DOM |
 | `GM.getResourceText` | `GM_getResourceText` | `Promise<string>` | Resource provider |
 | `GM.getResourceUrl` | `GM_getResourceURL` | `Promise<string>` | Resource provider |
 | `GM.xmlHttpRequest` | `GM_xmlhttpRequest` | Abortable `Promise<Response>` | CefSharp default |
@@ -314,9 +314,9 @@ Requires the corresponding grant. `css` is a string. Creates a `<style>`, assign
 
 ### GM.addElement(tagName, attributes?) / GM.addElement(parent, tagName, attributes?)
 
-Legacy: `GM_addElement` with the same overloads; grant `GM.addElement` or its alias. `tagName` is a non-empty string. `parent` must have `appendChild`; if omitted, the parent is `document.head` or `document.documentElement`.
+Legacy: `GM_addElement` with the same overloads; grant `GM.addElement` or its alias. `tagName` is a string. `parent` must have `appendChild`; if omitted, the parent is the first available of `document.head`, `document.body` and `document.documentElement`.
 
-`attributes` is an optional object. `textContent`/`innerHTML` set content, string `style` sets `style.cssText`, existing DOM properties (including function event handlers) are assigned, and other fields use `setAttribute` with string conversion. Modern result: `Promise<Element>`; legacy: immediate `Element`. Invalid inputs and DOM failures reject/throw rather than returning `null`.
+`attributes` is an optional object. `textContent`/`innerHTML` set content, string `style` sets `style.cssText`, existing DOM properties (including function event handlers) are assigned, and other fields use `setAttribute` with string conversion. Modern result: `Promise<Element/null>`; legacy: immediate `Element/null`. DOM creation, attribute or insertion failures (including an empty/invalid tag) return/fulfill null. Parameter type errors and programming errors still throw/reject. Check for null before using the node. See [fixed-reference observations](compatibility/p0-follow-up.md).
 
 **Tampermonkey difference:** these are ordinary page DOM operations, with no extension-based CSP bypass. The default parent follows the pinned head placement; page CSP still governs source and style effects. See the [Tampermonkey helper](https://www.tampermonkey.net/documentation.php?q=GM_addElement).
 
