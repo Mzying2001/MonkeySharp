@@ -19,7 +19,8 @@ Use an explicit `x64` or `x86` platform for CefSharp builds. The Demo and its te
 
 ## Development Guidelines
 
-Update related documentation and tests alongside code changes so they reflect the current implementation and requirements.
+- Update related documentation and tests alongside code changes so they reflect the current implementation and requirements.
+- Keep documentation paragraphs on single source lines, preserving Markdown structure.
 
 ## Git Commit Conventions
 
