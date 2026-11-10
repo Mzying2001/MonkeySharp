@@ -85,4 +85,4 @@ The grant and [storage-authority probes](../../scripts/compatibility/evidence/ta
 
 ## Real-script corpus intake
 
-The original probes are not third-party compatibility evidence. The [corpus manifest](../../scripts/compatibility/corpus.json) tracks seven pending categories and optional local-script provenance. Entries need immutable upstream URLs, licenses, versions, SHA-256, unmodified sources and local prerequisites before becoming runnable. Classify failures as syntax, GM contract, matching, authorization or world/CSP. See [corpus intake and the recorded local-script scope](validation.md#corpus-intake).
+The original probes are not third-party compatibility evidence. The [corpus manifest](../../scripts/compatibility/corpus.json) pins unmodified third-party source and licenses for seven executable categories and preserves optional historical local-script provenance. Intake ready status is separate from actual pass/limit/block/failure records. Classify failures as syntax, GM contract, matching, authorization or world/CSP. See [corpus scope](../../scripts/compatibility/corpus/README.md) and [current evidence gaps](p0-follow-up.md).

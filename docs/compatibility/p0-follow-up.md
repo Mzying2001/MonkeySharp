@@ -11,7 +11,7 @@ Edge 157.0.4341.42 and fresh profiles. Historical evidence is retained.
 | 23 | Native 84/121/151 ignored explicit Cookie inputs. Default backend now rejects before sending; jar-based authentication remains available. This is an explicit engine limitation, not implemented TM merge parity; [probe evidence](../../scripts/compatibility/evidence/explicit-cookies-follow-up-p0.json). |
 | 24 | Shared listener registry, once/signal/capture identity, dispatch mutation rules, exception isolation, deduplication and cleanup. 118 JS tests and all three x64 raw/isolated native gates passed; [evidence](../../scripts/compatibility/evidence/urlchange-follow-up-p0.json). |
 | 25 | Download permission/session/backend errors corrected; known subfeatures use the existing capability map; English/Chinese guides reconciled. 410 .NET and 119 JS tests passed; 84/121 native/WPF passed (84 WPF first run crashed in CEF, retry retained); [evidence](../../scripts/compatibility/evidence/download-docs-follow-up-p0.json). |
-| 26 | Seven third-party categories pending intake/execution. |
+| 26 | Two immutable MIT upstream scripts, seven category scenarios and CSP/cancel/denial variants, shared source/package host. Native 121/151 scenarios pass within declared start/CSP limits; 84 settings require missing replaceAll. Fixed TM has actual runs, with saved files blocked by browser permission and the resource-refresh hook assertion failed. Intake/runner delivered; complete differential acceptance remains incomplete. |
 | 27 | M1 and original step 15 remain incomplete until corpus and matrix requirements pass. |
 
 ## Stable observations
@@ -42,6 +42,24 @@ Tracked `fixtures/p0-*.user.js` and `evidence/tampermonkey-5.5.1-p0-*.json` unde
 The initial URL experiment assumed AbortSignal support and failed. Its record
 is retained alongside the corrected observation. Missing events do not prove
 native interaction or failure handling.
+
+## Third-party results
+
+[Fixed TM](../../scripts/compatibility/evidence/corpus-reference-stable-p0.json),
+[native 121](../../scripts/compatibility/evidence/corpus-native-121-p0.json),
+[native 151](../../scripts/compatibility/evidence/corpus-native-151-p0.json) and
+[initial native 84](../../scripts/compatibility/evidence/corpus-native-84-initial-p0.json)
+retain all attempted scenarios. The 84 initial settings failures include the
+actual replaceAll TypeError; later runs classify only that exact observed case
+as an engine limitation. The unchanged sources are never repaired in the corpus.
+
+Native authentication/download checks include server requests, a cross-origin
+port redirect, actual file/ZIP-entry hashes and cancellation transitions. TM
+HEAD/GET requests were observed, but missing download permission prevented
+saved-file/ZIP confirmation; those cases stay blocked. Its page-hook scenario
+installed the history wrapper but failed the changed-resource refresh assertion;
+this reference failure is retained, not used to lower the native assertion.
+No M1 pass or unchanged-script success rate is inferred from these results.
 
 ## Reproduction
 

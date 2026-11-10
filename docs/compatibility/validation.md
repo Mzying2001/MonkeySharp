@@ -44,6 +44,13 @@ This is a dated snapshot, not a new test result from reorganizing the repository
 
 ## Corpus intake
 
-Each third-party entry needs an immutable source URL, redistribution license, version, SHA-256, unmodified source and local prerequisites. The seven categories in the manifest remain pending: DOM decoration, page hooks, authenticated XHR, downloads, storage listeners, menu configuration and iframe/SPA. Project-authored fixtures do not replace that corpus.
+The [pinned corpus](../../scripts/compatibility/corpus/README.md) now contains two
+unmodified MIT-licensed upstream scripts with immutable commit URLs, exact source
+and license hashes, no external requirements, controlled loopback pages and
+seven separate category scenarios. CSP/cancellation/policy denial add variants.
+Source SmokeHost and NuGet-only consumers run the same actions. Fixed TM runs
+are separate; missing browser download permission remains blocked. Chromium 84's
+observed replaceAll failure is an explicit engine restriction, not a runtime pass.
+See [follow-up evidence and remaining M1 requirements](p0-follow-up.md).
 
-The snapshot also ran a user-provided local about:blank search script unchanged through all six package consumers. It verified DOM creation, engine-choice storage, empty-submit validation and navigation persistence without a nonempty external search. Its source remains uncommitted because redistribution permission is undeclared. The manifest's `localOriginal.sourcePath` is historical provenance, not a required file in a fresh checkout; use `-CorpusScript` to supply an available script. The local script does not satisfy the seven pending pinned third-party categories.
+The snapshot also ran a user-provided local about:blank search script unchanged through all six package consumers. It verified DOM creation, engine-choice storage, empty-submit validation and navigation persistence without a nonempty external search. Its source remains uncommitted because redistribution permission is undeclared. The manifest's `localOriginal.sourcePath` is historical provenance, not a required file in a fresh checkout; use `-CorpusScript` to supply an available script. The local search script is separate from the new pinned seven-category corpus.

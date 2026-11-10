@@ -41,7 +41,11 @@ foreach ($version in $CefSharpVersions) {
         $caseIndex++
         New-Item -ItemType Directory -Path $caseRoot -Force | Out-Null
         Invoke-Logged 'git' @('-C',$root,'worktree','add','--detach',$checkout,$commit) $root (Join-Path $caseRoot 'checkout.log')
-        if ((Get-Item -LiteralPath $patch).Length -gt 0) { Invoke-Logged 'git' @('-C',$checkout,'apply','--whitespace=nowarn',$patch) $root (Join-Path $caseRoot 'patch.log') }
+        if ((Get-Item -LiteralPath $patch).Length -gt 0) {
+            # Install attributes first so pinned binary inputs keep their exact upstream bytes.
+            Invoke-Logged 'git' @('-c','core.autocrlf=false','-c','core.eol=lf','-C',$checkout,'apply','--include=.gitattributes','--whitespace=nowarn',$patch) $root (Join-Path $caseRoot 'patch-attributes.log')
+            Invoke-Logged 'git' @('-c','core.autocrlf=false','-c','core.eol=lf','-C',$checkout,'apply','--exclude=.gitattributes','--whitespace=nowarn',$patch) $root (Join-Path $caseRoot 'patch.log')
+        }
         $record = [ordered]@{ version=$version; platform=$platform; commit=$commit; sourcePatchSha256=$patchHash; status='failed'; checkout=$checkout }
         try {
             if ($PackageOnly) { $record.baseline = 'skipped-package-only' }
@@ -77,9 +81,16 @@ foreach ($version in $CefSharpVersions) {
             $consumerResult = Get-Content -LiteralPath $report -Raw | ConvertFrom-Json
             if (!$consumerResult.success -or $consumerResult.platform -ne $platform) { throw 'The packaged consumer did not pass.' }
             $record.consumer = $consumerResult
+            $corpusOutput = Join-Path $caseRoot 'corpus-consumer'
+            Invoke-Logged 'node' @((Join-Path $checkout 'scripts/compatibility/Run-Corpus.cjs'),'--manager','monkeysharp','--host',
+                (Join-Path $consumer "bin/$platform/Release/net462/MonkeySharp.PackageConsumer.exe"),'--expected-cef-version',$version,'--expected-platform',$platform,'--output',$corpusOutput) $checkout (Join-Path $caseRoot 'consumer-corpus.log')
+            $record.consumerCorpus = Get-Content -LiteralPath (Join-Path $corpusOutput 'results.json') -Raw -Encoding UTF8 | ConvertFrom-Json
             if (!$PackageOnly) {
                 Copy-Item -LiteralPath (Join-Path $checkout "artifacts/smoke/$version-$platform/results.jsonl") -Destination (Join-Path $caseRoot 'smoke-results.jsonl')
                 Copy-Item -LiteralPath (Join-Path $checkout "artifacts/smoke/$version-$platform/cdp-probe.jsonl") -Destination (Join-Path $caseRoot 'cdp-probe.jsonl')
+                $baselineCorpus = Get-ChildItem -LiteralPath (Join-Path $checkout 'artifacts/corpus') -Filter results.json -Recurse | Select-Object -First 1
+                if (!$baselineCorpus) { throw 'Baseline corpus evidence is missing.' }
+                Copy-Item -LiteralPath $baselineCorpus.FullName -Destination (Join-Path $caseRoot 'baseline-corpus.json')
             }
             $record.status = if ($PackageOnly) { 'package-only-passed' } else { 'passed' }
         }

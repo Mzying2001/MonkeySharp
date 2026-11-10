@@ -1,0 +1,1598 @@
+{
+  "schemaVersion": 1,
+  "manager": "monkeysharp",
+  "results": [
+    {
+      "schemaVersion": 1,
+      "caseId": "dom-decoration",
+      "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+      "actionHash": "26167358e9b2b0b8d8ae86e7fde99c4f08e84cfd7c202017eb28eb0f8c003766",
+      "contractSource": [
+        "https://raw.githubusercontent.com/fastnow/UserJs/4e58ac92f3acc409e05fcb156afca3237454f777/SiteAssetDL.user.js"
+      ],
+      "environment": {
+        "manager": "MonkeySharp",
+        "managerVersion": "3.0.0",
+        "chromiumVersion": "151.0.7922.174",
+        "manifestVersion": null,
+        "cefSharpVersion": "151.3.240.0",
+        "platform": "x64",
+        "menuInput": "WinForms ToolStripMenuItem.PerformClick; no trusted DOM activation claimed",
+        "commit": "cfb7c42e7017308d1cb00e97f7ef22dfbc34d56d",
+        "sourcePatchSha256": "d63396b4b7571adbf18e74f36d07b1c22a0c40cfa81c3827e8df223d5650d694",
+        "inputsSha256": {
+          "Run-Corpus.cjs": "c1c75adbc41a8a185cded975c79303c2cc99929bfed13a3e5e298752f66e7f92",
+          "corpus/scenarios.cjs": "4f75a7d487f94bedf7dedda1cd3e21bc54f32ce95f3d18f9c9fcc4892c84f01f",
+          "corpus.json": "ec6f7828f93937f645b8619fbda9a739afe19b3539a75ad2673501f26b1a1aa9",
+          "PackageConsumer/CorpusHost.cs": "103a4496f324e4aae0c3f5b477d1985ff879c7907e86eb6edf84aabccfb685ae",
+          "ReferenceEnvironment.cjs": "4027d9d646ad73dea080312af3795967021e05eb2b6ed7c304356e439b3b3b87",
+          "reference-stable.json": "c7b33ecad356a740d291713f0108da69e2954afce891628ff577003074354bab"
+        },
+        "world": "raw",
+        "capabilities": {},
+        "settings": {
+          "trustedPageWorld": true,
+          "testCookiesOnly": true
+        }
+      },
+      "immediateReturn": {},
+      "events": [
+        {
+          "kind": "open",
+          "name": null
+        },
+        {
+          "kind": "assert",
+          "name": "assetToolbar"
+        },
+        {
+          "kind": "wait",
+          "name": null
+        },
+        {
+          "kind": "evaluate",
+          "name": null
+        },
+        {
+          "kind": "assert",
+          "name": "resourceCollected"
+        },
+        {
+          "kind": "assert",
+          "name": "computedStyle"
+        },
+        {
+          "kind": "evaluate",
+          "name": null
+        },
+        {
+          "kind": "wait",
+          "name": null
+        },
+        {
+          "kind": "assert",
+          "name": "singleDecoration"
+        }
+      ],
+      "promise": {},
+      "effects": {
+        "observations": {
+          "engineFeatures": {
+            "replaceAll": "function",
+            "compressionStream": "function",
+            "saveFilePicker": "function"
+          }
+        },
+        "checks": {
+          "assetToolbar": true,
+          "resourceCollected": true,
+          "computedStyle": true,
+          "singleDecoration": true
+        },
+        "files": [],
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/corpus",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:52139",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/favicon.ico",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/favicon.ico",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          }
+        ],
+        "diagnostics": [
+          "MSR100_DOCUMENT_START_BEST_EFFORT: The script is running with best-effort document-start timing.",
+          "MSR200_UNVERIFIED_BRIDGE: TrustedPageWorld exposes capabilities to page-world code.",
+          "MSC201_NOTIFICATION_DELIVERY_FAILED: A bridge notification could not be delivered."
+        ],
+        "failedAction": null
+      },
+      "status": "passed"
+    },
+    {
+      "schemaVersion": 1,
+      "caseId": "dom-decoration-csp",
+      "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+      "actionHash": "3a4ecd4c6876c3e25fdaf6a396b827e993db5be645a26038324b7a0567ef08fc",
+      "contractSource": [
+        "https://raw.githubusercontent.com/fastnow/UserJs/4e58ac92f3acc409e05fcb156afca3237454f777/SiteAssetDL.user.js"
+      ],
+      "environment": {
+        "manager": "MonkeySharp",
+        "managerVersion": "3.0.0",
+        "chromiumVersion": "151.0.7922.174",
+        "manifestVersion": null,
+        "cefSharpVersion": "151.3.240.0",
+        "platform": "x64",
+        "menuInput": "WinForms ToolStripMenuItem.PerformClick; no trusted DOM activation claimed",
+        "commit": "cfb7c42e7017308d1cb00e97f7ef22dfbc34d56d",
+        "sourcePatchSha256": "d63396b4b7571adbf18e74f36d07b1c22a0c40cfa81c3827e8df223d5650d694",
+        "inputsSha256": {
+          "Run-Corpus.cjs": "c1c75adbc41a8a185cded975c79303c2cc99929bfed13a3e5e298752f66e7f92",
+          "corpus/scenarios.cjs": "4f75a7d487f94bedf7dedda1cd3e21bc54f32ce95f3d18f9c9fcc4892c84f01f",
+          "corpus.json": "ec6f7828f93937f645b8619fbda9a739afe19b3539a75ad2673501f26b1a1aa9",
+          "PackageConsumer/CorpusHost.cs": "103a4496f324e4aae0c3f5b477d1985ff879c7907e86eb6edf84aabccfb685ae",
+          "ReferenceEnvironment.cjs": "4027d9d646ad73dea080312af3795967021e05eb2b6ed7c304356e439b3b3b87",
+          "reference-stable.json": "c7b33ecad356a740d291713f0108da69e2954afce891628ff577003074354bab"
+        },
+        "world": "raw",
+        "capabilities": {},
+        "settings": {
+          "trustedPageWorld": true,
+          "testCookiesOnly": true
+        }
+      },
+      "immediateReturn": {},
+      "events": [
+        {
+          "kind": "open",
+          "name": null
+        },
+        {
+          "kind": "assert",
+          "name": "nodeCreatedUnderCsp"
+        },
+        {
+          "kind": "evaluate",
+          "name": "styleApplied"
+        },
+        {
+          "kind": "assert",
+          "name": "singleCspDecoration"
+        }
+      ],
+      "promise": {},
+      "effects": {
+        "observations": {
+          "engineFeatures": {
+            "replaceAll": "function",
+            "compressionStream": "function",
+            "saveFilePicker": "function"
+          },
+          "styleApplied": false
+        },
+        "checks": {
+          "nodeCreatedUnderCsp": true,
+          "singleCspDecoration": true
+        },
+        "files": [],
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/corpus",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200,
+            "contentSecurityPolicy": "style-src 'self'"
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:52139",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/favicon.ico",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          }
+        ],
+        "diagnostics": [
+          "MSR100_DOCUMENT_START_BEST_EFFORT: The script is running with best-effort document-start timing.",
+          "MSR200_UNVERIFIED_BRIDGE: TrustedPageWorld exposes capabilities to page-world code.",
+          "MSC201_NOTIFICATION_DELIVERY_FAILED: A bridge notification could not be delivered."
+        ],
+        "failedAction": null
+      },
+      "status": "expected-engine-limitation",
+      "reason": "Source created its live DOM toolbar, but page style-src blocked its inline styles.",
+      "reasonCategory": "engine-csp"
+    },
+    {
+      "schemaVersion": 1,
+      "caseId": "page-hook",
+      "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+      "actionHash": "930ddf23fa6df2f44b6fdc12fb62f5b592ec65aa31065d39b27f9d72484609b8",
+      "contractSource": [
+        "https://raw.githubusercontent.com/fastnow/UserJs/4e58ac92f3acc409e05fcb156afca3237454f777/SiteAssetDL.user.js"
+      ],
+      "environment": {
+        "manager": "MonkeySharp",
+        "managerVersion": "3.0.0",
+        "chromiumVersion": "151.0.7922.174",
+        "manifestVersion": null,
+        "cefSharpVersion": "151.3.240.0",
+        "platform": "x64",
+        "menuInput": "WinForms ToolStripMenuItem.PerformClick; no trusted DOM activation claimed",
+        "commit": "cfb7c42e7017308d1cb00e97f7ef22dfbc34d56d",
+        "sourcePatchSha256": "d63396b4b7571adbf18e74f36d07b1c22a0c40cfa81c3827e8df223d5650d694",
+        "inputsSha256": {
+          "Run-Corpus.cjs": "c1c75adbc41a8a185cded975c79303c2cc99929bfed13a3e5e298752f66e7f92",
+          "corpus/scenarios.cjs": "4f75a7d487f94bedf7dedda1cd3e21bc54f32ce95f3d18f9c9fcc4892c84f01f",
+          "corpus.json": "ec6f7828f93937f645b8619fbda9a739afe19b3539a75ad2673501f26b1a1aa9",
+          "PackageConsumer/CorpusHost.cs": "103a4496f324e4aae0c3f5b477d1985ff879c7907e86eb6edf84aabccfb685ae",
+          "ReferenceEnvironment.cjs": "4027d9d646ad73dea080312af3795967021e05eb2b6ed7c304356e439b3b3b87",
+          "reference-stable.json": "c7b33ecad356a740d291713f0108da69e2954afce891628ff577003074354bab"
+        },
+        "world": "raw",
+        "capabilities": {},
+        "settings": {
+          "trustedPageWorld": true,
+          "testCookiesOnly": true
+        }
+      },
+      "immediateReturn": {},
+      "events": [
+        {
+          "kind": "open",
+          "name": null
+        },
+        {
+          "kind": "assert",
+          "name": "assetToolbar"
+        },
+        {
+          "kind": "wait",
+          "name": null
+        },
+        {
+          "kind": "evaluate",
+          "name": null
+        },
+        {
+          "kind": "assert",
+          "name": "resourceCollected"
+        },
+        {
+          "kind": "evaluate",
+          "name": "hookBeforeFirstInline"
+        },
+        {
+          "kind": "assert",
+          "name": "historyHookInstalled"
+        },
+        {
+          "kind": "evaluate",
+          "name": null
+        },
+        {
+          "kind": "wait",
+          "name": null
+        },
+        {
+          "kind": "assert",
+          "name": "hookRefreshesResources"
+        }
+      ],
+      "promise": {},
+      "effects": {
+        "observations": {
+          "engineFeatures": {
+            "replaceAll": "function",
+            "compressionStream": "function",
+            "saveFilePicker": "function"
+          },
+          "hookBeforeFirstInline": false
+        },
+        "checks": {
+          "assetToolbar": true,
+          "resourceCollected": true,
+          "historyHookInstalled": true,
+          "hookRefreshesResources": true
+        },
+        "files": [],
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/corpus",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:52139",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/favicon.ico",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/second.png",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/favicon.ico",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          }
+        ],
+        "diagnostics": [
+          "MSR100_DOCUMENT_START_BEST_EFFORT: The script is running with best-effort document-start timing.",
+          "MSR200_UNVERIFIED_BRIDGE: TrustedPageWorld exposes capabilities to page-world code.",
+          "MSC201_NOTIFICATION_DELIVERY_FAILED: A bridge notification could not be delivered."
+        ],
+        "failedAction": null
+      },
+      "status": "expected-engine-limitation",
+      "reason": "History hook works after startup but was not installed before first inline.",
+      "reasonCategory": "engine-timing"
+    },
+    {
+      "schemaVersion": 1,
+      "caseId": "authenticated-xhr",
+      "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+      "actionHash": "05b62b1868a4c19aa4c75008738f1948bea93da19b65234da1a59537a6e659cc",
+      "contractSource": [
+        "https://raw.githubusercontent.com/fastnow/UserJs/4e58ac92f3acc409e05fcb156afca3237454f777/SiteAssetDL.user.js"
+      ],
+      "environment": {
+        "manager": "MonkeySharp",
+        "managerVersion": "3.0.0",
+        "chromiumVersion": "151.0.7922.174",
+        "manifestVersion": null,
+        "cefSharpVersion": "151.3.240.0",
+        "platform": "x64",
+        "menuInput": "WinForms ToolStripMenuItem.PerformClick; no trusted DOM activation claimed",
+        "commit": "cfb7c42e7017308d1cb00e97f7ef22dfbc34d56d",
+        "sourcePatchSha256": "d63396b4b7571adbf18e74f36d07b1c22a0c40cfa81c3827e8df223d5650d694",
+        "inputsSha256": {
+          "Run-Corpus.cjs": "c1c75adbc41a8a185cded975c79303c2cc99929bfed13a3e5e298752f66e7f92",
+          "corpus/scenarios.cjs": "4f75a7d487f94bedf7dedda1cd3e21bc54f32ce95f3d18f9c9fcc4892c84f01f",
+          "corpus.json": "ec6f7828f93937f645b8619fbda9a739afe19b3539a75ad2673501f26b1a1aa9",
+          "PackageConsumer/CorpusHost.cs": "103a4496f324e4aae0c3f5b477d1985ff879c7907e86eb6edf84aabccfb685ae",
+          "ReferenceEnvironment.cjs": "4027d9d646ad73dea080312af3795967021e05eb2b6ed7c304356e439b3b3b87",
+          "reference-stable.json": "c7b33ecad356a740d291713f0108da69e2954afce891628ff577003074354bab"
+        },
+        "world": "raw",
+        "capabilities": {},
+        "settings": {
+          "trustedPageWorld": true,
+          "testCookiesOnly": true
+        }
+      },
+      "immediateReturn": {},
+      "events": [
+        {
+          "kind": "open",
+          "name": null
+        },
+        {
+          "kind": "assert",
+          "name": "assetToolbar"
+        },
+        {
+          "kind": "wait",
+          "name": null
+        },
+        {
+          "kind": "evaluate",
+          "name": null
+        },
+        {
+          "kind": "assert",
+          "name": "resourceCollected"
+        },
+        {
+          "kind": "evaluate",
+          "name": null
+        },
+        {
+          "kind": "wait",
+          "name": null
+        },
+        {
+          "kind": "evaluate",
+          "name": "probeResponseUi"
+        },
+        {
+          "kind": "evaluate",
+          "name": null
+        },
+        {
+          "kind": "files",
+          "name": "authenticatedBytesPacked"
+        }
+      ],
+      "promise": {},
+      "effects": {
+        "observations": {
+          "engineFeatures": {
+            "replaceAll": "function",
+            "compressionStream": "function",
+            "saveFilePicker": "function"
+          },
+          "probeResponseUi": {
+            "status": "探测完成（1 项）",
+            "cards": [
+              "↓\n       ⧉\n       ◎\n       ↗redirect.png\n       1×1 · 70 B"
+            ]
+          }
+        },
+        "checks": {
+          "assetToolbar": true,
+          "resourceCollected": true,
+          "authenticatedBytesPacked": true
+        },
+        "files": [
+          {
+            "name": "Corpus fixture_2026-11-10-14-25-31.zip",
+            "bytes": 192,
+            "sha256": "a0dc07b78e329e3eae94b88b7f8241136fd5d69715b801157118df504dff3f75",
+            "entries": [
+              {
+                "name": "redirect.png",
+                "bytes": 70,
+                "sha256": "2640059609118b695c139804676372eca75c30d30e5906775902d13e44f5356c"
+              }
+            ]
+          }
+        ],
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/corpus",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:52139",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/favicon.ico",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "HEAD",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "HEAD",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:52139",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:52139",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          }
+        ],
+        "diagnostics": [
+          "MSR100_DOCUMENT_START_BEST_EFFORT: The script is running with best-effort document-start timing.",
+          "MSR200_UNVERIFIED_BRIDGE: TrustedPageWorld exposes capabilities to page-world code.",
+          "MSC201_NOTIFICATION_DELIVERY_FAILED: A bridge notification could not be delivered."
+        ],
+        "failedAction": null
+      },
+      "status": "passed"
+    },
+    {
+      "schemaVersion": 1,
+      "caseId": "download",
+      "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+      "actionHash": "4fa86bd9812abc6a6a18b89e9228fb635d9f768ec2f1f34f5668914547f8b933",
+      "contractSource": [
+        "https://raw.githubusercontent.com/fastnow/UserJs/4e58ac92f3acc409e05fcb156afca3237454f777/SiteAssetDL.user.js"
+      ],
+      "environment": {
+        "manager": "MonkeySharp",
+        "managerVersion": "3.0.0",
+        "chromiumVersion": "151.0.7922.174",
+        "manifestVersion": null,
+        "cefSharpVersion": "151.3.240.0",
+        "platform": "x64",
+        "menuInput": "WinForms ToolStripMenuItem.PerformClick; no trusted DOM activation claimed",
+        "commit": "cfb7c42e7017308d1cb00e97f7ef22dfbc34d56d",
+        "sourcePatchSha256": "d63396b4b7571adbf18e74f36d07b1c22a0c40cfa81c3827e8df223d5650d694",
+        "inputsSha256": {
+          "Run-Corpus.cjs": "c1c75adbc41a8a185cded975c79303c2cc99929bfed13a3e5e298752f66e7f92",
+          "corpus/scenarios.cjs": "4f75a7d487f94bedf7dedda1cd3e21bc54f32ce95f3d18f9c9fcc4892c84f01f",
+          "corpus.json": "ec6f7828f93937f645b8619fbda9a739afe19b3539a75ad2673501f26b1a1aa9",
+          "PackageConsumer/CorpusHost.cs": "103a4496f324e4aae0c3f5b477d1985ff879c7907e86eb6edf84aabccfb685ae",
+          "ReferenceEnvironment.cjs": "4027d9d646ad73dea080312af3795967021e05eb2b6ed7c304356e439b3b3b87",
+          "reference-stable.json": "c7b33ecad356a740d291713f0108da69e2954afce891628ff577003074354bab"
+        },
+        "world": "raw",
+        "capabilities": {},
+        "settings": {
+          "trustedPageWorld": true,
+          "testCookiesOnly": true
+        }
+      },
+      "immediateReturn": {},
+      "events": [
+        {
+          "kind": "open",
+          "name": null
+        },
+        {
+          "kind": "assert",
+          "name": "assetToolbar"
+        },
+        {
+          "kind": "wait",
+          "name": null
+        },
+        {
+          "kind": "evaluate",
+          "name": null
+        },
+        {
+          "kind": "assert",
+          "name": "resourceCollected"
+        },
+        {
+          "kind": "evaluate",
+          "name": null
+        },
+        {
+          "kind": "files",
+          "name": "fileSaved"
+        }
+      ],
+      "promise": {},
+      "effects": {
+        "observations": {
+          "engineFeatures": {
+            "replaceAll": "function",
+            "compressionStream": "function",
+            "saveFilePicker": "function"
+          }
+        },
+        "checks": {
+          "assetToolbar": true,
+          "resourceCollected": true,
+          "fileSaved": true
+        },
+        "files": [
+          {
+            "name": "redirect.png",
+            "bytes": 70,
+            "sha256": "2640059609118b695c139804676372eca75c30d30e5906775902d13e44f5356c"
+          }
+        ],
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/corpus",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:52139",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/favicon.ico",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:52139",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          }
+        ],
+        "diagnostics": [
+          "MSR100_DOCUMENT_START_BEST_EFFORT: The script is running with best-effort document-start timing.",
+          "MSR200_UNVERIFIED_BRIDGE: TrustedPageWorld exposes capabilities to page-world code.",
+          "MSC201_NOTIFICATION_DELIVERY_FAILED: A bridge notification could not be delivered."
+        ],
+        "failedAction": null
+      },
+      "status": "passed"
+    },
+    {
+      "schemaVersion": 1,
+      "caseId": "download-cancel",
+      "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+      "actionHash": "1dd29e5c7faddcd2d4c980d2e8da36c49f3f61136bf4bd8f5afa5ddba86074f7",
+      "contractSource": [
+        "https://raw.githubusercontent.com/fastnow/UserJs/4e58ac92f3acc409e05fcb156afca3237454f777/SiteAssetDL.user.js"
+      ],
+      "environment": {
+        "manager": "MonkeySharp",
+        "managerVersion": "3.0.0",
+        "chromiumVersion": "151.0.7922.174",
+        "manifestVersion": null,
+        "cefSharpVersion": "151.3.240.0",
+        "platform": "x64",
+        "menuInput": "WinForms ToolStripMenuItem.PerformClick; no trusted DOM activation claimed",
+        "commit": "cfb7c42e7017308d1cb00e97f7ef22dfbc34d56d",
+        "sourcePatchSha256": "d63396b4b7571adbf18e74f36d07b1c22a0c40cfa81c3827e8df223d5650d694",
+        "inputsSha256": {
+          "Run-Corpus.cjs": "c1c75adbc41a8a185cded975c79303c2cc99929bfed13a3e5e298752f66e7f92",
+          "corpus/scenarios.cjs": "4f75a7d487f94bedf7dedda1cd3e21bc54f32ce95f3d18f9c9fcc4892c84f01f",
+          "corpus.json": "ec6f7828f93937f645b8619fbda9a739afe19b3539a75ad2673501f26b1a1aa9",
+          "PackageConsumer/CorpusHost.cs": "103a4496f324e4aae0c3f5b477d1985ff879c7907e86eb6edf84aabccfb685ae",
+          "ReferenceEnvironment.cjs": "4027d9d646ad73dea080312af3795967021e05eb2b6ed7c304356e439b3b3b87",
+          "reference-stable.json": "c7b33ecad356a740d291713f0108da69e2954afce891628ff577003074354bab"
+        },
+        "world": "raw",
+        "capabilities": {},
+        "settings": {
+          "trustedPageWorld": true,
+          "testCookiesOnly": true
+        }
+      },
+      "immediateReturn": {},
+      "events": [
+        {
+          "kind": "open",
+          "name": null
+        },
+        {
+          "kind": "assert",
+          "name": "assetToolbar"
+        },
+        {
+          "kind": "wait",
+          "name": null
+        },
+        {
+          "kind": "evaluate",
+          "name": null
+        },
+        {
+          "kind": "assert",
+          "name": "resourceCollected"
+        },
+        {
+          "kind": "evaluate",
+          "name": null
+        },
+        {
+          "kind": "wait",
+          "name": null
+        },
+        {
+          "kind": "evaluate",
+          "name": "cancelStatus"
+        },
+        {
+          "kind": "files",
+          "name": "cancellationLeavesNoFile"
+        }
+      ],
+      "promise": {},
+      "effects": {
+        "observations": {
+          "engineFeatures": {
+            "replaceAll": "function",
+            "compressionStream": "function",
+            "saveFilePicker": "function"
+          },
+          "cancelStatus": {
+            "url": "http://127.0.0.1:52138/corpus",
+            "status": null
+          }
+        },
+        "checks": {
+          "assetToolbar": true,
+          "resourceCollected": true,
+          "cancellationLeavesNoFile": true
+        },
+        "files": [],
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/corpus",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:52139",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/favicon.ico",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:52139",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          }
+        ],
+        "diagnostics": [
+          "MSR100_DOCUMENT_START_BEST_EFFORT: The script is running with best-effort document-start timing.",
+          "MSR200_UNVERIFIED_BRIDGE: TrustedPageWorld exposes capabilities to page-world code.",
+          "MSC201_NOTIFICATION_DELIVERY_FAILED: A bridge notification could not be delivered."
+        ],
+        "failedAction": null
+      },
+      "status": "passed"
+    },
+    {
+      "schemaVersion": 1,
+      "caseId": "authenticated-xhr-denied",
+      "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+      "actionHash": "253ae6f69529f53bb69beed0054174d42192afce8a92a6a8eab3398f3be959c6",
+      "contractSource": [
+        "https://raw.githubusercontent.com/fastnow/UserJs/4e58ac92f3acc409e05fcb156afca3237454f777/SiteAssetDL.user.js"
+      ],
+      "environment": {
+        "manager": "MonkeySharp",
+        "managerVersion": "3.0.0",
+        "chromiumVersion": "151.0.7922.174",
+        "manifestVersion": null,
+        "cefSharpVersion": "151.3.240.0",
+        "platform": "x64",
+        "menuInput": "WinForms ToolStripMenuItem.PerformClick; no trusted DOM activation claimed",
+        "commit": "cfb7c42e7017308d1cb00e97f7ef22dfbc34d56d",
+        "sourcePatchSha256": "d63396b4b7571adbf18e74f36d07b1c22a0c40cfa81c3827e8df223d5650d694",
+        "inputsSha256": {
+          "Run-Corpus.cjs": "c1c75adbc41a8a185cded975c79303c2cc99929bfed13a3e5e298752f66e7f92",
+          "corpus/scenarios.cjs": "4f75a7d487f94bedf7dedda1cd3e21bc54f32ce95f3d18f9c9fcc4892c84f01f",
+          "corpus.json": "ec6f7828f93937f645b8619fbda9a739afe19b3539a75ad2673501f26b1a1aa9",
+          "PackageConsumer/CorpusHost.cs": "103a4496f324e4aae0c3f5b477d1985ff879c7907e86eb6edf84aabccfb685ae",
+          "ReferenceEnvironment.cjs": "4027d9d646ad73dea080312af3795967021e05eb2b6ed7c304356e439b3b3b87",
+          "reference-stable.json": "c7b33ecad356a740d291713f0108da69e2954afce891628ff577003074354bab"
+        },
+        "world": "raw",
+        "capabilities": {},
+        "settings": {
+          "trustedPageWorld": true,
+          "testCookiesOnly": true
+        }
+      },
+      "immediateReturn": {},
+      "events": [
+        {
+          "kind": "open",
+          "name": null
+        },
+        {
+          "kind": "assert",
+          "name": "assetToolbar"
+        },
+        {
+          "kind": "wait",
+          "name": null
+        },
+        {
+          "kind": "evaluate",
+          "name": null
+        },
+        {
+          "kind": "assert",
+          "name": "resourceCollected"
+        },
+        {
+          "kind": "evaluate",
+          "name": null
+        },
+        {
+          "kind": "wait",
+          "name": null
+        },
+        {
+          "kind": "evaluate",
+          "name": null
+        },
+        {
+          "kind": "assert",
+          "name": "deniedRequestShowsFailure"
+        },
+        {
+          "kind": "files",
+          "name": "denialLeavesNoFile"
+        }
+      ],
+      "promise": {},
+      "effects": {
+        "observations": {
+          "engineFeatures": {
+            "replaceAll": "function",
+            "compressionStream": "function",
+            "saveFilePicker": "function"
+          }
+        },
+        "checks": {
+          "assetToolbar": true,
+          "resourceCollected": true,
+          "deniedRequestShowsFailure": true,
+          "denialLeavesNoFile": true
+        },
+        "files": [],
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/corpus",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:52139",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/favicon.ico",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "POST",
+            "path": "/phase/denial-start",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          }
+        ],
+        "diagnostics": [
+          "MSR100_DOCUMENT_START_BEST_EFFORT: The script is running with best-effort document-start timing.",
+          "MSR200_UNVERIFIED_BRIDGE: TrustedPageWorld exposes capabilities to page-world code.",
+          "MSC201_NOTIFICATION_DELIVERY_FAILED: A bridge notification could not be delivered."
+        ],
+        "failedAction": null
+      },
+      "status": "passed"
+    },
+    {
+      "schemaVersion": 1,
+      "caseId": "storage-listener",
+      "fixtureHash": "476400193285d5ed26a0e92a8173919feaa5748141600c955da44e146eceed4f",
+      "actionHash": "5d90474b2db9d509b89e941ed4628f1a61e64e03ed4470cc9b467d6a944d2633",
+      "contractSource": [
+        "https://raw.githubusercontent.com/utags/userscripts/5b6c8bbc379fcf8caf8f5e07d3dffe2de80387f9/find-scripts-for-this-site/find-scripts-for-this-site.user.js"
+      ],
+      "environment": {
+        "manager": "MonkeySharp",
+        "managerVersion": "3.0.0",
+        "chromiumVersion": "151.0.7922.174",
+        "manifestVersion": null,
+        "cefSharpVersion": "151.3.240.0",
+        "platform": "x64",
+        "menuInput": "WinForms ToolStripMenuItem.PerformClick; no trusted DOM activation claimed",
+        "commit": "cfb7c42e7017308d1cb00e97f7ef22dfbc34d56d",
+        "sourcePatchSha256": "d63396b4b7571adbf18e74f36d07b1c22a0c40cfa81c3827e8df223d5650d694",
+        "inputsSha256": {
+          "Run-Corpus.cjs": "c1c75adbc41a8a185cded975c79303c2cc99929bfed13a3e5e298752f66e7f92",
+          "corpus/scenarios.cjs": "4f75a7d487f94bedf7dedda1cd3e21bc54f32ce95f3d18f9c9fcc4892c84f01f",
+          "corpus.json": "ec6f7828f93937f645b8619fbda9a739afe19b3539a75ad2673501f26b1a1aa9",
+          "PackageConsumer/CorpusHost.cs": "103a4496f324e4aae0c3f5b477d1985ff879c7907e86eb6edf84aabccfb685ae",
+          "ReferenceEnvironment.cjs": "4027d9d646ad73dea080312af3795967021e05eb2b6ed7c304356e439b3b3b87",
+          "reference-stable.json": "c7b33ecad356a740d291713f0108da69e2954afce891628ff577003074354bab"
+        },
+        "world": "raw",
+        "capabilities": {},
+        "settings": {
+          "trustedPageWorld": true,
+          "testCookiesOnly": true
+        }
+      },
+      "immediateReturn": {},
+      "events": [
+        {
+          "kind": "open",
+          "name": null
+        },
+        {
+          "kind": "menu",
+          "name": null
+        },
+        {
+          "kind": "assert",
+          "name": "settingsPanel"
+        },
+        {
+          "kind": "wait",
+          "name": null
+        },
+        {
+          "kind": "open",
+          "name": null
+        },
+        {
+          "kind": "menu",
+          "name": null
+        },
+        {
+          "kind": "assert",
+          "name": "settingsPanel"
+        },
+        {
+          "kind": "wait",
+          "name": null
+        },
+        {
+          "kind": "switch",
+          "name": null
+        },
+        {
+          "kind": "evaluate",
+          "name": null
+        },
+        {
+          "kind": "wait",
+          "name": null
+        },
+        {
+          "kind": "assertMenu",
+          "name": "localMenuRemoved"
+        },
+        {
+          "kind": "switch",
+          "name": null
+        },
+        {
+          "kind": "assertMenu",
+          "name": "remoteMenuRemoved"
+        },
+        {
+          "kind": "navigate",
+          "name": null
+        },
+        {
+          "kind": "menu",
+          "name": null
+        },
+        {
+          "kind": "assert",
+          "name": "settingsPanel"
+        },
+        {
+          "kind": "wait",
+          "name": null
+        },
+        {
+          "kind": "assert",
+          "name": "persistedAfterNavigation"
+        }
+      ],
+      "promise": {},
+      "effects": {
+        "observations": {
+          "engineFeatures": {
+            "replaceAll": "function",
+            "compressionStream": "function",
+            "saveFilePicker": "function"
+          }
+        },
+        "checks": {
+          "settingsPanel": true,
+          "localMenuRemoved": true,
+          "remoteMenuRemoved": true,
+          "persistedAfterNavigation": true
+        },
+        "files": [],
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/settings-a",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:52139",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/favicon.ico",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/settings-b",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:52139",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/favicon.ico",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/settings-reload",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:52139",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/favicon.ico",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          }
+        ],
+        "diagnostics": [
+          "MSR200_UNVERIFIED_BRIDGE: TrustedPageWorld exposes capabilities to page-world code.",
+          "MSR200_UNVERIFIED_BRIDGE: TrustedPageWorld exposes capabilities to page-world code.",
+          "MSC201_NOTIFICATION_DELIVERY_FAILED: A bridge notification could not be delivered.",
+          "MSR200_UNVERIFIED_BRIDGE: TrustedPageWorld exposes capabilities to page-world code.",
+          "MSC201_NOTIFICATION_DELIVERY_FAILED: A bridge notification could not be delivered.",
+          "MSC201_NOTIFICATION_DELIVERY_FAILED: A bridge notification could not be delivered."
+        ],
+        "failedAction": null
+      },
+      "status": "passed"
+    },
+    {
+      "schemaVersion": 1,
+      "caseId": "menu-configuration",
+      "fixtureHash": "476400193285d5ed26a0e92a8173919feaa5748141600c955da44e146eceed4f",
+      "actionHash": "d27c2b9d49539b305e4a26deea09ddf22fd3af6c2c529cacf7f78cf8800d77ca",
+      "contractSource": [
+        "https://raw.githubusercontent.com/utags/userscripts/5b6c8bbc379fcf8caf8f5e07d3dffe2de80387f9/find-scripts-for-this-site/find-scripts-for-this-site.user.js"
+      ],
+      "environment": {
+        "manager": "MonkeySharp",
+        "managerVersion": "3.0.0",
+        "chromiumVersion": "151.0.7922.174",
+        "manifestVersion": null,
+        "cefSharpVersion": "151.3.240.0",
+        "platform": "x64",
+        "menuInput": "WinForms ToolStripMenuItem.PerformClick; no trusted DOM activation claimed",
+        "commit": "cfb7c42e7017308d1cb00e97f7ef22dfbc34d56d",
+        "sourcePatchSha256": "d63396b4b7571adbf18e74f36d07b1c22a0c40cfa81c3827e8df223d5650d694",
+        "inputsSha256": {
+          "Run-Corpus.cjs": "c1c75adbc41a8a185cded975c79303c2cc99929bfed13a3e5e298752f66e7f92",
+          "corpus/scenarios.cjs": "4f75a7d487f94bedf7dedda1cd3e21bc54f32ce95f3d18f9c9fcc4892c84f01f",
+          "corpus.json": "ec6f7828f93937f645b8619fbda9a739afe19b3539a75ad2673501f26b1a1aa9",
+          "PackageConsumer/CorpusHost.cs": "103a4496f324e4aae0c3f5b477d1985ff879c7907e86eb6edf84aabccfb685ae",
+          "ReferenceEnvironment.cjs": "4027d9d646ad73dea080312af3795967021e05eb2b6ed7c304356e439b3b3b87",
+          "reference-stable.json": "c7b33ecad356a740d291713f0108da69e2954afce891628ff577003074354bab"
+        },
+        "world": "raw",
+        "capabilities": {},
+        "settings": {
+          "trustedPageWorld": true,
+          "testCookiesOnly": true
+        }
+      },
+      "immediateReturn": {},
+      "events": [
+        {
+          "kind": "open",
+          "name": null
+        },
+        {
+          "kind": "wait",
+          "name": null
+        },
+        {
+          "kind": "assertMenu",
+          "name": "initialDomainMenu"
+        },
+        {
+          "kind": "menu",
+          "name": null
+        },
+        {
+          "kind": "assert",
+          "name": "settingsPanel"
+        },
+        {
+          "kind": "wait",
+          "name": null
+        },
+        {
+          "kind": "evaluate",
+          "name": null
+        },
+        {
+          "kind": "wait",
+          "name": null
+        },
+        {
+          "kind": "assertMenu",
+          "name": "updatedDomainMenu"
+        },
+        {
+          "kind": "navigate",
+          "name": null
+        },
+        {
+          "kind": "menu",
+          "name": null
+        },
+        {
+          "kind": "assert",
+          "name": "settingsPanel"
+        },
+        {
+          "kind": "wait",
+          "name": null
+        },
+        {
+          "kind": "assert",
+          "name": "configurationReadback"
+        }
+      ],
+      "promise": {},
+      "effects": {
+        "observations": {
+          "engineFeatures": {
+            "replaceAll": "function",
+            "compressionStream": "function",
+            "saveFilePicker": "function"
+          }
+        },
+        "checks": {
+          "initialDomainMenu": true,
+          "settingsPanel": true,
+          "updatedDomainMenu": true,
+          "configurationReadback": true
+        },
+        "files": [],
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/settings-menu",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/corpus-child",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:52139",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:52139",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/favicon.ico",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/settings-menu-reload",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:52139",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/favicon.ico",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          }
+        ],
+        "diagnostics": [
+          "MSR200_UNVERIFIED_BRIDGE: TrustedPageWorld exposes capabilities to page-world code.",
+          "MSC201_NOTIFICATION_DELIVERY_FAILED: A bridge notification could not be delivered.",
+          "MSR200_UNVERIFIED_BRIDGE: TrustedPageWorld exposes capabilities to page-world code.",
+          "MSC201_NOTIFICATION_DELIVERY_FAILED: A bridge notification could not be delivered."
+        ],
+        "failedAction": null
+      },
+      "status": "passed"
+    },
+    {
+      "schemaVersion": 1,
+      "caseId": "iframe-spa",
+      "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+      "actionHash": "ee2e3591580528b8157e609d4d53ef58924e27e3a11cc66f384d116508eb81f1",
+      "contractSource": [
+        "https://raw.githubusercontent.com/fastnow/UserJs/4e58ac92f3acc409e05fcb156afca3237454f777/SiteAssetDL.user.js"
+      ],
+      "environment": {
+        "manager": "MonkeySharp",
+        "managerVersion": "3.0.0",
+        "chromiumVersion": "151.0.7922.174",
+        "manifestVersion": null,
+        "cefSharpVersion": "151.3.240.0",
+        "platform": "x64",
+        "menuInput": "WinForms ToolStripMenuItem.PerformClick; no trusted DOM activation claimed",
+        "commit": "cfb7c42e7017308d1cb00e97f7ef22dfbc34d56d",
+        "sourcePatchSha256": "d63396b4b7571adbf18e74f36d07b1c22a0c40cfa81c3827e8df223d5650d694",
+        "inputsSha256": {
+          "Run-Corpus.cjs": "c1c75adbc41a8a185cded975c79303c2cc99929bfed13a3e5e298752f66e7f92",
+          "corpus/scenarios.cjs": "4f75a7d487f94bedf7dedda1cd3e21bc54f32ce95f3d18f9c9fcc4892c84f01f",
+          "corpus.json": "ec6f7828f93937f645b8619fbda9a739afe19b3539a75ad2673501f26b1a1aa9",
+          "PackageConsumer/CorpusHost.cs": "103a4496f324e4aae0c3f5b477d1985ff879c7907e86eb6edf84aabccfb685ae",
+          "ReferenceEnvironment.cjs": "4027d9d646ad73dea080312af3795967021e05eb2b6ed7c304356e439b3b3b87",
+          "reference-stable.json": "c7b33ecad356a740d291713f0108da69e2954afce891628ff577003074354bab"
+        },
+        "world": "raw",
+        "capabilities": {},
+        "settings": {
+          "trustedPageWorld": true,
+          "testCookiesOnly": true
+        }
+      },
+      "immediateReturn": {},
+      "events": [
+        {
+          "kind": "open",
+          "name": null
+        },
+        {
+          "kind": "assert",
+          "name": "assetToolbar"
+        },
+        {
+          "kind": "wait",
+          "name": null
+        },
+        {
+          "kind": "evaluate",
+          "name": null
+        },
+        {
+          "kind": "assert",
+          "name": "resourceCollected"
+        },
+        {
+          "kind": "assert",
+          "name": "sameProcessFrameDecoration"
+        },
+        {
+          "kind": "evaluate",
+          "name": null
+        },
+        {
+          "kind": "wait",
+          "name": null
+        },
+        {
+          "kind": "assert",
+          "name": "spaNoDuplicate"
+        },
+        {
+          "kind": "evaluate",
+          "name": "excludedScopes"
+        }
+      ],
+      "promise": {},
+      "effects": {
+        "observations": {
+          "engineFeatures": {
+            "replaceAll": "function",
+            "compressionStream": "function",
+            "saveFilePicker": "function"
+          },
+          "excludedScopes": {
+            "oopif": "not-proven-by-same-process-frame",
+            "bfcache": "not-proven-by-history-update"
+          }
+        },
+        "checks": {
+          "assetToolbar": true,
+          "resourceCollected": true,
+          "sameProcessFrameDecoration": true,
+          "spaNoDuplicate": true
+        },
+        "files": [],
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/corpus",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/corpus-child",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:52139",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:52139",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/favicon.ico",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:52139",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/favicon.ico",
+            "host": "127.0.0.1:52138",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          }
+        ],
+        "diagnostics": [
+          "MSR100_DOCUMENT_START_BEST_EFFORT: The script is running with best-effort document-start timing.",
+          "MSR200_UNVERIFIED_BRIDGE: TrustedPageWorld exposes capabilities to page-world code.",
+          "MSR100_DOCUMENT_START_BEST_EFFORT: The script is running with best-effort document-start timing.",
+          "MSR200_UNVERIFIED_BRIDGE: TrustedPageWorld exposes capabilities to page-world code.",
+          "MSC201_NOTIFICATION_DELIVERY_FAILED: A bridge notification could not be delivered.",
+          "MSC201_NOTIFICATION_DELIVERY_FAILED: A bridge notification could not be delivered."
+        ],
+        "failedAction": null
+      },
+      "status": "passed"
+    }
+  ],
+  "artifactPath": "artifacts/corpus/native-151-v2-all/results.json"
+}

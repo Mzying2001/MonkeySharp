@@ -7,6 +7,7 @@
     <PlatformTarget>$(Platform)</PlatformTarget>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <CefSharpVersion Condition="'$(CefSharpVersion)' == ''">121.3.70</CefSharpVersion>
+    <DefineConstants Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(CefSharpVersion)', '130.0.0'))">$(DefineConstants);CEF_CORPUS_NEW_DOWNLOAD_RETURN</DefineConstants>
     <AssemblyName>MonkeySharp.PackageConsumer</AssemblyName>
   </PropertyGroup>
   <ItemGroup>

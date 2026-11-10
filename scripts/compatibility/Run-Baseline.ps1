@@ -20,6 +20,9 @@ try {
     & (Join-Path $root 'Mzying2001.MonkeySharp.CefSharp.SmokeHost/Run-E2E.ps1') -Platform $Platform -CefSharpVersion $CefSharpVersion
     if ($LASTEXITCODE -ne 0) { throw 'SmokeHost failed.' }
     & (Join-Path $root 'Mzying2001.MonkeySharp.CefSharp.SmokeHost/Test-SmokeResults.ps1')
+    $corpusDirectory = Join-Path $root ('artifacts/corpus/baseline-' + [Guid]::NewGuid().ToString('N'))
+    & (Join-Path $root 'scripts/compatibility/Run-Corpus.ps1') -Platform $Platform -CefSharpVersion $CefSharpVersion -NoBuild -OutputDirectory $corpusDirectory
+    if ($LASTEXITCODE -ne 0) { throw 'Pinned corpus failed.' }
     if ($Platform -eq 'x64') {
         & (Join-Path $root 'Mzying2001.MonkeySharp.Demo/Run-E2E.ps1') -CefSharpVersion $CefSharpVersion
         if ($LASTEXITCODE -ne 0) { throw 'Demo failed.' }

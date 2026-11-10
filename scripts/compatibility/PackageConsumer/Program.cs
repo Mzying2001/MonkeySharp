@@ -21,6 +21,7 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        if (args.Length == 3 && args[0] == "--corpus") return MonkeySharp.Compatibility.CorpusHost.Run(args[1], args[2]);
         var report = Path.GetFullPath(args[0]);
         var expected = new Version(args[1]);
         var corpus = args.Length > 2 ? Path.GetFullPath(args[2]) : null;

@@ -10,7 +10,7 @@ This directory contains the shared validation harness and its inputs. Maintained
 | `PackageConsumer/` | Standalone consumer built against generated NuGet packages |
 | `fixtures/` | Original userscripts and companion content/URL scenarios; shared by reference runners and automated tests |
 | `evidence/` | Concise versioned native/reference results and the differential record schema |
-| `corpus.json` | Third-party intake requirements and optional local-script provenance |
+| `corpus.json`, `corpus/` | Pinned unmodified third-party source, licenses, scenarios and optional historical local-script provenance |
 
 [Browser-independent Core/JS commands](../../docs/compatibility/validation.md#browser-independent-checks) can run without CefSharp, local notes or a local corpus script.
 
@@ -39,6 +39,39 @@ node scripts/compatibility/Run-Reference.cjs C:/path/to/msedge.exe C:/path/to/ta
 Positional arguments are `<Edge-exe> <extension-dir> [output.json] [fixture.user.js] [environment.json]`. Defaults are a timestamped output, `scripts/compatibility/fixtures/returns.user.js` and tracked `reference-stable.json`. Existing output files are never overwritten. Fixture paths are repository-relative or absolute; relative output paths use the current working directory. The server supplies companion content from `fixtures/content/`. Interactive effects need their own recorded checks; no event is not proof of completion.
 
 The environment JSON pins `channel` (stable/beta), `version`, `manifestVersion`, `extensionId`, `contentSha256` and records `settings`. Identity comes from the manifest public key. Source content is hashed except regenerated `_metadata`; mismatches fail before launch. The browser uses a source copy and fresh profile. `settings.headless: false` selects a visible reference browser. An acquired beta needs a separate complete pin; 5.6.6242 remains pending. See [stable follow-up observations and fingerprint format](../../docs/compatibility/p0-follow-up.md).
+
+## Pinned third-party corpus
+
+```powershell
+# Restore/clean/build the source host, then execute all pinned scenarios.
+./scripts/compatibility/Run-Corpus.ps1 -Platform x64 -CefSharpVersion 121.3.70
+
+# Use a built source host or a NuGet-only package consumer.
+node scripts/compatibility/Run-Corpus.cjs --manager monkeysharp --host C:/path/to/MonkeySharp.PackageConsumer.exe --expected-cef-version 121.3.70 --expected-platform x64 --output artifacts/corpus/consumer-run
+
+# Compare the same original sources and actions against pinned TM.
+node scripts/compatibility/Run-Corpus.cjs --manager tampermonkey --browser C:/path/to/msedge.exe --extension C:/path/to/tampermonkey --output artifacts/corpus/reference-run
+```
+
+`Run-Corpus.ps1` accepts `-Platform`, `-CefSharpVersion`, `-OutputDirectory` and
+`-NoBuild`. Do not share native outputs between versions/platforms. `Run-Corpus.cjs`
+accepts `--case <scenario-id>` to select one scenario, `--environment <JSON>` for
+a complete reference pin, `--headed true` for manual browser interaction and
+`--permission-wait-ms <milliseconds>` to allow a manual download permission step.
+Do not treat elapsed time as permission. Output directories must be new.
+
+`results.json` contains schema-1 differential records under `results`, including
+source/action/input hashes, environment and source patch, actual completed
+actions, failed action, checks, file/ZIP-entry hashes, diagnostics and server
+Cookie/method/status logs. Raw profiles, inputs and host logs stay beside it.
+Exit 0 accepts only `passed` and the explicitly recognized
+`expected-engine-limitation`; blocked/failed results exit 1. Manifest intake
+`ready` is separate from runtime status. The pinned corpus has seven main
+categories plus CSP, cancel and host-denial variants. See [scenario scope](corpus/README.md).
+
+Baseline runs the source corpus. Delivery additionally runs it through every
+NuGet-only consumer; `-CorpusScript` remains the separate historical optional
+local-search script. Package-only diagnostics still do not establish full M1.
 
 ## Maintaining shared inputs
 

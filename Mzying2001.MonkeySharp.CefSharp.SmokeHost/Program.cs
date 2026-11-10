@@ -25,6 +25,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
         [STAThread]
         private static void Main(string[] args)
         {
+            if (args.Length == 3 && args[0] == "--corpus") { Environment.ExitCode = global::MonkeySharp.Compatibility.CorpusHost.Run(args[1], args[2]); return; }
             CefSharpSettings.WcfEnabled = false;
             CefSharpSettings.ConcurrentTaskExecution = true;
             var cachePath = Path.Combine(Path.GetTempPath(), "MonkeySharpSmoke", Guid.NewGuid().ToString("N"));

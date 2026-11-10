@@ -5,3 +5,5 @@
 scripts/compatibility/fixtures/*.user.js text eol=lf
 Mzying2001.MonkeySharp.CefSharp.SmokeHost/Fixtures/*.user.js text eol=lf
 Mzying2001.MonkeySharp.CefSharp.SmokeHost/Fixtures/loopback.pfx -text
+scripts/compatibility/corpus/**/source.user.js binary
+scripts/compatibility/corpus/**/LICENSE binary
