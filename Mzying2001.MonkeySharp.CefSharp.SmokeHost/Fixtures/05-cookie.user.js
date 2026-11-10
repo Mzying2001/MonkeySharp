@@ -37,6 +37,20 @@
         await GM.cookie.delete({ name: 'same-path' });
         await legacy('delete', details);
         result.checks.deleted = !(await GM.cookie.list({ name: details.name })).length;
+        document.cookie = 'p0Same=jar; Path=/'; document.cookie = 'p0Jar=jar; Path=/';
+        result.explicitCookies = {};
+        for (const [name, options] of Object.entries({
+            jar: {}, header: { headers: { Cookie: 'p0Same=header; p0Header=h' } },
+            details: { cookie: 'p0Same=details; p0Details=d' },
+            both: { headers: { Cookie: 'p0Same=header; p0Header=h' }, cookie: 'p0Same=details; p0Details=d' },
+            values: { cookie: 'p0Same=first; p0Same=last; p0Empty=; p0Equals=a=b=c' },
+            anonymous: { anonymous: true, headers: { Cookie: 'p0Same=header' }, cookie: 'p0Same=details; p0Explicit=e' }
+        })) {
+            try { result.explicitCookies[name] = (await GM.xmlHttpRequest({ url: location.origin + '/compat/cookie-echo', ...options })).responseText; }
+            catch (error) { result.explicitCookies[name] = error.code; }
+        }
+        result.checks.explicitCookieRejected = ['header', 'details', 'both', 'values', 'anonymous'].every(name => result.explicitCookies[name] === 'MSP006_NOT_SUPPORTED');
+        result.checks.actualJarRetained = result.explicitCookies.jar.includes('p0Same=jar') && result.explicitCookies.jar.includes('p0Jar=jar');
         try { await GM.cookie.list({firstPartyDomain:'example.com'}); result.checks.unsupportedFirstParty = false; }
         catch (error) { result.checks.unsupportedFirstParty = error.code === 'MSP006_NOT_SUPPORTED'; }
         globalThis.__httpsCookieProbe = async function (base) {

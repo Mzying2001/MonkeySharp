@@ -8,7 +8,7 @@ Edge 157.0.4341.42 and fresh profiles. Historical evidence is retained.
 | --- | --- |
 | 21 | Pinned identity/content and stable DOM, Cookie, URL and notification probes. Native download permission interaction and notification clicks remain pending. Beta 5.6.6242 and historical MV2 have no acquired content pin/results. |
 | 22 | DOM failures return/fulfill null; body fallback added, parameter/programming errors preserved. 116 JS tests and 84/121/151 x64 SmokeHost/CDP passed; [evidence](../../scripts/compatibility/evidence/dom-follow-up-p0.json). |
-| 23 | Pending implementation and native verification. |
+| 23 | Native 84/121/151 ignored explicit Cookie inputs. Default backend now rejects before sending; jar-based authentication remains available. This is an explicit engine limitation, not implemented TM merge parity; [probe evidence](../../scripts/compatibility/evidence/explicit-cookies-follow-up-p0.json). |
 | 24 | Pending implementation and native verification. |
 | 25 | Pending download semantics and documentation reconciliation. |
 | 26 | Seven third-party categories pending intake/execution. |

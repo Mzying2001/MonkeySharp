@@ -406,7 +406,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             var required = name == "download"
                 ? new[] { "promise", "handle", "completed", "canceled", "timeout", "failure", "singleTerminal", "loginRedirect", "anonymous", "empty", "earlyCancel", "diskFailure" }
                 : name == "cookie"
-                    ? new[] { "setList", "legacy", "context", "noListeners", "preciseDelete", "deleted", "setUndefined", "unsupportedFirstParty" }
+                    ? new[] { "setList", "legacy", "context", "noListeners", "preciseDelete", "deleted", "setUndefined", "unsupportedFirstParty", "explicitCookieRejected", "actualJarRetained" }
                     : new[] { "staticFirstScript", "voidReturn", "cancel", "replacement", "redirect", "capture", "restored", "noCallbackAfterRevoke" };
             foreach (var check in required) Check(check, result.GetProperty("checks").GetProperty(check).GetBoolean());
         }
@@ -436,7 +436,11 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
 
         private async Task CookieAsync()
         {
+            var echoRequests = _fixture.RequestCount("/compat/cookie-echo");
             await ScriptCaseAsync("cookie");
+            // The existing authenticated/anonymous checks and the new jar probe send three requests.
+            Check("explicitCookiesHaveNoNetworkEffect", _fixture.RequestCount("/compat/cookie-echo") == echoRequests + 3);
+            Console.WriteLine(JsonSerializer.Serialize(new { type = "explicit-cookie-probe", effects = await ReadAsync("globalThis.__compatCase.explicitCookies") }));
             using (var tls = new LocalHttpFixture(true))
             {
                 var url = tls.Start();

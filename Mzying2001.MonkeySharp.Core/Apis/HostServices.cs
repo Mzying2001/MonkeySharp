@@ -135,7 +135,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
     {
         /// <summary>Gets or sets whether a string request body uses low-byte binary encoding.</summary>
         public bool Binary { get; set; }
-        /// <summary>Gets or sets cookies appended to the outgoing Cookie header.</summary>
+        /// <summary>Gets or sets explicit cookies for a backend supporting verified name-based merging. The default CefSharp backend rejects this option.</summary>
         public string Cookie { get; set; }
 
         /// <summary>Gets or sets the user name supplied to an HTTP authentication challenge.</summary>

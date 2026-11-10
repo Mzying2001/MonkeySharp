@@ -8,6 +8,8 @@ Modern list resolves Cookie[]; modern set/delete resolve undefined. Legacy calls
 
 ## Partitioned Cookie scope
 
+Explicit request Cookie support is separate from CRUD; see below.
+
 | Engine | CRUD | Remaining limits |
 | --- | --- | --- |
 | 84.4.10 | Ordinary cookies | Explicit partitionKey is rejected before effects |
@@ -19,6 +21,24 @@ Unspecified partitionKey selects ordinary cookies. Empty list selectors include 
 The pinned reference deletes an ordinary same-name sibling when deleting a partitioned cookie. That preservation check remains failed in its record. MonkeySharp deliberately preserves the sibling; this is a documented difference. `firstPartyDomain` remains unsupported.
 
 XHR `cookiePartition` is unsupported on every tested engine. The native URLRequest surface has no reliable top-level partition selector; probes sent ordinary state and stored incoming partitioned state under the request's own site. The option is rejected before network dispatch. Cookie-header synthesis and jar swapping are not used to simulate request-partition support.
+
+## Explicit request cookies
+
+The default CefSharp HTTP backend rejects `headers.Cookie` (case insensitive)
+and `details.cookie` before network dispatch with `MSP006_NOT_SUPPORTED`, even
+with `anonymous`. 84/121/151 native probes showed the supplied values never
+reached the server: URLRequest used jar values or no cookies when anonymous.
+String deduplication cannot repair that native behavior. No jar swapping,
+Cookie CRUD mutation or unverified network replacement is performed.
+
+Ordinary jar-based login, TLS/Secure/HttpOnly/domain/path selection, redirects,
+anonymous suppression and independent RequestContexts retain their existing
+network validation. Custom `IHttpRequestService` hosts can implement explicit
+cookies against the [pinned merge observations](p0-follow-up.md), including
+header priority, last duplicate value, empty values and embedded equals signs.
+This limitation also applies to download headers through the same backend.
+
+See the [native before/after evidence](../../scripts/compatibility/evidence/explicit-cookies-follow-up-p0.json).
 
 ## Evidence and reproduction
 

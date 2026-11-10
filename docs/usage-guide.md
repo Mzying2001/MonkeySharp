@@ -380,7 +380,7 @@ Modern result: a `Promise<Response>` with an immediate `.abort()` method. Non-st
 | `responseType` | String, `"text"` | `text`, `json`, `arraybuffer`, `blob`, `document`, `xml`, or `stream`; empty string means text. |
 | `responseXML` | Boolean, `false` | `true` overrides responseType to `document`, parsed through the page DOMParser as XML. |
 | `timeout` | Non-negative integer milliseconds | Zero/omission supplies no per-XHR deadline. Ignored with `fetch:true`. Host policy may impose limits. |
-| `cookie` | Optional string | Explicit cookie header input. |
+| `cookie` | Optional string | Explicit cookie input; rejected by the default CefSharp backend before sending. |
 | `user`, `password` | Optional strings | Authentication credentials supplied to the host HTTP service. |
 | `anonymous` | Boolean, `false` | Disables browser-stored cookies and credentials. |
 | `overrideMimeType` | Optional string | Override response MIME/charset handling. |
@@ -395,7 +395,7 @@ Modern result: a `Promise<Response>` with an immediate `.abort()` method. Non-st
 
 Objects/arrays are sent as JSON, URLSearchParams as form encoding, and FormData as multipart with generated boundary/filenames/media types. Appropriate content type is supplied unless you set it yourself. Blob/File bodies and URL inputs are supported. Blob/File URL inputs and blob URL strings are resolved inside their owning renderer; local requests support GET without network headers, authentication, or an upload body.
 
-`User-Agent`, `Referer`, `Origin`, and `Cookie` headers are allowed. `Host`, `Content-Length`, connection/transfer-control headers, and `Sec-*`/`Proxy-*` names are rejected. Cross-origin redirects strip explicit cookies and authorization. Cookie merging and browser-authentication behavior remain host-service details; do not assume exact Tampermonkey browser-version behavior.
+`User-Agent`, `Referer` and `Origin` headers are allowed. `Host`, `Content-Length`, connection/transfer-control headers and `Sec-*`/`Proxy-*` names are rejected. The default CefSharp backend rejects `headers.Cookie` (any casing) and `cookie` with `MSP006_NOT_SUPPORTED` before sending, including with `anonymous`. Native 84/121/151 URLRequest ignored these explicit values; ordinary authenticated requests still use the actual RequestContext jar, and anonymous requests suppress it. A custom verified HTTP backend may implement the [pinned merge contract](compatibility/p0-follow-up.md). Cross-origin redirects strip authorization. See [Cookie evidence](compatibility/cookies.md#explicit-request-cookies).
 
 `@connect self` checks scheme, host, and port. Both `example.com` and `*.example.com` allow the domain itself and all its subdomains. IPs and localhost are exact. URL declarations additionally constrain scheme/port; their path is not an allowlist restriction. An omitted allowlist denies even same-origin XHR. Original and redirected URLs must all pass the allowlist and host permission policy.
 

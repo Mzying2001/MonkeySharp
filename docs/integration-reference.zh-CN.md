@@ -103,9 +103,9 @@ CefSharp 宿主默认提供 `GM.xmlHttpRequest`、`GM.cookie` 和 `GM.webRequest
 
 请求体支持字符串、`ArrayBuffer`、类型化数组、`DataView`、`Blob`/`File`、`FormData`、`URLSearchParams`、普通对象和数组。对象及数组使用 JSON，`URLSearchParams` 使用表单编码，`FormData` 保留生成的 boundary、文件名和媒体类型。请求体以 64 KiB 分块跨越桥接。
 
-支持 `headers`、`cookie`、`user`、`password`、`anonymous`、`overrideMimeType`、`signal`、`redirect`、`nocache`、`revalidate`、`fetch`、`timeout` 和 `context`。重定向默认为 `follow`，也接受 `error` 和 `manual`。每次重定向都会重新检查授权、`@connect` 和宿主权限策略；跨源重定向会移除显式 Cookie 和授权头。
+支持 headers、user、password、anonymous、overrideMimeType、signal、redirect、nocache、revalidate、fetch、timeout 和 context。原生 URLRequest 忽略显式 Cookie，默认 CefSharp 后端因此在发送前拒绝 cookie 和 headers.Cookie；见[显式 Cookie 范围](compatibility/cookies.md#explicit-request-cookies)。自定义 HTTP 服务应独立验证合并语义。重定向默认为 follow，也接受 error 和 manual。每跳重新检查授权、connect 和宿主策略；跨源移除授权头。
 
-可以设置 `User-Agent`、`Referer`、`Origin` 和 `Cookie` 等兼容性请求头。MonkeySharp 拒绝 `Host`、`Content-Length`、连接/传输控制头及所有 `Sec-*`、`Proxy-*` 头。`anonymous:true` 禁用已存储的 Cookie 和凭据；`fetch:true` 忽略超时和进度，只报告 readyState 4。
+可以设置 User-Agent、Referer、Origin 等兼容性请求头。MonkeySharp 拒绝 Host、Content-Length、连接/传输控制头及所有 Sec-*、Proxy-* 头。anonymous:true 禁用已存储的 Cookie 和凭据；fetch:true 忽略超时和进度，只报告 readyState 4。
 
 `binary: true` 只接受字符串请求体，并将每个 UTF-16 code unit 转换为其低八位；普通字符串仍使用 UTF-8。`responseType` 接受 `text`、`json`、`arraybuffer`、`blob`、`document`、`xml` 和 `stream`。`responseXML: true` 使用页面的 `DOMParser` 解析；document 类型也会把解析结果放入 `response`。没有 DOMParser 时 `responseXML` 为 `null`，不会伪造 XML。非流式响应通过 64 KiB 宿主读取拼装。响应包含 readyState 1 至 4、状态、最终 URL、保留重复字段的原始响应头、响应数据、适用的文本、responseXML 及原始 JavaScript context。HTTP 4xx/5xx 调用 `onload`；网络、权限、序列化和桥接故障调用 `onerror`，错误对象为 `{ error, details, code }`，分类包括 `not_supported`、`not_permitted`、`timeout` 和 `not_succeeded`。
 

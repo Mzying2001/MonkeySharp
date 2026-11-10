@@ -396,7 +396,7 @@ attributes 是可选对象：textContent/innerHTML 设置内容，字符串 styl
 | `responseType` | 字符串，"text" | text、json、arraybuffer、blob、document、xml 或 stream；空字符串视为 text。 |
 | `responseXML` | 布尔值，false | true 时覆盖 responseType 为 document，通过页面 DOMParser 按 XML 解析。 |
 | `timeout` | 非负整数，毫秒 | 0/省略表示不提供单独的 XHR 截止时间；fetch:true 时忽略，宿主仍可设置限制。 |
-| `cookie` | 可选字符串 | 显式 Cookie 头输入。 |
+| `cookie` | 可选字符串 | 显式 Cookie 输入；默认 CefSharp 后端在发送前拒绝。 |
 | `user`、`password` | 可选字符串 | 传给宿主 HTTP 服务的认证凭据。 |
 | `anonymous` | 布尔值，false | 禁用浏览器已存储的 Cookie 和凭据。 |
 | `overrideMimeType` | 可选字符串 | 覆盖响应 MIME/字符集处理。 |
@@ -411,7 +411,7 @@ attributes 是可选对象：textContent/innerHTML 设置内容，字符串 styl
 
 对象/数组按 JSON 发送，URLSearchParams 使用表单编码，FormData 使用包含自动边界、文件名和媒体类型的 multipart。未自行设置时会补入适当 Content-Type。支持 Blob/File 请求体及 URL 输入；blob URL 由所属 renderer 解引用，本地输入仅支持不含网络头、认证和请求体的 GET。
 
-允许 User-Agent、Referer、Origin 和 Cookie 头。禁止 Host、Content-Length、连接/传输控制头，以及 Sec-*/Proxy-* 头。跨源重定向会移除显式 Cookie 和 Authorization。Cookie 合并及浏览器认证细节仍由宿主服务决定，不应假定与每个 Tampermonkey 浏览器版本完全一致。
+允许 User-Agent、Referer、Origin 头。禁止 Host、Content-Length、连接/传输控制头和 Sec-*/Proxy-* 头。默认 CefSharp 后端对任意大小写的 headers.Cookie 及 cookie 在发送前返回 MSP006_NOT_SUPPORTED，包括 anonymous 组合。84/121/151 原生 URLRequest 忽略这些显式值；普通认证请求仍使用真实 RequestContext jar，anonymous 禁用 jar。自定义且已验证的 HTTP 后端可实现[固定参考合并契约](compatibility/p0-follow-up.md)。跨源重定向移除 Authorization。见[显式 Cookie 证据](compatibility/cookies.md#explicit-request-cookies)。
 
 @connect self 同时检查协议、主机和端口。`example.com` 和 `*.example.com` 均允许裸域名自身及其所有层级的子域名；IP 和 localhost 必须精确匹配。URL 声明还限制协议/端口，但其中路径不构成白名单限制。没有白名单时，同源 XHR 也被拒绝。原始目标和所有重定向目标都必须通过白名单及宿主权限策略。
 

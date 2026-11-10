@@ -107,6 +107,11 @@ namespace Mzying2001.MonkeySharp.CefSharp
             if (observer == null) throw new ArgumentNullException(nameof(observer));
             ThrowIfDisposed();
             cancellationToken.ThrowIfCancellationRequested();
+            // Native URLRequest replaces/strips Cookie even when explicitly supplied.
+            // Do not silently send different authentication state or mutate the shared jar.
+            if (request.Options.Cookie != null || request.Headers.Keys.Any(name =>
+                string.Equals(name, "Cookie", StringComparison.OrdinalIgnoreCase)))
+                throw new UnsupportedApiException("Explicit Cookie headers and the cookie option are not supported by CefSharp URLRequest. Use the actual RequestContext cookie jar or a host HTTP backend with verified explicit-cookie support.");
             var operation = new Operation(this, request, observer, cancellationToken, _contextAccessor, _webRequestService);
             lock (_sync)
             {
@@ -264,13 +269,6 @@ namespace Mzying2001.MonkeySharp.CefSharp
                             (_sendBody || !BodyHeaders.Contains(header.Key)) &&
                             (_allowExplicitCredentials || !string.Equals(header.Key, "Authorization", StringComparison.OrdinalIgnoreCase)))
                             cefRequest.SetHeaderByName(header.Key, header.Value, true);
-                    }
-                    if (_allowExplicitCredentials)
-                    {
-                        _request.Headers.TryGetValue("Cookie", out var cookieHeader);
-                        var cookie = string.Join("; ", new[] { cookieHeader, _request.Options.Cookie }
-                            .Where(value => !string.IsNullOrEmpty(value)));
-                        if (cookie.Length != 0) cefRequest.SetHeaderByName("Cookie", cookie, true);
                     }
                     if (_sendBody)
                     {

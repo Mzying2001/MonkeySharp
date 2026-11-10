@@ -744,6 +744,23 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
                 new Uri("https://example.com/"), new Uri("https://example.com:444/")));
         }
 
+        [Theory]
+        [InlineData(false, false)]
+        [InlineData(false, true)]
+        [InlineData(true, false)]
+        [InlineData(true, true)]
+        public void ExplicitCookiesFailBeforeResolvingContextOrStartingNetwork(bool header, bool anonymous)
+        {
+            using (var service = new CefSharpHttpRequestService(() => throw new InvalidOperationException("No native context may be touched.")))
+            {
+                var headers = new Dictionary<string, string>();
+                if (header) headers.Add("cOoKiE", "same=header; empty=; equals=a=b");
+                var request = new UserScriptHttpRequest("GET", new Uri("https://example.com/"), headers, null, null, null, (_, __) => Task.FromResult(true),
+                    options: new UserScriptHttpRequestOptions { Anonymous = anonymous, Cookie = header ? null : "same=details" });
+                Assert.Throws<UnsupportedApiException>(() => service.SendAsync(request, Mock.Of<IUserScriptHttpObserver>(), CancellationToken.None));
+            }
+        }
+
         [Fact]
         public void RequestHandlerMultiplexerCombinesResourceHandlers()
         {
