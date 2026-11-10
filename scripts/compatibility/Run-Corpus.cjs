@@ -218,7 +218,12 @@ async function main() {
                 const inputFile = path.join(caseDirectory, 'input.json'), report = path.join(caseDirectory, 'native.json'); fs.writeFileSync(inputFile, JSON.stringify(input));
                 await new Promise(resolve => execFile(path.resolve(options.host), ['--corpus', inputFile, report], { windowsHide: true, timeout: 90000, encoding: 'buffer' }, (error, stdout, stderr) => {
                     fs.writeFileSync(path.join(caseDirectory, 'stdout.log'), stdout || ''); fs.writeFileSync(path.join(caseDirectory, 'stderr.log'), stderr || '');
-                    actual = fs.existsSync(report) ? JSON.parse(fs.readFileSync(report)) : { status: 'blocked', error: String(error || 'Missing native report'), checks: {}, observations: {} }; resolve();
+                    actual = fs.existsSync(report) ? JSON.parse(fs.readFileSync(report)) : { status: 'blocked', error: String(error || 'Missing native report'), checks: {}, observations: {} };
+                    const phaseFile = report + '.phase.json';
+                    actual.nativeProcess = { code: error?.code ?? 0, signal: error?.signal || null, killed: error?.killed || false,
+                        lastPhase: fs.existsSync(phaseFile) ? JSON.parse(fs.readFileSync(phaseFile)) : null };
+                    if (error && actual.status === 'passed') { actual.status = 'failed'; actual.error = 'Native process failed after producing its report: ' + String(error); }
+                    resolve();
                 }));
             }
             const files = fs.readdirSync(input.downloads).filter(file => fs.statSync(path.join(input.downloads, file)).isFile()).map(name => {
@@ -229,7 +234,7 @@ async function main() {
                     ...actual.environment, ...inputSnapshot,
                     platform: actual.environment?.platform || process.arch, world: options.manager === 'monkeysharp' ? 'raw' : 'manager-selected/default', capabilities: {}, settings: actual.environment?.settings || { trustedPageWorld: true, testCookiesOnly: true } },
                 immediateReturn: {}, events: actual.events || [], promise: {},
-                effects: { observations: actual.observations, checks: actual.checks, files, requests: requests.slice(start), diagnostics: actual.diagnostics, failedAction: actual.failedAction },
+                effects: { observations: actual.observations, checks: actual.checks, files, requests: requests.slice(start), diagnostics: actual.diagnostics, failedAction: actual.failedAction, nativeProcess: actual.nativeProcess },
                 status: actual.status, ...(actual.error ? { reason: actual.error, reasonCategory: 'runtime-or-host' } : {}) };
             if (actual.environment && (options['expected-cef-version'] && actual.environment.cefSharpVersion?.split('.').slice(0, 3).join('.') !== options['expected-cef-version'] ||
                 options['expected-platform'] && actual.environment.platform !== options['expected-platform'])) {

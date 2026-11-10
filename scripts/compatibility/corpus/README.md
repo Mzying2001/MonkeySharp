@@ -8,6 +8,11 @@ patches preserve bytes. Delivery installs changed attributes before other files.
 No runtime dependencies are fetched. The corpus does not modify `@match`,
 `@connect`, grant or failed source branches, and does not polyfill Chromium 84.
 
+The native test host waits for Cookie storage's completion callback before
+seeding the fake login, rather than equating BrowserInitialized with Cookie
+storage readiness. It releases both callback and manager wrappers before
+browser shutdown; a missing native completion still fails the process deadline.
+
 | Category | Upstream script | Functional check |
 | --- | --- | --- |
 | DOM decoration | SiteAssetDL 1.0.0 | Shadow toolbar, computed style, no duplicate after SPA; separate style-src CSP case |

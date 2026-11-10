@@ -32,14 +32,17 @@ namespace MonkeySharp.Compatibility
             var output = input.RootElement.GetProperty("downloads").GetString();
             Directory.CreateDirectory(output);
             string error = null;
+            Action<string, object> phase = (name, action) => File.WriteAllText(outputPath + ".phase.json", JsonSerializer.Serialize(new { phase = name, action }));
             var initialized = false;
             try
             {
                 CefSharpSettings.WcfEnabled = false;
                 CefSharpSettings.ConcurrentTaskExecution = true;
+                phase("cef-initialize", null);
                 using (var settings = new CefSettings { RootCachePath = Path.Combine(Path.GetDirectoryName(outputPath), "profile-" + Guid.NewGuid().ToString("N")), Locale = "en-US" })
                     initialized = Cef.Initialize(settings);
                 if (!initialized) throw new InvalidOperationException("CEF initialization failed.");
+                phase("prepare-source", null);
                 using (var store = new InMemoryUserScriptValueStore())
                 using (var form = new Form { Width = 1100, Height = 800, Text = "MonkeySharp corpus" })
                 {
@@ -53,6 +56,7 @@ namespace MonkeySharp.Compatibility
                             foreach (var action in input.RootElement.GetProperty("actions").EnumerateArray())
                             {
                                 failedAction = action.Clone();
+                                phase("action", failedAction);
                                 var kind = action.GetProperty("kind").GetString();
                                 if (kind == "open")
                                 {
@@ -62,12 +66,22 @@ namespace MonkeySharp.Compatibility
                                     services.Add(session); active = services.Count - 1;
                                     session.Host.Diagnostic += (s, d) => { lock (diagnostics) diagnostics.Add(d.Code + ": " + d.Message); };
                                     session.Browser.ConsoleMessage += (s, e) => { if (e.Message.Contains("replaceAll")) lock (diagnostics) diagnostics.Add("console: " + e.Message); };
+                                    phase("browser-initialization", failedAction);
                                     await Until(() => Task.FromResult(session.Browser.IsBrowserInitialized));
-                                    var cookies = session.Browser.GetBrowser().GetHost().RequestContext.GetCookieManager(null);
-                                    foreach (var host in new[] { "127.0.0.1", "localhost" })
-                                        if (!await cookies.SetCookieAsync("http://" + host, new Cookie { Name = "corpus-auth", Value = "fixture-only", Path = "/" }))
-                                            throw new InvalidOperationException("Cannot seed test cookie jar.");
+                                    // BrowserInitialized does not guarantee Cookie storage initialization.
+                                    using (var ready = new TaskCompletionCallback())
+                                    using (var cookies = session.Browser.GetBrowser().GetHost().RequestContext.GetCookieManager(ready))
+                                    {
+                                        phase("cookie-storage-initialization", failedAction);
+                                        await ready.Task;
+                                        phase("seed-test-cookies", failedAction);
+                                        foreach (var host in new[] { "127.0.0.1", "localhost" })
+                                            if (!await cookies.SetCookieAsync("http://" + host, new Cookie { Name = "corpus-auth", Value = "fixture-only", Path = "/" }))
+                                                throw new InvalidOperationException("Cannot seed test cookie jar.");
+                                    }
+                                    phase("navigate", failedAction);
                                     await session.Host.NavigateAsync(action.GetProperty("url").GetString());
+                                    phase("navigation-ready", failedAction);
                                     var pageUrl = action.GetProperty("url").GetString();
                                     await Until(async () => session.Browser.CanExecuteJavascriptInMainFrame && (await Evaluate(session.Browser, "location.href === " + JsonSerializer.Serialize(pageUrl) + " && document.readyState === 'complete'")).ValueKind == JsonValueKind.True);
                                     observations["engineFeatures"] = await Evaluate(session.Browser, "({replaceAll:typeof String.prototype.replaceAll,compressionStream:typeof CompressionStream,saveFilePicker:typeof window.showSaveFilePicker})");
@@ -120,6 +134,7 @@ namespace MonkeySharp.Compatibility
                         catch (Exception failure) { error = failure.ToString(); }
                         finally
                         {
+                            phase("dispose-sessions", failedAction);
                             foreach (var session in services)
                             {
                                 try { await session.Downloads.DrainAsync(); await Until(() => Task.FromResult(!session.BrowserDownloads.HasPending)); await session.Host.DetachAsync(CancellationToken.None); }
@@ -136,6 +151,7 @@ namespace MonkeySharp.Compatibility
             catch (Exception failure) { error = failure.ToString(); }
             finally
             {
+                phase("cef-shutdown", failedAction);
                 if (initialized) Cef.Shutdown();
                 File.WriteAllText(outputPath, JsonSerializer.Serialize(new
                 {
@@ -150,7 +166,7 @@ namespace MonkeySharp.Compatibility
 
         private static async Task<JsonElement> Evaluate(ChromiumWebBrowser browser, string expression)
         {
-            var result = await browser.EvaluateScriptAsync("JSON.stringify((" + expression + "))");
+            var result = await browser.EvaluateScriptAsync("JSON.stringify((" + expression + "))", timeout: TimeSpan.FromSeconds(10));
             if (!result.Success) throw new InvalidOperationException(result.Message);
             using (var json = JsonDocument.Parse(result.Result as string ?? "null")) return json.RootElement.Clone();
         }
