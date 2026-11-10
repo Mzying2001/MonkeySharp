@@ -32,11 +32,26 @@ The package consumer uses NuGet packages rather than project references. It chec
 
 ## Pinned reference and evidence
 
-Run the original shared fixture against the fixed reference through [Run-Reference.cjs](../../scripts/compatibility/Run-Reference.cjs). It requires Playwright and locally available Edge/Tampermonkey installations; the runner verifies Tampermonkey 5.5.1/MV3. The committed reference environment used Edge 156.0.4314.58. That extension's minimum Chromium 120 is independent of MonkeySharp's 84 baseline.
+Run shared fixtures through [Run-Reference.cjs](../../scripts/compatibility/Run-Reference.cjs).
+It requires Playwright and local Edge/Tampermonkey source; the default pins
+5.5.1/MV3 identity and content. A complete separate environment pin can select a
+fixed beta. The original reference used Edge 156.0.4314.58; the [stable follow-up](p0-follow-up.md)
+uses Edge 157.0.4341.42. The extension's minimum Chromium 120 remains independent
+of MonkeySharp's 84 baseline.
 
 [Fixtures](../../scripts/compatibility/fixtures/), [evidence](../../scripts/compatibility/evidence/) and the [corpus manifest](../../scripts/compatibility/corpus.json) are tracked together with the runners. The [differential schema](../../scripts/compatibility/evidence/schema.json) applies to reference records; native matrices and delivery summaries retain their own record shapes. Preserve original fixture bytes, hashes, versions, ordered events, settlements, effects and failed checks. Raw logs and browser profiles stay in ignored `artifacts/`.
 
 ## Recorded delivery snapshot: 2026-11-07
+
+The [stable follow-up assessment](m1-report.md) / [中文](m1-report.zh-CN.md)
+reports the newer implementation and its separate acceptance scope. It does not
+overwrite this historical snapshot.
+
+The WPF smoke poll keeps its 25-second deadline and actual predicates. A reload
+may cancel an in-flight JavaScript evaluation after its readiness check; polling
+retries that cancellation, while direct evaluations and other errors still fail.
+The regression checks verify eventual success, error propagation and persistent
+cancellation timing out. Native navigation/disable/enable assertions remain intact.
 
 The [delivery record](../../scripts/compatibility/evidence/p2-delivery.json) reports all six 84/121/151 × x64/x86 isolated combinations passed within its declared scope. Each x64 target passed 403 .NET tests and its WPF gate; each x86 target passed 357 .NET tests. Each run had 114 JavaScript tests and 15 SmokeHost compatibility scenarios. WPF private-context coverage includes all three x64 engine versions.
 

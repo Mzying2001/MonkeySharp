@@ -357,7 +357,7 @@ attributes 是可选对象：textContent/innerHTML 设置内容，字符串 styl
 
 需要对应授权、资源提供器和 @resource name url。name 是非空、区分大小写的字符串。现代返回 `Promise<string>`，使用提供器给出的文本，否则将字节按 UTF-8 解码。旧版从完整启动资源快照立即返回字符串。未声明的资源导致拒绝；缺少旧版快照时不暴露别名，在可用快照中找不到名称时抛出错误。
 
-### GM.getResourceUrl(name) / GM.getResourceUrl(name) / GM_getResourceURL(name)
+### GM.getResourceUrl(name) / GM_getResourceURL(name)
 
 前提和名称规则相同，但需要自己的授权。现代返回 `Promise<string>`，内容为 **data URL**：`data:<media-type>;base64,<bytes>`；旧版从快照立即返回该 URL。它不是原始下载地址，也不是需要 revoke 的对象 URL。不支持 isBlobUrl 参数。两种资源 API 均应用完整性检查和大小限制。
 

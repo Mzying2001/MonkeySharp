@@ -111,6 +111,10 @@ Generic execution timeout starts after authorization. CEF transfer and download 
 
 ## Network APIs
 
+The [stable follow-up assessment](compatibility/m1-report.md) records the
+37-row API review, pinned corpus and native/package delivery scope. Its full M1
+acceptance remains incomplete while fixed-reference interaction evidence is missing.
+
 The CefSharp host supplies default `GM.xmlHttpRequest`, `GM.cookie`, and `GM.webRequest` services. Set `EnableDefaultNetworkServices = false` to require explicit providers, or use `UseHttpRequestService`, `UseCookieService`, and `UseWebRequestService` to replace individual defaults.
 
 ### HTTP Requests

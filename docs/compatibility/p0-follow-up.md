@@ -12,7 +12,7 @@ Edge 157.0.4341.42 and fresh profiles. Historical evidence is retained.
 | 24 | Shared listener registry, once/signal/capture identity, dispatch mutation rules, exception isolation, deduplication and cleanup. 118 JS tests and all three x64 raw/isolated native gates passed; [evidence](../../scripts/compatibility/evidence/urlchange-follow-up-p0.json). |
 | 25 | Download permission/session/backend errors corrected; known subfeatures use the existing capability map; English/Chinese guides reconciled. 410 .NET and 119 JS tests passed; 84/121 native/WPF passed (84 WPF first run crashed in CEF, retry retained); [evidence](../../scripts/compatibility/evidence/download-docs-follow-up-p0.json). |
 | 26 | Two immutable MIT upstream scripts, seven category scenarios and CSP/cancel/denial variants, shared source/package host. Native 121/151 scenarios pass within declared start/CSP limits; 84 settings require missing replaceAll. Fixed TM has actual runs, with saved files blocked by browser permission and the resource-refresh hook assertion failed. Intake/runner delivered; complete differential acceptance remains incomplete. |
-| 27 | M1 and original step 15 remain incomplete until corpus and matrix requirements pass. |
+| 27 | Final six native/package combinations and all three WPF gates passed declared scope on 2026-11-11; [evidence](../../scripts/compatibility/evidence/stable-follow-up-delivery-p0.json), [report](m1-report.md) / [中文](m1-report.zh-CN.md). M1 and original step 15 remain incomplete until missing reference interactions and corpus results meet their original requirements. |
 
 ## Stable observations
 

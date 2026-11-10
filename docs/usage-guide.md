@@ -351,7 +351,7 @@ Legacy: `GM_addElement` with the same overloads; grant `GM.addElement` or its al
 
 Requires its grant, a resource provider, and `@resource name url`. `name` is a non-empty, case-sensitive string. Modern result: `Promise<string>`, using provider text or UTF-8 decoding of bytes. Legacy returns a string immediately from the complete bootstrap resource snapshot. An undeclared resource rejects; a missing legacy snapshot makes the alias unavailable, and an absent name in an available snapshot throws.
 
-### GM.getResourceUrl(name) / GM.getResourceUrl(name) / GM_getResourceURL(name)
+### GM.getResourceUrl(name) / GM_getResourceURL(name)
 
 Same prerequisites and name rules, with its own grant. Modern result: `Promise<string>` containing a **data URL**, `data:<media-type>;base64,<bytes>`; legacy returns that URL immediately from its snapshot. It is not the download URL and is not a revocable object URL. There is no supported `isBlobUrl` parameter. Integrity and size limits apply to both resource APIs.
 

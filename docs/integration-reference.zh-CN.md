@@ -49,6 +49,8 @@ TrustedPageWorld 默认关闭；特权执行需要可信桥或宿主显式信任
 context 和仅手动更新策略。`GM.info.version` 是管理器程序集版本，脚本版本位于 `script.version`。
 `GM.info.compatibility.capabilities` 记录 API 是否可用及明确的政策、引擎限制原因。
 
+稳定后续改进的 37 项 API 核对、固定语料和原生/包消费范围见[交付评估](compatibility/m1-report.zh-CN.md)；固定参考交互证据未补齐时，完整 M1 保持未完成。
+
 同一映射还报告 strict start、OOPIF、BFCache、手动菜单 frame、显式/请求分区 Cookie、分区 CRUD 版本、audible 和 clickedFrame。自定义 UserScriptExecutionEnvironment 的 capabilityStatus 会保留细分能力键；仅填宿主能够证明的事实。见[脚本侧键说明](usage-guide.zh-CN.md#information-and-logging)。
 
 ## 资源完整性与更新检查
