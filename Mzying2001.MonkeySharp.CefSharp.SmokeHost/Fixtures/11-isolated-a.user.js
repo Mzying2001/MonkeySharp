@@ -14,7 +14,7 @@
 // ==/UserScript==
 (async function () {
     const state = { world: GM_info.compatibility.executionWorld, unsafe: typeof unsafeWindow, page: typeof pageOnlyCanary,
-        resource: GM_getResourceText('isolatedText'), sandbox: GM_info.sandboxMode, changes: [] };
+        resource: GM_getResourceText('isolatedText'), sandbox: GM_info.sandboxMode, changes: [], once: 0, aborted: 0, tail: 0 };
     globalThis.privateWorldValue = 'A';
     const publish = () => document.documentElement.setAttribute('data-isolated-a', JSON.stringify(state));
     try {
@@ -27,6 +27,11 @@
             type: 'hello', documentId: 'another-document', scriptKey: GM_info.scriptKey, capability: 'forged' })));
         state.forgeryDenied = denied.ok === false && denied.error.code === 'MSP003_SESSION_EXPIRED';
         window.onurlchange = event => { state.changes.push(event.url); publish(); };
+        window.addEventListener('urlchange', () => state.once++, { once: true });
+        const abort = new AbortController();
+        window.addEventListener('urlchange', () => state.aborted++, { signal: abort.signal }); abort.abort();
+        window.addEventListener('urlchange', () => { throw new Error('Expected isolated URL callback failure'); });
+        window.addEventListener('urlchange', () => { state.tail++; publish(); });
         await new Promise(resolve => setTimeout(resolve, 50));
         state.privateValue = globalThis.privateWorldValue;
         state.done = true;

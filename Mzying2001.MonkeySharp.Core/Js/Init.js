@@ -201,7 +201,7 @@
                     lastStorageSequence: 0,
                     bridgeLimits: {},
                     resourceMirror: null
-                    , urlChangeHandlers: new Set(), urlChangeHandler: null, windowFacade: null
+                    , urlChangeEnabled: false, urlChangeHandler: null, lastUrlChange: null, windowFacade: null
                 };
                 executions.set(invocation.executionId, record);
                 let availableApis = new Set();
@@ -408,6 +408,8 @@
             const endExecution = function (record) {
                 record.disposed = true;
                 record.pageListeners.forEach(listener => listener.remove());
+                record.urlChangeHandler = null;
+                record.urlChangeEnabled = false;
                 record.tabHandlers.forEach(state => { state.onclose = null; });
                 record.tabHandlers.length = 0;
                 record.handlers.clear();
@@ -430,13 +432,18 @@
                 if (!data || typeof data.url !== "string") return false;
                 const info = { url: data.url, oldURL: typeof data.oldURL === "string" ? data.oldURL : "" };
                 executions.forEach(record => {
-                    if (!record.urlChangeHandler && record.urlChangeHandlers.size === 0) return;
+                    if (record.disposed || !record.urlChangeEnabled || record.lastUrlChange === data.url || data.url === data.oldURL) return;
+                    record.lastUrlChange = data.url;
+                    const listeners = Array.from(record.pageListeners).filter(entry => entry.type === "urlchange");
                     try {
                         if (typeof record.urlChangeHandler === "function") record.urlChangeHandler.call(record.windowFacade, info);
-                        record.urlChangeHandlers.forEach(handler => handler.call(record.windowFacade, info));
                     } catch (error) {
                         console.error("[MonkeySharp] urlchange callback failed", error);
                     }
+                    listeners.forEach(entry => {
+                        try { entry.deliver(info); }
+                        catch (error) { console.error("[MonkeySharp] urlchange callback failed", error); }
+                    });
                 });
                 return true;
             };

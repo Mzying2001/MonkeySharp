@@ -729,7 +729,7 @@ GM_webRequest([
 | `window.focus()` | 精确 window.focus 授权及窗口服务，请求宿主聚焦来源标签页/窗口。 | `undefined`，宿主政策可能拒绝操作。 |
 | `window.onurlchange` | 精确授权，可赋值函数/null，或 window.addEventListener("urlchange", handler)。 | 属性/事件注册，回调接收 {url, oldURL}。 |
 
-URL 变化时会观察 pushState、replaceState、popstate 和 hashchange。使用 window.removeEventListener("urlchange", handler) 移除同一函数。回调的 this 为 window 门面；参数是普通对象，不是原生 Event，once/capture 等选项不会改变这套自定义注册行为。没有授权就不会建立 MonkeySharp URL 变更订阅。close/focus 缺少授权或服务时不可用。
+pushState、replaceState、popstate、hashchange 按 URL 去重。参数保持普通 {url, oldURL} 对象；先调用属性处理器，再按注册顺序调用监听器。函数的 this 为 window 门面，监听对象使用自己的 handleEvent。支持 once 和 AbortSignal；重复注册/移除以类型、回调、capture 匹配，capture 不创建 DOM 传播阶段。派发中新增监听等待下一次，移除立即生效；每个回调异常独立隔离。导航/执行结束清除订阅。oldURL、属性处理器、门面 receiver 和 signal 是 MonkeySharp 在[固定 TM 对照](compatibility/p0-follow-up.md)之外的保证。没有授权不建立 URL 订阅；close/focus 仍需授权及宿主服务。
 
 脚本中的 window 是绑定原生函数到页面窗口的门面。close/focus 返回 undefined，不提供 GM.windowClose/GM.windowFocus 别名。
 

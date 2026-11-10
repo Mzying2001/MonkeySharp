@@ -35,24 +35,27 @@
                 const signal = options && typeof options === "object" && options.signal;
                 if (signal && (typeof signal.addEventListener !== "function" || typeof signal.removeEventListener !== "function")) throw new TypeError("signal must be an AbortSignal.");
                 if (signal && signal.aborted) return;
-                const entry = { type, listener, capture, active: true, seen: new WeakSet() };
+                const entry = { type, listener, capture, once: Boolean(options && options.once), active: true, seen: new WeakSet() };
+                const virtualUrl = type === "urlchange" && record.urlChangeEnabled;
                 const deliver = function (event, original) {
                     if (!entry.active || record.disposed || entry.seen.has(original)) return;
                     entry.seen.add(original);
-                    if (options && options.once) entry.remove();
+                    if (entry.once) entry.remove();
                     if (typeof listener === "function") listener.call(record.windowFacade, event);
                     else if (typeof listener.handleEvent === "function") listener.handleEvent(event);
                 };
                 const wrapped = event => deliver(event, event);
+                entry.deliver = wrapped;
                 entry.remove = function () {
                     entry.active = false;
-                    root.removeEventListener.call(root, type, wrapped, capture);
+                    if (!virtualUrl) root.removeEventListener.call(root, type, wrapped, capture);
                     if (signal) signal.removeEventListener("abort", entry.remove);
                     record.pageListeners.delete(entry);
                 };
                 record.pageListeners.add(entry);
-                root.addEventListener.call(root, type, wrapped, { capture, passive: Boolean(options && options.passive) });
+                if (!virtualUrl) root.addEventListener.call(root, type, wrapped, { capture, passive: Boolean(options && options.passive) });
                 if (signal) signal.addEventListener("abort", entry.remove, { once: true });
+                if (virtualUrl) return;
                 const cache = root.__MonkeySharpLifecycleEvents;
                 if (cache && cache.documentId === record.proof.documentId) cache.snapshot(type, record.runAt, record.invocationMoment).forEach(item => {
                     Promise.resolve().then(() => {
@@ -75,7 +78,7 @@
                 const close = windowAction("window.close");
                 const focus = windowAction("window.focus");
                 const urlEnabled = grants.has("window.onurlchange");
-                const isUrlEvent = value => value === "urlchange";
+                record.urlChangeEnabled = urlEnabled;
                 const nativeFunctionCache = new Map();
                 const bindNativeFunction = function (property, value) {
                     if (typeof value !== "function" || Object.prototype.hasOwnProperty.call(value, "prototype")) {
@@ -95,20 +98,11 @@
                         if (property === "onurlchange") return urlEnabled ? record.urlChangeHandler : undefined;
                         if (property === "addEventListener") {
                             return function (type, listener, options) {
-                                if (urlEnabled && isUrlEvent(type)) {
-                                    if (typeof listener !== "function") throw new TypeError("listener must be a function.");
-                                    record.urlChangeHandlers.add(listener);
-                                    return;
-                                }
                                 return addPageListener(record, type, listener, options);
                             };
                         }
                         if (property === "removeEventListener") {
                             return function (type, listener, options) {
-                                if (urlEnabled && isUrlEvent(type)) {
-                                    record.urlChangeHandlers.delete(listener);
-                                    return;
-                                }
                                 return removePageListener(record, type, listener, options);
                             };
                         }

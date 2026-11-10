@@ -174,6 +174,10 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             await ReadAsync("(history.pushState({},'', '/compat/isolated-spa'), true)");
             await WaitAsync(async () => (await ReadAsync(readA + ".changes.length === 1"))?.GetBoolean() == true);
             Check("urlchange", true);
+            await ReadAsync("(history.replaceState({},'', '/compat/isolated-spa-next'), true)");
+            await WaitAsync(async () => (await ReadAsync(readA + ".tail === 2"))?.GetBoolean() == true);
+            var urlState = (await ReadAsync(readA)).Value;
+            Check("isolatedUrlOptions", urlState.GetProperty("once").GetInt32() == 1 && urlState.GetProperty("aborted").GetInt32() == 0 && urlState.GetProperty("changes").GetArrayLength() == 2);
             await ReadAsync("(function(){var f=document.createElement('iframe');f.src='/compat/isolated-child';document.body.appendChild(f);return true;})()");
             await WaitAsync(() => Task.FromResult(FindFrame("/compat/isolated-child") != null));
             var child = await WaitResultAsync(readA, FindFrame("/compat/isolated-child"));
@@ -393,6 +397,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                 previous = urls[index];
             }
             var state = await ReadAsync("({ runs: globalThis.__compatSpa.runs, denied: globalThis.__compatSpaDenied })");
+            Check("rawUrlOptions", (await ReadAsync("__compatSpa.once === 1 && __compatSpa.aborted === 0 && __compatSpa.tail === 4")).Value.GetBoolean());
             var denied = state.Value.GetProperty("denied");
             Check("grantBoundary", denied.GetProperty("hidden").GetBoolean() && denied.GetProperty("events").GetInt32() == 0);
             Check("sameDocument", FindFrame("/compat/spa").DocumentId == original.DocumentId && state.Value.GetProperty("runs").GetInt32() == 1 &&
