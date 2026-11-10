@@ -36,7 +36,9 @@ node scripts/compatibility/Run-Reference.cjs C:/path/to/msedge.exe C:/path/to/ta
 node scripts/compatibility/Run-Reference.cjs C:/path/to/msedge.exe C:/path/to/tampermonkey artifacts/compatibility/prepared-content.json scripts/compatibility/fixtures/prepared-content.user.js
 ```
 
-Positional arguments are `<Edge-exe> <extension-dir> [output.json] [fixture.user.js]`. Defaults are `artifacts/compatibility/reference-returns.json` and `scripts/compatibility/fixtures/returns.user.js`. Fixture paths are repository-relative or absolute; relative output paths use the current working directory. The server supplies companion content from `fixtures/content/`. Interactive effects need their own recorded checks; no event is not proof of completion.
+Positional arguments are `<Edge-exe> <extension-dir> [output.json] [fixture.user.js] [environment.json]`. Defaults are a timestamped output, `scripts/compatibility/fixtures/returns.user.js` and tracked `reference-stable.json`. Existing output files are never overwritten. Fixture paths are repository-relative or absolute; relative output paths use the current working directory. The server supplies companion content from `fixtures/content/`. Interactive effects need their own recorded checks; no event is not proof of completion.
+
+The environment JSON pins `channel` (stable/beta), `version`, `manifestVersion`, `extensionId`, `contentSha256` and records `settings`. Identity comes from the manifest public key. Source content is hashed except regenerated `_metadata`; mismatches fail before launch. The browser uses a source copy and fresh profile. `settings.headless: false` selects a visible reference browser. An acquired beta needs a separate complete pin; 5.6.6242 remains pending. See [stable follow-up observations and fingerprint format](../../docs/compatibility/p0-follow-up.md).
 
 ## Maintaining shared inputs
 

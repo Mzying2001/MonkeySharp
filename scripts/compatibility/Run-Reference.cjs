@@ -6,20 +6,24 @@ const http = require("node:http");
 const https = require("node:https");
 const crypto = require("node:crypto");
 const { execFileSync } = require("node:child_process");
-const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
+const { verifyEnvironment } = require('./ReferenceEnvironment.cjs');
 
 async function main() {
-    const [browserPath, extensionPath, output = "artifacts/compatibility/reference-returns.json", fixturePath = "scripts/compatibility/fixtures/returns.user.js"] = process.argv.slice(2);
+    const [browserPath, extensionPath, output = `artifacts/compatibility/reference-${Date.now()}.json`, fixturePath = "scripts/compatibility/fixtures/returns.user.js", environmentPath = path.join(__dirname, 'reference-stable.json')] = process.argv.slice(2);
     if (!browserPath || !extensionPath) throw new Error("Usage: node Run-Reference.cjs <Edge executable> <Tampermonkey directory> [output.json] [fixture.user.js]");
-    const manifest = JSON.parse(fs.readFileSync(path.join(extensionPath, "manifest.json"), "utf8"));
-    if (manifest.version !== "5.5.1" || manifest.manifest_version !== 3) throw new Error("Reference requires Tampermonkey 5.5.1/MV3; record a new environment before changing this pin.");
-    const extensionId = "iikmkjmpaadaobahmlepeloendndfphd";
+    if (fs.existsSync(output)) throw new Error('Refusing to overwrite an existing reference record. Choose a new output path.');
+    const pin = JSON.parse(fs.readFileSync(environmentPath, 'utf8'));
+    const { manifest, contentSha256 } = verifyEnvironment(extensionPath, pin);
+    const extensionId = pin.extensionId;
+    const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
     const root = path.resolve(__dirname, "../..");
     const fixture = path.resolve(root, fixturePath);
     const fixtureHash = crypto.createHash("sha256").update(fs.readFileSync(fixture)).digest("hex");
     const artifacts = path.join(root, "artifacts/compatibility");
     fs.mkdirSync(artifacts, { recursive: true });
     const profile = fs.mkdtempSync(path.join(artifacts, "reference-profile-"));
+    const extensionSnapshot = path.join(profile, 'reference-extension');
+    fs.cpSync(extensionPath, extensionSnapshot, { recursive: true });
     let resolveEvidence;
     const evidence = new Promise(resolve => { resolveEvidence = resolve; });
     const received = [];
@@ -36,6 +40,10 @@ async function main() {
                 else { received.push(value); resolveEvidence(value); }
                 response.end("ok");
             });
+        } else if (request.url.startsWith('/cookie-echo') || request.url.startsWith('/cookie-redirect')) {
+            if (request.url.startsWith('/cookie-redirect')) { response.statusCode = 302; response.setHeader('Location', '/cookie-echo'); }
+            response.setHeader('Content-Type', 'text/plain');
+            response.end(request.headers.cookie || '');
         } else if (request.url === '/partition-echo' || request.url === '/partition-receive') {
             if (request.url === '/partition-receive') response.setHeader('Set-Cookie','partition-received=done; Path=/; Secure; SameSite=None; Partitioned');
             response.setHeader('Content-Type','text/plain');
@@ -66,13 +74,14 @@ async function main() {
         }
         if (ipv6) await new Promise((resolve, reject) => { ipv6.once("error", reject); ipv6.listen(0, "::1", resolve); });
         context = await chromium.launchPersistentContext(profile, {
-            executablePath: path.resolve(browserPath), headless: true,
-            args: [`--disable-extensions-except=${path.resolve(extensionPath)}`, `--load-extension=${path.resolve(extensionPath)}`, "--no-first-run",
+            executablePath: path.resolve(browserPath), headless: pin.settings?.headless !== false,
+            args: [`--disable-extensions-except=${extensionSnapshot}`, `--load-extension=${extensionSnapshot}`, "--no-first-run",
                 ...(matching ? ["--no-proxy-server", "--host-resolver-rules=MAP xn--fsqu00a.xn--0zwm56d 127.0.0.1"] : []),
                 ...(partitionProbe ? ['--ignore-certificate-errors'] : [])]
         });
         let worker = context.serviceWorkers()[0] || await context.waitForEvent("serviceworker");
-        if (await worker.evaluate(() => chrome.runtime.getManifest().version) !== manifest.version) throw new Error("Wrong running extension version.");
+        if (await worker.evaluate(() => chrome.runtime.getManifest().version) !== manifest.version ||
+            await worker.evaluate(() => chrome.runtime.id) !== extensionId) throw new Error("Wrong running extension version or identity.");
         const page = await context.newPage();
         await page.goto(`edge://extensions/?id=${extensionId}`);
         const privateProbe = path.basename(fixture) === 'private-tabs.user.js';
@@ -121,6 +130,19 @@ async function main() {
                 promise: {}, immediateReturn: { probe: "completed" }, effects: { automaticExecutions: received.length } };
         } else {
             await target.goto(`http://127.0.0.1:${server.address().port}/`);
+            if (path.basename(fixture) === 'p0-urlchange.user.js') {
+                await target.waitForFunction(() => document.documentElement.dataset.urlProbeReady === 'true');
+                await target.waitForTimeout(500);
+                for (const operation of ['push', 'replace', 'hash', 'back']) {
+                    await target.evaluate(operation => {
+                        if (operation === 'push') history.pushState({}, '', '/one');
+                        if (operation === 'replace') history.replaceState({}, '', '/two');
+                        if (operation === 'hash') location.hash = 'hash';
+                        if (operation === 'back') history.back();
+                    }, operation);
+                    await target.waitForTimeout(1100);
+                }
+            }
             result = await Promise.race([evidence, new Promise((_, reject) => { deadline = setTimeout(() => reject(new Error("No userscript evidence within 20 seconds.")), 20000); })]).finally(() => clearTimeout(deadline));
         }
         result.effects.tabsBefore = tabsBefore;
@@ -139,7 +161,24 @@ async function main() {
             result.effects.afterManagerReload = privateReloadEvidence;
         }
         result.effects.tabsAfter = await worker.evaluate(() => chrome.tabs.query({}).then(tabs => tabs.length));
-        const checks = matching ? {
+        const checks = result.caseId === 'p0-dom' ? {
+            invalidCreation: ['invalidTag', 'invalidAttribute', 'invalidParent', 'emptyTag'].every(name =>
+                result.immediateReturn[name] === 'null' && result.promise[name]?.state === 'fulfilled' && result.promise[name]?.value === 'null'),
+            invalidType: result.immediateReturn.invalidType === 'throws:TypeError' && result.promise.invalidType?.state === 'rejected',
+            continued: result.effects.continued === true
+        } : result.caseId === 'p0-urlchange' ? {
+            changesObserved: result.events.some(event => event.name === 'listener'),
+            once: result.effects.onceCount === 1,
+            signalIgnoredByPinnedReference: result.events.some(event => event.name === 'aborted'),
+            plainUrlPayload: result.events.filter(event => event.name === 'listener').every(event => event.isEvent === false && event.keys?.join(',') === 'url')
+        } : result.caseId === 'p0-cookies' ? {
+            jarObserved: result.effects.jar?.includes('same=jar'),
+            headerWins: result.effects.both?.includes('same=header') && !result.effects.both?.includes('same=details'),
+            values: result.effects.values?.includes('equals=a=b=c') && result.effects.values?.includes('empty='),
+            anonymous: result.effects.anonymous === 'same=header'
+        } : result.caseId === 'p0-notification' ? {
+            replacementTimeout: result.promise.replacement?.state === 'fulfilled' && result.promise.replacement.value === false
+        } : matching ? {
             allCasesRecorded: result.effects.cases.length === matchingScenarios.length,
             expectedMatches: result.effects.cases.every(value => value.matched === matchingScenarios.find(scenario => scenario.id === value.id).expected)
         } : noAutomaticMatch ? { noAutomaticExecution: result.effects.automaticExecutions === 0 } : result.caseId === "storage-timing" ? {
@@ -192,17 +231,20 @@ async function main() {
         } : { exposureRecorded: Object.keys(result.immediateReturn).length > 0 };
         const record = {
             ...result, fixtureHash,
-            contractSource: ["https://www.tampermonkey.net/documentation.php?locale=en", "Tampermonkey 5.5.1/MV3 runtime"],
+            contractSource: ["https://www.tampermonkey.net/documentation.php?locale=en", `Tampermonkey ${pin.version}/${pin.channel}/MV3 runtime`],
             environment: {
                 manager: "Tampermonkey", managerVersion: manifest.version,
                 chromiumVersion: browserVersion.product, userAgent: browserVersion.userAgent,
-                manifestVersion: manifest.manifest_version,
-                settings: { headless: true, userScriptsAccess: true, freshProfile: true,
+                manifestVersion: manifest.manifest_version, channel: pin.channel, extensionId, contentSha256,
+                minimumChromeVersion: manifest.minimum_chrome_version,
+                settings: { ...pin.settings, headless: pin.settings?.headless !== false, userScriptsAccess: true, freshProfile: true,
                     ignoreLoopbackCertificateErrors: partitionProbe, legacyPfxProvider: process.execArgv.includes('--openssl-legacy-provider') },
                 commit: execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim(),
+                sourcePatchSha256: crypto.createHash('sha256').update(execFileSync('git', ['diff', '--binary', 'HEAD'], { cwd: root })).digest('hex'),
+                runnerSha256: crypto.createHash('sha256').update(fs.readFileSync(__filename)).digest('hex'),
                 platform: process.arch, capabilities: { referenceReturnProbe: true }, world: "manager-selected"
             },
-            checks, status: Object.values(checks).every(Boolean) ? "passed" : "failed"
+            checks, status: result.status === 'blocked' ? 'blocked' : Object.values(checks).every(Boolean) ? "passed" : "failed"
         };
         fs.mkdirSync(path.dirname(path.resolve(output)), { recursive: true });
         fs.writeFileSync(output, JSON.stringify(record, null, 2) + "\n");

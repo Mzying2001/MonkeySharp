@@ -60,6 +60,9 @@ Resource URL spellings are intentionally different. No `GM.getResourceURL`,
 
 ## Evidence and execution
 
+The [stable follow-up](p0-follow-up.md) adds pinned failure/URL/Cookie observations
+and distinguishes additional MonkeySharp guarantees from 5.5.1 behavior.
+
 Run the same original [return probe](../../scripts/compatibility/fixtures/returns.user.js) in each manager. Its ordered log preserves immediate return shapes, microtasks, Promise settlement, DOM effects and tab closure. Separate grant installations cover missing/none, each spelling, mixed, unknown and info-only. Install only on the local test page; the probe posts JSON to `/evidence`. Interactive notification/menu effects require their own recorded checks.
 
 The committed modern reference used Edge 156.0.4314.58, Tampermonkey 5.5.1 and MV3; the extension manifest requires Chromium 120. This is independent of MonkeySharp's 84 baseline. The [return record](../../scripts/compatibility/evidence/tampermonkey-5.5.1-returns.json) confirms modern Promise returns for DOM, menu registration/removal and openInTab, and notification timeout resolving false. It does not establish every click/tag-replacement result. Delayed tab closure passed; the earlier immediate-close observation needed a later retry. MonkeySharp's queued early-close behavior is documented separately.

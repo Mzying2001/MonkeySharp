@@ -1,5 +1,7 @@
 # Compatibility
 
+The [stable follow-up](p0-follow-up.md) tracks current fixes and remaining M1 evidence.
+
 MonkeySharp targets the observable Chromium Tampermonkey contract while keeping CefSharp **84.4.10** as the minimum engine. The regression matrix also covers **121.3.70** and **151.3.240**, each on x64 and x86. The WPF Demo supports x64 only. Build the adapter against the exact CefSharp version shipped by the host.
 
 The [API contract](api-contract.md) distinguishes legacy and modern calling forms. The [userscript guide](../usage-guide.md) / [中文](../usage-guide.zh-CN.md) owns parameters and examples; the [integration reference](../integration-reference.md) / [中文](../integration-reference.zh-CN.md) owns host interfaces and configuration.
