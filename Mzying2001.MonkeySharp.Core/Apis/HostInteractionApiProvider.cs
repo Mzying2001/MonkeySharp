@@ -564,6 +564,16 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             public override void Dispose() { _handle.OnClose -= _closed; _handle.Dispose(); }
         }
 
+        private static object DownloadFailure(string clientId, Exception error)
+        {
+            var code = (error as BridgeProtocolException)?.Code;
+            if (error is UnsupportedApiException) code = BridgeErrorCodes.NotSupported;
+            var reason = code == BridgeErrorCodes.NotSupported ? "not_supported" :
+                code == BridgeErrorCodes.PermissionDenied || code == BridgeErrorCodes.GrantDenied ? "not_permitted" :
+                code == BridgeErrorCodes.Timeout || error is TimeoutException ? "timeout" : "not_succeeded";
+            return new { clientId, error = reason, details = error?.Message, code };
+        }
+
         private sealed class DownloadRegistration : Registration
         {
             private readonly DownloadRequest _request;
@@ -590,7 +600,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                         name = result?.Name ?? request.Name, loaded = result?.BytesReceived
                     } });
                 };
-                _failed = (_, failure) => Terminal("download-error", new { clientId, error = "not_succeeded", details = failure.Error?.Message });
+                _failed = (_, failure) => Terminal("download-error", DownloadFailure(clientId, failure.Error));
                 _aborted = (_, __) => Terminal("download-aborted", new { clientId, error = "not_succeeded", details = "The download was aborted." });
                 _timedOut = (_, __) => Terminal("download-timeout", new { clientId, error = "timeout", details = "The download timed out." });
             }
@@ -614,7 +624,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             public void StartFailed(Exception error)
             {
                 Terminal(error is OperationCanceledException ? "download-aborted" : "download-error",
-                    new { clientId = _clientId, error = "not_succeeded", details = error.Message });
+                    DownloadFailure(_clientId, error));
             }
             private void Publish(string eventName, object data)
             {

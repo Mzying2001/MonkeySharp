@@ -10,7 +10,7 @@ Edge 157.0.4341.42 and fresh profiles. Historical evidence is retained.
 | 22 | DOM failures return/fulfill null; body fallback added, parameter/programming errors preserved. 116 JS tests and 84/121/151 x64 SmokeHost/CDP passed; [evidence](../../scripts/compatibility/evidence/dom-follow-up-p0.json). |
 | 23 | Native 84/121/151 ignored explicit Cookie inputs. Default backend now rejects before sending; jar-based authentication remains available. This is an explicit engine limitation, not implemented TM merge parity; [probe evidence](../../scripts/compatibility/evidence/explicit-cookies-follow-up-p0.json). |
 | 24 | Shared listener registry, once/signal/capture identity, dispatch mutation rules, exception isolation, deduplication and cleanup. 118 JS tests and all three x64 raw/isolated native gates passed; [evidence](../../scripts/compatibility/evidence/urlchange-follow-up-p0.json). |
-| 25 | Pending download semantics and documentation reconciliation. |
+| 25 | Download permission/session/backend errors corrected; known subfeatures use the existing capability map; English/Chinese guides reconciled. 410 .NET and 119 JS tests passed; 84/121 native/WPF passed (84 WPF first run crashed in CEF, retry retained); [evidence](../../scripts/compatibility/evidence/download-docs-follow-up-p0.json). |
 | 26 | Seven third-party categories pending intake/execution. |
 | 27 | M1 and original step 15 remain incomplete until corpus and matrix requirements pass. |
 

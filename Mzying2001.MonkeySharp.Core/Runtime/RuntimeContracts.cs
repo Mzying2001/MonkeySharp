@@ -364,7 +364,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
         public bool? ScriptWillUpdate { get; }
         /// <summary>Gets explicit engine or policy reasons for unavailable capabilities.</summary>
         public IReadOnlyDictionary<string, string> UnavailableCapabilities { get; }
-        /// <summary>Gets truthful partial-capability descriptions supplied by the host.</summary>
+        /// <summary>Gets truthful API and subfeature status descriptions supplied by the host. Keys are preserved in GM.info.compatibility.capabilities.</summary>
         public IReadOnlyDictionary<string, string> CapabilityStatus { get; }
     }
 }

@@ -549,6 +549,28 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             Assert.Equal(new[] { "download-aborted" }, events);
         }
 
+        [Theory]
+        [InlineData("unsupported", "not_supported")]
+        [InlineData("permission", "not_permitted")]
+        [InlineData("io", "not_succeeded")]
+        public async Task DownloadFailuresPreserveTheirCauseAndTerminateOnce(string kind, string reason)
+        {
+            var installation = await InstallAsync("// @grant GM.download");
+            var service = new ControlledDownloadService();
+            using var provider = new HostInteractionApiProvider(downloads: service);
+            var events = new List<ApiNotificationEventArgs>();
+            provider.Notification += (_, value) => events.Add(value);
+            await provider.InvokeAsync(Context(installation, "GM.download", new { url = "https://example.com/file", clientId = Guid.NewGuid().ToString() }), CancellationToken.None);
+            Exception error = kind == "unsupported" ? new UnsupportedApiException("unsupported cookie input") :
+                kind == "permission" ? new BridgeProtocolException(BridgeErrorCodes.PermissionDenied, "redirect denied") :
+                new IOException("disk failed");
+            service.Operation.Fail(error); service.Operation.Fail(error);
+            var notification = Assert.Single(events);
+            Assert.Equal("download-error", notification.EventName);
+            Assert.Equal(reason, Json(notification.DataJson).GetProperty("error").GetString());
+            Assert.Equal(error.Message, Json(notification.DataJson).GetProperty("details").GetString());
+        }
+
         [Fact]
         public async Task DocumentEndMutesDownloadCallbacksButHostDisposalCancelsTasks()
         {
@@ -870,11 +892,12 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             public Task Completion => _completion.Task;
             public bool CompleteOnStart, WasAborted, Disposed;
             public event EventHandler<UserScriptDownloadProgress> Progress { add { } remove { } }
-            public event EventHandler<UserScriptDownloadFailure> Failed { add { } remove { } }
+            public event EventHandler<UserScriptDownloadFailure> Failed;
             public event EventHandler TimedOut { add { } remove { } }
             public event EventHandler Completed, Aborted;
             public void Start() { if (WasAborted) Aborted?.Invoke(this, EventArgs.Empty); else if (CompleteOnStart) Complete(); }
             public void Complete() { Completed?.Invoke(this, EventArgs.Empty); _completion.TrySetResult(null); }
+            public void Fail(Exception error) { Failed?.Invoke(this, new UserScriptDownloadFailure(error)); _completion.TrySetException(error); }
             public void Abort() { WasAborted = true; Aborted?.Invoke(this, EventArgs.Empty); _completion.TrySetCanceled(); }
             public void Dispose() { Disposed = true; }
         }

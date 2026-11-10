@@ -65,6 +65,12 @@ update policy. `GM.info.version` is the manager assembly version; script
 version remains in `GM.info.script.version`. API availability and explicit
 policy/engine reasons are recorded in `GM.info.compatibility.capabilities`.
 
+This same map includes adapter facts for strict start, OOPIF, BFCache, manual
+menu frame routing, explicit/request-partition cookies, versioned partition
+CRUD, audible and clickedFrame. Custom `UserScriptExecutionEnvironment`
+`capabilityStatus` keys are preserved, including subfeatures; supply only facts
+the host can establish. See [the script-facing key list](usage-guide.md#information-and-logging).
+
 ## Resource Integrity and Update Checks
 
 Configure installation content with `new InMemoryUserScriptRepository(preparer: new UserScriptPreparer(dependencyProvider, resourceProvider))`, or pass the same preparer to `PersistentUserScriptRepository`. Install, edit and update await complete preparation before publishing a revision; a failed update leaves the active revision intact. All frames consume the captured revision without further content-provider calls. Dependencies share one scope and retain directive/strict semantics, with newline/semicolon boundaries between source segments.

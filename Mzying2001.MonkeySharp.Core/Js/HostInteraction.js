@@ -126,9 +126,9 @@
                 }
                 const code = error && error.code;
                 const mapped = {
-                    MSP003_SESSION_EXPIRED: "not_enabled",
+                    MSP003_SESSION_EXPIRED: "not_succeeded",
                     MSP004_GRANT_DENIED: "not_permitted",
-                    MSP005_PERMISSION_DENIED: "not_whitelisted",
+                    MSP005_PERMISSION_DENIED: "not_permitted",
                     MSP006_NOT_SUPPORTED: "not_supported",
                     MSP009_TIMEOUT: "timeout",
                     MSP010_CANCELED: "not_succeeded"

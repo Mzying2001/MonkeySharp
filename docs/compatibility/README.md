@@ -17,10 +17,6 @@ The [API contract](api-contract.md) distinguishes legacy and modern calling form
 
 ## Storage and resources
 
-The default HTTP backend rejects explicit `cookie` and `headers.Cookie` before
-sending; native URLRequest ignored their requested values on 84/121/151. Ordinary
-jar-based authentication is retained. See [Cookie scope](cookies.md#explicit-request-cookies).
-
 Installation prepares immutable source, dependencies and original resource bytes before atomic activation. Failed preparation leaves an existing revision active. Execution consumes complete prepared resources and an atomic storage snapshot before starting user code. Resource text follows host text, declared charset, then UTF-8; the pinned reference does not establish equivalent decoding across every Tampermonkey fetch path.
 
 Storage uses per-script watermarks, bounded replay and a confirmed mirror plus ordered pending writes. Local listeners run synchronously, local echoes are suppressed, and modern writes wait for host commit/replay confirmation. Lost history can recover values through a fresh snapshot but cannot reconstruct unavailable listener events. Atomic batches are a MonkeySharp store guarantee, not a claimed Tampermonkey transaction guarantee.
@@ -28,6 +24,10 @@ Storage uses per-script watermarks, bounded replay and a confirmed mirror plus o
 See [resource preparation](../integration-reference.md#resource-integrity-and-update-checks), [storage synchronization](../integration-reference.md#storage-snapshots-and-listeners), [prepared-content evidence](../../scripts/compatibility/evidence/prepared-revisions-p1.json), [atomic snapshots](../../scripts/compatibility/evidence/atomic-storage-p1.json) and [mirror evidence](../../scripts/compatibility/evidence/storage-mirror-p1.json).
 
 ## Matching and permissions
+
+The default HTTP backend rejects explicit `cookie` and `headers.Cookie` before
+sending; native URLRequest ignored their requested values on 84/121/151. Ordinary
+jar-based authentication is retained. See [Cookie scope](cookies.md#explicit-request-cookies).
 
 Prepared URL/run-in rules are reused across frames. URL regular expressions use a bounded ECMAScript subset; unsupported syntax fails installation and timeouts fail closed. Unicode `@match` host declarations are diagnosed; use Punycode. Manual context-menu execution ignores include/exclude while retaining match/exclude-match, frame, privacy and trust checks.
 

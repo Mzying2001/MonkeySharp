@@ -6,6 +6,18 @@ Both calling forms share one client-identified operation. `GM.download` immediat
 
 Accepted tasks continue across document end, navigation, script disable and uninstall under captured authorization; redirect targets still need approval. Document callbacks are muted after execution ends. Host disposal cancels tasks, and the Demo drains them before releasing its browser context. This ownership policy is distinct from JavaScript callback delivery.
 
+## Error causes
+
+Permission/grant denial maps to `not_permitted`, unsupported options/backend to
+`not_supported`, I/O/cancellation/expired execution to `not_succeeded`, and
+timeout to `timeout`. Callback delivery precedes Promise rejection and only one
+terminal result is delivered. Structured host errors retain their cause/details.
+`not_whitelisted` is reserved for an actual filename-extension policy; the Demo
+does not introduce one. `not_enabled` describes a disabled download feature,
+not session expiry. Native save cancellation and disk failure remain separately
+diagnosable through details. Reference permission/UI cases still marked blocked
+are not claimed as differential passes.
+
 ## Binary inputs and completion
 
 Blob/File and blob URLs are resolved in their owning renderer. Acknowledged 64 KiB chunks stage binary downloads before handing the body to the accepted task. Incomplete staging is execution-scoped and released on failure/navigation. Custom download services read `DownloadRequest.Body` and retain it through termination rather than attempting HTTP access to a renderer blob identifier.

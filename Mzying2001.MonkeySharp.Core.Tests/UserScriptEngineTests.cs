@@ -279,7 +279,8 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 "// @name environment\n// @version 1.2.3\n// @match https://example.com/*\n// @run-at document-end"), "test", true, CancellationToken.None);
             using (var engine = new UserScriptEngine(repository, options: new UserScriptEngineOptions
             {
-                EnvironmentProvider = frame => new UserScriptExecutionEnvironment(mode, privateContext, updates)
+                EnvironmentProvider = frame => new UserScriptExecutionEnvironment(mode, privateContext, updates,
+                    capabilityStatus: new Dictionary<string, string> { ["execution.documentStart"] = "best-effort", ["GM.xmlHttpRequest.cookie"] = "unsupported:cef-urlrequest" })
             }))
             {
                 var plan = await engine.ProcessLifecycleAsync(new DocumentLifecycleEventArgs(DocumentLifecycleKind.DomContentLoaded, Frame("environment", true)), CancellationToken.None);
@@ -290,6 +291,9 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                     Assert.Equal(mode, info.RootElement.GetProperty("downloadMode").GetString());
                     Assert.Equal(privateContext, info.RootElement.GetProperty("isIncognito").GetBoolean());
                     Assert.Equal(updates, info.RootElement.GetProperty("scriptWillUpdate").GetBoolean());
+                    var capabilities = info.RootElement.GetProperty("compatibility").GetProperty("capabilities");
+                    Assert.Equal("best-effort", capabilities.GetProperty("execution.documentStart").GetString());
+                    Assert.Equal("unsupported:cef-urlrequest", capabilities.GetProperty("GM.xmlHttpRequest.cookie").GetString());
                     Assert.False(info.RootElement.GetProperty("script").TryGetProperty("position", out _));
                     Assert.False(info.RootElement.GetProperty("script").TryGetProperty("blockers", out _));
                 }

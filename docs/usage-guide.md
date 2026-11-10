@@ -4,7 +4,7 @@
 
 This guide describes the JavaScript userscript surface in the current MonkeySharp 3 source tree. It covers writing scripts, every built-in script API, and differences from Tampermonkey. Applications can change services, permissions, and limits. For .NET integration, see the [integration reference](integration-reference.md); for installation and UI operations, see the [Demo guide](../Mzying2001.MonkeySharp.Demo/README.md).
 
-Tampermonkey comparisons were checked against its [official documentation](https://www.tampermonkey.net/documentation.php) on **2026-11-01**. They describe documented contracts, not a differential test against every Tampermonkey/browser version.
+Tampermonkey comparisons distinguish [official contracts](compatibility/api-contract.md), [pinned stable observations](compatibility/p0-follow-up.md) and MonkeySharp guarantees. They do not establish parity with every manager/browser version.
 
 ## Contents
 
@@ -21,6 +21,8 @@ Tampermonkey comparisons were checked against its [official documentation](https
 - [Tabs and tab state](#tabs-and-tab-state)
 - [Downloads](#downloads)
 - [Cookies](#cookies)
+- [Private browsing](#private-browsing)
+- [Tab audio](#tab-audio)
 - [Request interception](#request-interception)
 - [Window extensions](#window-extensions)
 - [Tampermonkey compatibility checklist](#tampermonkey-compatibility-checklist)
@@ -204,12 +206,23 @@ Each row requires its capability family or exact legacy declaration unless state
 | `GM.getTabs` | `GM_getTabs` | `Promise<object>` | Tab-state service |
 | `GM.download` | `GM_download` | `Promise<DownloadDetails> & {abort()}` | Download service |
 | `GM.cookie` | `GM_cookie` | Namespace with list/set/delete | CefSharp default |
+| `GM.audio.*` | `GM_audio.*` | Promise for mute/state/listeners; legacy callbacks | Audio service; audible needs a reliable backend |
 | `GM.webRequest` | `GM_webRequest` | undefined; replace/revoke rules | CefSharp default |
 | `unsafeWindow` | Same name | Page global object | Exact grant |
 | `window.close`, `window.focus` | Same names | `undefined` | Window service |
 | `window.onurlchange` | Same name | Property/event registration | Core |
 
 ## Information and logging
+
+The default adapter reports known limits through `GM.info.compatibility.capabilities`:
+`execution.documentStart` (best-effort), `execution.oopif` (unsupported),
+`execution.bfcache` (fresh navigation required), `execution.contextMenuFrame`
+(isolated child/OOPIF unavailable), `GM.xmlHttpRequest.cookie` and `.cookiePartition`,
+`GM.cookie.partitionKey` (84 unsupported, 121 without ancestor dimension, 151
+serializable keys), `GM.audio.audible` (unavailable without a reliable source)
+and `GM.registerMenuCommand.clickedFrame` (unsupported). Missing custom-backend
+facts are omitted, not inferred to be supported. API availability alone does not
+establish these subfeatures.
 
 ### GM.info / GM_info
 
@@ -556,7 +569,7 @@ Requires its grant and a download service. Both forms accept an options object o
 
 Modern `GM.download` immediately returns the original completion **Promise with `abort()`**. It resolves only after the file is flushed, closed and atomically moved/replaced into its final destination. Its completion details are the supported subset `{url, name, loaded}` (final URL, actual filename, committed bytes), without local paths or internal IDs. Legacy immediately returns `{abort()}`. Both abort methods return `undefined`, work before host acknowledgment, and are harmless after a terminal state. Both forms support callbacks; a callback exception is reported separately and cannot turn a committed download into failure. Each operation settles once.
 
-Errors use `{error, details, code?}`: `not_enabled`, `not_permitted`, `not_whitelisted`, `not_supported`, `not_succeeded`, or `timeout`. Host failures reject the modern Promise and invoke the callback; legacy failures use callbacks. A picker cancellation and explicit abort are `not_succeeded`. Unsupported controls and invalid options fail before network work.
+Errors use `{error, details, code?}`. Permission denial is `not_permitted`; unsupported controls/backends are `not_supported`; file I/O, picker cancellation, explicit abort and expired executions are `not_succeeded`; transfer timeout is `timeout`. Host failures invoke the callback before rejecting the modern Promise and terminate once. `not_enabled` describes an explicitly disabled feature, and `not_whitelisted` is reserved for a host's filename-extension policy; the Demo adds no such whitelist. An expired execution is not a disabled feature. Success still follows file commit. See [error mappings](compatibility/downloads.md#error-causes).
 
 Demo GM downloads use the exact CEF HTTP service and RequestContext used by GM XHR, including browser login credentials, anonymous behavior, redirect checks and configured webRequest composition. They stream through a bounded buffer into temporary files, then commit to `Data/Downloads` or a picker destination. Cancellation/failure removes partials before the terminal event. Download authorization uses the host policy, rather than XHR's `@connect` list; there is no extension-whitelist preference.
 
@@ -712,19 +725,19 @@ window.addEventListener("urlchange", onRoute);
 
 | Area | Porting action |
 | --- | --- |
-| Runtime boundary | Treat source and page as trusted page-world code; no extension sandbox or guaranteed CSP bypass. |
+| Runtime boundary | DOM/content uses per-script isolated contexts; raw privileges require host trust. Strict start, OOPIF, transparent BFCache restore and general CSP bypass are unavailable. |
 | Grants | Info is implicit; legacy globals require exact declarations, while modern API families follow the pinned 5.5.1 evidence. |
 | Timing / SPA | Do not require guaranteed document-start or automatic reruns on history changes. |
 | Match subdomains | `*.domain` match patterns include the bare domain and all its subdomains. |
 | Stored values | Use supported storage values; await modern writes for failures; account for bounded mirrors and post-commit notifications. |
-| Resources | Use `GM.getResourceUrl` or `GM.getResourceUrl` with either grant; expect a data URL and host-provided resource availability. |
-| XHR | Check unsupported proxy/partition controls; adapt progress/XML behavior; inspect HTTP status explicitly. |
+| Resources | Use `GM_getResourceURL` or `GM.getResourceUrl` with the corresponding grant; expect a data URL and prepared resources. |
+| XHR | Default CEF rejects explicit Cookie and request partitions; proxy is Firefox-only. Adapt progress/XML and inspect status. |
 | Menu / clipboard | Options and ID updates, interaction-completion notifications, and text/HTML clipboard info/callback overloads. |
-| Notifications | Use supported detail fields; modern resolution is registration, not dismissal. |
+| Notifications | Modern Promise waits for completion and resolves clicked status; click/tag/navigation comparison limits remain documented. |
 | Tabs | Modern returns a Promise; legacy returns an immediate handle; use close/onclose; numeric insertion positions and real private contexts are supported by the Demo. |
 | Downloads | Immediately returns an abortable completion Promise; Demo uses the shared browser network context and commits the file before completion. |
 | Cookies | Partition CRUD on 121/151; request cookiePartition, firstPartyDomain and change feeds remain unavailable. |
-| webRequest | Rewrite action objects and callbacks; explicitly register runtime rules and retain the removal handle. |
+| webRequest | Historical MV2 target: official selector/cancel/redirect rules; void return, replace registration or pass [] to revoke. Historical TM parity remains pending. |
 | Other manager APIs | Extension-specific content/deployment APIs are not built in. Unknown grants do not add them. Audio is partial as described above. |
 
 This is a list of supported contracts and known differences, not a promise that every Tampermonkey script can run unchanged. Prefer testing each feature against the actual embedding application.

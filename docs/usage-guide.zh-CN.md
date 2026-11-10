@@ -4,7 +4,7 @@
 
 本文面向脚本作者，描述当前 MonkeySharp 3 源码中的 JavaScript 用户脚本功能，包括如何编写脚本、全部内置脚本 API，以及与 Tampermonkey 的行为差异。宿主应用可以调整服务、权限、限制和兼容模式。.NET 接入请参阅[集成参考](integration-reference.zh-CN.md)，安装和界面操作请参阅 [Demo 指南](../Mzying2001.MonkeySharp.Demo/README.md)。
 
-与 Tampermonkey 的比较于 **2026-11-01** 对照其[官方文档](https://www.tampermonkey.net/documentation.php)核对。比较的是公开行为约定，并不表示已对所有 Tampermonkey 和浏览器版本进行差分测试。
+比较分别依据[官方契约](compatibility/api-contract.md)、[固定稳定版观察](compatibility/p0-follow-up.md)及 MonkeySharp 主动保证，不表示已对所有管理器/浏览器版本完成差分。
 
 ## 目录
 
@@ -21,6 +21,8 @@
 - [标签页及标签页状态](#tabs-and-tab-state)
 - [下载](#downloads)
 - [Cookie](#cookies)
+- [私密浏览](#private-browsing)
+- [标签音频](#tab-audio)
 - [请求拦截](#request-interception)
 - [window 扩展](#window-extensions)
 - [Tampermonkey 兼容性检查表](#tampermonkey-compatibility-checklist)
@@ -205,12 +207,13 @@ document-idle 在 DOMContentLoaded 后调度，不等待缓慢资源的 load。�
 | `GM.unregisterMenuCommand` | `GM_unregisterMenuCommand` | `Promise<undefined>` | 菜单服务 |
 | `GM.notification` | `GM_notification` | `Promise<boolean>` | 通知服务 |
 | `GM.setClipboard` | `GM_setClipboard` | `Promise<undefined>` | 剪贴板服务 |
-| `GM.openInTab` | `GM_openInTab` | 立即返回标签页句柄 | 标签页服务 |
+| `GM.openInTab` | `GM_openInTab` | `Promise<TabHandle>` | 标签页服务 |
 | `GM.getTab` | `GM_getTab` | `Promise<object>` | 标签页状态服务 |
 | `GM.saveTab` | `GM_saveTab` | `Promise<undefined>` | 标签页状态服务 |
 | `GM.getTabs` | `GM_getTabs` | `Promise<object>` | 标签页状态服务 |
 | `GM.download` | `GM_download` | `Promise<DownloadDetails> & {abort()}` | 下载服务 |
 | `GM.cookie` | `GM_cookie` | 含 list/set/delete 的命名空间 | CefSharp 默认服务 |
+| `GM.audio.*` | `GM_audio.*` | 静音/状态/监听的 Promise；旧版回调 | 音频服务，audible 仅可靠后端可用 |
 | `GM.webRequest` | `GM_webRequest` | undefined；替换/撤销规则 | CefSharp 默认服务 |
 | `unsafeWindow` | 同名 | 页面全局对象 | 精确授权 |
 | `window.close`、`window.focus` | 同名 | undefined | 窗口服务 |
@@ -219,6 +222,8 @@ document-idle 在 DOMContentLoaded 后调度，不等待缓慢资源的 load。�
 <a id="information-and-logging"></a>
 
 ## 信息与日志
+
+默认适配器在 GM.info.compatibility.capabilities 报告已知限制：execution.documentStart 为 best-effort，execution.oopif 不支持，execution.bfcache 要求新导航，execution.contextMenuFrame 的 isolated 子 frame/OOPIF 不支持；GM.xmlHttpRequest.cookie/.cookiePartition 不支持；GM.cookie.partitionKey 在 84 不支持、121 无 ancestor 维度、151 支持可序列化身份；没有可靠来源时 GM.audio.audible 不可用，GM.registerMenuCommand.clickedFrame 不支持。自定义后端的未知事实省略，不能将字段缺失或主 API 可用推断为细分能力已支持。
 
 ### GM.info / GM_info
 
@@ -229,10 +234,10 @@ document-idle 在 DOMContentLoaded 后调度，不等待缓慢资源的 load。�
 | `scriptKey` | 稳定的安装标识。 |
 | `name`、`namespace`、`description` | 顶层元数据便利字段。version 是管理器实际版本，脚本版本位于 script.version。 |
 | `grants`、`grantDeclarationState` | 原始授权名称，以及 Missing、ExplicitNone 或 ExplicitList。授权别名在内部规范化，这些列表保留原始写法。 |
-| `scriptHandler`、`sandboxMode` | 固定为 "MonkeySharp" 和 "raw"。 |
+| `scriptHandler`、`sandboxMode` | 管理器为 MonkeySharp；执行世界为 raw 或 DOM。 |
 | `downloadMode`、`isIncognito`、`scriptWillUpdate` | 下载服务实际模式及宿主 context/更新策略；未知字段省略。 |
 | `scriptMetaStr`、`scriptUpdateURL` | 原始元数据头和声明的更新 URL。 |
-| `compatibility` | contractVersion: 2，包含实际世界、能力状态及字段来源。 |
+| `compatibility` | contractVersion: 2，包含实际世界、能力状态及字段来源。capabilities 同时包含宿主确认的细分能力限制，见下文。 |
 | `script` | 下述脚本元数据对象。 |
 
 script 包含 name、namespace、version、description、author、copyright、name_i18n、description_i18n、icon、icon64、homepage、supportURL、downloadURL、updateURL、fileURL（安装来源）、header、grant、connects、matches、includes、excludes（含 exclude-match）、resources、antifeatures、webRequest、run-at 和 unwrap。lastModified 是安装更新时间的 Unix **毫秒数**；不提供没有管理器状态来源的 position/blockers 字段。resources 项为 `{name, url, integrity: [{algorithm, digest}]}`；antifeatures 先按类型、再按语言分组（无语言时为 default）。未声明 webRequest 时为 null。options 包含 sandbox、noframes、unwrap 和 run_at。
@@ -579,7 +584,7 @@ GM_setClipboard('已复制', 'text', () => console.log('已写入'));
 
 现代 GM.download 立即返回**带 abort() 的原始完成 Promise**，只有文件 flush、关闭并原子移动或替换到最终位置后才兑现。支持的完成详情是 `{url, name, loaded}` 子集：最终 URL、实际文件名和提交字节数，不含本地路径和内部 ID。旧版立即返回 `{abort()}`。两者 abort 均返回 undefined，在宿主确认前也能取消，终态后调用无害。两者均支持回调；回调异常单独报告，不会把已提交的下载变成失败。每次操作只结算一次。
 
-错误使用 `{error, details, code?}`，类别包括 not_enabled、not_permitted、not_whitelisted、not_supported、not_succeeded 和 timeout。现代 Promise 拒绝并调用对应回调；旧版通过回调报告。保存取消和主动中止归为 not_succeeded。不支持的控制及无效选项在网络操作前拒绝。
+错误使用 {error, details, code?}。权限/授权拒绝为 not_permitted；不支持的选项/后端为 not_supported；I/O、保存取消、主动中止及执行过期为 not_succeeded；传输超时为 timeout。先调用回调再拒绝现代 Promise，只终结一次。not_enabled 表示明确关闭下载功能；not_whitelisted 仅用于宿主实际存在的扩展名政策，Demo 不新增白名单。执行过期不表示功能关闭，成功仍须等文件提交。见[错误分类](compatibility/downloads.md#error-causes)。
 
 Demo GM 下载与 GM XHR 使用同一个 CEF HTTP 服务及 RequestContext，继承浏览器登录凭据、匿名语义、重定向授权及配置的 webRequest 组合。内容通过有界缓冲流入临时文件，再提交到 Data/Downloads 或用户选择的位置；失败和取消先清理临时文件，再通知终态。下载由宿主策略授权，不应用 XHR 的 @connect 列表，也没有扩展名白名单偏好设置。
 
@@ -749,19 +754,19 @@ window.addEventListener("urlchange", onRoute);
 
 | 方面 | 迁移时的处理 |
 | --- | --- |
-| 执行边界 | 将脚本和页面视为可信的页面世界代码，不具有扩展沙箱或保证的 CSP 绕过。 |
+| 执行边界 | DOM/content 使用每脚本隔离世界；raw 权限需宿主信任。严格 start、OOPIF、透明 BFCache 恢复及通用 CSP 绕过不可用。 |
 | 授权 | info 默认可用，旧式全局需要精确声明；现代 API 家族按固定 5.5.1 实测开放。 |
 | 时机 / SPA | 不依赖保证的 document-start 或历史导航后的自动重跑。 |
 | 子域名匹配 | `*.domain` 的 match 模式包含裸域名及其所有层级的子域名。 |
 | 存储 | 使用支持的存储值，await 现代写入以观察失败，并考虑镜像限额、本地同步监听及远端提交通知的时序。 |
-| 资源 | 使用 `GM.getResourceUrl` 或 `GM.getResourceUrl`，声明任一对应 grant，按 data URL 处理，并确认宿主资源提供器可用。 |
-| XHR | 检查代理/分区等不支持项，适配进度/XML 行为，显式检查 HTTP 状态。 |
+| 资源 | 使用 GM_getResourceURL 或 GM.getResourceUrl 及对应 grant；按 data URL 和已准备资源处理。 |
+| XHR | 默认 CEF 拒绝显式 Cookie 和请求分区；proxy 是 Firefox-only。适配 progress/XML 并检查 HTTP 状态。 |
 | 菜单 / 剪贴板 | 菜单选项及 ID 更新、通知交互完成、文本/HTML 剪贴板 info 与回调重载。 |
-| 通知 | 只使用支持字段；现代 Promise 在注册后兑现，而非关闭后。 |
-| 标签页 | 两种形式都立即返回句柄；通过 close/onclose 操作，不支持隐私模式和数字插入位置。 |
+| 通知 | 现代 Promise 等待完成并兑现点击状态；点击/tag/导航对照限制仍公开保留。 |
+| 标签页 | 现代返回 Promise，旧版立即返回句柄；Demo 支持数字插入和真实私密上下文，通过 close/onclose 操作。 |
 | 下载 | 立即返回带 abort 的完成 Promise；Demo 共用浏览器网络上下文，文件提交后才完成。 |
 | Cookie | 121/151 支持分区 CRUD；请求 cookiePartition、firstPartyDomain 及变更监听仍不可用。 |
-| webRequest | 改写动作对象及回调，显式注册运行时规则并保留移除句柄。 |
+| webRequest | 历史 MV2 目标；官方 selector/cancel/redirect、返回 void，重新注册替换或 [] 撤销；历史 TM 差分仍 pending。 |
 | 其他管理器 API | 不内置扩展专属内容/部署 API；未知授权不会增加它们。音频按上文提供部分能力。 |
 
 这张表描述支持的约定及已知差异，不保证任意 Tampermonkey 脚本都能原样运行。应在实际宿主应用中验证所用功能。

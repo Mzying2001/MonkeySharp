@@ -37,6 +37,17 @@ async function waitFor(predicate) {
 }
 const starts = harness => harness.requests.filter(request => request.params.operation === "start");
 
+test('download errors distinguish permission, expired execution and unsupported controls', async () => {
+    for (const [code, reason] of [['MSP005_PERMISSION_DENIED', 'not_permitted'], ['MSP003_SESSION_EXPIRED', 'not_succeeded'], ['MSP006_NOT_SUPPORTED', 'not_supported']]) {
+        const h = await install(() => { throw Object.assign(new Error('failure detail'), { code }); });
+        const events = [];
+        const promise = h.modern({ url: 'https://example.com/file', onerror(error) { events.push(error.error); } });
+        await assert.rejects(promise, error => error.error === reason && error.details === 'failure detail' && error.code === code);
+        events.push('rejected');
+        assert.deepEqual(events, [reason, 'rejected']);
+    }
+});
+
 test("modern download returns its abortable completion Promise before starting", async () => {
     const h = await install();
     const events = [];

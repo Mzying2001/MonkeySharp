@@ -211,7 +211,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                         unavailableCapabilities: _options.EnableDefaultNetworkServices ? null : new Dictionary<string, string>
                         {
                             ["GM.xmlHttpRequest"] = "policy-disabled", ["GM.cookie"] = "policy-disabled", ["GM.webRequest"] = "policy-disabled"
-                        }, capabilityStatus: _audio != null && !_audio.SupportsAudible ? new Dictionary<string, string> { ["GM.audio"] = "partial:mute-only;audible-unavailable" } : null)
+                        }, capabilityStatus: CapabilityStatus())
                 });
             var ownedServices = new List<IDisposable>();
             try
@@ -295,6 +295,33 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     ownedServices[index].Dispose();
                 throw;
             }
+        }
+
+        private IReadOnlyDictionary<string, string> CapabilityStatus()
+        {
+            var status = new Dictionary<string, string>
+            {
+                ["execution.documentStart"] = "best-effort",
+                ["execution.oopif"] = "unsupported",
+                ["execution.bfcache"] = "fresh-navigation-required",
+                ["execution.contextMenuFrame"] = "isolated-child-and-oopif-unsupported",
+                ["GM.xmlHttpRequest.cookiePartition"] = "unsupported",
+                ["GM.registerMenuCommand.clickedFrame"] = "unsupported"
+            };
+            if (_http is CefSharpHttpRequestService || _http == null && _options.EnableDefaultNetworkServices)
+                status["GM.xmlHttpRequest.cookie"] = "unsupported:cef-urlrequest";
+            if (_cookies is CefSharpCookieService || _cookies == null && _options.EnableDefaultNetworkServices)
+            {
+                var major = typeof(Cef).Assembly.GetName().Version.Major;
+                status["GM.cookie.partitionKey"] = major == 121 ? "available:without-ancestor-dimension" :
+                    major == 151 ? "available:serializable-keys" : major == 84 ? "unsupported:engine-version" : "unsupported:unverified-engine";
+            }
+            if (_audio != null && !_audio.SupportsAudible)
+            {
+                status["GM.audio"] = "partial:mute-only;audible-unavailable";
+                status["GM.audio.audible"] = "unsupported:source-unavailable";
+            }
+            return status;
         }
     }
 }

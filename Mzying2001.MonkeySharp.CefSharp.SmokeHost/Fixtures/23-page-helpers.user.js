@@ -21,6 +21,12 @@
             r.modernLog = await GM.log(cyclic, 'second', 3) === undefined;
         } finally { console.log = original; }
         r.logObjects = logs === 2 && argumentsPreserved;
+        const capabilities = GM_info.compatibility.capabilities;
+        r.capabilityFacts = capabilities['execution.documentStart'] === 'best-effort' &&
+            capabilities['execution.oopif'] === 'unsupported' && capabilities['execution.bfcache'] === 'fresh-navigation-required' &&
+            capabilities['GM.xmlHttpRequest.cookie'] === 'unsupported:cef-urlrequest' &&
+            capabilities['GM.xmlHttpRequest.cookiePartition'] === 'unsupported' &&
+            capabilities['GM.registerMenuCommand.clickedFrame'] === 'unsupported';
         const style = GM_addStyle('body { --page-helper: 19; }');
         r.style = style.nodeName === 'STYLE' && style.parentNode === document.head && getComputedStyle(document.body).getPropertyValue('--page-helper').trim() === '19';
         const node = GM_addElement('span', { textContent: 'legacy' });
