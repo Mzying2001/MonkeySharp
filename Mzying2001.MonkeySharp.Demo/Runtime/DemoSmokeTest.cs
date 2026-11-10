@@ -254,12 +254,15 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
             }
         }
 
-        internal static async Task WaitAsync(Func<Task<bool>> condition)
+        internal static async Task WaitAsync(Func<Task<bool>> condition, TimeSpan? timeout = null)
         {
-            var deadline = DateTime.UtcNow.AddSeconds(25);
+            var deadline = DateTime.UtcNow + (timeout ?? TimeSpan.FromSeconds(25));
             while (DateTime.UtcNow < deadline)
             {
-                if (await condition()) return;
+                try { if (await condition()) return; }
+                // A reload can destroy the V8 context between the ready check and evaluation.
+                // Only polling retries cancellation; direct evaluations and assertion errors still fail.
+                catch (TaskCanceledException) { }
                 await Task.Delay(150);
             }
             throw new TimeoutException("A WPF/Chromium smoke assertion timed out.");
