@@ -1,26 +1,12 @@
 # Tampermonkey contract baseline
 
-This is the target contract; each capability also has a verified scope and explicit
-limits in the [compatibility index](README.md). The minimum engine remains
-CefSharp 84.4.10, with 121.3.70 and 151.3.240 regression targets, x64 and x86;
-the WPF Demo is x64 only. Both official calling forms share capabilities but
-their declared names and return types must be preserved independently.
+This is the target contract; each capability also has a verified scope and explicit limits in the [compatibility index](README.md). The minimum engine remains CefSharp 84.4.10, with 121.3.70 and 151.3.240 regression targets, x64 and x86; the WPF Demo is x64 only. Both official calling forms share capabilities but their declared names and return types must be preserved independently.
 
-Sources are the [official API documentation](https://www.tampermonkey.net/documentation.php?locale=en),
-checked on 2026-11-06, and versioned experiments under `scripts/compatibility/evidence/`. Online
-documentation is not a frozen Tampermonkey release specification. `pending`
-means evidence is still required; existing MonkeySharp tests cannot supply it.
+Sources are the [official API documentation](https://www.tampermonkey.net/documentation.php?locale=en), checked on 2026-11-06, and versioned experiments under `scripts/compatibility/evidence/`. Online documentation is not a frozen Tampermonkey release specification. `pending` means evidence is still required; existing MonkeySharp tests cannot supply it.
 
 ## API inventory
 
-The names in each row are separate declaration spellings. Legacy globals
-require their exact name. `GM_info` and `GM.info` are implicit in the pinned runtime. Missing grants and
-`none` retain separate exposure fixtures; both expose an info-only GM object.
-Modern storage, resources, menus and tab-data operations are authorized by
-family; legacy globals retain exact declaration names. This differs from the
-original plan assumptions and is backed by the committed 5.5.1 probes.
-Resource URL spellings are intentionally different. No `GM.getResourceURL`,
-`GM.windowClose`, Cookie listener, or webRequest removal handle is a TM target.
+The names in each row are separate declaration spellings. Legacy globals require their exact name. `GM_info` and `GM.info` are implicit in the pinned runtime. Missing grants and `none` retain separate exposure fixtures; both expose an info-only GM object. Modern storage, resources, menus and tab-data operations are authorized by family; legacy globals retain exact declaration names. This differs from the original plan assumptions and is backed by the committed 5.5.1 probes. Resource URL spellings are intentionally different. No `GM.getResourceURL`, `GM.windowClose`, Cookie listener, or webRequest removal handle is a TM target.
 
 | Names / grants | Inputs / overloads | Immediate result (legacy; modern) | Callback / settlement | Backend / conditions |
 | --- | --- | --- | --- | --- |
@@ -60,19 +46,11 @@ Resource URL spellings are intentionally different. No `GM.getResourceURL`,
 
 ## Evidence and execution
 
-The [stable follow-up](p0-follow-up.md) adds pinned failure/URL/Cookie observations
-and distinguishes additional MonkeySharp guarantees from 5.5.1 behavior.
+The [stable follow-up](p0-follow-up.md) adds pinned failure/URL/Cookie observations and distinguishes additional MonkeySharp guarantees from 5.5.1 behavior.
 
 Run the same original [return probe](../../scripts/compatibility/fixtures/returns.user.js) in each manager. Its ordered log preserves immediate return shapes, microtasks, Promise settlement, DOM effects and tab closure. Separate grant installations cover missing/none, each spelling, mixed, unknown and info-only. Install only on the local test page; the probe posts JSON to `/evidence`. Interactive notification/menu effects require their own recorded checks.
 
-The original modern reference used Edge 156.0.4314.58, Tampermonkey 5.5.1 and MV3;
-the [stable follow-up](p0-follow-up.md) uses Edge 157.0.4341.42 with the same pinned
-manager. The extension requires Chromium 120, independently of MonkeySharp's 84
-baseline. The [original return record](../../scripts/compatibility/evidence/tampermonkey-5.5.1-returns.json)
-confirms modern Promise returns for DOM, menus and openInTab, and notification
-timeout resolving false. It does not establish every click/tag-replacement
-result. Delayed tab closure passed after an immediate-close observation needed
-a retry; MonkeySharp's queued early-close guarantee is documented separately.
+The original modern reference used Edge 156.0.4314.58, Tampermonkey 5.5.1 and MV3; the [stable follow-up](p0-follow-up.md) uses Edge 157.0.4341.42 with the same pinned manager. The extension requires Chromium 120, independently of MonkeySharp's 84 baseline. The [original return record](../../scripts/compatibility/evidence/tampermonkey-5.5.1-returns.json) confirms modern Promise returns for DOM, menus and openInTab, and notification timeout resolving false. It does not establish every click/tag-replacement result. Delayed tab closure passed after an immediate-close observation needed a retry; MonkeySharp's queued early-close guarantee is documented separately.
 
 The historical MV2 reference remains unavailable. Immediate webRequest void returns and first-match overlap behavior are implementation decisions awaiting that comparison, not established differential parity. Do not install the pinned modern extension on Chromium 84 or count MV3 webRequest absence as a MonkeySharp failure.
 

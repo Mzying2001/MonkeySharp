@@ -1,9 +1,6 @@
 # Execution worlds and lifecycle evidence
 
-URL listeners share execution-owned registration and cleanup with other window
-listeners. `once`, signal, capture identity and per-callback exception isolation
-apply; URL notifications remain plain objects and are never replayed from the
-DOMContentLoaded/load cache. See [URL guarantees and pinned differences](../usage-guide.md#window-extensions).
+URL listeners share execution-owned registration and cleanup with other window listeners. `once`, signal, capture identity and per-callback exception isolation apply; URL notifications remain plain objects and are never replayed from the DOMContentLoaded/load cache. See [URL guarantees and pinned differences](../usage-guide.md#window-extensions).
 
 The adapter now executes `@sandbox DOM` / `@inject-into content` in per-installation, per-revision isolated worlds. Native CDP frame/loader/context events establish ownership. Source and delivery use a remote global-object ID tied to a context generation. Binding packets must belong to that native context's script and document before reaching the normal grant/permission gateway; the page binding rejects isolated proofs. CEF frame IDs are not cast into CDP IDs.
 

@@ -25,9 +25,7 @@ See [resource preparation](../integration-reference.md#resource-integrity-and-up
 
 ## Matching and permissions
 
-The default HTTP backend rejects explicit `cookie` and `headers.Cookie` before
-sending; native URLRequest ignored their requested values on 84/121/151. Ordinary
-jar-based authentication is retained. See [Cookie scope](cookies.md#explicit-request-cookies).
+The default HTTP backend rejects explicit `cookie` and `headers.Cookie` before sending; native URLRequest ignored their requested values on 84/121/151. Ordinary jar-based authentication is retained. See [Cookie scope](cookies.md#explicit-request-cookies).
 
 Prepared URL/run-in rules are reused across frames. URL regular expressions use a bounded ECMAScript subset; unsupported syntax fails installation and timeouts fail closed. Unicode `@match` host declarations are diagnosed; use Punycode. Manual context-menu execution ignores include/exclude while retaining match/exclude-match, frame, privacy and trust checks.
 

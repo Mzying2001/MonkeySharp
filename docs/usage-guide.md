@@ -150,25 +150,13 @@ The Demo's manual updater checks `@updateURL` before `@downloadURL`, and install
 
 ## Execution, grants, and compatibility
 
-There is one contract. [Pinned Tampermonkey 5.5.1 evidence](compatibility/api-contract.md)
-confirms that missing grants, `none`, unknown grants and info-only declarations
-expose `GM_info` and `GM.info`. These declarations remain distinct in metadata.
-`unsafeWindow` is absent with `none`; otherwise it refers to the page global.
+There is one contract. [Pinned Tampermonkey 5.5.1 evidence](compatibility/api-contract.md) confirms that missing grants, `none`, unknown grants and info-only declarations expose `GM_info` and `GM.info`. These declarations remain distinct in metadata. `unsafeWindow` is absent with `none`; otherwise it refers to the page global.
 
-Legacy `GM_*` names require their exact declarations. Modern storage, resource,
-menu and tab-data APIs are granted as families, matching the pinned runtime:
-`GM_getValue` also enables modern storage writes, but does not expose the
-undeclared `GM_setValue` global. Other families remain ungranted. Providers and
-host policy still determine whether operations are available and permitted.
+Legacy `GM_*` names require their exact declarations. Modern storage, resource, menu and tab-data APIs are granted as families, matching the pinned runtime: `GM_getValue` also enables modern storage writes, but does not expose the undeclared `GM_setValue` global. Other families remain ungranted. Providers and host policy still determine whether operations are available and permitted.
 
-Calling style does not force strictness or select a world. Source directives
-control strictness. Top-level this is the window facade, except `none` uses a
-separate object receiver as observed in 5.5.1. Raw/default and Chromium JavaScript access use the page world; DOM access uses a per-script isolated world and native context-authenticated dispatch. Conflicting unsafeWindow/DOM requirements and unsupported unwrap fail before source execution. Document-start remains best effort, and guaranteed timing
-requirements fail explicitly.
+Calling style does not force strictness or select a world. Source directives control strictness. Top-level this is the window facade, except `none` uses a separate object receiver as observed in 5.5.1. Raw/default and Chromium JavaScript access use the page world; DOM access uses a per-script isolated world and native context-authenticated dispatch. Conflicting unsafeWindow/DOM requirements and unsupported unwrap fail before source execution. Document-start remains best effort, and guaranteed timing requirements fail explicitly.
 
-Legacy synchronous storage/resource reads require complete snapshots. Preparation uses complete chunked snapshots with a 64 MiB total bootstrap budget and a five-second host snapshot timeout. Host-backed UI APIs require
-their services. [Integration details](integration-reference.md#api-contract-and-grants)
-describe trust, providers and actual environment facts.
+Legacy synchronous storage/resource reads require complete snapshots. Preparation uses complete chunked snapshots with a 64 MiB total bootstrap budget and a five-second host snapshot timeout. Host-backed UI APIs require their services. [Integration details](integration-reference.md#api-contract-and-grants) describe trust, providers and actual environment facts.
 
 ### Native isolated execution and lifecycle
 
@@ -214,15 +202,7 @@ Each row requires its capability family or exact legacy declaration unless state
 
 ## Information and logging
 
-The default adapter reports known limits through `GM.info.compatibility.capabilities`:
-`execution.documentStart` (best-effort), `execution.oopif` (unsupported),
-`execution.bfcache` (fresh navigation required), `execution.contextMenuFrame`
-(isolated child/OOPIF unavailable), `GM.xmlHttpRequest.cookie` and `.cookiePartition`,
-`GM.cookie.partitionKey` (84 unsupported, 121 without ancestor dimension, 151
-serializable keys), `GM.audio.audible` (unavailable without a reliable source)
-and `GM.registerMenuCommand.clickedFrame` (unsupported). Missing custom-backend
-facts are omitted, not inferred to be supported. API availability alone does not
-establish these subfeatures.
+The default adapter reports known limits through `GM.info.compatibility.capabilities`: `execution.documentStart` (best-effort), `execution.oopif` (unsupported), `execution.bfcache` (fresh navigation required), `execution.contextMenuFrame` (isolated child/OOPIF unavailable), `GM.xmlHttpRequest.cookie` and `.cookiePartition`, `GM.cookie.partitionKey` (84 unsupported, 121 without ancestor dimension, 151 serializable keys), `GM.audio.audible` (unavailable without a reliable source) and `GM.registerMenuCommand.clickedFrame` (unsupported). Missing custom-backend facts are omitted, not inferred to be supported. API availability alone does not establish these subfeatures.
 
 ### GM.info / GM_info
 

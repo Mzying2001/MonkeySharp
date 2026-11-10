@@ -53,25 +53,11 @@ node scripts/compatibility/Run-Corpus.cjs --manager monkeysharp --host C:/path/t
 node scripts/compatibility/Run-Corpus.cjs --manager tampermonkey --browser C:/path/to/msedge.exe --extension C:/path/to/tampermonkey --output artifacts/corpus/reference-run
 ```
 
-`Run-Corpus.ps1` accepts `-Platform`, `-CefSharpVersion`, `-OutputDirectory` and
-`-NoBuild`. Do not share native outputs between versions/platforms. `Run-Corpus.cjs`
-accepts `--case <scenario-id>` to select one scenario, `--environment <JSON>` for
-a complete reference pin, `--headed true` for manual browser interaction and
-`--permission-wait-ms <milliseconds>` to allow a manual download permission step.
-Do not treat elapsed time as permission. Output directories must be new.
+`Run-Corpus.ps1` accepts `-Platform`, `-CefSharpVersion`, `-OutputDirectory` and `-NoBuild`. Do not share native outputs between versions/platforms. `Run-Corpus.cjs` accepts `--case <scenario-id>` to select one scenario, `--environment <JSON>` for a complete reference pin, `--headed true` for manual browser interaction and `--permission-wait-ms <milliseconds>` to allow a manual download permission step. Do not treat elapsed time as permission. Output directories must be new.
 
-`results.json` contains schema-1 differential records under `results`, including
-source/action/input hashes, environment and source patch, actual completed
-actions, failed action, checks, file/ZIP-entry hashes, diagnostics and server
-Cookie/method/status logs. Raw profiles, inputs and host logs stay beside it.
-Exit 0 accepts only `passed` and the explicitly recognized
-`expected-engine-limitation`; blocked/failed results exit 1. Manifest intake
-`ready` is separate from runtime status. The pinned corpus has seven main
-categories plus CSP, cancel and host-denial variants. See [scenario scope](corpus/README.md).
+`results.json` contains schema-1 differential records under `results`, including source/action/input hashes, environment and source patch, actual completed actions, failed action, checks, file/ZIP-entry hashes, diagnostics and server Cookie/method/status logs. Raw profiles, inputs and host logs stay beside it. Exit 0 accepts only `passed` and the explicitly recognized `expected-engine-limitation`; blocked/failed results exit 1. Manifest intake `ready` is separate from runtime status. The pinned corpus has seven main categories plus CSP, cancel and host-denial variants. See [scenario scope](corpus/README.md).
 
-Baseline runs the source corpus. Delivery additionally runs it through every
-NuGet-only consumer; `-CorpusScript` remains the separate historical optional
-local-search script. Package-only diagnostics still do not establish full M1.
+Baseline runs the source corpus. Delivery additionally runs it through every NuGet-only consumer; `-CorpusScript` remains the separate historical optional local-search script. Package-only diagnostics still do not establish full M1.
 
 ## Maintaining shared inputs
 

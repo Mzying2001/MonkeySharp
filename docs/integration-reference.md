@@ -6,12 +6,7 @@ This reference collects the compatibility, network API, host service, migration,
 
 ## CefSharp Version Compatibility
 
-For the complete compatibility delivery gate, run `scripts/compatibility/Run-Delivery.ps1`.
-It uses separate short-path checkouts for every native version/platform, verifies
-NuGet contents, then runs a public-API Chromium consumer against unique package
-versions. `-CorpusScript <path>` installs an existing local script unchanged.
-See the [delivery record](compatibility/validation.md) for scope, provenance and
-remaining limits. `-PackageOnly` skips baseline checks and is diagnostic only.
+For the complete compatibility delivery gate, run `scripts/compatibility/Run-Delivery.ps1`. It uses separate short-path checkouts for every native version/platform, verifies NuGet contents, then runs a public-API Chromium consumer against unique package versions. `-CorpusScript <path>` installs an existing local script unchanged. See the [delivery record](compatibility/validation.md) for scope, provenance and remaining limits. `-PackageOnly` skips baseline checks and is diagnostic only.
 
 The adapter cannot support arbitrary CefSharp versions from one binary. CefSharp assemblies are strong-named, and public interfaces have changed between releases. For example, `IBrowser.GetFrame(long)` became `GetFrameByIdentifier(string)`, while `IFrame.Identifier` changed from `long` to `string`.
 
@@ -28,20 +23,9 @@ CI runs only on pull requests targeting `dev` or `main` and verifies `84.4.10`, 
 
 ## API Contract and Grants
 
-MonkeySharp has one userscript contract, with both official calling forms.
-The [pinned 5.5.1 experiments](compatibility/api-contract.md) determine exposure:
-legacy globals require their exact declared names; modern storage, resource,
-menu and tab-data methods are authorized as families. For example, granting
-`GM_getValue` exposes that legacy name and the modern storage family, including
-`GM.setValue`, but does not expose the undeclared `GM_setValue` global.
+MonkeySharp has one userscript contract, with both official calling forms. The [pinned 5.5.1 experiments](compatibility/api-contract.md) determine exposure: legacy globals require their exact declared names; modern storage, resource, menu and tab-data methods are authorized as families. For example, granting `GM_getValue` exposes that legacy name and the modern storage family, including `GM.setValue`, but does not expose the undeclared `GM_setValue` global.
 
-Missing grants, explicit `none`, unknown and info-only declarations retain
-their original metadata states. All expose `GM_info` and `GM.info` in the pinned
-runtime. `unsafeWindow` is absent for `none`; other declarations expose the
-page global. The wrapper preserves source `"use strict"` directives; calling
-style never selects strictness or execution world. Top-level `this` is the
-window facade except for `none`, which has a separate object receiver as
-observed in the reference. Production DOM execution now uses per-script isolated CDP contexts; see [world and lifecycle evidence](compatibility/execution-worlds.md).
+Missing grants, explicit `none`, unknown and info-only declarations retain their original metadata states. All expose `GM_info` and `GM.info` in the pinned runtime. `unsafeWindow` is absent for `none`; other declarations expose the page global. The wrapper preserves source `"use strict"` directives; calling style never selects strictness or execution world. Top-level `this` is the window facade except for `none`, which has a separate object receiver as observed in the reference. Production DOM execution now uses per-script isolated CDP contexts; see [world and lifecycle evidence](compatibility/execution-worlds.md).
 
 ```csharp
 var repository = new InMemoryUserScriptRepository();
@@ -50,26 +34,11 @@ var host = new CefSharpUserScriptHostBuilder(repository)
     .Build();
 ```
 
-`TrustedPageWorld` defaults to false. Privileged executions require verified
-integrity or explicit page-world trust; info-only scripts skip bridge binding.
-Legacy storage and resources consume prepared snapshots with bounded budgets.
-There are no profile, alias-parsing, legacy-global or snapshot enable switches.
-Dependencies require a provider regardless of API spelling; missing dependencies
-skip execution with `MSR401_DEPENDENCY_PROVIDER_UNAVAILABLE`.
+`TrustedPageWorld` defaults to false. Privileged executions require verified integrity or explicit page-world trust; info-only scripts skip bridge binding. Legacy storage and resources consume prepared snapshots with bounded budgets. There are no profile, alias-parsing, legacy-global or snapshot enable switches. Dependencies require a provider regardless of API spelling; missing dependencies skip execution with `MSR401_DEPENDENCY_PROVIDER_UNAVAILABLE`.
 
-`IDownloadService.DownloadMode` reports the implemented native/browser/disabled
-backend semantics. `IsIncognito` resolves actual context state, and
-`AutomaticallyUpdatesScripts` reports actual host policy. Unknown states are
-omitted from info. The Demo reports each tab's actual normal/private context and manual-only
-update policy. `GM.info.version` is the manager assembly version; script
-version remains in `GM.info.script.version`. API availability and explicit
-policy/engine reasons are recorded in `GM.info.compatibility.capabilities`.
+`IDownloadService.DownloadMode` reports the implemented native/browser/disabled backend semantics. `IsIncognito` resolves actual context state, and `AutomaticallyUpdatesScripts` reports actual host policy. Unknown states are omitted from info. The Demo reports each tab's actual normal/private context and manual-only update policy. `GM.info.version` is the manager assembly version; script version remains in `GM.info.script.version`. API availability and explicit policy/engine reasons are recorded in `GM.info.compatibility.capabilities`.
 
-This same map includes adapter facts for strict start, OOPIF, BFCache, manual
-menu frame routing, explicit/request-partition cookies, versioned partition
-CRUD, audible and clickedFrame. Custom `UserScriptExecutionEnvironment`
-`capabilityStatus` keys are preserved, including subfeatures; supply only facts
-the host can establish. See [the script-facing key list](usage-guide.md#information-and-logging).
+This same map includes adapter facts for strict start, OOPIF, BFCache, manual menu frame routing, explicit/request-partition cookies, versioned partition CRUD, audible and clickedFrame. Custom `UserScriptExecutionEnvironment` `capabilityStatus` keys are preserved, including subfeatures; supply only facts the host can establish. See [the script-facing key list](usage-guide.md#information-and-logging).
 
 ## Resource Integrity and Update Checks
 
@@ -111,9 +80,7 @@ Generic execution timeout starts after authorization. CEF transfer and download 
 
 ## Network APIs
 
-The [stable follow-up assessment](compatibility/m1-report.md) records the
-37-row API review, pinned corpus and native/package delivery scope. Its full M1
-acceptance remains incomplete while fixed-reference interaction evidence is missing.
+The [stable follow-up assessment](compatibility/m1-report.md) records the 37-row API review, pinned corpus and native/package delivery scope. Its full M1 acceptance remains incomplete while fixed-reference interaction evidence is missing.
 
 The CefSharp host supplies default `GM.xmlHttpRequest`, `GM.cookie`, and `GM.webRequest` services. Set `EnableDefaultNetworkServices = false` to require explicit providers, or use `UseHttpRequestService`, `UseCookieService`, and `UseWebRequestService` to replace individual defaults.
 
@@ -320,11 +287,7 @@ OpenTabRequest supports adjacent Insert and absolute InsertIndex (the index wins
 
 ## Lifecycle and Diagnostics
 
-`PrepareAsync()` prepares the attachment's shared CDP session;
-`NavigateAsync(url)` waits for it before navigating. Start the browser at
-`about:blank` when using this sequence. `IsLateAttach` and `IsLatePreparation`
-identify initialization that already occurred. These APIs do not upgrade
-userscript timing guarantees. See the [real protocol findings](compatibility/execution-worlds.md#protocol-session-and-preparation).
+`PrepareAsync()` prepares the attachment's shared CDP session; `NavigateAsync(url)` waits for it before navigating. Start the browser at `about:blank` when using this sequence. `IsLateAttach` and `IsLatePreparation` identify initialization that already occurred. These APIs do not upgrade userscript timing guarantees. See the [real protocol findings](compatibility/execution-worlds.md#protocol-session-and-preparation).
 
 The adapter creates an identity per frame document and executes each `(document, frame, script, run-at)` once. `@run-at context-menu` scripts are listed by the native CefSharp context menu for the matching frame and execute a fresh invocation only after the user selects an entry. Navigation, context release and detach invalidate document capabilities and pending calls. Accepted downloads continue as host tasks with document callbacks muted; host disposal cancels them.
 
@@ -361,16 +324,11 @@ Call PrepareAsync/NavigateAsync from an about:blank control for early preparatio
 
 ## Bridge Protocol
 
-Bridge protocol 2 is the single current protocol. Old and unknown versions are
-rejected; no compatibility transport is retained. CEF frame/version adaptation,
-storage encodings and persistent installation identities remain unchanged.
+Bridge protocol 2 is the single current protocol. Old and unknown versions are rejected; no compatibility transport is retained. CEF frame/version adaptation, storage encodings and persistent installation identities remain unchanged.
 
 ## Build, Package, and Verify
 
-The [Tampermonkey contract inventory](compatibility/api-contract.md) separates
-target behavior from versioned evidence. Run `scripts/compatibility/Run-Baseline.ps1`
-for the clean 84/x64 baseline, including the WPF Demo. CI runs the Demo on
-84/x64, 121/x64 and 151/x64; its report verifies the actual assembly version and architecture.
+The [Tampermonkey contract inventory](compatibility/api-contract.md) separates target behavior from versioned evidence. Run `scripts/compatibility/Run-Baseline.ps1` for the clean 84/x64 baseline, including the WPF Demo. CI runs the Demo on 84/x64, 121/x64 and 151/x64; its report verifies the actual assembly version and architecture.
 
 CI's verified toolchain is Windows Server 2022, .NET SDK `9.0.315`, and Node.js `24`. These are tested versions, not a statement of minimum requirements. Use an SDK that supports `MonkeySharp.slnx`; Core tests target `net8.0`, while CefSharp tests and applications target `net462`. Real-Chromium gates require a Windows desktop session.
 

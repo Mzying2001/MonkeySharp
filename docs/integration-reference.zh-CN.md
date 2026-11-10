@@ -23,15 +23,9 @@ CI 仅在目标分支为 `dev` 或 `main` 的 PR 上触发，针对 x64 和 x86 
 
 ## 授权与 API 契约
 
-MonkeySharp 只有一套用户脚本契约，保留两种官方调用形式。
-[固定 5.5.1 实测](compatibility/api-contract.md) 决定暴露规则：旧式全局需要精确声明名；
-现代存储、资源、菜单和标签数据 API 按家族授权。例如 `GM_getValue` 声明会提供该旧式名称，
-以及含 `GM.setValue` 的现代存储家族，但不会提供未声明的 `GM_setValue` 全局。
+MonkeySharp 只有一套用户脚本契约，保留两种官方调用形式。[固定 5.5.1 实测](compatibility/api-contract.md) 决定暴露规则：旧式全局需要精确声明名；现代存储、资源、菜单和标签数据 API 按家族授权。例如 `GM_getValue` 声明会提供该旧式名称，以及含 `GM.setValue` 的现代存储家族，但不会提供未声明的 `GM_setValue` 全局。
 
-未声明、显式 none、未知授权和 info-only 保留各自元数据状态。固定对照环境在这些情况下
-均提供 `GM_info` 和 `GM.info`。none 不提供 unsafeWindow，其余声明可访问页面 global。
-包装器尊重源码自身的 `"use strict"`，调用风格不选择 strict 或执行世界。
-顶层 this 是 window 门面；none 按实测使用独立对象 receiver。DOM/content 执行使用每脚本原生隔离世界；raw 保持页面世界。
+未声明、显式 none、未知授权和 info-only 保留各自元数据状态。固定对照环境在这些情况下均提供 `GM_info` 和 `GM.info`。none 不提供 unsafeWindow，其余声明可访问页面 global。包装器尊重源码自身的 `"use strict"`，调用风格不选择 strict 或执行世界。顶层 this 是 window 门面；none 按实测使用独立对象 receiver。DOM/content 执行使用每脚本原生隔离世界；raw 保持页面世界。
 
 ```csharp
 var repository = new InMemoryUserScriptRepository();
@@ -40,14 +34,9 @@ var host = new CefSharpUserScriptHostBuilder(repository)
     .Build();
 ```
 
-TrustedPageWorld 默认关闭；特权执行需要可信桥或宿主显式信任页面。仅 info 的脚本跳过桥接。
-旧式同步存储和资源使用有界准备快照。不再提供 profile、别名解析、旧式全局或快照启用开关。
-任何调用风格下，require 缺少提供器都会以 `MSR401_DEPENDENCY_PROVIDER_UNAVAILABLE` 跳过执行。
+TrustedPageWorld 默认关闭；特权执行需要可信桥或宿主显式信任页面。仅 info 的脚本跳过桥接。旧式同步存储和资源使用有界准备快照。不再提供 profile、别名解析、旧式全局或快照启用开关。任何调用风格下，require 缺少提供器都会以 `MSR401_DEPENDENCY_PROVIDER_UNAVAILABLE` 跳过执行。
 
-`IDownloadService.DownloadMode` 报告后端实际语义。`IsIncognito` 从实际 context 解析私密状态，
-`AutomaticallyUpdatesScripts` 报告真实更新策略；未知状态不写入 info。Demo 明确报告其共享普通
-context 和仅手动更新策略。`GM.info.version` 是管理器程序集版本，脚本版本位于 `script.version`。
-`GM.info.compatibility.capabilities` 记录 API 是否可用及明确的政策、引擎限制原因。
+`IDownloadService.DownloadMode` 报告后端实际语义。`IsIncognito` 从实际 context 解析私密状态，`AutomaticallyUpdatesScripts` 报告真实更新策略；未知状态不写入 info。Demo 明确报告其共享普通 context 和仅手动更新策略。`GM.info.version` 是管理器程序集版本，脚本版本位于 `script.version`。`GM.info.compatibility.capabilities` 记录 API 是否可用及明确的政策、引擎限制原因。
 
 稳定后续改进的 37 项 API 核对、固定语料和原生/包消费范围见[交付评估](compatibility/m1-report.zh-CN.md)；固定参考交互证据未补齐时，完整 M1 保持未完成。
 
@@ -300,16 +289,11 @@ OpenTabRequest 支持相邻 Insert 和优先使用的绝对 InsertIndex。服务
 
 ## 生命周期与诊断
 
-`PrepareAsync()` 准备当前附加会话的共享 CDP；`NavigateAsync(url)` 等待准备后导航。
-使用该顺序时，浏览器应以 `about:blank` 初始化。`IsLateAttach` 与 `IsLatePreparation`
-分别标记附加、准备发生时初始化已完成。这些 API 不提高用户脚本的时序保证。
-参见[真实协议实验结论](compatibility/execution-worlds.md#protocol-session-and-preparation)。
+`PrepareAsync()` 准备当前附加会话的共享 CDP；`NavigateAsync(url)` 等待准备后导航。使用该顺序时，浏览器应以 `about:blank` 初始化。`IsLateAttach` 与 `IsLatePreparation` 分别标记附加、准备发生时初始化已完成。这些 API 不提高用户脚本的时序保证。参见[真实协议实验结论](compatibility/execution-worlds.md#protocol-session-and-preparation)。
 
 适配器为每个框架文档建立身份，并对每个 `(document, frame, script, run-at)` 组合执行一次。`@run-at context-menu` 脚本会按当前 frame 匹配规则出现在 CefSharp 原生上下文菜单中，只有用户选择菜单项后才创建一次新的执行。导航、上下文释放和分离使文档能力失效并取消待处理调用；已接受下载继续作为宿主任务运行，文档回调停止。宿主释放时取消这些任务。
 
-GM.info 和 GM_info 无需单独授权，始终引用同一个深度冻结快照。声明状态与原始授权列表保持不变。
-compatibility 块的 contractVersion 为 2，记录真实执行世界、可用 API 及字段来源。管理器版本来自程序集；
-下载模式来自服务，私密状态和更新策略未知时省略；不再提供 position/blockers 占位值。
+GM.info 和 GM_info 无需单独授权，始终引用同一个深度冻结快照。声明状态与原始授权列表保持不变。compatibility 块的 contractVersion 为 2，记录真实执行世界、可用 API 及字段来源。管理器版本来自程序集；下载模式来自服务，私密状态和更新策略未知时省略；不再提供 position/blockers 占位值。
 
 CefSharp 只能提供尽力而为的 document-start 钩子。相应执行产生 `MSR100_DOCUMENT_START_BEST_EFFORT`；设置 `RequireGuaranteedDocumentStart = true` 后会跳过并产生 `MSR101_DOCUMENT_START_UNAVAILABLE`。
 
@@ -344,14 +328,11 @@ document-idle 在 DOMContentLoaded 后调度，不等待缓慢资源的 load。�
 
 ## 桥协议
 
-当前仅支持桥协议 2，旧版本和未知版本均被拒绝，不保留兼容传输。必要的 CEF 版本适配、
-值编码和持久化安装身份保持有效。
+当前仅支持桥协议 2，旧版本和未知版本均被拒绝，不保留兼容传输。必要的 CEF 版本适配、值编码和持久化安装身份保持有效。
 
 ## 构建、打包与验证
 
-[Tampermonkey 契约清单](compatibility/api-contract.md) 区分目标行为与版本化实测证据。
-运行 `scripts/compatibility/Run-Baseline.ps1` 可清理并验证 84/x64 基线（含 WPF Demo）。
-CI 覆盖 84/x64、121/x64 和 151/x64 的 Demo；报告核验实际程序集版本与进程架构。
+[Tampermonkey 契约清单](compatibility/api-contract.md) 区分目标行为与版本化实测证据。运行 `scripts/compatibility/Run-Baseline.ps1` 可清理并验证 84/x64 基线（含 WPF Demo）。CI 覆盖 84/x64、121/x64 和 151/x64 的 Demo；报告核验实际程序集版本与进程架构。
 
 CI 已验证的工具链为 Windows Server 2022、.NET SDK `9.0.315` 和 Node.js `24`。这些是已测试版本，不代表最低要求。SDK 需要支持 `MonkeySharp.slnx`；Core 测试目标为 `net8.0`，CefSharp 测试及应用程序目标为 `net462`。真实 Chromium 验证需要 Windows 桌面会话。
 

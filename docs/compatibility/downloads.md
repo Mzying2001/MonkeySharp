@@ -8,15 +8,7 @@ Accepted tasks continue across document end, navigation, script disable and unin
 
 ## Error causes
 
-Permission/grant denial maps to `not_permitted`, unsupported options/backend to
-`not_supported`, I/O/cancellation/expired execution to `not_succeeded`, and
-timeout to `timeout`. Callback delivery precedes Promise rejection and only one
-terminal result is delivered. Structured host errors retain their cause/details.
-`not_whitelisted` is reserved for an actual filename-extension policy; the Demo
-does not introduce one. `not_enabled` describes a disabled download feature,
-not session expiry. Native save cancellation and disk failure remain separately
-diagnosable through details. Reference permission/UI cases still marked blocked
-are not claimed as differential passes.
+Permission/grant denial maps to `not_permitted`, unsupported options/backend to `not_supported`, I/O/cancellation/expired execution to `not_succeeded`, and timeout to `timeout`. Callback delivery precedes Promise rejection and only one terminal result is delivered. Structured host errors retain their cause/details. `not_whitelisted` is reserved for an actual filename-extension policy; the Demo does not introduce one. `not_enabled` describes a disabled download feature, not session expiry. Native save cancellation and disk failure remain separately diagnosable through details. Reference permission/UI cases still marked blocked are not claimed as differential passes.
 
 ## Binary inputs and completion
 

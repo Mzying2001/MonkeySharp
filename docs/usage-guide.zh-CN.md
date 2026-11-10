@@ -156,20 +156,13 @@ Demo 手动更新时优先从 `@updateURL` 检查，其次使用 `@downloadURL`�
 
 ## 执行、授权与兼容性
 
-现在只有一套契约。[固定 Tampermonkey 5.5.1 证据](compatibility/api-contract.md) 确认：
-未声明、none、未知授权和 info-only 均提供 GM_info 与 GM.info，但保留不同元数据状态。
-none 不提供 unsafeWindow；其他情况指向页面 global。
+现在只有一套契约。[固定 Tampermonkey 5.5.1 证据](compatibility/api-contract.md) 确认：未声明、none、未知授权和 info-only 均提供 GM_info 与 GM.info，但保留不同元数据状态。none 不提供 unsafeWindow；其他情况指向页面 global。
 
-旧式 GM_* 名称需要精确声明。现代存储、资源、菜单和标签数据 API 按家族开放：
-GM_getValue 还允许现代存储写入，但不会暴露未声明的 GM_setValue 全局，也不授权其他家族。
-宿主服务和权限政策仍决定操作是否可用、是否获准。
+旧式 GM_* 名称需要精确声明。现代存储、资源、菜单和标签数据 API 按家族开放：GM_getValue 还允许现代存储写入，但不会暴露未声明的 GM_setValue 全局，也不授权其他家族。宿主服务和权限政策仍决定操作是否可用、是否获准。
 
-调用风格不强制 strict，也不选择世界；strict 由源码指令决定。顶层 this 为 window 门面，
-但 none 使用固定 5.5.1 对照观察到的独立对象作为接收者。DOM/content 使用每脚本独立世界和原生 context 验证的派发；raw/默认/Chromium JavaScript 使用受宿主信任政策约束的页面世界。
-DOM 与 unsafeWindow 冲突、未支持的 unwrap 会在源码执行前拒绝。隔离世界提供脚本全局和派发身份边界，不是操作系统沙箱。document-start 保持 best effort，显式要求保证时拒绝执行。
+调用风格不强制 strict，也不选择世界；strict 由源码指令决定。顶层 this 为 window 门面，但 none 使用固定 5.5.1 对照观察到的独立对象作为接收者。DOM/content 使用每脚本独立世界和原生 context 验证的派发；raw/默认/Chromium JavaScript 使用受宿主信任政策约束的页面世界。DOM 与 unsafeWindow 冲突、未支持的 unwrap 会在源码执行前拒绝。隔离世界提供脚本全局和派发身份边界，不是操作系统沙箱。document-start 保持 best effort，显式要求保证时拒绝执行。
 
-旧式同步存储和资源依赖完整快照，总序列化预算默认 64 MiB、每份快照准备超时 5 秒；单条桥接消息默认 1 MiB，较大快照完整分块传输。宿主交互需要对应服务。
-[集成说明](integration-reference.zh-CN.md#授权与-api-契约) 说明信任、服务和真实环境信息。
+旧式同步存储和资源依赖完整快照，总序列化预算默认 64 MiB、每份快照准备超时 5 秒；单条桥接消息默认 1 MiB，较大快照完整分块传输。宿主交互需要对应服务。[集成说明](integration-reference.zh-CN.md#授权与-api-契约) 说明信任、服务和真实环境信息。
 
 ### 原生隔离世界与生命周期
 

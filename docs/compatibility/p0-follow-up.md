@@ -1,8 +1,6 @@
 # Stable compatibility follow-up (2026-11-10)
 
-This tracks steps 21–27. The reference is Tampermonkey 5.5.1/MV3 (Chromium 120
-minimum), independently of MonkeySharp's CefSharp 84.4.10 baseline. New runs use
-Edge 157.0.4341.42 and fresh profiles. Historical evidence is retained.
+This tracks steps 21–27. The reference is Tampermonkey 5.5.1/MV3 (Chromium 120 minimum), independently of MonkeySharp's CefSharp 84.4.10 baseline. New runs use Edge 157.0.4341.42 and fresh profiles. Historical evidence is retained.
 
 | Step | Scope and current result |
 | --- | --- |
@@ -16,60 +14,24 @@ Edge 157.0.4341.42 and fresh profiles. Historical evidence is retained.
 
 ## Stable observations
 
-Tracked `fixtures/p0-*.user.js` and `evidence/tampermonkey-5.5.1-p0-*.json` under
-`scripts/compatibility/` contain source hashes, events and network response bodies.
+Tracked `fixtures/p0-*.user.js` and `evidence/tampermonkey-5.5.1-p0-*.json` under `scripts/compatibility/` contain source hashes, events and network response bodies.
 
-- DOM: invalid tag/attribute/parent and empty tag return null; modern fulfills
-  null. Non-string tags fail normalization (legacy TypeError, modern rejection).
-  Default parent falls back from head to body to document element. A returned
-  node does not establish a CSP effect.
-- Cookie: `headers.Cookie` takes priority over the entire `details.cookie`
-  string. Explicit names override jar names; repeated explicit names use the
-  last value, preserving empty values and embedded `=`. With an explicit string
-  the reference also collapses jar names across paths. Anonymous suppresses the
-  jar but still sends explicit cookies, with headers taking priority.
-- URL: plain object containing only `url`, not a DOM Event. `once` works;
-  AbortSignal is ignored. MonkeySharp's `oldURL`, property handler, facade
-  receiver and AbortSignal are additional guarantees, not asserted TM parity.
-- Notification replacement times out with false; the first tagged Promise can
-  remain pending. Native click/default-action/navigation evidence is pending.
-- Download: the fresh native-mode profile opens browser interaction and has no
-  terminal result within the probe; the record is **blocked**. The official
-  [error categories](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_download)
-  distinguish extension policy (`not_whitelisted`), permission (`not_permitted`)
-  and disabled downloads (`not_enabled`). No error result is invented.
+- DOM: invalid tag/attribute/parent and empty tag return null; modern fulfills null. Non-string tags fail normalization (legacy TypeError, modern rejection). Default parent falls back from head to body to document element. A returned node does not establish a CSP effect.
+- Cookie: `headers.Cookie` takes priority over the entire `details.cookie` string. Explicit names override jar names; repeated explicit names use the last value, preserving empty values and embedded `=`. With an explicit string the reference also collapses jar names across paths. Anonymous suppresses the jar but still sends explicit cookies, with headers taking priority.
+- URL: plain object containing only `url`, not a DOM Event. `once` works; AbortSignal is ignored. MonkeySharp's `oldURL`, property handler, facade receiver and AbortSignal are additional guarantees, not asserted TM parity.
+- Notification replacement times out with false; the first tagged Promise can remain pending. Native click/default-action/navigation evidence is pending.
+- Download: the fresh native-mode profile opens browser interaction and has no terminal result within the probe; the record is **blocked**. The official [error categories](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_download) distinguish extension policy (`not_whitelisted`), permission (`not_permitted`) and disabled downloads (`not_enabled`). No error result is invented.
 
-The initial URL experiment assumed AbortSignal support and failed. Its record
-is retained alongside the corrected observation. Missing events do not prove
-native interaction or failure handling.
+The initial URL experiment assumed AbortSignal support and failed. Its record is retained alongside the corrected observation. Missing events do not prove native interaction or failure handling.
 
 ## Third-party results
 
-[Fixed TM](../../scripts/compatibility/evidence/corpus-reference-stable-p0.json),
-[native 121](../../scripts/compatibility/evidence/corpus-native-121-p0.json),
-[native 151](../../scripts/compatibility/evidence/corpus-native-151-p0.json) and
-[initial native 84](../../scripts/compatibility/evidence/corpus-native-84-initial-p0.json)
-retain all attempted scenarios. The 84 initial settings failures include the
-actual replaceAll TypeError; later runs classify only that exact observed case
-as an engine limitation. The unchanged sources are never repaired in the corpus.
+[Fixed TM](../../scripts/compatibility/evidence/corpus-reference-stable-p0.json), [native 121](../../scripts/compatibility/evidence/corpus-native-121-p0.json), [native 151](../../scripts/compatibility/evidence/corpus-native-151-p0.json) and [initial native 84](../../scripts/compatibility/evidence/corpus-native-84-initial-p0.json) retain all attempted scenarios. The 84 initial settings failures include the actual replaceAll TypeError; later runs classify only that exact observed case as an engine limitation. The unchanged sources are never repaired in the corpus.
 
-Native authentication/download checks include server requests, a cross-origin
-port redirect, actual file/ZIP-entry hashes and cancellation transitions. TM
-HEAD/GET requests were observed, but missing download permission prevented
-saved-file/ZIP confirmation; those cases stay blocked. Its page-hook scenario
-installed the history wrapper but failed the changed-resource refresh assertion;
-this reference failure is retained, not used to lower the native assertion.
-No M1 pass or unchanged-script success rate is inferred from these results.
+Native authentication/download checks include server requests, a cross-origin port redirect, actual file/ZIP-entry hashes and cancellation transitions. TM HEAD/GET requests were observed, but missing download permission prevented saved-file/ZIP confirmation; those cases stay blocked. Its page-hook scenario installed the history wrapper but failed the changed-resource refresh assertion; this reference failure is retained, not used to lower the native assertion. No M1 pass or unchanged-script success rate is inferred from these results.
 
 ## Reproduction
 
-See [runner instructions](../../scripts/compatibility/README.md). No ignored
-planning files are automation inputs. Extension fingerprints hash the sorted
-`[relativePath, fileSha256]` JSON array, excluding Chromium's regenerated
-`_metadata` verification cache. Symbolic links are rejected. The browser loads
-a copy of source in the new test profile.
+See [runner instructions](../../scripts/compatibility/README.md). No ignored planning files are automation inputs. Extension fingerprints hash the sorted `[relativePath, fileSha256]` JSON array, excluding Chromium's regenerated `_metadata` verification cache. Symbolic links are rejected. The browser loads a copy of source in the new test profile.
 
-A separately acquired beta uses the fifth positional environment JSON with
-exact channel, version, MV, extension ID, content fingerprint and settings.
-Incomplete or mismatching pins fail before browser launch. This facility does
-not establish beta feature support.
+A separately acquired beta uses the fifth positional environment JSON with exact channel, version, MV, extension ID, content fingerprint and settings. Incomplete or mismatching pins fail before browser launch. This facility does not establish beta feature support.
