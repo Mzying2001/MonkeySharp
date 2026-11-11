@@ -1,6 +1,6 @@
 # Full-GM start and CSP decisions
 
-Step 33 evaluates two independent capabilities. The experiments use the production prepared-revision, engine, gateway and isolated executor, including the child-target route from step 32. [Versioned evidence](../../scripts/compatibility/evidence/start-csp-follow-up-p1.json) retains successful assessments and failed attempts. A completed assessment does not mean a timing or CSP-bypass feature was implemented.
+Full-GM document-start and CSP effects are independent capabilities. The experiments use the production prepared-revision, engine, gateway and isolated executor, including native child-target routing. [Versioned evidence](../../scripts/compatibility/evidence/start-csp-follow-up-p1.json) retains the assessments and their outcomes. A completed assessment does not establish a timing or CSP-bypass feature.
 
 ## Full GM before first inline
 
@@ -16,11 +16,11 @@ The alternative tested once per combination registers an owned `debugger` statem
 
 The server retains `default-src 'none'; script-src 'self'; style-src 'none'; connect-src 'none'; img-src 'none'`. The native HTTP bridge and isolated world are evaluated independently of page-source policy. On all tested combinations, isolated user source, the required dependency, DOM insertion, resource bytes and GM HTTP succeed. Raw Function-based user source and page/injected inline scripts remain blocked. Returned style/link nodes do not apply their requested styles. A resource data URL preserves exact JavaScript bytes but its script side effect remains blocked. The allowed same-origin external script runs, demonstrating that the test distinguishes permitted and blocked resource classes without a whole-page bypass.
 
-The 151 computed outline width was `3px` with `outline-style:none`, unlike older engines' `0px`. The initial assertion confused width with an actual applied outline and failed; the retained correction checks style and the requested 19px side effect separately. OOPIF observations are read through that target's CDP session, because 84's generic frame evaluation can select an isolated context and cannot be used to inspect page globals reliably.
+OOPIF observations are read through that target's CDP session so the probe inspects the intended page world. CSP assertions check actual script/style side effects separately from returned nodes and computed width values.
 
 **Decision:** retain the current world and CSP boundaries. No resource URL scheme or execution backend is changed. Do not advertise a returned node or decoded resource as a style/script effect. These results cover the explicit policy above and the existing native fixtures, rather than every possible CSP. Only a separately validated resource/renderer design could change this scope.
 
-## Separate renderer-subprocess design task
+## Renderer-subprocess deployment constraints
 
 | Build family | Native deployment that would be required |
 | --- | --- |

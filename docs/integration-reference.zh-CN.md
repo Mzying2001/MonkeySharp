@@ -38,7 +38,7 @@ TrustedPageWorld 默认关闭；特权执行需要可信桥或宿主显式信任
 
 `IDownloadService.DownloadMode` 报告后端实际语义。`IsIncognito` 从实际 context 解析私密状态，`AutomaticallyUpdatesScripts` 报告真实更新策略；未知状态不写入 info。Demo 明确报告其共享普通 context 和仅手动更新策略。`GM.info.version` 是管理器程序集版本，脚本版本位于 `script.version`。`GM.info.compatibility.capabilities` 记录 API 是否可用及明确的政策、引擎限制原因。
 
-稳定后续改进的 37 项 API 核对、固定语料和原生/包消费范围见[交付评估](compatibility/m1-report.zh-CN.md)；固定参考交互证据未补齐时，完整 M1 保持未完成。
+当前调用形式和能力边界见[API 契约](compatibility/api-contract.md)及[兼容性主题](compatibility/README.md)。固定语料和原生/包消费范围见[验证说明](compatibility/validation.md#latest-recorded-validation)；固定参考交互及语料结果未补齐时，完整 M1 保持未完成。
 
 同一映射还报告 strict start、OOPIF、BFCache、手动菜单 frame、显式/请求分区 Cookie、分区 CRUD 版本、audible 和 clickedFrame。自定义 UserScriptExecutionEnvironment 的 capabilityStatus 会保留细分能力键；仅填宿主能够证明的事实。见[脚本侧键说明](usage-guide.zh-CN.md#information-and-logging)。
 
@@ -401,6 +401,6 @@ HTTP ReadableStream 输入仅在 session create 授权后消费，通过 appendB
 
 IMenuService.RegisterAsync 现在接收 Action<MenuCommandInvocation>。MenuCommandRequest 携带已认证的 OriginFrame 和 ClickedFrame，仅填入实际观测的输入字段。CefSharp 宿主可使用 ResolveMenuFrame(nativeFrame, request) 解析原生事件 frame；null 表示未知或已过期，不派发定向调用。Demo 弹出菜单没有 frame 身份。GM 回调路由与 @run-at context-menu 的用户源码启动分别验收。
 
-OOPIF 的普通/私密上下文、进程迁移与 session 身份范围见[P1 进度](compatibility/p1-follow-up.zh-CN.md)，不据此推断菜单、严格 start 或 BFCache 已支持。
+OOPIF 的普通/私密上下文、进程迁移与 session 身份范围见[隔离 OOPIF 路由](compatibility/execution-worlds.md#isolated-oopif-routing)，不据此推断菜单、严格 start 或 BFCache 已支持。
 
 严格 start 与 CSP 的独立评估、失败证据及后续渲染子进程设计要求见[专项决策](compatibility/start-csp-decision.md)。

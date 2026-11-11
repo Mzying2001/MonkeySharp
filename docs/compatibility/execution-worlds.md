@@ -1,4 +1,4 @@
-# Execution worlds and lifecycle evidence
+# Execution worlds and lifecycle
 
 URL listeners share execution-owned registration and cleanup with other window listeners. `once`, signal, capture identity and per-callback exception isolation apply; URL notifications remain plain objects and are never replayed from the DOMContentLoaded/load cache. See [URL guarantees and pinned differences](../usage-guide.md#window-extensions).
 
@@ -26,6 +26,16 @@ The real protocol probe verifies Cookie readback and HTTP effects, pre-inline pa
 
 The [84](../../scripts/compatibility/evidence/cdp-84.4.10.json), [121](../../scripts/compatibility/evidence/cdp-121.3.70.json) and [151](../../scripts/compatibility/evidence/cdp-151.3.240.json) records separate protocol success from blocked strict-GM timing. Reproduce through SmokeHost `Run-E2E.ps1`, its independent `Run-CdpProbe.ps1`, or the [baseline gate](validation.md#reproduction). Reports include adjacent `cdp-probe.jsonl` files. A renderer subprocess remains a separate deployment/ABI decision if future strict timing requirements justify it.
 
+## Isolated OOPIF routing
+
+OOPIF commands and events carry their native child session. Context IDs are scoped within that session, and remote objects pin each world generation. Only iframe targets whose native parent frame belongs to this executor receive bindings and source. Discovery can briefly attach a target to inspect native ancestry, then detaches its own session if unrelated without running source. Native CEF IDs are never cast to CDP IDs.
+
+Reserved CEF command IDs, owned-session detach and per-observer envelope filtering preserve other observers and shared domains. Read-only coexistence is tested; competing owners that mutate Target discovery/attachment state are not independently isolated DevTools clients.
+
+The [native OOPIF matrix](../../scripts/compatibility/evidence/oopif-follow-up-p1.json) uses distinct sites, actual iframe targets and prepared GM. It verifies source, snapshots/resources, permission-checked XHR, two script partitions, nested targets, same-process/OOPIF migration without duplicate source, balanced document release and normal/private Cookie jar isolation. [Recorded delivery](validation.md#latest-recorded-validation) covers both architectures on 84/121/151. Native menus, strict start, historical isolated webRequest and transparent BFCache retain separate limits.
+
+Run `./scripts/compatibility/Run-NativeProbe.ps1 -Probe oopif -Platform x64 -CefSharpVersion 121.3.70`; the baseline also runs this gate for its selected engine/platform. Actual effects and runtime diagnostics are checked together. See [runner parameters](../../scripts/compatibility/README.md#native-feasibility-probes).
+
 ## Remaining limits
 
 - Full-GM document-start remains best effort, including prepared navigation. `RequireGuaranteedDocumentStart` rejects these combinations; protocol registration is not proof of pre-inline user execution.
@@ -35,8 +45,6 @@ The [84](../../scripts/compatibility/evidence/cdp-84.4.10.json), [121](../../scr
 - Historical page-frame webRequest interception is unavailable from isolated contexts. See the [historical webRequest scope](README.md#historical-webrequest).
 - User-managed DOM listeners/timers are not an unload API for arbitrary code in a live document; document navigation destroys normal contexts, and runtime-owned listeners/bridge state are revoked explicitly.
 
-The [step 31 native BFCache assessment](../../scripts/compatibility/evidence/bfcache-follow-up-p1.json) includes cacheable control pages without a runtime/CDP attachment. Neither control nor prepared raw/isolated runs retained the closure or reported persisted pageshow on 84/121/151, including explicit BFCache enablement. Transparent restoration remains unimplemented; no global BFCache disablement was used. The [native probe runner](../../scripts/compatibility/Run-NativeProbe.ps1) preserves capability outcomes separately from probe completion.
+The [native BFCache assessment](../../scripts/compatibility/evidence/bfcache-follow-up-p1.json) includes cacheable control pages without a runtime/CDP attachment. Neither control nor prepared raw/isolated runs retained the closure or reported persisted pageshow on 84/121/151, including explicit BFCache enablement. Transparent restoration remains unimplemented; no global BFCache disablement was used. Private-context restoration and suspended-state listener/storage recovery remain unverified because the basic cache-hit prerequisite was not met. The [native probe runner](../../scripts/compatibility/Run-NativeProbe.ps1) preserves capability outcomes separately from probe completion.
 
-See [OOPIF scope and native evidence](p1-follow-up.md) for normal/private contexts, migrations and per-session identity.
-
-The [step 33 start/CSP assessment](start-csp-decision.md) uses full prepared GM and real child sessions, rather than only a preinjected canary. Its owned parser-pause alternative still lacked full-GM readiness/acknowledgement/completion before resume. CSP effects and renderer deployment costs are recorded separately; no timing guarantee or whole-page bypass is introduced.
+The [start/CSP decisions](start-csp-decision.md) use full prepared GM and real child sessions. The owned parser-pause alternative still lacked full-GM readiness/acknowledgement/completion before resume. CSP effects and renderer deployment constraints are recorded separately; strict start and whole-page bypass remain unavailable.

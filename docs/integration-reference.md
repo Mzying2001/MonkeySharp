@@ -80,7 +80,7 @@ Generic execution timeout starts after authorization. CEF transfer and download 
 
 ## Network APIs
 
-The [stable follow-up assessment](compatibility/m1-report.md) records the 37-row API review, pinned corpus and native/package delivery scope. Its full M1 acceptance remains incomplete while fixed-reference interaction evidence is missing.
+The [API contract](compatibility/api-contract.md) and [compatibility topics](compatibility/README.md) define current calling forms and capability limits. [Validation](compatibility/validation.md#latest-recorded-validation) records the pinned corpus and native/package delivery scope; full M1 remains incomplete while fixed-reference interactions and corpus outcomes are missing.
 
 The CefSharp host supplies default `GM.xmlHttpRequest`, `GM.cookie`, and `GM.webRequest` services. Set `EnableDefaultNetworkServices = false` to require explicit providers, or use `UseHttpRequestService`, `UseCookieService`, and `UseWebRequestService` to replace individual defaults.
 
@@ -397,6 +397,6 @@ HTTP ReadableStream inputs are consumed only after session creation authorizatio
 
 IMenuService.RegisterAsync now receives Action<MenuCommandInvocation>. MenuCommandRequest carries authenticated OriginFrame and ClickedFrame. Copy only observed input fields. CefSharp hosts can resolve a native event frame with ResolveMenuFrame(nativeFrame, request); null means unknown/stale and suppresses a targeted invocation. Demo’s popup has no frame identity. This GM callback routing is separate from @run-at context-menu source execution.
 
-See the [OOPIF scope and native evidence](compatibility/p1-follow-up.md) for normal/private contexts, migrations and per-session identity.
+See the [OOPIF scope and native evidence](compatibility/execution-worlds.md#isolated-oopif-routing) for normal/private contexts, migrations and per-session identity.
 
 The [start/CSP decision](compatibility/start-csp-decision.md) separates full-GM timing, node/resource effects and the cost of a future renderer subprocess. No new strict-start guarantee is made.

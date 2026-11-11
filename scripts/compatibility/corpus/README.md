@@ -2,8 +2,6 @@
 
 `source.user.js` files are unmodified upstream bytes, including metadata and line endings. Each source and license is hashed in [corpus.json](../corpus.json). Both scripts declare MIT licensing; the original full licenses are included. Git treats these pinned sources/licenses as binary so checkout and delivery patches preserve bytes. Delivery installs changed attributes before other files. No runtime dependencies are fetched. The corpus does not modify `@match`, `@connect`, grant or failed source branches, and does not polyfill Chromium 84.
 
-The native test host waits for Cookie storage's completion callback before seeding the fake login, rather than equating BrowserInitialized with Cookie storage readiness. It releases both callback and manager wrappers before browser shutdown; a missing native completion still fails the process deadline.
-
 | Category | Upstream script | Functional check |
 | --- | --- | --- |
 | DOM decoration | SiteAssetDL 1.0.0 | Shadow toolbar, computed style, no duplicate after SPA; separate style-src CSP case |
@@ -22,4 +20,4 @@ The host is shared between SmokeHost and the package consumer and uses only publ
 
 Chromium 84 lacks `String.prototype.replaceAll`, used by the unmodified Find Scripts settings panel. That exact observed TypeError plus engine version and feature check classifies these two scenarios as `expected-engine-limitation`. No generic test failure is relabeled as an engine restriction.
 
-See [CLI and output](../README.md#pinned-third-party-corpus). A reference without browser downloads permission is blocked, not passed. Full M1 still needs the reference interactions and seven-category results declared by the plan.
+See [CLI and output](../README.md#pinned-third-party-corpus) and [recorded corpus results](../evidence/README.md#corpus-results). A reference without browser downloads permission is blocked, not passed. Full M1 still needs saved-file/ZIP/cancellation and native notification/download interaction comparisons, plus resolution of the failed reference history-refresh assertion; see [current evidence gaps](../../../docs/compatibility/README.md#known-evidence-gaps).

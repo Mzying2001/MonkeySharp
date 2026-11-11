@@ -46,15 +46,27 @@ The names in each row are separate declaration spellings. Legacy globals require
 
 ## Evidence and execution
 
-The [stable follow-up](p0-follow-up.md) adds pinned failure/URL/Cookie observations and distinguishes additional MonkeySharp guarantees from 5.5.1 behavior.
+The [pinned reference observations](#pinned-reference-observations) distinguish fixed-manager behavior from additional MonkeySharp guarantees. Topic references own current capability limits; the [evidence index](../../scripts/compatibility/evidence/README.md) groups native, reference and delivery records.
 
 Run the same original [return probe](../../scripts/compatibility/fixtures/returns.user.js) in each manager. Its ordered log preserves immediate return shapes, microtasks, Promise settlement, DOM effects and tab closure. Separate grant installations cover missing/none, each spelling, mixed, unknown and info-only. Install only on the local test page; the probe posts JSON to `/evidence`. Interactive notification/menu effects require their own recorded checks.
 
-The original modern reference used Edge 156.0.4314.58, Tampermonkey 5.5.1 and MV3; the [stable follow-up](p0-follow-up.md) uses Edge 157.0.4341.42 with the same pinned manager. The extension requires Chromium 120, independently of MonkeySharp's 84 baseline. The [original return record](../../scripts/compatibility/evidence/tampermonkey-5.5.1-returns.json) confirms modern Promise returns for DOM, menus and openInTab, and notification timeout resolving false. It does not establish every click/tag-replacement result. Delayed tab closure passed after an immediate-close observation needed a retry; MonkeySharp's queued early-close guarantee is documented separately.
+The original modern reference used Edge 156.0.4314.58, Tampermonkey 5.5.1 and MV3; later fixed-stable observations use Edge 157.0.4341.42 with the same manager. The extension requires Chromium 120, independently of MonkeySharp's 84 baseline. The [original return record](../../scripts/compatibility/evidence/tampermonkey-5.5.1-returns.json) confirms modern Promise returns for DOM, menus and openInTab, and notification timeout resolving false. It does not establish every click/tag-replacement result. Delayed tab closure passed after an immediate-close observation needed a retry; MonkeySharp's queued early-close guarantee is documented separately.
 
 The historical MV2 reference remains unavailable. Immediate webRequest void returns and first-match overlap behavior are implementation decisions awaiting that comparison, not established differential parity. Do not install the pinned modern extension on Chromium 84 or count MV3 webRequest absence as a MonkeySharp failure.
 
 The [reference schema](../../scripts/compatibility/evidence/schema.json) records fixture SHA-256, source, versions, settings, commit, capabilities, immediate returns, ordered events, settlements, effects and status. Raw logs stay under ignored `artifacts/`; concise [evidence records](../../scripts/compatibility/evidence/) remain in Git. Native matrices and delivery summaries have their own shapes. Only random IDs, absolute timestamps, paths and visual appearance may be normalized; preserve observable ordering and failed assertions. `blocked` is not a passing status.
+
+## Pinned reference observations
+
+| Topic | Tampermonkey 5.5.1/MV3 observation | MonkeySharp boundary |
+| --- | --- | --- |
+| DOM helpers | Invalid/empty tags, invalid attributes and invalid parents return null; modern fulfills null. Non-string tags fail normalization. Parent fallback is head, body, then document element. [DOM reference](../../scripts/compatibility/evidence/tampermonkey-5.5.1-p0-dom.json) | DOM creation/attribute/insertion failures return null; normalization and programming errors stay visible. Returned nodes do not establish CSP effects. |
+| Explicit request Cookie | Header priority, duplicate names and anonymous requests were observed. [Cookie reference](../../scripts/compatibility/evidence/tampermonkey-5.5.1-p0-cookies.json) | The default native backend rejects explicit Cookie inputs; [Cookies](cookies.md#explicit-request-cookies) records the merge observations for custom backends. |
+| URL changes | Payload is a plain object containing only url; once works and AbortSignal is ignored. [URL reference](../../scripts/compatibility/evidence/tampermonkey-5.5.1-p0-urlchange.json) | oldURL, property handlers, facade receivers and AbortSignal are additional guarantees; see [window extensions](../usage-guide.md#window-extensions). |
+| Notifications | Replacement times out with false; the first tagged Promise can remain pending. [Notification reference](../../scripts/compatibility/evidence/tampermonkey-5.5.1-p0-notification.json) | Fixed-reference native click/default-action/navigation comparisons remain incomplete; see [host interactions](host-interactions.md#notifications). |
+| Downloads | The fresh native-mode profile requires browser interaction and produces no terminal result within the probe. [Blocked reference](../../scripts/compatibility/evidence/tampermonkey-5.5.1-p0-download-errors.json) | No error outcome is inferred from missing events; [Downloads](downloads.md#error-causes) defines actual host errors. |
+
+Fixed beta 5.6.6242 is pinned separately from stable. Its non-fetch incremental text and stream-input observations, including intentional fetch/reader/replay differences, are maintained in [HTTP requests and streams](network.md). Historical MV2 webRequest comparisons remain a separate evidence gap.
 
 ## Reproduction
 
@@ -70,6 +82,6 @@ The grant and [storage-authority probes](../../scripts/compatibility/evidence/ta
 
 ## Real-script corpus intake
 
-The original probes are not third-party compatibility evidence. The [corpus manifest](../../scripts/compatibility/corpus.json) pins unmodified third-party source and licenses for seven executable categories and preserves optional historical local-script provenance. Intake ready status is separate from actual pass/limit/block/failure records. Classify failures as syntax, GM contract, matching, authorization or world/CSP. See [corpus scope](../../scripts/compatibility/corpus/README.md) and [current evidence gaps](p0-follow-up.md).
+The original probes are not third-party compatibility evidence. The [corpus manifest](../../scripts/compatibility/corpus.json) pins unmodified third-party source and licenses for seven executable categories and preserves optional historical local-script provenance. Intake ready status is separate from actual pass/limit/block/failure records. Classify failures as syntax, GM contract, matching, authorization or world/CSP. See [corpus scope](../../scripts/compatibility/corpus/README.md) and [current evidence gaps](README.md#known-evidence-gaps).
 
-The [P1 incremental text implementation](p1-follow-up.md) follows the 5.6.6242 non-fetch text progress observation. Fetch progress remains an explicitly recorded difference.
+The [network scope](network.md) includes incremental non-fetch text and staged ReadableStream input. [Menu scope](host-interactions.md#menus) includes native event fields and clickedFrame filtering within its documented frame limits. These enhancements do not close missing stable-reference interactions.

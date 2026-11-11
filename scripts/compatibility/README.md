@@ -7,9 +7,13 @@ This directory contains the shared validation harness and its inputs. Maintained
 | `Run-Baseline.ps1` | Clean restore/build/.NET/JS, real SmokeHost/CDP and x64 WPF gate for one engine/platform |
 | `Run-Delivery.ps1` | Isolated version/platform worktrees, baseline gates, package checks and public-API consumers |
 | `Run-Reference.cjs` | Original fixture comparisons with a locally installed pinned Tampermonkey |
+| `Run-Corpus.ps1`, `Run-Corpus.cjs` | Build/run pinned third-party scenarios through a source host, package consumer or fixed reference |
+| `Run-NativeProbe.ps1` | Native OOPIF, BFCache and start/CSP capability experiments |
+| `ReferenceEnvironment.cjs`, `Unpack-Reference.cjs` | Verify pinned source identity/content and unpack a signed beta package |
+| `reference-stable.json`, `reference-beta.json` | Separate complete environment pins for stable 5.5.1 and beta 5.6.6242 |
 | `PackageConsumer/` | Standalone consumer built against generated NuGet packages |
 | `fixtures/` | Original userscripts and companion content/URL scenarios; shared by reference runners and automated tests |
-| `evidence/` | Concise versioned native/reference results and the differential record schema |
+| [Evidence index](evidence/README.md) | Test baselines, native/reference results, delivery snapshots and retained failures |
 | `corpus.json`, `corpus/` | Pinned unmodified third-party source, licenses, scenarios and optional historical local-script provenance |
 
 [Browser-independent Core/JS commands](../../docs/compatibility/validation.md#browser-independent-checks) can run without CefSharp, local notes or a local corpus script.
@@ -38,7 +42,7 @@ node scripts/compatibility/Run-Reference.cjs C:/path/to/msedge.exe C:/path/to/ta
 
 Positional arguments are `<Edge-exe> <extension-dir> [output.json] [fixture.user.js] [environment.json]`. Defaults are a timestamped output, `scripts/compatibility/fixtures/returns.user.js` and tracked `reference-stable.json`. Existing output files are never overwritten. Fixture paths are repository-relative or absolute; relative output paths use the current working directory. The server supplies companion content from `fixtures/content/`. Interactive effects need their own recorded checks; no event is not proof of completion.
 
-The environment JSON pins `channel` (stable/beta), `version`, `manifestVersion`, `extensionId`, `contentSha256` and records `settings`. Identity comes from the manifest public key. Source content is hashed except regenerated `_metadata`; mismatches fail before launch. The browser uses a source copy and fresh profile. `settings.headless: false` selects a visible reference browser. An acquired beta needs a separate complete pin; 5.6.6242 remains pending. See [stable follow-up observations and fingerprint format](../../docs/compatibility/p0-follow-up.md).
+The environment JSON pins `channel` (stable/beta), `version`, `manifestVersion`, `extensionId`, `contentSha256` and records `settings`. Identity comes from the manifest public key. Content fingerprints hash the sorted `[relativePath, fileSha256]` JSON array, excluding Chromium's regenerated `_metadata` verification cache; symbolic links are rejected. Mismatches fail before launch. The browser uses a source copy and fresh profile. `settings.headless: false` selects a visible reference browser. Stable 5.5.1 and beta 5.6.6242 have separate tracked pins and recorded observations; see [fixed-reference scope](../../docs/compatibility/api-contract.md#pinned-reference-observations).
 
 ## Pinned third-party corpus
 
@@ -61,13 +65,15 @@ Baseline runs the source corpus. Delivery additionally runs it through every NuG
 
 ## Maintaining shared inputs
 
-Keep fixtures, corpus declarations and concise evidence in Git. Preserve hashed userscript LF bytes through `.gitattributes`; do not reformat binary or charset fixtures. Evidence names containing P0/P1/P2 identify historical runs and remain stable. Relocation does not change fixture hashes, recorded commits, statuses or historical artifact paths.
+Keep fixtures, corpus declarations and concise evidence in Git. Preserve hashed userscript LF bytes through `.gitattributes`; do not reformat binary or charset fixtures. Evidence names containing P0/P1/P2 identify historical runs and remain stable. Use the [evidence index](evidence/README.md) to find test dependencies, current topic evidence, delivery snapshots and retained failures. Relocation does not change fixture hashes, recorded commits, statuses or historical artifact paths.
 
 The optional local corpus source is not redistributed or required by automated Core/JS tests. Temporary plans and full implementation diaries belong in ignored `local-notes/`; raw output belongs in `artifacts/`. Promote current behavior and limitations into the [maintained documentation](../../docs/README.md).
 
 ## Pinned beta enhancements
 
-The [beta pin](reference-beta.json) selects 5.6.6242 separately from stable. Download the exact signed Chrome package from the official update service for gcalenpjmijncebpfijmoaglllgpjagf (package hash in the pin). Run `node scripts/compatibility/Unpack-Reference.cjs <signed.crx> <new-directory>` to verify the publisher signature and restore manifest.key for unpacked loading without changing executable source. Then pass reference-beta.json as the fifth Run-Reference.cjs argument. See [P1 progress and acquisition caveats](../../docs/compatibility/p1-follow-up.md); old failed results remain intact.
+The [beta pin](reference-beta.json) selects 5.6.6242 separately from stable and records its acquired package hash and publisher signature. Obtain that exact signed Chrome package from the official update service for gcalenpjmijncebpfijmoaglllgpjagf; the pin rejects a newer package or changed source. Run `node scripts/compatibility/Unpack-Reference.cjs <signed.crx> <new-directory>` to verify the publisher signature and restore only manifest.key from the signed publisher proof for unpacked loading. Executable source remains unchanged. Pass reference-beta.json as the fifth Run-Reference.cjs argument.
+
+Recorded beta observations cover incremental text and stream inputs; fixed-beta native menu click/overlap comparisons remain incomplete. A pin establishes identity, not feature parity. See [network behavior and differences](../../docs/compatibility/network.md), [menu scope](../../docs/compatibility/host-interactions.md#menus) and [retained acquisition/probe failures](evidence/README.md#retained-failures-and-regressions).
 
 ## Native feasibility probes
 

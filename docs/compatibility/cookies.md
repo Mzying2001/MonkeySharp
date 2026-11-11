@@ -26,7 +26,9 @@ XHR `cookiePartition` is unsupported on every tested engine. The native URLReque
 
 The default CefSharp HTTP backend rejects `headers.Cookie` (case insensitive) and `details.cookie` before network dispatch with `MSP006_NOT_SUPPORTED`, even with `anonymous`. 84/121/151 native probes showed the supplied values never reached the server: URLRequest used jar values or no cookies when anonymous. String deduplication cannot repair that native behavior. No jar swapping, Cookie CRUD mutation or unverified network replacement is performed.
 
-Ordinary jar-based login, TLS/Secure/HttpOnly/domain/path selection, redirects, anonymous suppression and independent RequestContexts retain their existing network validation. Custom `IHttpRequestService` hosts can implement explicit cookies against the [pinned merge observations](p0-follow-up.md), including header priority, last duplicate value, empty values and embedded equals signs. This limitation also applies to download headers through the same backend.
+Ordinary jar-based login, TLS/Secure/HttpOnly/domain/path selection, redirects, anonymous suppression and independent RequestContexts retain their existing network validation. This limitation also applies to download headers through the same backend.
+
+The [fixed Tampermonkey 5.5.1 reference](../../scripts/compatibility/evidence/tampermonkey-5.5.1-p0-cookies.json) gives `headers.Cookie` priority over the entire `details.cookie` string. Explicit names override jar names; repeated explicit names use the last value, preserving empty values and embedded `=`. An explicit string also collapses jar names across paths. Anonymous suppresses the jar but still sends explicit cookies, with headers taking priority. Custom verified `IHttpRequestService` backends can implement these observed merge rules; the default backend does not claim that behavior.
 
 See the [native before/after evidence](../../scripts/compatibility/evidence/explicit-cookies-follow-up-p0.json).
 

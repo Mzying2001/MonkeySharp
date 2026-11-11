@@ -4,7 +4,7 @@
 
 本文面向脚本作者，描述当前 MonkeySharp 3 源码中的 JavaScript 用户脚本功能，包括如何编写脚本、全部内置脚本 API，以及与 Tampermonkey 的行为差异。宿主应用可以调整服务、权限、限制和兼容模式。.NET 接入请参阅[集成参考](integration-reference.zh-CN.md)，安装和界面操作请参阅 [Demo 指南](../Mzying2001.MonkeySharp.Demo/README.md)。
 
-比较分别依据[官方契约](compatibility/api-contract.md)、[固定稳定版观察](compatibility/p0-follow-up.md)及 MonkeySharp 主动保证，不表示已对所有管理器/浏览器版本完成差分。
+比较分别依据[官方契约](compatibility/api-contract.md)、[固定稳定版观察](compatibility/api-contract.md#pinned-reference-observations)及 MonkeySharp 主动保证，不表示已对所有管理器/浏览器版本完成差分。
 
 ## 目录
 
@@ -326,7 +326,7 @@ script 包含 name、namespace、version、description、author、copyright、na
 
 旧版为相同重载的 GM_addElement；需要 GM.addElement 或其别名授权。tagName 是字符串。parent 必须具有 appendChild；省略时依次选择可用的 document.head、document.body、document.documentElement。
 
-attributes 是可选对象：textContent/innerHTML 设置内容，字符串 style 设置 style.cssText，已有 DOM 属性（包括函数事件处理器）直接赋值，其他字段转换成字符串后使用 setAttribute。现代返回 `Promise<Element/null>`，旧版立即返回 Element/null。创建、属性赋值或插入的 DOM 异常（包括空 tag 或非法 tag）返回 null，现代 Promise 完成为 null；参数类型错误及内部编程错误仍抛出/拒绝。使用节点前应检查 null。参见[固定版本对照](compatibility/p0-follow-up.md)。
+attributes 是可选对象：textContent/innerHTML 设置内容，字符串 style 设置 style.cssText，已有 DOM 属性（包括函数事件处理器）直接赋值，其他字段转换成字符串后使用 setAttribute。现代返回 `Promise<Element/null>`，旧版立即返回 Element/null。创建、属性赋值或插入的 DOM 异常（包括空 tag 或非法 tag）返回 null，现代 Promise 完成为 null；参数类型错误及内部编程错误仍抛出/拒绝。使用节点前应检查 null。参见[固定版本对照](compatibility/api-contract.md#pinned-reference-observations)。
 
 **与 Tampermonkey 的差异：** 这些是普通页面 DOM 操作，不提供扩展级 CSP 绕过。默认插入 head 的行为遵循固定版本对照；页面 CSP 仍决定源码及样式是否生效。参见 [Tampermonkey 辅助方法](https://www.tampermonkey.net/documentation.php?q=GM_addElement)。
 
@@ -409,7 +409,7 @@ attributes 是可选对象：textContent/innerHTML 设置内容，字符串 styl
 
 对象/数组按 JSON 发送，URLSearchParams 使用表单编码，FormData 使用包含自动边界、文件名和媒体类型的 multipart。未自行设置时会补入适当 Content-Type。支持 Blob/File 请求体及 URL 输入；blob URL 由所属 renderer 解引用，本地输入仅支持不含网络头、认证和请求体的 GET。
 
-允许 User-Agent、Referer、Origin 头。禁止 Host、Content-Length、连接/传输控制头和 Sec-*/Proxy-* 头。默认 CefSharp 后端对任意大小写的 headers.Cookie 及 cookie 在发送前返回 MSP006_NOT_SUPPORTED，包括 anonymous 组合。84/121/151 原生 URLRequest 忽略这些显式值；普通认证请求仍使用真实 RequestContext jar，anonymous 禁用 jar。自定义且已验证的 HTTP 后端可实现[固定参考合并契约](compatibility/p0-follow-up.md)。跨源重定向移除 Authorization。见[显式 Cookie 证据](compatibility/cookies.md#explicit-request-cookies)。
+允许 User-Agent、Referer、Origin 头。禁止 Host、Content-Length、连接/传输控制头和 Sec-*/Proxy-* 头。默认 CefSharp 后端对任意大小写的 headers.Cookie 及 cookie 在发送前返回 MSP006_NOT_SUPPORTED，包括 anonymous 组合。84/121/151 原生 URLRequest 忽略这些显式值；普通认证请求仍使用真实 RequestContext jar，anonymous 禁用 jar。自定义且已验证的 HTTP 后端可实现[固定参考合并契约](compatibility/cookies.md#explicit-request-cookies)。跨源重定向移除 Authorization。见[显式 Cookie 证据](compatibility/cookies.md#explicit-request-cookies)。
 
 @connect self 同时检查协议、主机和端口。`example.com` 和 `*.example.com` 均允许裸域名自身及其所有层级的子域名；IP 和 localhost 必须精确匹配。URL 声明还限制协议/端口，但其中路径不构成白名单限制。没有白名单时，同源 XHR 也被拒绝。原始目标和所有重定向目标都必须通过白名单及宿主权限策略。
 
@@ -727,7 +727,7 @@ GM_webRequest([
 | `window.focus()` | 精确 window.focus 授权及窗口服务，请求宿主聚焦来源标签页/窗口。 | `undefined`，宿主政策可能拒绝操作。 |
 | `window.onurlchange` | 精确授权，可赋值函数/null，或 window.addEventListener("urlchange", handler)。 | 属性/事件注册，回调接收 {url, oldURL}。 |
 
-pushState、replaceState、popstate、hashchange 按 URL 去重。参数保持普通 {url, oldURL} 对象；先调用属性处理器，再按注册顺序调用监听器。函数的 this 为 window 门面，监听对象使用自己的 handleEvent。支持 once 和 AbortSignal；重复注册/移除以类型、回调、capture 匹配，capture 不创建 DOM 传播阶段。派发中新增监听等待下一次，移除立即生效；每个回调异常独立隔离。导航/执行结束清除订阅。oldURL、属性处理器、门面 receiver 和 signal 是 MonkeySharp 在[固定 TM 对照](compatibility/p0-follow-up.md)之外的保证。没有授权不建立 URL 订阅；close/focus 仍需授权及宿主服务。
+pushState、replaceState、popstate、hashchange 按 URL 去重。参数保持普通 {url, oldURL} 对象；先调用属性处理器，再按注册顺序调用监听器。函数的 this 为 window 门面，监听对象使用自己的 handleEvent。支持 once 和 AbortSignal；重复注册/移除以类型、回调、capture 匹配，capture 不创建 DOM 传播阶段。派发中新增监听等待下一次，移除立即生效；每个回调异常独立隔离。导航/执行结束清除订阅。oldURL、属性处理器、门面 receiver 和 signal 是 MonkeySharp 在[固定 TM 对照](compatibility/api-contract.md#pinned-reference-observations)之外的保证。没有授权不建立 URL 订阅；close/focus 仍需授权及宿主服务。
 
 脚本中的 window 是绑定原生函数到页面窗口的门面。close/focus 返回 undefined，不提供 GM.windowClose/GM.windowFocus 别名。
 
@@ -803,8 +803,8 @@ window.addEventListener("urlchange", onRoute);
 
 MonkeySharp 行为依据[授权目录](../Mzying2001.MonkeySharp.Core/Compatibility/UserScriptGrantCatalog.cs)、[JavaScript 门面](../Mzying2001.MonkeySharp.Core/Js/Init.js)、[Core API 提供器](../Mzying2001.MonkeySharp.Core/Apis/)、[元数据解析器](../Mzying2001.MonkeySharp.Core/Parsing/UserScriptMetadataParser.cs)、[运行时信息构建](../Mzying2001.MonkeySharp.Core/Runtime/UserScriptEngine.cs)、[CefSharp 服务](../Mzying2001.MonkeySharp.CefSharp/)及 [JavaScript 行为测试](../Mzying2001.MonkeySharp.Core.Tests/JavaScript/)核对。具体持久化及交互服务见 [Demo 指南](../Mzying2001.MonkeySharp.Demo/README.md)。升级运行时或替换宿主服务时，可据此复核。
 
-ReadableStream 请求输入在授权后获取 reader，逐块读取并先放入现有有界暂存，再由 CEF 发送。未知总长同样受默认 256 MiB 总预算约束，单个 bridge append 最多 64 KiB。这是暂存后上传，不是网络端到端流式发送。locked/disturbed 输入、非 Uint8Array 块及 producer 异常会拒绝；abort/导航取消 reader 与暂存。重定向重放已完成的暂存，不再读取原流。[固定预览](compatibility/p1-follow-up.zh-CN.md)的 reader 释放和重放行为不同。
+ReadableStream 请求输入在授权后获取 reader，逐块读取并先放入现有有界暂存，再由 CEF 发送。未知总长同样受默认 256 MiB 总预算约束，单个 bridge append 最多 64 KiB。这是暂存后上传，不是网络端到端流式发送。locked/disturbed 输入、非 Uint8Array 块及 producer 异常会拒绝；abort/导航取消 reader 与暂存。重定向重放已完成的暂存，不再读取原流。[固定预览](compatibility/network.md#stream-request-bodies)的 reader 释放和重放行为不同。
 
-OOPIF 的普通/私密上下文、进程迁移与 session 身份范围见[P1 进度](compatibility/p1-follow-up.zh-CN.md)，不据此推断菜单、严格 start 或 BFCache 已支持。
+OOPIF 的普通/私密上下文、进程迁移与 session 身份范围见[隔离 OOPIF 路由](compatibility/execution-worlds.md#isolated-oopif-routing)，不据此推断菜单、严格 start 或 BFCache 已支持。
 
 严格 start 与 CSP 的独立评估、失败证据及后续渲染子进程设计要求见[专项决策](compatibility/start-csp-decision.md)。

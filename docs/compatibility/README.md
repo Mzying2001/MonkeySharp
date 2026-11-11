@@ -1,6 +1,6 @@
 # Compatibility
 
-The [stable follow-up](p0-follow-up.md) tracks current fixes and remaining M1 evidence.
+This index describes maintained capabilities and evidence gaps. The [validation guide](validation.md#latest-recorded-validation) records the latest native/package matrix, and the [evidence index](../../scripts/compatibility/evidence/README.md) separates reference baselines, capability matrices and historical results.
 
 MonkeySharp targets the observable Chromium Tampermonkey contract while keeping CefSharp **84.4.10** as the minimum engine. The regression matrix also covers **121.3.70** and **151.3.240**, each on x64 and x86. The WPF Demo supports x64 only. Build the adapter against the exact CefSharp version shipped by the host.
 
@@ -11,9 +11,10 @@ The [API contract](api-contract.md) distinguishes legacy and modern calling form
 | Grants and return shapes | [API contract](api-contract.md) | [Pinned TM 5.5.1 returns](../../scripts/compatibility/evidence/tampermonkey-5.5.1-returns.json) and [grant probes](../../scripts/compatibility/evidence/) |
 | Worlds, lifecycle and CSP | [Execution worlds](execution-worlds.md) | [Native world matrix](../../scripts/compatibility/evidence/execution-worlds-p1.json) |
 | Cookies and partitions | [Cookies](cookies.md) | [Basic Cookie matrix](../../scripts/compatibility/evidence/cookies-p0.json), [partition matrix](../../scripts/compatibility/evidence/partition-cookies-p2.json) |
+| HTTP requests and streams | [Network scope](network.md) | [Incremental text](../../scripts/compatibility/evidence/progress-follow-up-p1.json), [stream inputs](../../scripts/compatibility/evidence/stream-body-follow-up-p1.json) |
 | Downloads and binary inputs | [Downloads](downloads.md) | [Download matrix](../../scripts/compatibility/evidence/downloads-p0.json), [binary matrix](../../scripts/compatibility/evidence/binary-transport-p1.json) |
 | Notifications, menus and clipboard | [Host interactions](host-interactions.md) | [Native/WPF interactions](../../scripts/compatibility/evidence/interactions-p0.json) |
-| Reproduction and delivery | [Validation](validation.md) | [2026-11-07 delivery snapshot](../../scripts/compatibility/evidence/p2-delivery.json) |
+| Reproduction and delivery | [Validation](validation.md) | [Latest recorded delivery](../../scripts/compatibility/evidence/enhanced-follow-up-delivery-p1.json) |
 
 ## Storage and resources
 
@@ -59,8 +60,6 @@ The [native/WPF matrix](../../scripts/compatibility/evidence/private-contexts-p2
 
 Guaranteed full-GM document-start and transparent BFCache restoration remain unavailable. Isolated OOPIF source/storage/resources/XHR now use native child sessions; native isolated child manual menus are verified on 84, while 121/151 remain main-only. See the precise [execution limits](execution-worlds.md#remaining-limits). Cookie partition CRUD on 121/151 does not imply XHR request-partition selection; see [partition scope](cookies.md#partitioned-cookie-scope).
 
-Historical MV2 comparison remains pending. The [seven-category corpus](../../scripts/compatibility/corpus/README.md) now has pinned sources and functional runs; saved-file reference permission and the reference history-refresh failure still prevent complete M1 acceptance. See [delivery assessment](m1-report.md) / [中文](m1-report.zh-CN.md). [Validation](validation.md) distinguishes native checks, pinned-reference observations and deliberate differences. Raw logs remain local artifacts; concise evidence and fixtures are tracked.
+The [seven-category corpus](../../scripts/compatibility/corpus/README.md) has pinned sources and functional runs. Full stable-reference acceptance (M1 and the original comprehensive acceptance step) remains incomplete: saved-file/ZIP/cancellation checks are blocked by reference browser download permission, the reference history-refresh assertion failed, and native notification/download interactions still lack comparisons. The [reference corpus](../../scripts/compatibility/evidence/corpus-reference-stable-p0.json) and [delivery evidence](../../scripts/compatibility/evidence/enhanced-follow-up-delivery-p1.json) preserve those outcomes. Native test totals are not a compatibility percentage.
 
-Enhanced implementation status and fixed beta references: [P1 follow-up](p1-follow-up.md) / [中文](p1-follow-up.zh-CN.md).
-
-The [enhanced scoped delivery assessment](m2-report.md) / [中文](m2-report.zh-CN.md) records the selected steps, final native/package matrix and explicitly unselected P2 tasks. The stable report remains a historical implementation snapshot with open M1 reference requirements.
+The selected enhancement delivery passed its recorded native/package scope. Incremental non-fetch text, staged stream upload and isolated OOPIF execution have documented capabilities; full menu acceptance still lacks 121/151 isolated child routing and fixed-beta native click/overlap comparisons. BFCache and strict start/CSP work establish assessment results only. Request partitions, audible and historical MV2 parity remain unsupported or unverified; they were not implemented by the scoped delivery. See [network scope](network.md), [menu boundaries](host-interactions.md#menus), [execution limits](execution-worlds.md#remaining-limits) and [recorded validation](validation.md#latest-recorded-validation).
