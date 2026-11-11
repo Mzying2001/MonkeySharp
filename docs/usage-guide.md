@@ -760,3 +760,5 @@ MonkeySharp behavior was checked against the [grant catalog](../Mzying2001.Monke
 ReadableStream request input is authorized before reader acquisition, pulled one chunk at a time and staged in the existing bounded spool before CEF sends it. Unknown lengths share the 256 MiB default total budget; individual bridge appends are at most 64 KiB. This is staged upload, without end-to-end network streaming. Locked/disturbed input, non-Uint8Array chunks and producer errors reject; abort/navigation cancels the reader and staging. Redirects replay the completed spool without rereading the stream. The [pinned preview](compatibility/p1-follow-up.md) has different reader-release and replay behavior.
 
 See the [OOPIF scope and native evidence](compatibility/p1-follow-up.md) for normal/private contexts, migrations and per-session identity.
+
+The [start/CSP decision](compatibility/start-csp-decision.md) separates full-GM timing, node/resource effects and the cost of a future renderer subprocess. No new strict-start guarantee is made.

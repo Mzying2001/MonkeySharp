@@ -29,7 +29,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             if (args.Length == 3 && args[0] == "--corpus") { Environment.ExitCode = global::MonkeySharp.Compatibility.CorpusHost.Run(args[1], args[2]); return; }
             CefSharpSettings.WcfEnabled = false;
             CefSharpSettings.ConcurrentTaskExecution = true;
-            if (args.Contains("--bfcache-probe") || args.Contains("--oopif-probe")) CefSharpSettings.ShutdownOnExit = false;
+            if (args.Contains("--bfcache-probe") || args.Contains("--oopif-probe") || args.Contains("--start-csp-probe")) CefSharpSettings.ShutdownOnExit = false;
             var cachePath = Path.Combine(Path.GetTempPath(), "MonkeySharpSmoke", Guid.NewGuid().ToString("N"));
             var settings = new CefSettings
             {
@@ -39,7 +39,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             settings.CefCommandLineArgs.Add("ignore-certificate-errors", "1");
             settings.CefCommandLineArgs.Add("host-resolver-rules", "MAP cookie.monkeysharp.test 127.0.0.1");
             settings.CefCommandLineArgs.Add("autoplay-policy", "no-user-gesture-required");
-            if (args.Contains("--oopif-probe"))
+            if (args.Contains("--oopif-probe") || args.Contains("--start-csp-probe"))
             {
                 settings.CefCommandLineArgs["host-resolver-rules"] = "MAP *.monkeysharp.test 127.0.0.1, MAP *.monkeysharp-other.test 127.0.0.1";
                 settings.CefCommandLineArgs.Add("site-per-process", "1");
@@ -55,6 +55,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                 if (args.Contains("--cdp-probe")) CdpProbe.RunAsync().GetAwaiter().GetResult();
                 else if (args.Contains("--bfcache-probe")) BfcacheProbe.RunAsync().GetAwaiter().GetResult();
                 else if (args.Contains("--oopif-probe")) OopifProbe.Run();
+                else if (args.Contains("--start-csp-probe")) StartCspProbe.RunAsync().GetAwaiter().GetResult();
                 else RunAsync().GetAwaiter().GetResult();
             }
             finally
@@ -588,6 +589,32 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                     if (request.Path == "/stream")
                     {
                         await WriteChunkedAsync(stream).ConfigureAwait(false);
+                        return;
+                    }
+                    if (request.Path == "/probe/start-frame-parent" || request.Path == "/probe/csp-frame-parent")
+                    {
+                        var child = request.Path == "/probe/start-frame-parent" ? "/probe/start-full" : "/probe/csp-effects";
+                        var html = Encoding.UTF8.GetBytes("<!doctype html><body><script>var f=document.createElement('iframe');f.src='http://b.monkeysharp-other.test:" + Port + child + "'+location.search;document.body.appendChild(f);</script></body>");
+                        await WriteResponseAsync(stream, 200, "OK", "text/html", new Dictionary<string, string>(), html).ConfigureAwait(false);
+                        return;
+                    }
+                    if (request.Path == "/probe/start-full")
+                    {
+                        var html = Encoding.UTF8.GetBytes("<!doctype html><html><head><script>var key=new URL(location.href).searchParams.get('probe');window.__startCanary={nonce:key,time:performance.now(),raw:JSON.parse(document.documentElement.getAttribute('data-start-raw')||localStorage.getItem(key+'raw')||'null'),isolated:JSON.parse(document.documentElement.getAttribute('data-start-isolated')||localStorage.getItem(key+'isolated')||'null')};document.documentElement.setAttribute('data-first-inline',JSON.stringify(__startCanary));</script></head><body>Full GM first inline</body></html>");
+                        await WriteResponseAsync(stream, 200, "OK", "text/html", new Dictionary<string, string>(), html).ConfigureAwait(false);
+                        return;
+                    }
+                    if (request.Path == "/probe/csp-effects")
+                    {
+                        var html = Encoding.UTF8.GetBytes("<!doctype html><html><head><script>document.documentElement.dataset.cspPageInline='ran';</script></head><body>CSP effects</body></html>");
+                        await WriteResponseAsync(stream, 200, "OK", "text/html", new Dictionary<string, string> { ["Content-Security-Policy"] = "default-src 'none';script-src 'self';style-src 'none';connect-src 'none';img-src 'none'" }, html).ConfigureAwait(false);
+                        return;
+                    }
+                    if (request.Path == "/probe/csp-external.js" || request.Path == "/probe/csp.css")
+                    {
+                        var script = request.Path.EndsWith(".js");
+                        var bytes = Encoding.UTF8.GetBytes(script ? "document.documentElement.dataset.cspExternal='ran';" : "body{outline:19px solid red}");
+                        await WriteResponseAsync(stream, 200, "OK", script ? "application/javascript" : "text/css", new Dictionary<string, string>(), bytes).ConfigureAwait(false);
                         return;
                     }
                     if (request.Path == "/probe/oopif")

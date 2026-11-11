@@ -9,7 +9,7 @@
 | 30 | 已实现原生输入字段、菜单注册代际、可信 clickedFrame 过滤及 84 isolated 子 frame 手动菜单。121/151 子 frame 映射与 beta 原生点击/重叠一致性仍未完成；[证据](../../scripts/compatibility/evidence/menus-follow-up-p1.json)。 |
 | 31 | 可行性评估完成；84/121/151 的对照及运行时往返均未真正命中缓存，恢复功能未实现；[证据](../../scripts/compatibility/evidence/bfcache-follow-up-p1.json)。 |
 | 32 | 84/121/151 已实现 isolated OOPIF target/session 路由、嵌套、值/资源就绪、XHR 授权、进程迁移及普通/私密上下文验证；[证据](../../scripts/compatibility/evidence/oopif-follow-up-p1.json)。 |
-| 33 | 待实施。 |
+| 33 | 严格 start 与 CSP 分别完成原生评估；严格 start 及 CSP 绕过未实现；[决策](start-csp-decision.md)。 |
 | 36 | 待最终矩阵。 |
 
 JSON/document 保留最终解析时机，二进制/stream 不暴露部分文本。保留现有 fetch 不报告进度/中间 readyState 的边界；固定 5.6.6242 实际报告 fetch 进度，这一有意差异不算对齐。无效字节使用替换字符，未知字符集沿用 UTF-8 回退。
@@ -27,3 +27,5 @@ BFCache fixture 使用可缓存 HTTP A/B 页面，无 unload/beforeunload，通�
 OOPIF 命令和事件携带原生 session，context ID 在 session 内使用，remote object 固定 world 代际。仅在原生 parent frame 属于当前 executor 时启用绑定/源码；发现阶段可短暂附加读取原生祖先信息，无关目标只拆除本运行时自己的 session，绝不执行源码。CEF ID 不转换成 CDP ID。CEF 分配命令 ID、按 session 拆除、每 observer 信封过滤保留其他 observer 与共享域；已验证只读共存，不将竞争修改 Target 状态的其他拥有者当成独立隔离客户端。
 
 真实 fixture 验证不同站点 iframe target、完整 prepared GM、两个脚本分区、嵌套、普通/私密 Cookie jar、拒绝请求零副作用、同进程/OOPIF 迁移不双执行及文档释放平衡。定向原生菜单、严格 start、isolated 历史 webRequest 与 BFCache 仍分别受限。初轮同站点子域样例不计 OOPIF 证据；有时间重叠的版本结果已作废并串行重跑。门禁已接入 Run-Baseline.ps1。
+
+第 33 步使用完整 prepared revision、require、同步值/资源及真实 GM 请求，在普通/私密主 frame 和真正 OOPIF 读取首 inline 标记。三版均为首 inline 后 GM 才就绪；一次归探针所有的 debugger parser 暂停在两秒观察窗内仍没有门面/请求确认/完成标记，未集成生产。严格要求继续在源码副作用前拒绝。CSP 单独证明 isolated 源码/节点/字节及 GM 网络可用，页面/注入 inline、样式和资源 data URL 副作用受限；允许的同源外部脚本生效。151 outline-width 为 3px 但 style:none，首轮错误断言与修正保留。渲染子进程的三版双架构 ABI、部署、包维护、身份及清理要求列入独立设计任务，未隐式引入。

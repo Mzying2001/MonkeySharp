@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('bfcache','oopif')][string]$Probe = 'bfcache',
+    [ValidateSet('bfcache','oopif','start-csp')][string]$Probe = 'bfcache',
     [ValidateSet('x64','x86')][string]$Platform = 'x64',
     [string]$CefSharpVersion = '84.4.10',
     [string]$OutputDirectory = '',

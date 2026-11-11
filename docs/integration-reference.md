@@ -398,3 +398,5 @@ HTTP ReadableStream inputs are consumed only after session creation authorizatio
 IMenuService.RegisterAsync now receives Action<MenuCommandInvocation>. MenuCommandRequest carries authenticated OriginFrame and ClickedFrame. Copy only observed input fields. CefSharp hosts can resolve a native event frame with ResolveMenuFrame(nativeFrame, request); null means unknown/stale and suppresses a targeted invocation. Demo’s popup has no frame identity. This GM callback routing is separate from @run-at context-menu source execution.
 
 See the [OOPIF scope and native evidence](compatibility/p1-follow-up.md) for normal/private contexts, migrations and per-session identity.
+
+The [start/CSP decision](compatibility/start-csp-decision.md) separates full-GM timing, node/resource effects and the cost of a future renderer subprocess. No new strict-start guarantee is made.

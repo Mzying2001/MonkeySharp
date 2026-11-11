@@ -57,7 +57,7 @@ The [native/WPF matrix](../../scripts/compatibility/evidence/private-contexts-p2
 
 ## Known evidence gaps
 
-Guaranteed full-GM document-start, OOPIF routing, transparent BFCache restoration and isolated child-frame native manual-menu mapping remain unavailable. See the precise [execution limits](execution-worlds.md#remaining-limits). Cookie partition CRUD on 121/151 does not imply XHR request-partition selection; see [partition scope](cookies.md#partitioned-cookie-scope).
+Guaranteed full-GM document-start and transparent BFCache restoration remain unavailable. Isolated OOPIF source/storage/resources/XHR now use native child sessions; native isolated child manual menus are verified on 84, while 121/151 remain main-only. See the precise [execution limits](execution-worlds.md#remaining-limits). Cookie partition CRUD on 121/151 does not imply XHR request-partition selection; see [partition scope](cookies.md#partitioned-cookie-scope).
 
 Historical MV2 comparison remains pending. The [seven-category corpus](../../scripts/compatibility/corpus/README.md) now has pinned sources and functional runs; saved-file reference permission and the reference history-refresh failure still prevent complete M1 acceptance. See [delivery assessment](m1-report.md) / [中文](m1-report.zh-CN.md). [Validation](validation.md) distinguishes native checks, pinned-reference observations and deliberate differences. Raw logs remain local artifacts; concise evidence and fixtures are tracked.
 

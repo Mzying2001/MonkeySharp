@@ -324,7 +324,7 @@ DOM/content 需求使用每安装脚本的独立 CDP 世界，身份来自原生
 
 document-idle 在 DOMContentLoaded 后调度，不等待缓慢资源的 load。沙箱 window 按脚本私有地回放 DOMContentLoaded/load 缓存，回放事件 isTrusted 为 false；idle 不回放更早的 DOMContentLoaded。监听支持 once、移除及 abort，执行结束清理运行时拥有的监听；直接在页面 DOM 上注册的监听由用户代码管理。源码、DOM、样式的 CSP 效果分别验证，不全站关闭 CSP。
 
-完整 GM 的 document-start 仍为 best effort，显式保证要求会拒绝。OOPIF 不支持时明确失败且没有 raw 回退；BFCache 缓存执行撤销，需要新导航。isolated 的历史 page-frame webRequest 不支持，子 frame 的隔离手动菜单尚未与原生 CEF 菜单 frame 映射。详见[执行证据和边界](compatibility/execution-worlds.md)。
+完整 GM 的 document-start 仍为 best effort，显式保证要求会拒绝。isolated OOPIF 使用原生 child session，失败时没有 raw 回退；BFCache 缓存执行撤销，需要新导航。isolated 的历史 page-frame webRequest 不支持，84 的同进程 isolated 子 frame 手动菜单已映射，121/151 保留主 frame。详见[执行证据和边界](compatibility/execution-worlds.md)。
 
 ## 桥协议
 
@@ -402,3 +402,5 @@ HTTP ReadableStream 输入仅在 session create 授权后消费，通过 appendB
 IMenuService.RegisterAsync 现在接收 Action<MenuCommandInvocation>。MenuCommandRequest 携带已认证的 OriginFrame 和 ClickedFrame，仅填入实际观测的输入字段。CefSharp 宿主可使用 ResolveMenuFrame(nativeFrame, request) 解析原生事件 frame；null 表示未知或已过期，不派发定向调用。Demo 弹出菜单没有 frame 身份。GM 回调路由与 @run-at context-menu 的用户源码启动分别验收。
 
 OOPIF 的普通/私密上下文、进程迁移与 session 身份范围见[P1 进度](compatibility/p1-follow-up.zh-CN.md)，不据此推断菜单、严格 start 或 BFCache 已支持。
+
+严格 start 与 CSP 的独立评估、失败证据及后续渲染子进程设计要求见[专项决策](compatibility/start-csp-decision.md)。

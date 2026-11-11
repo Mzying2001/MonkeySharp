@@ -1,14 +1,18 @@
 # Enhanced compatibility follow-up
 
-This tracks steps 28?33 and the step 36 delivery. [M1 gaps](m1-report.md) remain unchanged; a completed experiment is distinct from an implemented capability.
+This tracks steps 28–33 and the step 36 delivery. [M1 gaps](m1-report.md) remain unchanged; a completed experiment is distinct from an implemented capability.
 
 | Step | Result |
 | --- | --- |
 | 28 | Incremental non-fetch text/JSON/document/xml responseText, one 64 KiB pull at a time, a persistent decoder, bounded progress frequency and unchanged final parsing. [Evidence](../../scripts/compatibility/evidence/progress-follow-up-p1.json). |
-| 29?33 | Pending. |
+| 29 | Authorized bounded stream input, staged upload, cancel/navigation cleanup and spool replay; [evidence](../../scripts/compatibility/evidence/stream-body-follow-up-p1.json). |
+| 30 | Native input fields, registration generations, host-attested clickedFrame filtering and 84 isolated child manual menus implemented. 121/151 child mapping and beta native click/overlap parity remain unavailable; [evidence](../../scripts/compatibility/evidence/menus-follow-up-p1.json). |
+| 31 | Feasibility assessment completed; no genuine cache hit in 84/121/151 control or runtime round trips. Restoration is not implemented; [evidence](../../scripts/compatibility/evidence/bfcache-follow-up-p1.json). |
+| 32 | Isolated OOPIF source, snapshots/resources, XHR permissions, nested targets, migration and normal/private context checks implemented on 84/121/151; [evidence](../../scripts/compatibility/evidence/oopif-follow-up-p1.json). |
+| 33 | Separate start and CSP assessments completed; strict start remains unguaranteed and CSP continues to apply; [decision](start-csp-decision.md). |
 | 36 | Pending final matrix. |
 
-Text responses also expose cumulative response. JSON/document response stays null until final parsing; binary/stream never exposes partial text. Fetch mode retains MonkeySharp?s existing suppression of progress and intermediate readyState events. Fixed 5.6.6242 actually emits fetch progress: this is a recorded intentional difference, not parity. UTF-8 decoding uses replacement for malformed bytes; unsupported charset names retain the existing UTF-8 fallback.
+Text responses also expose cumulative response. JSON/document response stays null until final parsing; binary/stream never exposes partial text. Fetch mode retains MonkeySharp's existing suppression of progress and intermediate readyState events. Fixed 5.6.6242 actually emits fetch progress: this is a recorded intentional difference, not parity. UTF-8 decoding uses replacement for malformed bytes; unsupported charset names retain the existing UTF-8 fallback.
 
 The signed Chrome beta CRX is pinned by package hash and publisher signature. Unpacking restores only manifest.key from the publisher proof matching the signed CRX identity; executable files are unchanged. The first acquisition selected the store proof instead of the publisher proof and the first fixture incorrectly expected no fetch progress. That failed run is retained and is not identity-qualified evidence. The corrected publisher run and reproducibly unpacked run are retained separately.
 
@@ -25,3 +29,5 @@ The BFCache fixture uses cacheable HTTP A/B pages without unload/beforeunload, n
 OOPIF commands and events carry their native session. Context IDs are scoped within that session; remote objects pin each world generation. Only iframe targets whose native parent frame belongs to this executor receive bindings/source. Discovery can briefly attach a target to read native ancestry, then detaches its own session if unrelated; it never runs source there. Native CEF IDs are never cast to CDP IDs. Reserved CEF command IDs, owned-session detach and per-observer envelope filtering preserve other observers and shared domains. Read-only coexistence is tested; competing owners that mutate Target discovery/attachment state are not an independently isolated DevTools client.
 
 The native fixture uses distinct sites, real iframe targets and actual prepared GM code. It checks two script partitions, nested targets, normal/private cookie jars, a permission denial with zero requests, same-process/OOPIF migration without duplicate source, and balanced document release. Targeted native menus, strict document-start, historical isolated webRequest and transparent BFCache remain separate limits. A same-site-subdomain first attempt was a negative control and is excluded as OOPIF evidence; overlapping version runs were invalidated and rerun serially. The gate now runs from Run-Baseline.ps1.
+
+Step 33 now has separate [start and CSP decisions](start-csp-decision.md), with main/OOPIF and normal/private evidence, a bounded owned parser-pause candidate, actual GM effects and a separately scoped renderer deployment task. Strict start and CSP bypass remain unimplemented.

@@ -38,3 +38,5 @@ The [84](../../scripts/compatibility/evidence/cdp-84.4.10.json), [121](../../scr
 The [step 31 native BFCache assessment](../../scripts/compatibility/evidence/bfcache-follow-up-p1.json) includes cacheable control pages without a runtime/CDP attachment. Neither control nor prepared raw/isolated runs retained the closure or reported persisted pageshow on 84/121/151, including explicit BFCache enablement. Transparent restoration remains unimplemented; no global BFCache disablement was used. The [native probe runner](../../scripts/compatibility/Run-NativeProbe.ps1) preserves capability outcomes separately from probe completion.
 
 See [OOPIF scope and native evidence](p1-follow-up.md) for normal/private contexts, migrations and per-session identity.
+
+The [step 33 start/CSP assessment](start-csp-decision.md) uses full prepared GM and real child sessions, rather than only a preinjected canary. Its owned parser-pause alternative still lacked full-GM readiness/acknowledgement/completion before resume. CSP effects and renderer deployment costs are recorded separately; no timing guarantee or whole-page bypass is introduced.
