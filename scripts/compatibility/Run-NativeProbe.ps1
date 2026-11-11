@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('bfcache')][string]$Probe = 'bfcache',
+    [ValidateSet('bfcache','oopif')][string]$Probe = 'bfcache',
     [ValidateSet('x64','x86')][string]$Platform = 'x64',
     [string]$CefSharpVersion = '84.4.10',
     [string]$OutputDirectory = '',
@@ -39,7 +39,8 @@ $records = @()
 Get-Content -LiteralPath $stdout | ForEach-Object {
     try { $item = $_ | ConvertFrom-Json -ErrorAction Stop; if ($item.type -eq "$Probe-probe") { $records += $item } } catch { }
 }
-$valid = !$timedOut -and $exitCode -eq 0 -and $records.Count -eq 2 -and @($records | Where-Object { $_.status -ne 'passed' -or $_.cefSharpVersion -ne "$CefSharpVersion.0" -or $_.platform -ne $Platform }).Count -eq 0
+$expectedRecords = 2
+$valid = !$timedOut -and $exitCode -eq 0 -and $records.Count -eq $expectedRecords -and @($records | Where-Object { $_.status -ne 'passed' -or $_.cefSharpVersion -ne "$CefSharpVersion.0" -or $_.platform -ne $Platform }).Count -eq 0
 $result = [ordered]@{ schemaVersion=1; probe=$Probe; assessmentCompleted=$valid; commit=(& git -C $root rev-parse HEAD).Trim(); version=$CefSharpVersion; platform=$Platform; processExitCode=$exitCode; timedOut=$timedOut; records=$records; runnerSha256=(Get-FileHash -LiteralPath $PSCommandPath -Algorithm SHA256).Hash.ToLowerInvariant() }
 $result | ConvertTo-Json -Depth 60 | Set-Content -LiteralPath $resultFile -Encoding UTF8
 if (!$valid) { throw "Native $Probe assessment failed. See $resultFile" }

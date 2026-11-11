@@ -1,0 +1,893 @@
+{
+  "schemaVersion": 1,
+  "caseId": "oopif-follow-up-p1",
+  "date": "2026-11-11",
+  "baseCommit": "e8f02897056ff8bf7dc1dac6c9c68318c1d293c4",
+  "featureImplemented": "isolated-source-storage-resources-xhr; other API scopes separate",
+  "runs": [
+    {
+      "schemaVersion": 1,
+      "probe": "oopif",
+      "assessmentCompleted": true,
+      "commit": "e8f02897056ff8bf7dc1dac6c9c68318c1d293c4",
+      "version": "84.4.10",
+      "platform": "x64",
+      "processExitCode": 0,
+      "timedOut": false,
+      "records": [
+        {
+          "type": "oopif-probe",
+          "status": "passed",
+          "assessment": "completed",
+          "transportProven": true,
+          "featureImplemented": true,
+          "privateContext": false,
+          "facts": {
+            "targets": {
+              "targetInfos": [
+                {
+                  "targetId": "D875FFAC53D6CCDD0E79FFE1C25169B4",
+                  "type": "page",
+                  "title": "OOPIF parent",
+                  "url": "http://a.monkeysharp.test:61882/probe/oopif",
+                  "attached": true,
+                  "browserContextId": "DD5F715113CA903CE8BB7D27CF2041B8"
+                },
+                {
+                  "targetId": "D4C0F5B36314DCFCD0EDB0BBBE900E84",
+                  "type": "iframe",
+                  "title": "http://b.monkeysharp-other.test:61882/probe/oopif-child",
+                  "url": "http://b.monkeysharp-other.test:61882/probe/oopif-child",
+                  "attached": false,
+                  "browserContextId": "DD5F715113CA903CE8BB7D27CF2041B8"
+                }
+              ]
+            },
+            "childHttpRequests": 1,
+            "rootFrameTree": {
+              "frameTree": {
+                "frame": {
+                  "id": "D875FFAC53D6CCDD0E79FFE1C25169B4",
+                  "loaderId": "33716742CD8D321390B37BCF4DBA126F",
+                  "url": "http://a.monkeysharp.test:61882/probe/oopif",
+                  "securityOrigin": "http://a.monkeysharp.test:61882",
+                  "mimeType": "text/html"
+                }
+              }
+            },
+            "childTarget": {
+              "targetId": "D4C0F5B36314DCFCD0EDB0BBBE900E84",
+              "type": "iframe",
+              "title": "http://b.monkeysharp-other.test:61882/probe/oopif-child",
+              "url": "http://b.monkeysharp-other.test:61882/probe/oopif-child",
+              "attached": false,
+              "browserContextId": "DD5F715113CA903CE8BB7D27CF2041B8"
+            },
+            "childSession": "1F433B179057116BD382EEBE78862069",
+            "childFrameTree": {
+              "frameTree": {
+                "frame": {
+                  "id": "D4C0F5B36314DCFCD0EDB0BBBE900E84",
+                  "parentId": "D875FFAC53D6CCDD0E79FFE1C25169B4",
+                  "loaderId": "5701E7E4F82C1C685D2C57C231E6A329",
+                  "name": "",
+                  "url": "http://b.monkeysharp-other.test:61882/probe/oopif-child",
+                  "securityOrigin": "http://b.monkeysharp-other.test:61882",
+                  "mimeType": "text/html"
+                }
+              }
+            },
+            "isolatedEvaluation": {
+              "result": {
+                "type": "object",
+                "value": {
+                  "origin": "http://b.monkeysharp-other.test:61882",
+                  "privateProof": 37
+                }
+              }
+            },
+            "otherObserverAlive": "Chrome/84.0.4147.105",
+            "runtimeFirst": {
+              "ready": "snapshot-ready",
+              "resource": "offline-resource",
+              "cookie": "oopif-proof=normal",
+              "denied": true,
+              "visits": 1,
+              "runs": 1,
+              "world": "DOM",
+              "private": false,
+              "alien": "undefined"
+            },
+            "runtimeNested": {
+              "ready": "snapshot-ready",
+              "resource": "offline-resource",
+              "cookie": "",
+              "denied": true,
+              "visits": 2,
+              "runs": 1,
+              "world": "DOM",
+              "private": false,
+              "alien": "undefined"
+            },
+            "runtimeMigrated": {
+              "ready": "snapshot-ready",
+              "resource": "offline-resource",
+              "cookie": "oopif-proof=normal",
+              "denied": true,
+              "visits": 3,
+              "runs": 1,
+              "world": "DOM",
+              "private": false,
+              "alien": "undefined"
+            },
+            "runtimeContextBalance": 5,
+            "runtimeFrameScopes": [
+              "cdp:4FCD762369F9CA25BDC3DC73BF9FEE82:D4C0F5B36314DCFCD0EDB0BBBE900E84",
+              "cdp:4FCD762369F9CA25BDC3DC73BF9FEE82:D4C0F5B36314DCFCD0EDB0BBBE900E84",
+              "cdp:1BD06FA2AD5326D4DFE8D92EF69E4EF5:391E794B2ADCAF3D137B7944850C99C9",
+              "cdp:EBFA8975A2B396DF43FBB4B33D39B67E:D4C0F5B36314DCFCD0EDB0BBBE900E84",
+              "cdp:EBFA8975A2B396DF43FBB4B33D39B67E:D4C0F5B36314DCFCD0EDB0BBBE900E84"
+            ],
+            "runtimeDiagnostics": [],
+            "runtimeValidated": true
+          },
+          "cefSharpVersion": "84.4.10.0",
+          "platform": "x64",
+          "configuration": "fresh profile; site-per-process; test-only DNS mapping; distinct sites monkeysharp.test and monkeysharp-other.test; flat session transport via public SendDevToolsMessage",
+          "targetEventCount": 56
+        },
+        {
+          "type": "oopif-probe",
+          "status": "passed",
+          "assessment": "completed",
+          "transportProven": true,
+          "featureImplemented": true,
+          "privateContext": true,
+          "facts": {
+            "targets": {
+              "targetInfos": [
+                {
+                  "targetId": "1E1CB8DB60C4807972A1D1F07AA250D3",
+                  "type": "page",
+                  "title": "OOPIF parent",
+                  "url": "http://a.monkeysharp.test:61882/probe/oopif",
+                  "attached": true,
+                  "browserContextId": "6B3F73BCECD1F53A374AEC53028E40E5"
+                },
+                {
+                  "targetId": "A4E3F79A180477E4CC5ED93BAC820E37",
+                  "type": "iframe",
+                  "title": "http://b.monkeysharp-other.test:61882/probe/oopif-child",
+                  "url": "http://b.monkeysharp-other.test:61882/probe/oopif-child",
+                  "attached": false,
+                  "browserContextId": "6B3F73BCECD1F53A374AEC53028E40E5"
+                }
+              ]
+            },
+            "childHttpRequests": 4,
+            "rootFrameTree": {
+              "frameTree": {
+                "frame": {
+                  "id": "1E1CB8DB60C4807972A1D1F07AA250D3",
+                  "loaderId": "6A80CA62B991BA68F3493A4FE29A4F67",
+                  "url": "http://a.monkeysharp.test:61882/probe/oopif",
+                  "securityOrigin": "http://a.monkeysharp.test:61882",
+                  "mimeType": "text/html"
+                }
+              }
+            },
+            "childTarget": {
+              "targetId": "A4E3F79A180477E4CC5ED93BAC820E37",
+              "type": "iframe",
+              "title": "http://b.monkeysharp-other.test:61882/probe/oopif-child",
+              "url": "http://b.monkeysharp-other.test:61882/probe/oopif-child",
+              "attached": false,
+              "browserContextId": "6B3F73BCECD1F53A374AEC53028E40E5"
+            },
+            "childSession": "2C3358538C8D65D007937313EC411660",
+            "childFrameTree": {
+              "frameTree": {
+                "frame": {
+                  "id": "A4E3F79A180477E4CC5ED93BAC820E37",
+                  "parentId": "1E1CB8DB60C4807972A1D1F07AA250D3",
+                  "loaderId": "B0B1D07591DF122A581B14EAA202F5E3",
+                  "name": "",
+                  "url": "http://b.monkeysharp-other.test:61882/probe/oopif-child",
+                  "securityOrigin": "http://b.monkeysharp-other.test:61882",
+                  "mimeType": "text/html"
+                }
+              }
+            },
+            "isolatedEvaluation": {
+              "result": {
+                "type": "object",
+                "value": {
+                  "origin": "http://b.monkeysharp-other.test:61882",
+                  "privateProof": 37
+                }
+              }
+            },
+            "otherObserverAlive": "Chrome/84.0.4147.105",
+            "runtimeFirst": {
+              "ready": "snapshot-ready",
+              "resource": "offline-resource",
+              "cookie": "oopif-proof=private",
+              "denied": true,
+              "visits": 1,
+              "runs": 1,
+              "world": "DOM",
+              "private": true,
+              "alien": "undefined"
+            },
+            "runtimeNested": {
+              "ready": "snapshot-ready",
+              "resource": "offline-resource",
+              "cookie": "",
+              "denied": true,
+              "visits": 2,
+              "runs": 1,
+              "world": "DOM",
+              "private": true,
+              "alien": "undefined"
+            },
+            "runtimeMigrated": {
+              "ready": "snapshot-ready",
+              "resource": "offline-resource",
+              "cookie": "oopif-proof=private",
+              "denied": true,
+              "visits": 3,
+              "runs": 1,
+              "world": "DOM",
+              "private": true,
+              "alien": "undefined"
+            },
+            "normalJarUnaffected": true,
+            "runtimeContextBalance": 5,
+            "runtimeFrameScopes": [
+              "cdp:6DCC0E5E592C0EFA2B67C7DDB7C2340B:A4E3F79A180477E4CC5ED93BAC820E37",
+              "cdp:6DCC0E5E592C0EFA2B67C7DDB7C2340B:A4E3F79A180477E4CC5ED93BAC820E37",
+              "cdp:C2871546F188636C25AA4F66B402F9F1:B2807755F7281F2344650AE56AE5AF8F",
+              "cdp:77CB52F4F7379D7BBAC0CA4F7243E4B7:A4E3F79A180477E4CC5ED93BAC820E37",
+              "cdp:77CB52F4F7379D7BBAC0CA4F7243E4B7:A4E3F79A180477E4CC5ED93BAC820E37"
+            ],
+            "runtimeDiagnostics": [],
+            "runtimeValidated": true
+          },
+          "cefSharpVersion": "84.4.10.0",
+          "platform": "x64",
+          "configuration": "fresh profile; site-per-process; test-only DNS mapping; distinct sites monkeysharp.test and monkeysharp-other.test; flat session transport via public SendDevToolsMessage",
+          "targetEventCount": 53
+        }
+      ],
+      "runnerSha256": "c064c3cdf115307e513e2c1c1c92f510defacc417c992085cdce6e8033d5da6d",
+      "rawPath": "artifacts/p1-follow-up/step32/84-serial/results.json"
+    },
+    {
+      "schemaVersion": 1,
+      "probe": "oopif",
+      "assessmentCompleted": true,
+      "commit": "e8f02897056ff8bf7dc1dac6c9c68318c1d293c4",
+      "version": "121.3.70",
+      "platform": "x64",
+      "processExitCode": 0,
+      "timedOut": false,
+      "records": [
+        {
+          "type": "oopif-probe",
+          "status": "passed",
+          "assessment": "completed",
+          "transportProven": true,
+          "featureImplemented": true,
+          "privateContext": false,
+          "facts": {
+            "targets": {
+              "targetInfos": [
+                {
+                  "targetId": "5F946E28A638038EE33B28644339F7FA",
+                  "type": "page",
+                  "title": "OOPIF parent",
+                  "url": "http://a.monkeysharp.test:61105/probe/oopif",
+                  "attached": true,
+                  "canAccessOpener": false,
+                  "browserContextId": "1E0F192E9BD6022F31D5306DF764116D"
+                },
+                {
+                  "targetId": "57CDAE43566424B8B620E1583DA0768C",
+                  "type": "iframe",
+                  "title": "http://b.monkeysharp-other.test:61105/probe/oopif-child",
+                  "url": "http://b.monkeysharp-other.test:61105/probe/oopif-child",
+                  "attached": false,
+                  "canAccessOpener": false,
+                  "browserContextId": "1E0F192E9BD6022F31D5306DF764116D"
+                }
+              ]
+            },
+            "childHttpRequests": 1,
+            "rootFrameTree": {
+              "frameTree": {
+                "frame": {
+                  "id": "5F946E28A638038EE33B28644339F7FA",
+                  "loaderId": "1193A3B1E1F4E51B9377EA3570B3DEF9",
+                  "url": "http://a.monkeysharp.test:61105/probe/oopif",
+                  "domainAndRegistry": "monkeysharp.test",
+                  "securityOrigin": "http://a.monkeysharp.test:61105",
+                  "mimeType": "text/html",
+                  "adFrameStatus": {
+                    "adFrameType": "none"
+                  },
+                  "secureContextType": "InsecureScheme",
+                  "crossOriginIsolatedContextType": "NotIsolated",
+                  "gatedAPIFeatures": []
+                }
+              }
+            },
+            "childTarget": {
+              "targetId": "57CDAE43566424B8B620E1583DA0768C",
+              "type": "iframe",
+              "title": "http://b.monkeysharp-other.test:61105/probe/oopif-child",
+              "url": "http://b.monkeysharp-other.test:61105/probe/oopif-child",
+              "attached": false,
+              "canAccessOpener": false,
+              "browserContextId": "1E0F192E9BD6022F31D5306DF764116D"
+            },
+            "childSession": "D7035CB541D280F62112ADE47952F2D1",
+            "childFrameTree": {
+              "frameTree": {
+                "frame": {
+                  "id": "57CDAE43566424B8B620E1583DA0768C",
+                  "parentId": "5F946E28A638038EE33B28644339F7FA",
+                  "loaderId": "12D0DDC2097DA443B3B00E810E6EF182",
+                  "name": "",
+                  "url": "http://b.monkeysharp-other.test:61105/probe/oopif-child",
+                  "domainAndRegistry": "monkeysharp-other.test",
+                  "securityOrigin": "http://b.monkeysharp-other.test:61105",
+                  "mimeType": "text/html",
+                  "adFrameStatus": {
+                    "adFrameType": "none"
+                  },
+                  "secureContextType": "InsecureScheme",
+                  "crossOriginIsolatedContextType": "NotIsolatedFeatureDisabled",
+                  "gatedAPIFeatures": []
+                }
+              }
+            },
+            "isolatedEvaluation": {
+              "result": {
+                "type": "object",
+                "value": {
+                  "origin": "http://b.monkeysharp-other.test:61105",
+                  "privateProof": 37
+                }
+              }
+            },
+            "otherObserverAlive": "Chrome/121.0.6167.160",
+            "runtimeFirst": {
+              "ready": "snapshot-ready",
+              "resource": "offline-resource",
+              "cookie": "oopif-proof=normal",
+              "denied": true,
+              "visits": 1,
+              "runs": 1,
+              "world": "DOM",
+              "private": false,
+              "alien": "undefined"
+            },
+            "runtimeNested": {
+              "ready": "snapshot-ready",
+              "resource": "offline-resource",
+              "cookie": "",
+              "denied": true,
+              "visits": 2,
+              "runs": 1,
+              "world": "DOM",
+              "private": false,
+              "alien": "undefined"
+            },
+            "runtimeMigrated": {
+              "ready": "snapshot-ready",
+              "resource": "offline-resource",
+              "cookie": "oopif-proof=normal",
+              "denied": true,
+              "visits": 3,
+              "runs": 1,
+              "world": "DOM",
+              "private": false,
+              "alien": "undefined"
+            },
+            "runtimeContextBalance": 5,
+            "runtimeFrameScopes": [
+              "cdp:A03E3A9558ECA48DEAF25E536A947B3D:57CDAE43566424B8B620E1583DA0768C",
+              "cdp:A03E3A9558ECA48DEAF25E536A947B3D:57CDAE43566424B8B620E1583DA0768C",
+              "cdp:6F6933465D22B1771F83020B4D5CCE12:5633DEF9B909E091C6E47A02684A994D",
+              "cdp:0141E3671B289FBC64E222C430143D99:57CDAE43566424B8B620E1583DA0768C",
+              "cdp:0141E3671B289FBC64E222C430143D99:57CDAE43566424B8B620E1583DA0768C"
+            ],
+            "runtimeDiagnostics": [],
+            "runtimeValidated": true
+          },
+          "cefSharpVersion": "121.3.70.0",
+          "platform": "x64",
+          "configuration": "fresh profile; site-per-process; test-only DNS mapping; distinct sites monkeysharp.test and monkeysharp-other.test; flat session transport via public SendDevToolsMessage",
+          "targetEventCount": 56
+        },
+        {
+          "type": "oopif-probe",
+          "status": "passed",
+          "assessment": "completed",
+          "transportProven": true,
+          "featureImplemented": true,
+          "privateContext": true,
+          "facts": {
+            "targets": {
+              "targetInfos": [
+                {
+                  "targetId": "2200C46BCFC81752E1EA2B66D272DA20",
+                  "type": "page",
+                  "title": "OOPIF parent",
+                  "url": "http://a.monkeysharp.test:61105/probe/oopif",
+                  "attached": true,
+                  "canAccessOpener": false,
+                  "browserContextId": "5A30728AE49342545314AA6FCE1E9419"
+                },
+                {
+                  "targetId": "6744246F9C29706FCE65AA23C3EF1799",
+                  "type": "iframe",
+                  "title": "http://b.monkeysharp-other.test:61105/probe/oopif-child",
+                  "url": "http://b.monkeysharp-other.test:61105/probe/oopif-child",
+                  "attached": false,
+                  "canAccessOpener": false,
+                  "browserContextId": "5A30728AE49342545314AA6FCE1E9419"
+                }
+              ]
+            },
+            "childHttpRequests": 4,
+            "rootFrameTree": {
+              "frameTree": {
+                "frame": {
+                  "id": "2200C46BCFC81752E1EA2B66D272DA20",
+                  "loaderId": "7975C17BD19E4E0E89757B27884A4313",
+                  "url": "http://a.monkeysharp.test:61105/probe/oopif",
+                  "domainAndRegistry": "monkeysharp.test",
+                  "securityOrigin": "http://a.monkeysharp.test:61105",
+                  "mimeType": "text/html",
+                  "adFrameStatus": {
+                    "adFrameType": "none"
+                  },
+                  "secureContextType": "InsecureScheme",
+                  "crossOriginIsolatedContextType": "NotIsolated",
+                  "gatedAPIFeatures": []
+                }
+              }
+            },
+            "childTarget": {
+              "targetId": "6744246F9C29706FCE65AA23C3EF1799",
+              "type": "iframe",
+              "title": "http://b.monkeysharp-other.test:61105/probe/oopif-child",
+              "url": "http://b.monkeysharp-other.test:61105/probe/oopif-child",
+              "attached": false,
+              "canAccessOpener": false,
+              "browserContextId": "5A30728AE49342545314AA6FCE1E9419"
+            },
+            "childSession": "E5FB9448986A60B1AD2409FA4B7961EA",
+            "childFrameTree": {
+              "frameTree": {
+                "frame": {
+                  "id": "6744246F9C29706FCE65AA23C3EF1799",
+                  "parentId": "2200C46BCFC81752E1EA2B66D272DA20",
+                  "loaderId": "02B01089E3E8487AA43BF10B6696C8E1",
+                  "name": "",
+                  "url": "http://b.monkeysharp-other.test:61105/probe/oopif-child",
+                  "domainAndRegistry": "monkeysharp-other.test",
+                  "securityOrigin": "http://b.monkeysharp-other.test:61105",
+                  "mimeType": "text/html",
+                  "adFrameStatus": {
+                    "adFrameType": "none"
+                  },
+                  "secureContextType": "InsecureScheme",
+                  "crossOriginIsolatedContextType": "NotIsolatedFeatureDisabled",
+                  "gatedAPIFeatures": []
+                }
+              }
+            },
+            "isolatedEvaluation": {
+              "result": {
+                "type": "object",
+                "value": {
+                  "origin": "http://b.monkeysharp-other.test:61105",
+                  "privateProof": 37
+                }
+              }
+            },
+            "otherObserverAlive": "Chrome/121.0.6167.160",
+            "runtimeFirst": {
+              "ready": "snapshot-ready",
+              "resource": "offline-resource",
+              "cookie": "oopif-proof=private",
+              "denied": true,
+              "visits": 1,
+              "runs": 1,
+              "world": "DOM",
+              "private": true,
+              "alien": "undefined"
+            },
+            "runtimeNested": {
+              "ready": "snapshot-ready",
+              "resource": "offline-resource",
+              "cookie": "",
+              "denied": true,
+              "visits": 2,
+              "runs": 1,
+              "world": "DOM",
+              "private": true,
+              "alien": "undefined"
+            },
+            "runtimeMigrated": {
+              "ready": "snapshot-ready",
+              "resource": "offline-resource",
+              "cookie": "oopif-proof=private",
+              "denied": true,
+              "visits": 3,
+              "runs": 1,
+              "world": "DOM",
+              "private": true,
+              "alien": "undefined"
+            },
+            "normalJarUnaffected": true,
+            "runtimeContextBalance": 5,
+            "runtimeFrameScopes": [
+              "cdp:3F03FCFA108A576449A399DF1F0FB7C5:6744246F9C29706FCE65AA23C3EF1799",
+              "cdp:3F03FCFA108A576449A399DF1F0FB7C5:6744246F9C29706FCE65AA23C3EF1799",
+              "cdp:32007CF3448BAEE6297265296EC76F0D:22B875C76FB74C5B8079D48A26CD3ADD",
+              "cdp:E26381084E1672824290D413C91EA818:6744246F9C29706FCE65AA23C3EF1799",
+              "cdp:E26381084E1672824290D413C91EA818:6744246F9C29706FCE65AA23C3EF1799"
+            ],
+            "runtimeDiagnostics": [],
+            "runtimeValidated": true
+          },
+          "cefSharpVersion": "121.3.70.0",
+          "platform": "x64",
+          "configuration": "fresh profile; site-per-process; test-only DNS mapping; distinct sites monkeysharp.test and monkeysharp-other.test; flat session transport via public SendDevToolsMessage",
+          "targetEventCount": 55
+        }
+      ],
+      "runnerSha256": "c064c3cdf115307e513e2c1c1c92f510defacc417c992085cdce6e8033d5da6d",
+      "rawPath": "artifacts/p1-follow-up/step32/121-private/results.json"
+    },
+    {
+      "schemaVersion": 1,
+      "probe": "oopif",
+      "assessmentCompleted": true,
+      "commit": "e8f02897056ff8bf7dc1dac6c9c68318c1d293c4",
+      "version": "151.3.240",
+      "platform": "x64",
+      "processExitCode": 0,
+      "timedOut": false,
+      "records": [
+        {
+          "type": "oopif-probe",
+          "status": "passed",
+          "assessment": "completed",
+          "transportProven": true,
+          "featureImplemented": true,
+          "privateContext": false,
+          "facts": {
+            "targets": {
+              "targetInfos": [
+                {
+                  "targetId": "12698E63808970573F0AF80E68F5C523",
+                  "type": "page",
+                  "title": "OOPIF parent",
+                  "url": "http://a.monkeysharp.test:62047/probe/oopif",
+                  "attached": true,
+                  "canAccessOpener": false,
+                  "browserContextId": "29AAA6FFCF8F88FE0EDC44624FE4EA64"
+                },
+                {
+                  "targetId": "0A0232D36AB2E2603100FBCED88CBFCE",
+                  "type": "iframe",
+                  "title": "http://b.monkeysharp-other.test:62047/probe/oopif-child",
+                  "url": "http://b.monkeysharp-other.test:62047/probe/oopif-child",
+                  "attached": false,
+                  "parentId": "12698E63808970573F0AF80E68F5C523",
+                  "canAccessOpener": false,
+                  "parentFrameId": "12698E63808970573F0AF80E68F5C523",
+                  "browserContextId": "29AAA6FFCF8F88FE0EDC44624FE4EA64"
+                }
+              ]
+            },
+            "childHttpRequests": 1,
+            "rootFrameTree": {
+              "frameTree": {
+                "frame": {
+                  "id": "12698E63808970573F0AF80E68F5C523",
+                  "loaderId": "BC298857353DB6DFFBAA9BB6F2472F0C",
+                  "url": "http://a.monkeysharp.test:62047/probe/oopif",
+                  "domainAndRegistry": "monkeysharp.test",
+                  "securityOrigin": "http://a.monkeysharp.test:62047",
+                  "securityOriginDetails": {
+                    "isLocalhost": false
+                  },
+                  "mimeType": "text/html",
+                  "adFrameStatus": {
+                    "adFrameType": "none"
+                  },
+                  "secureContextType": "InsecureScheme",
+                  "crossOriginIsolatedContextType": "NotIsolated",
+                  "gatedAPIFeatures": []
+                }
+              }
+            },
+            "childTarget": {
+              "targetId": "0A0232D36AB2E2603100FBCED88CBFCE",
+              "type": "iframe",
+              "title": "http://b.monkeysharp-other.test:62047/probe/oopif-child",
+              "url": "http://b.monkeysharp-other.test:62047/probe/oopif-child",
+              "attached": false,
+              "parentId": "12698E63808970573F0AF80E68F5C523",
+              "canAccessOpener": false,
+              "parentFrameId": "12698E63808970573F0AF80E68F5C523",
+              "browserContextId": "29AAA6FFCF8F88FE0EDC44624FE4EA64"
+            },
+            "childSession": "B5830C415FF93F7912A3BA68742DE66D",
+            "childFrameTree": {
+              "frameTree": {
+                "frame": {
+                  "id": "0A0232D36AB2E2603100FBCED88CBFCE",
+                  "parentId": "12698E63808970573F0AF80E68F5C523",
+                  "loaderId": "C33EF1B0C67BB1403C7BCC2EED483EC8",
+                  "name": "",
+                  "url": "http://b.monkeysharp-other.test:62047/probe/oopif-child",
+                  "domainAndRegistry": "monkeysharp-other.test",
+                  "securityOrigin": "http://b.monkeysharp-other.test:62047",
+                  "securityOriginDetails": {
+                    "isLocalhost": false
+                  },
+                  "mimeType": "text/html",
+                  "adFrameStatus": {
+                    "adFrameType": "none",
+                    "explanations": []
+                  },
+                  "secureContextType": "InsecureScheme",
+                  "crossOriginIsolatedContextType": "NotIsolatedFeatureDisabled",
+                  "gatedAPIFeatures": []
+                }
+              }
+            },
+            "isolatedEvaluation": {
+              "result": {
+                "type": "object",
+                "value": {
+                  "origin": "http://b.monkeysharp-other.test:62047",
+                  "privateProof": 37
+                }
+              }
+            },
+            "otherObserverAlive": "Chrome/151.0.7922.174",
+            "runtimeFirst": {
+              "ready": "snapshot-ready",
+              "resource": "offline-resource",
+              "cookie": "oopif-proof=normal",
+              "denied": true,
+              "visits": 1,
+              "runs": 1,
+              "world": "DOM",
+              "private": false,
+              "alien": "undefined"
+            },
+            "runtimeNested": {
+              "ready": "snapshot-ready",
+              "resource": "offline-resource",
+              "cookie": "",
+              "denied": true,
+              "visits": 2,
+              "runs": 1,
+              "world": "DOM",
+              "private": false,
+              "alien": "undefined"
+            },
+            "runtimeMigrated": {
+              "ready": "snapshot-ready",
+              "resource": "offline-resource",
+              "cookie": "oopif-proof=normal",
+              "denied": true,
+              "visits": 3,
+              "runs": 1,
+              "world": "DOM",
+              "private": false,
+              "alien": "undefined"
+            },
+            "runtimeContextBalance": 5,
+            "runtimeFrameScopes": [
+              "cdp:BEDE54A345FB2056E9E0E3482A040306:0A0232D36AB2E2603100FBCED88CBFCE",
+              "cdp:BEDE54A345FB2056E9E0E3482A040306:0A0232D36AB2E2603100FBCED88CBFCE",
+              "cdp:8B502C24389BEA301858CF308AD35B2F:11F8900DF674F0AF668B68563980B276",
+              "cdp:C96AAE48F5F605AEFD96AF00E1C9B5BB:0A0232D36AB2E2603100FBCED88CBFCE",
+              "cdp:C96AAE48F5F605AEFD96AF00E1C9B5BB:0A0232D36AB2E2603100FBCED88CBFCE"
+            ],
+            "runtimeDiagnostics": [],
+            "runtimeValidated": true
+          },
+          "cefSharpVersion": "151.3.240.0",
+          "platform": "x64",
+          "configuration": "fresh profile; site-per-process; test-only DNS mapping; distinct sites monkeysharp.test and monkeysharp-other.test; flat session transport via public SendDevToolsMessage",
+          "targetEventCount": 56
+        },
+        {
+          "type": "oopif-probe",
+          "status": "passed",
+          "assessment": "completed",
+          "transportProven": true,
+          "featureImplemented": true,
+          "privateContext": true,
+          "facts": {
+            "targets": {
+              "targetInfos": [
+                {
+                  "targetId": "B441099E3F8032E3EAC75775FEBB90D4",
+                  "type": "page",
+                  "title": "OOPIF parent",
+                  "url": "http://a.monkeysharp.test:62047/probe/oopif",
+                  "attached": true,
+                  "canAccessOpener": false,
+                  "browserContextId": "0C0270E3CE60BDDF7D21126D257043CC"
+                },
+                {
+                  "targetId": "CAF9DFB5B322479F964A80761FBB8313",
+                  "type": "iframe",
+                  "title": "http://b.monkeysharp-other.test:62047/probe/oopif-child",
+                  "url": "http://b.monkeysharp-other.test:62047/probe/oopif-child",
+                  "attached": false,
+                  "parentId": "B441099E3F8032E3EAC75775FEBB90D4",
+                  "canAccessOpener": false,
+                  "parentFrameId": "B441099E3F8032E3EAC75775FEBB90D4",
+                  "browserContextId": "0C0270E3CE60BDDF7D21126D257043CC"
+                }
+              ]
+            },
+            "childHttpRequests": 4,
+            "rootFrameTree": {
+              "frameTree": {
+                "frame": {
+                  "id": "B441099E3F8032E3EAC75775FEBB90D4",
+                  "loaderId": "B5D8E06493CC6FC3B9BF9DDD81B0362E",
+                  "url": "http://a.monkeysharp.test:62047/probe/oopif",
+                  "domainAndRegistry": "monkeysharp.test",
+                  "securityOrigin": "http://a.monkeysharp.test:62047",
+                  "securityOriginDetails": {
+                    "isLocalhost": false
+                  },
+                  "mimeType": "text/html",
+                  "adFrameStatus": {
+                    "adFrameType": "none"
+                  },
+                  "secureContextType": "InsecureScheme",
+                  "crossOriginIsolatedContextType": "NotIsolated",
+                  "gatedAPIFeatures": []
+                }
+              }
+            },
+            "childTarget": {
+              "targetId": "CAF9DFB5B322479F964A80761FBB8313",
+              "type": "iframe",
+              "title": "http://b.monkeysharp-other.test:62047/probe/oopif-child",
+              "url": "http://b.monkeysharp-other.test:62047/probe/oopif-child",
+              "attached": false,
+              "parentId": "B441099E3F8032E3EAC75775FEBB90D4",
+              "canAccessOpener": false,
+              "parentFrameId": "B441099E3F8032E3EAC75775FEBB90D4",
+              "browserContextId": "0C0270E3CE60BDDF7D21126D257043CC"
+            },
+            "childSession": "4325D465F1768C140F247A8E3DEE41D3",
+            "childFrameTree": {
+              "frameTree": {
+                "frame": {
+                  "id": "CAF9DFB5B322479F964A80761FBB8313",
+                  "parentId": "B441099E3F8032E3EAC75775FEBB90D4",
+                  "loaderId": "0269720C98483C9A8B1E61B4DC869AD4",
+                  "name": "",
+                  "url": "http://b.monkeysharp-other.test:62047/probe/oopif-child",
+                  "domainAndRegistry": "monkeysharp-other.test",
+                  "securityOrigin": "http://b.monkeysharp-other.test:62047",
+                  "securityOriginDetails": {
+                    "isLocalhost": false
+                  },
+                  "mimeType": "text/html",
+                  "adFrameStatus": {
+                    "adFrameType": "none",
+                    "explanations": []
+                  },
+                  "secureContextType": "InsecureScheme",
+                  "crossOriginIsolatedContextType": "NotIsolatedFeatureDisabled",
+                  "gatedAPIFeatures": []
+                }
+              }
+            },
+            "isolatedEvaluation": {
+              "result": {
+                "type": "object",
+                "value": {
+                  "origin": "http://b.monkeysharp-other.test:62047",
+                  "privateProof": 37
+                }
+              }
+            },
+            "otherObserverAlive": "Chrome/151.0.7922.174",
+            "runtimeFirst": {
+              "ready": "snapshot-ready",
+              "resource": "offline-resource",
+              "cookie": "oopif-proof=private",
+              "denied": true,
+              "visits": 1,
+              "runs": 1,
+              "world": "DOM",
+              "private": true,
+              "alien": "undefined"
+            },
+            "runtimeNested": {
+              "ready": "snapshot-ready",
+              "resource": "offline-resource",
+              "cookie": "",
+              "denied": true,
+              "visits": 2,
+              "runs": 1,
+              "world": "DOM",
+              "private": true,
+              "alien": "undefined"
+            },
+            "runtimeMigrated": {
+              "ready": "snapshot-ready",
+              "resource": "offline-resource",
+              "cookie": "oopif-proof=private",
+              "denied": true,
+              "visits": 3,
+              "runs": 1,
+              "world": "DOM",
+              "private": true,
+              "alien": "undefined"
+            },
+            "normalJarUnaffected": true,
+            "runtimeContextBalance": 5,
+            "runtimeFrameScopes": [
+              "cdp:961A41993D9F05D250160B541CA9BE3E:CAF9DFB5B322479F964A80761FBB8313",
+              "cdp:961A41993D9F05D250160B541CA9BE3E:CAF9DFB5B322479F964A80761FBB8313",
+              "cdp:BD6957A506268FC60E1CE4E34C42A028:0A1E78B53F00B2645B81FDF5BF210491",
+              "cdp:2C7334C5356A6616D83BCBBBD26FB164:CAF9DFB5B322479F964A80761FBB8313",
+              "cdp:2C7334C5356A6616D83BCBBBD26FB164:CAF9DFB5B322479F964A80761FBB8313"
+            ],
+            "runtimeDiagnostics": [],
+            "runtimeValidated": true
+          },
+          "cefSharpVersion": "151.3.240.0",
+          "platform": "x64",
+          "configuration": "fresh profile; site-per-process; test-only DNS mapping; distinct sites monkeysharp.test and monkeysharp-other.test; flat session transport via public SendDevToolsMessage",
+          "targetEventCount": 53
+        }
+      ],
+      "runnerSha256": "c064c3cdf115307e513e2c1c1c92f510defacc417c992085cdce6e8033d5da6d",
+      "rawPath": "artifacts/p1-follow-up/step32/151-serial/results.json"
+    }
+  ],
+  "tests": {
+    "adapter": 63,
+    "cdp": 6
+  },
+  "ordinaryNativeGate": "artifacts/p1-follow-up/step32/smoke-121/results.jsonl",
+  "retainedAttempts": {
+    "84-retry": "same-site subdomains; invalid OOPIF fixture, not negative capability evidence",
+    "84-cross-site/121-cross-site/151-cross-site": "transport-only experiments; genuine distinct-site iframe targets",
+    "151-runtime-retry/84-runtime": "initial actual source/nested/migration proof, before two-script and private expansion",
+    "151-private": "actual private proof with transient detach diagnostics, before expected-revocation cleanup",
+    "84-private/151-private-final": "invalidated because version runs potentially overlapped; excluded from acceptance"
+  },
+  "remaining": [
+    "Native OOPIF menu targeting",
+    "Strict start",
+    "Transparent BFCache",
+    "API-specific scopes not independently validated"
+  ],
+  "inputSha256": {
+    "Mzying2001.MonkeySharp.CefSharp/CefSharpCdpSession.cs": "528d8bdda0491038b282159eb3752dda4b0d4ea26adc9be2d3e5993766de0a41",
+    "Mzying2001.MonkeySharp.CefSharp/CefSharpIsolatedExecutor.cs": "8bb1ada3d183a7210f88437ec2af84fb52af1370c8d0985d51412bb7b7c45b69",
+    "Mzying2001.MonkeySharp.CefSharp.SmokeHost/OopifProbe.cs": "fb8fdc93210b4f95cd5100449255e88fac89e49b37ae791fef774e1b13917984"
+  }
+}

@@ -4,6 +4,7 @@ using Moq;
 using System;
 using System.IO;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
@@ -12,6 +13,72 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
 {
     public sealed class CdpSessionTests
     {
+        [Fact]
+        public async Task NestedNativeSubmissionDoesNotLoseTheOuterReentrantResponse()
+        {
+            var host = new Mock<IBrowserHost>();
+            using (var session = new CefSharpCdpSession(host.Object, action => { action(); return Task.CompletedTask; }))
+            {
+                Task<JsonElement> inner = null;
+                host.Setup(value => value.ExecuteDevToolsMethod(0, It.IsAny<string>(), It.IsAny<string>())).Returns((int _, string method, string parameters) =>
+                {
+                    var id = method == "outer" ? 41 : 42;
+                    if (method == "outer") inner = session.ExecuteAsync("inner");
+                    session.OnDevToolsMethodResult(null, id, true, Json("{}"));
+                    return id;
+                });
+                var outer = session.ExecuteAsync("outer");
+                Assert.Same(outer, await Task.WhenAny(outer, Task.Delay(100)));
+                await outer; await inner;
+            }
+        }
+
+        [Fact]
+        public async Task ChildSessionsKeepResponsesEventsAndCancellationScoped()
+        {
+            var host = new Mock<IBrowserHost>();
+            var next = 10;
+            using (var root = new CefSharpCdpSession(host.Object, action => { action(); return Task.CompletedTask; }))
+            {
+                host.Setup(value => value.ExecuteDevToolsMethod(0, It.IsAny<string>(), It.IsAny<string>())).Returns((int _, string method, string parameters) =>
+                {
+                    var id = next++;
+                    if (method == "Target.attachToTarget") root.OnDevToolsMethodResult(null, id, true, Json("{\"sessionId\":\"child\"}"));
+                    else root.OnDevToolsMethodResult(null, id, true, Json("{}"));
+                    return id;
+                });
+                string sent = null;
+                host.Setup(value => value.SendDevToolsMessage(It.IsAny<string>())).Returns((string value) => { sent = value; return true; });
+                using (var child = await root.AttachTargetAsync("target", CancellationToken.None))
+                {
+                    var rootEvents = 0; var childEvents = 0;
+                    root.EventReceived += (_, __) => rootEvents++;
+                    child.EventReceived += (_, __) => childEvents++;
+                    var command = child.ExecuteAsync("Runtime.evaluate");
+                    using (var packet = JsonDocument.Parse(sent))
+                    {
+                        var id = packet.RootElement.GetProperty("id").GetInt32();
+                        root.OnDevToolsMessage(null, Json("{\"sessionId\":\"other\",\"id\":" + id + ",\"result\":{\"wrong\":true}}"));
+                        Assert.False(command.IsCompleted);
+                        root.OnDevToolsMessage(null, Json("{\"sessionId\":\"child\",\"id\":" + id + ",\"result\":{\"value\":7}}"));
+                    }
+                    Assert.Equal(7, (await command).GetProperty("value").GetInt32());
+                    Assert.True(root.OnDevToolsMessage(null, Json("{\"sessionId\":\"child\",\"method\":\"Runtime.executionContextCreated\",\"params\":{\"context\":{\"id\":1}}}")));
+                    Assert.Equal(0, rootEvents); Assert.Equal(1, childEvents);
+                    using (var cancellation = new CancellationTokenSource())
+                    {
+                        var pending = child.ExecuteAsync("Runtime.evaluate", cancellationToken: cancellation.Token);
+                        cancellation.Cancel();
+                        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => pending);
+                    }
+                    var detached = child.ExecuteAsync("Runtime.evaluate");
+                    root.OnDevToolsEvent(null, "Target.detachedFromTarget", Json("{\"sessionId\":\"child\"}"));
+                    await Assert.ThrowsAsync<ObjectDisposedException>(() => detached);
+                }
+                Assert.Equal(JsonValueKind.Object, (await root.ExecuteAsync("Browser.getVersion")).ValueKind);
+            }
+        }
+
         [Fact]
         public async Task CommandsUseNativeIdsAndOnlyDisposeTheirOwnObserver()
         {

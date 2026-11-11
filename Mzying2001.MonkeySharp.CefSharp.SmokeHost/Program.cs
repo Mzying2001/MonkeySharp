@@ -29,7 +29,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             if (args.Length == 3 && args[0] == "--corpus") { Environment.ExitCode = global::MonkeySharp.Compatibility.CorpusHost.Run(args[1], args[2]); return; }
             CefSharpSettings.WcfEnabled = false;
             CefSharpSettings.ConcurrentTaskExecution = true;
-            if (args.Contains("--bfcache-probe")) CefSharpSettings.ShutdownOnExit = false;
+            if (args.Contains("--bfcache-probe") || args.Contains("--oopif-probe")) CefSharpSettings.ShutdownOnExit = false;
             var cachePath = Path.Combine(Path.GetTempPath(), "MonkeySharpSmoke", Guid.NewGuid().ToString("N"));
             var settings = new CefSettings
             {
@@ -39,6 +39,12 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             settings.CefCommandLineArgs.Add("ignore-certificate-errors", "1");
             settings.CefCommandLineArgs.Add("host-resolver-rules", "MAP cookie.monkeysharp.test 127.0.0.1");
             settings.CefCommandLineArgs.Add("autoplay-policy", "no-user-gesture-required");
+            if (args.Contains("--oopif-probe"))
+            {
+                settings.CefCommandLineArgs["host-resolver-rules"] = "MAP *.monkeysharp.test 127.0.0.1, MAP *.monkeysharp-other.test 127.0.0.1";
+                settings.CefCommandLineArgs.Add("site-per-process", "1");
+                settings.CefCommandLineArgs.Add("no-proxy-server", "1");
+            }
             EnableBackForwardCacheProbe = args.Contains("--enable-bfcache");
             if (EnableBackForwardCacheProbe) settings.CefCommandLineArgs.Add("enable-features", "BackForwardCache");
             if (!Cef.Initialize(settings))
@@ -48,6 +54,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             {
                 if (args.Contains("--cdp-probe")) CdpProbe.RunAsync().GetAwaiter().GetResult();
                 else if (args.Contains("--bfcache-probe")) BfcacheProbe.RunAsync().GetAwaiter().GetResult();
+                else if (args.Contains("--oopif-probe")) OopifProbe.Run();
                 else RunAsync().GetAwaiter().GetResult();
             }
             finally
@@ -581,6 +588,12 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                     if (request.Path == "/stream")
                     {
                         await WriteChunkedAsync(stream).ConfigureAwait(false);
+                        return;
+                    }
+                    if (request.Path == "/probe/oopif")
+                    {
+                        var html = Encoding.UTF8.GetBytes("<!doctype html><title>OOPIF parent</title><iframe src='http://b.monkeysharp-other.test:" + Port + "/probe/oopif-child'></iframe>");
+                        await WriteResponseAsync(stream, 200, "OK", "text/html", new Dictionary<string, string>(), html).ConfigureAwait(false);
                         return;
                     }
                     if (request.Path == "/probe/bfcache-a" || request.Path == "/probe/bfcache-b")

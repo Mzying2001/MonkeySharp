@@ -19,6 +19,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'JavaScript tests failed.' }
     & (Join-Path $root 'Mzying2001.MonkeySharp.CefSharp.SmokeHost/Run-E2E.ps1') -Platform $Platform -CefSharpVersion $CefSharpVersion
     if ($LASTEXITCODE -ne 0) { throw 'SmokeHost failed.' }
+    & (Join-Path $root 'scripts/compatibility/Run-NativeProbe.ps1') -Probe oopif -Platform $Platform -CefSharpVersion $CefSharpVersion -NoBuild
+    if ($LASTEXITCODE -ne 0) { throw 'OOPIF runtime gate failed.' }
     & (Join-Path $root 'Mzying2001.MonkeySharp.CefSharp.SmokeHost/Test-SmokeResults.ps1')
     $corpusDirectory = Join-Path $root ('artifacts/corpus/baseline-' + [Guid]::NewGuid().ToString('N'))
     & (Join-Path $root 'scripts/compatibility/Run-Corpus.ps1') -Platform $Platform -CefSharpVersion $CefSharpVersion -NoBuild -OutputDirectory $corpusDirectory

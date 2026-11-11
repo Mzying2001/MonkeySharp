@@ -3,6 +3,7 @@ using CefSharp.Callback;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -21,7 +22,15 @@ namespace Mzying2001.MonkeySharp.CefSharp
             new Dictionary<int, TaskCompletionSource<JsonElement>>();
         private IRegistration _registration;
         private Dictionary<int, Action<TaskCompletionSource<JsonElement>>> _submissionResults;
+        private int _submissionDepth;
         private bool _disposed;
+        private readonly CefSharpCdpSession _root;
+        private readonly string _sessionId;
+        private readonly Dictionary<string, CefSharpCdpSession> _children = new Dictionary<string, CefSharpCdpSession>();
+        internal string Scope => _sessionId ?? "root";
+        internal bool IsChild => _sessionId != null;
+        internal bool IsClosed { get { lock (_sync) return _disposed; } }
+        internal event EventHandler Closed;
 
         internal CefSharpCdpSession(IBrowserHost host, Func<Action, Task> schedule = null)
         {
@@ -31,6 +40,34 @@ namespace Mzying2001.MonkeySharp.CefSharp
 
         internal event EventHandler<CdpEventArgs> EventReceived;
         internal event EventHandler<Exception> HandlerFailed;
+
+        private CefSharpCdpSession(CefSharpCdpSession root, string sessionId)
+        { _root = root; _sessionId = sessionId; _host = root._host; _schedule = root._schedule; }
+
+        internal async Task<CefSharpCdpSession> AttachTargetAsync(string targetId, CancellationToken token)
+        {
+            var root = _root ?? this;
+            var result = await root.ExecuteAsync("Target.attachToTarget", new { targetId, flatten = true }, token).ConfigureAwait(false);
+            var id = result.GetProperty("sessionId").GetString();
+            lock (root._sync)
+            {
+                root.ThrowIfDisposed();
+                var child = new CefSharpCdpSession(root, id);
+                root._children.Add(id, child);
+                return child;
+            }
+        }
+
+        internal Task<JsonElement> ExecuteRootAsync(string method, object parameters = null, CancellationToken token = default(CancellationToken)) =>
+            (_root ?? this).ExecuteAsync(method, parameters, token);
+
+        internal async Task DetachAsync()
+        {
+            if (_root == null) return;
+            try { await _root.ExecuteAsync("Target.detachFromTarget", new { sessionId = _sessionId }).ConfigureAwait(false); }
+            catch (ObjectDisposedException) { }
+            finally { Dispose(); }
+        }
 
         internal async Task InitializeAsync()
         {
@@ -65,9 +102,20 @@ namespace Mzying2001.MonkeySharp.CefSharp
                         {
                             ThrowIfDisposed();
                             deadline.Token.ThrowIfCancellationRequested();
+                            if (_root != null)
+                            {
+                                // Reserve a CEF-allocated ID before sending its child-session command.
+                                // No other observer can subsequently allocate this ID for a root request.
+                                id = _host.ExecuteDevToolsMethod(0, "Browser.getVersion", "{}");
+                                if (id <= 0) throw new InvalidOperationException("CEF did not allocate a child command ID.");
+                                _pending.Add(id, completion);
+                                if (!_host.SendDevToolsMessage(JsonSerializer.Serialize(new { id, sessionId = _sessionId, method, @params = parameters ?? new object() })))
+                                    throw new InvalidOperationException("CEF rejected the child session message.");
+                                return;
+                            }
                             // CEF 84 can deliver the response reentrantly before returning
                             // its allocated ID. Keep only responses received during submission.
-                            _submissionResults = new Dictionary<int, Action<TaskCompletionSource<JsonElement>>>();
+                            if (_submissionDepth++ == 0) _submissionResults = new Dictionary<int, Action<TaskCompletionSource<JsonElement>>>();
                             try
                             {
                                 id = _host.ExecuteDevToolsMethod(0, method, json);
@@ -76,7 +124,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                                 if (_submissionResults.TryGetValue(id, out var deliver)) deliver(completion);
                                 else _pending.Add(id, completion);
                             }
-                            finally { _submissionResults = null; }
+                            finally { if (--_submissionDepth == 0) _submissionResults = null; }
                         }
                     }).ConfigureAwait(false);
                     using (deadline.Token.Register(() =>
@@ -91,7 +139,37 @@ namespace Mzying2001.MonkeySharp.CefSharp
             }
         }
 
-        public bool OnDevToolsMessage(IBrowser browser, Stream message) => false;
+        public bool OnDevToolsMessage(IBrowser browser, Stream message)
+        {
+            var packet = Read(message);
+            if (!packet.TryGetProperty("sessionId", out var id)) return false;
+            CefSharpCdpSession child;
+            lock (_sync) _children.TryGetValue(id.GetString(), out child);
+            child?.Receive(packet);
+            // Session envelopes must never enter this observer's unscoped callbacks.
+            // Returning true affects this observer only; other native observers remain registered.
+            return true;
+        }
+
+        private void Receive(JsonElement packet)
+        {
+            if (packet.TryGetProperty("id", out var id))
+            {
+                TaskCompletionSource<JsonElement> pending;
+                lock (_sync)
+                {
+                    if (!_pending.TryGetValue(id.GetInt32(), out pending)) return;
+                    _pending.Remove(id.GetInt32());
+                }
+                if (packet.TryGetProperty("error", out var error)) pending.TrySetException(new InvalidOperationException("CDP rejected child command: " + error.GetRawText()));
+                else pending.TrySetResult(packet.GetProperty("result").Clone());
+            }
+            else if (packet.TryGetProperty("method", out var method))
+            {
+                var parameters = packet.TryGetProperty("params", out var data) ? data.Clone() : JsonSerializer.SerializeToElement(new object());
+                DispatchEvent(new CdpEventArgs(method.GetString(), parameters));
+            }
+        }
 
         public void OnDevToolsMethodResult(IBrowser browser, int messageId, bool success, Stream result)
         {
@@ -121,6 +199,21 @@ namespace Mzying2001.MonkeySharp.CefSharp
             try
             {
                 var args = new CdpEventArgs(method, Read(parameters));
+                if (method == "Target.detachedFromTarget" && args.Parameters.TryGetProperty("sessionId", out var sessionId))
+                {
+                    CefSharpCdpSession child;
+                    lock (_sync) _children.TryGetValue(sessionId.GetString(), out child);
+                    child?.Dispose();
+                }
+                DispatchEvent(args);
+            }
+            catch (Exception error) { HandlerFailed?.Invoke(this, error); }
+        }
+
+        private void DispatchEvent(CdpEventArgs args)
+        {
+            try
+            {
                 var handlers = EventReceived;
                 if (handlers == null) return;
                 foreach (EventHandler<CdpEventArgs> handler in handlers.GetInvocationList())
@@ -154,6 +247,8 @@ namespace Mzying2001.MonkeySharp.CefSharp
         {
             TaskCompletionSource<JsonElement>[] pending;
             IRegistration registration;
+            CefSharpCdpSession[] children;
+            EventHandler closed;
             lock (_sync)
             {
                 if (_disposed) return;
@@ -162,12 +257,19 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 _pending.Clear();
                 registration = _registration;
                 _registration = null;
+                children = _children.Values.ToArray();
+                _children.Clear();
+                closed = Closed;
+                Closed = null;
                 EventReceived = null;
                 HandlerFailed = null;
             }
             foreach (var completion in pending)
                 completion.TrySetException(new ObjectDisposedException(nameof(CefSharpCdpSession)));
             registration?.Dispose();
+            foreach (var child in children) child.Dispose();
+            if (_root != null) lock (_root._sync) _root._children.Remove(_sessionId);
+            closed?.Invoke(this, EventArgs.Empty);
         }
     }
 

@@ -32,6 +32,10 @@ namespace Mzying2001.MonkeySharp.CefSharp
         private readonly Dictionary<string, World> _documents = new Dictionary<string, World>();
         private readonly Dictionary<string, World> _menuProofs = new Dictionary<string, World>();
         private readonly HashSet<Task> _tasks = new HashSet<Task>();
+        private readonly Dictionary<string, CefSharpIsolatedExecutor> _children = new Dictionary<string, CefSharpIsolatedExecutor>();
+        private readonly HashSet<string> _attachingTargets = new HashSet<string>();
+        private readonly HashSet<string> _ignoredTargets = new HashSet<string>();
+        private bool _discovering, _discoverAgain;
         private readonly string _binding = "__MonkeySharpIsolated_" + Guid.NewGuid().ToString("N");
         private volatile bool _disposed;
         private volatile bool _stopping;
@@ -50,12 +54,95 @@ namespace Mzying2001.MonkeySharp.CefSharp
         internal async Task InitializeAsync()
         {
             _session.EventReceived += EventReceived;
+            _session.Closed += SessionClosed;
             _repository.Changed += RepositoryChanged;
             await _session.ExecuteAsync("Page.enable", cancellationToken: _lifetime.Token).ConfigureAwait(false);
             await _session.ExecuteAsync("Runtime.enable", cancellationToken: _lifetime.Token).ConfigureAwait(false);
             var tree = await _session.ExecuteAsync("Page.getFrameTree", cancellationToken: _lifetime.Token).ConfigureAwait(false);
             ReadTree(tree.GetProperty("frameTree"));
             await RefreshAsync().ConfigureAwait(false);
+            if (!_session.IsChild) await _session.ExecuteAsync("Target.setDiscoverTargets", new { discover = true }, _lifetime.Token).ConfigureAwait(false);
+            await DiscoverChildrenAsync().ConfigureAwait(false);
+        }
+
+        private void SessionClosed(object sender, EventArgs args) => Track(DisposeAsync());
+
+        private async Task DiscoverChildrenAsync()
+        {
+            lock (_sync)
+            {
+                if (_disposed || _stopping) return;
+                if (_discovering) { _discoverAgain = true; return; }
+                _discovering = true;
+            }
+            try
+            {
+                bool again;
+                do
+                {
+                    lock (_sync) _discoverAgain = false;
+                    var targets = await _session.ExecuteRootAsync("Target.getTargets", token: _lifetime.Token).ConfigureAwait(false);
+                    foreach (var target in targets.GetProperty("targetInfos").EnumerateArray())
+                    {
+                        if (target.GetProperty("type").GetString() != "iframe") continue;
+                        var id = target.GetProperty("targetId").GetString();
+                        lock (_sync)
+                        {
+                            if (_disposed || _stopping) return;
+                            if (_frames.ContainsKey(id) || _children.ContainsKey(id) || _ignoredTargets.Contains(id) || !_attachingTargets.Add(id)) continue;
+                        }
+                        CefSharpCdpSession childSession = null;
+                        CefSharpIsolatedExecutor startedChild = null;
+                        try
+                        {
+                            childSession = await _session.AttachTargetAsync(id, _lifetime.Token).ConfigureAwait(false);
+                            var tree = await childSession.ExecuteAsync("Page.getFrameTree", cancellationToken: _lifetime.Token).ConfigureAwait(false);
+                            var native = tree.GetProperty("frameTree").GetProperty("frame");
+                            var owned = false;
+                            lock (_sync) owned = native.TryGetProperty("parentId", out var parent) && _frames.ContainsKey(parent.GetString()) && !_stopping && !_disposed;
+                            if (!owned) { lock (_sync) _ignoredTargets.Add(id); continue; } // Validate native ancestry before enabling bindings or running any source.
+                            var child = new CefSharpIsolatedExecutor(childSession, _repository, _engine, _gateway, _browserId, _privacy, _options, _diagnostic, _lifecycle, _lifetime.Token);
+                            startedChild = child;
+                            lock (_sync) _children.Add(id, child);
+                            var ownedSession = childSession;
+                            ownedSession.Closed += (_, __) => { lock (_sync) _children.Remove(id); };
+                            childSession = null;
+                            await child.InitializeAsync().ConfigureAwait(false);
+                            startedChild = null;
+                        }
+                        catch (OperationCanceledException) { }
+                        catch (ObjectDisposedException) { } // Target detach can win the attachment/initialization race.
+                        catch (Exception error)
+                        {
+                            var stillPresent = false;
+                            try
+                            {
+                                var current = await _session.ExecuteRootAsync("Target.getTargets", token: _lifetime.Token).ConfigureAwait(false);
+                                stillPresent = current.GetProperty("targetInfos").EnumerateArray().Any(item => item.GetProperty("targetId").GetString() == id);
+                            }
+                            catch (OperationCanceledException) { }
+                            catch (ObjectDisposedException) { }
+                            if (stillPresent && !_disposed && !_stopping) _diagnostic(new UserScriptDiagnostic("MSC236_OOPIF_ROUTE_UNAVAILABLE", DiagnosticSeverity.Warning,
+                                "A child target could not be prepared; no page-world fallback was used.", error));
+                        }
+                        finally
+                        {
+                            lock (_sync) _attachingTargets.Remove(id);
+                            if (startedChild != null)
+                            {
+                                lock (_sync) _children.Remove(id);
+                                await startedChild.DisposeAsync().ConfigureAwait(false);
+                            }
+                            if (childSession != null) try { await childSession.DetachAsync().ConfigureAwait(false); } catch (Exception) { }
+                        }
+                    }
+                    CefSharpIsolatedExecutor[] children;
+                    lock (_sync) children = _children.Values.ToArray();
+                    foreach (var child in children) await child.DiscoverChildrenAsync().ConfigureAwait(false);
+                    lock (_sync) again = _discoverAgain && !_stopping && !_disposed;
+                } while (again);
+            }
+            finally { lock (_sync) _discovering = false; }
         }
 
         private void ReadTree(JsonElement tree)
@@ -72,7 +159,16 @@ namespace Mzying2001.MonkeySharp.CefSharp
             switch (args.Method)
             {
                 case "Page.frameAttached":
+                    lock (_sync) _ignoredTargets.Clear();
                     Track(RefreshTreeAsync());
+                    Track(DiscoverChildrenAsync());
+                    break;
+                case "Target.targetCreated":
+                case "Target.targetInfoChanged":
+                    if (data.GetProperty("targetInfo").GetProperty("type").GetString() == "iframe") Track(DiscoverChildrenAsync());
+                    break;
+                case "Target.targetDestroyed":
+                    lock (_sync) _ignoredTargets.Remove(data.GetProperty("targetId").GetString());
                     break;
                 case "Page.frameNavigated":
                     FrameNavigated(data.GetProperty("frame"));
@@ -132,6 +228,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             {
                 RemoveFrame(id);
                 _frames[id] = new NativeFrame(id, loader, url, !frame.TryGetProperty("parentId", out _), _lifetime.Token);
+                _ignoredTargets.Clear();
             }
         }
 
@@ -185,7 +282,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     lock (_sync)
                     {
                         if (_disposed || _stopping || epoch != _repositoryEpoch || frame.Cancellation.IsCancellationRequested || frame.Worlds.ContainsKey(script.RevisionId)) continue;
-                        world = new World(frame, script, _binding + "_" + script.ScriptKey + "_" + script.RevisionId.ToString("N"), _browserId);
+                        world = new World(frame, script, _binding + "_" + script.ScriptKey + "_" + script.RevisionId.ToString("N"), _browserId, _session.Scope);
                         frame.Worlds.Add(script.RevisionId, world);
                         _requested[world.Name + "\n" + frame.Id] = world;
                         _documents.Add(world.Frame.DocumentId, world);
@@ -229,7 +326,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             catch (OperationCanceledException) { Revoke(world); }
             catch (Exception error)
             {
-                Report("MSC231_ISOLATED_EXECUTION_UNAVAILABLE", "The isolated context could not be prepared; no page-world fallback was used. " + error.Message, world.Script, world.Native, error);
+                if (Alive(world) && !_session.IsClosed) Report("MSC231_ISOLATED_EXECUTION_UNAVAILABLE", "The isolated context could not be prepared; no page-world fallback was used. " + error.Message, world.Script, world.Native, error);
                 Revoke(world);
             }
         }
@@ -315,7 +412,12 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 JsonSerializer.Serialize(new { url = world.Native.Url.AbsoluteUri, oldURL = old.AbsoluteUri }) + ");").ConfigureAwait(false);
         }
 
-        internal bool Owns(string documentId) { lock (_sync) return _documents.ContainsKey(documentId); }
+        internal bool Owns(string documentId)
+        {
+            CefSharpIsolatedExecutor[] children;
+            lock (_sync) { if (_documents.ContainsKey(documentId)) return true; children = _children.Values.ToArray(); }
+            return children.Any(child => child.Owns(documentId));
+        }
 
         internal bool ConfirmNativeMenuFrame(string proof, string nativeFrameId, bool main)
         {
@@ -361,6 +463,13 @@ namespace Mzying2001.MonkeySharp.CefSharp
         {
             World world;
             lock (_sync) _documents.TryGetValue(frame.DocumentId, out world);
+            if (world == null)
+            {
+                CefSharpIsolatedExecutor[] children;
+                lock (_sync) children = _children.Values.ToArray();
+                var owner = children.FirstOrDefault(child => child.Owns(frame.DocumentId));
+                if (owner != null) return owner.ExecuteAsync(frame, source);
+            }
             return world == null ? Task.FromException(new InvalidOperationException("The isolated document is no longer active.")) : CallAsync(world, source);
         }
 
@@ -428,9 +537,12 @@ namespace Mzying2001.MonkeySharp.CefSharp
         internal async Task DisposeAsync()
         {
             World[] worlds;
-            lock (_sync) { if (_disposed || _stopping) return; _stopping = true; worlds = _documents.Values.ToArray(); }
+            CefSharpIsolatedExecutor[] children;
+            lock (_sync) { if (_disposed || _stopping) return; _stopping = true; worlds = _documents.Values.ToArray(); children = _children.Values.ToArray(); _children.Clear(); }
             _repository.Changed -= RepositoryChanged;
             _session.EventReceived -= EventReceived;
+            _session.Closed -= SessionClosed;
+            foreach (var child in children) await child.DisposeAsync().ConfigureAwait(false);
             foreach (var world in worlds)
             {
                 await EndWorldAsync(world).ConfigureAwait(false);
@@ -449,6 +561,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             Track(all);
             await Task.WhenAny(all, Task.Delay(TimeSpan.FromSeconds(5))).ConfigureAwait(false);
             _lifetime.Dispose();
+            if (_session.IsChild) try { await _session.DetachAsync().ConfigureAwait(false); } catch (Exception) { }
             // Shared Runtime/Page domains remain enabled for other observers.
         }
 
@@ -466,12 +579,12 @@ namespace Mzying2001.MonkeySharp.CefSharp
 
         private sealed class World
         {
-            internal World(NativeFrame native, UserScriptInstallation script, string name, string browserId)
+            internal World(NativeFrame native, UserScriptInstallation script, string name, string browserId, string sessionScope)
             {
                 Native = native; Script = script; Name = name;
                 Cancellation = CancellationTokenSource.CreateLinkedTokenSource(native.Cancellation.Token);
                 Token = Cancellation.Token;
-                Frame = new DocumentFrame(browserId, Guid.NewGuid().ToString("D"), "cdp:" + native.Id, native.Url, native.Main,
+                Frame = new DocumentFrame(browserId, Guid.NewGuid().ToString("D"), "cdp:" + sessionScope + ":" + native.Id, native.Url, native.Main,
                     TimingGuarantee.BestEffortDocumentStart, BridgeIntegrityGuarantee.Verified, "isolated", script.ScriptKey, script.RevisionId);
             }
             internal readonly NativeFrame Native;

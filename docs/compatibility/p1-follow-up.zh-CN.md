@@ -8,7 +8,8 @@
 | 29 | 授权后有界消费流、暂存后上传、取消/导航清理、暂存重放；[证据](../../scripts/compatibility/evidence/stream-body-follow-up-p1.json)。 |
 | 30 | 已实现原生输入字段、菜单注册代际、可信 clickedFrame 过滤及 84 isolated 子 frame 手动菜单。121/151 子 frame 映射与 beta 原生点击/重叠一致性仍未完成；[证据](../../scripts/compatibility/evidence/menus-follow-up-p1.json)。 |
 | 31 | 可行性评估完成；84/121/151 的对照及运行时往返均未真正命中缓存，恢复功能未实现；[证据](../../scripts/compatibility/evidence/bfcache-follow-up-p1.json)。 |
-| 32～33 | 待实施。 |
+| 32 | 84/121/151 已实现 isolated OOPIF target/session 路由、嵌套、值/资源就绪、XHR 授权、进程迁移及普通/私密上下文验证；[证据](../../scripts/compatibility/evidence/oopif-follow-up-p1.json)。 |
+| 33 | 待实施。 |
 | 36 | 待最终矩阵。 |
 
 JSON/document 保留最终解析时机，二进制/stream 不暴露部分文本。保留现有 fetch 不报告进度/中间 readyState 的边界；固定 5.6.6242 实际报告 fetch 进度，这一有意差异不算对齐。无效字节使用替换字符，未知字符集沿用 UTF-8 回退。
@@ -22,3 +23,7 @@ JSON/document 保留最终解析时机，二进制/stream 不暴露部分文本�
 固定 beta 菜单 fixture 需要 settings.headless=false 的参考 pin 和真实原生输入，再点击 Save menu evidence。computer-use 的 native pipe 在重试/重置后仍不可用，测试运行已停止，未发生原生选择。WPF 回调字段/桥接测试和 Core 过滤不算 beta 原生点击结果。
 
 BFCache fixture 使用可缓存 HTTP A/B 页面，无 unload/beforeunload，通过原生后退、闭包 nonce 和 pageshow.persisted 判断。分别运行无 runtime/CDP 对照与 prepared raw/isolated GM；三版在默认和显式 enable-features=BackForwardCache 下仍为新闭包、persisted:false。这不证明所有 CEF 配置都不可能缓存，只是否决当前路线的恢复保证。因基本缓存命中前提未成立，私密上下文及暂停期间的监听/存储恢复继续未验证。复现命令见英文页；评估成功不等于能力支持。
+
+OOPIF 命令和事件携带原生 session，context ID 在 session 内使用，remote object 固定 world 代际。仅在原生 parent frame 属于当前 executor 时启用绑定/源码；发现阶段可短暂附加读取原生祖先信息，无关目标只拆除本运行时自己的 session，绝不执行源码。CEF ID 不转换成 CDP ID。CEF 分配命令 ID、按 session 拆除、每 observer 信封过滤保留其他 observer 与共享域；已验证只读共存，不将竞争修改 Target 状态的其他拥有者当成独立隔离客户端。
+
+真实 fixture 验证不同站点 iframe target、完整 prepared GM、两个脚本分区、嵌套、普通/私密 Cookie jar、拒绝请求零副作用、同进程/OOPIF 迁移不双执行及文档释放平衡。定向原生菜单、严格 start、isolated 历史 webRequest 与 BFCache 仍分别受限。初轮同站点子域样例不计 OOPIF 证据；有时间重叠的版本结果已作废并串行重跑。门禁已接入 Run-Baseline.ps1。

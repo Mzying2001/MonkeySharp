@@ -216,7 +216,7 @@ document-idle 在 DOMContentLoaded 后调度，不等待缓慢资源的 load。�
 
 ## 信息与日志
 
-默认适配器在 GM.info.compatibility.capabilities 报告已知限制：execution.documentStart 为 best-effort，execution.oopif 不支持，execution.bfcache 要求新导航，execution.contextMenuFrame 在 84 支持同进程 frame，121/151 仅主 frame，OOPIF 不支持；GM.xmlHttpRequest.cookie/.cookiePartition 不支持；GM.cookie.partitionKey 在 84 不支持、121 无 ancestor 维度、151 支持可序列化身份；没有可靠来源时 GM.audio.audible 不可用，GM.registerMenuCommand.clickedFrame 要求宿主证明当前文档/frame，未知 frame 时不派发。自定义后端的未知事实省略，不能将字段缺失或主 API 可用推断为细分能力已支持。
+默认适配器在 GM.info.compatibility.capabilities 报告已知限制：execution.documentStart 为 best-effort，execution.oopif 支持已验证的 isolated child-target session 范围，execution.bfcache 要求新导航，execution.contextMenuFrame 在 84 支持同进程 frame，121/151 仅主 frame，OOPIF 不支持；GM.xmlHttpRequest.cookie/.cookiePartition 不支持；GM.cookie.partitionKey 在 84 不支持、121 无 ancestor 维度、151 支持可序列化身份；没有可靠来源时 GM.audio.audible 不可用，GM.registerMenuCommand.clickedFrame 要求宿主证明当前文档/frame，未知 frame 时不派发。自定义后端的未知事实省略，不能将字段缺失或主 API 可用推断为细分能力已支持。
 
 ### GM.info / GM_info
 
@@ -804,3 +804,5 @@ window.addEventListener("urlchange", onRoute);
 MonkeySharp 行为依据[授权目录](../Mzying2001.MonkeySharp.Core/Compatibility/UserScriptGrantCatalog.cs)、[JavaScript 门面](../Mzying2001.MonkeySharp.Core/Js/Init.js)、[Core API 提供器](../Mzying2001.MonkeySharp.Core/Apis/)、[元数据解析器](../Mzying2001.MonkeySharp.Core/Parsing/UserScriptMetadataParser.cs)、[运行时信息构建](../Mzying2001.MonkeySharp.Core/Runtime/UserScriptEngine.cs)、[CefSharp 服务](../Mzying2001.MonkeySharp.CefSharp/)及 [JavaScript 行为测试](../Mzying2001.MonkeySharp.Core.Tests/JavaScript/)核对。具体持久化及交互服务见 [Demo 指南](../Mzying2001.MonkeySharp.Demo/README.md)。升级运行时或替换宿主服务时，可据此复核。
 
 ReadableStream 请求输入在授权后获取 reader，逐块读取并先放入现有有界暂存，再由 CEF 发送。未知总长同样受默认 256 MiB 总预算约束，单个 bridge append 最多 64 KiB。这是暂存后上传，不是网络端到端流式发送。locked/disturbed 输入、非 Uint8Array 块及 producer 异常会拒绝；abort/导航取消 reader 与暂存。重定向重放已完成的暂存，不再读取原流。[固定预览](compatibility/p1-follow-up.zh-CN.md)的 reader 释放和重放行为不同。
+
+OOPIF 的普通/私密上下文、进程迁移与 session 身份范围见[P1 进度](compatibility/p1-follow-up.zh-CN.md)，不据此推断菜单、严格 start 或 BFCache 已支持。

@@ -302,7 +302,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             var status = new Dictionary<string, string>
             {
                 ["execution.documentStart"] = "best-effort",
-                ["execution.oopif"] = "unsupported",
+                ["execution.oopif"] = "isolated:child-target-sessions",
                 ["execution.bfcache"] = "fresh-navigation-required",
                 ["execution.contextMenuFrame"] = typeof(global::CefSharp.Cef).Assembly.GetName().Version.Major == 84 ? "same-process;oopif-unsupported" : "main-only;child-native-proof-unavailable",
                 ["GM.xmlHttpRequest.cookiePartition"] = "unsupported",

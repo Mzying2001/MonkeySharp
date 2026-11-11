@@ -23,7 +23,7 @@
         r.logObjects = logs === 2 && argumentsPreserved;
         const capabilities = GM_info.compatibility.capabilities;
         r.capabilityFacts = capabilities['execution.documentStart'] === 'best-effort' &&
-            capabilities['execution.oopif'] === 'unsupported' && capabilities['execution.bfcache'] === 'fresh-navigation-required' &&
+            capabilities['execution.oopif'] === 'isolated:child-target-sessions' && capabilities['execution.bfcache'] === 'fresh-navigation-required' &&
             capabilities['GM.xmlHttpRequest.cookie'] === 'unsupported:cef-urlrequest' &&
             capabilities['GM.xmlHttpRequest.cookiePartition'] === 'unsupported' &&
             capabilities['GM.registerMenuCommand.clickedFrame'] === 'host-attested-document-required;unknown-frame-suppressed';
