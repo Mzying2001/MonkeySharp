@@ -53,6 +53,12 @@
                     return { bytes: new TextEncoder().encode(value), contentType: null };
                 }
                 const tag = objectTag(value);
+                if (tag === "[object ReadableStream]") {
+                    if (typeof root.Response !== "function") throw notSupported("This browser cannot validate stream request bodies.");
+                    // Response validates locked/disturbed state without acquiring or consuming the reader.
+                    new root.Response(value);
+                    return { stream: value, contentType: null };
+                }
                 if (tag === "[object ArrayBuffer]") {
                     return { bytes: new Uint8Array(value.slice(0)), contentType: null };
                 }
@@ -329,6 +335,7 @@
                         }
                         const controller = typeof AbortController === "function" ? new AbortController() : null;
                         let sessionId = null;
+                        let bodyReader = null;
                         let externalAbort;
                         if (details.signal && controller) {
                             externalAbort = () => controller.abort();
@@ -359,17 +366,19 @@
                         };
                         let released = false;
                         const release = function () {
+                            record.pageListeners.delete(requestLifecycle);
                             if (!handler.streamController || handler.terminal || handler.failed || record.disposed) record.xhrHandlers.delete(xhrId);
                             if (released) return;
                             released = true;
                             if (details.signal && externalAbort) details.signal.removeEventListener("abort", externalAbort);
-                            if (sessionId) call(record, "GM.xmlHttpRequest", {
+                            if (sessionId && !record.disposed) call(record, "GM.xmlHttpRequest", {
                                 operation: "release", sessionId: sessionId
                             }).catch(error => console.warn("[MonkeySharp] XHR release failed", error));
                         };
                         handler.cleanup = release;
                         record.xhrHandlers.set(xhrId, handler);
                         const abortRequest = function () {
+                            if (bodyReader) bodyReader.cancel().catch(() => {});
                             if (sessionId) call(record, "GM.xmlHttpRequest", {
                                 operation: "abort", sessionId: sessionId
                             }).catch(error => {
@@ -379,6 +388,10 @@
                             });
                             if (controller) controller.abort();
                         };
+                        const requestLifecycle = { remove: abortRequest };
+                        record.pageListeners.add(requestLifecycle);
+                        const cancelBodyRead = () => { if (bodyReader) bodyReader.cancel().catch(() => {}); };
+                        if (signal) signal.addEventListener("abort", cancelBodyRead, { once: true });
                         let responseStream = null;
                         let streamReady;
                         const streamSessionReady = new Promise(resolve => { streamReady = resolve; });
@@ -419,12 +432,40 @@
                                 if (bodyLength > (record.bridgeLimits.binaryTransferBytes || 256 * 1024 * 1024)) throw Object.assign(new Error("Request body exceeds the configured transfer budget."), { code: "MSP008_PAYLOAD_TOO_LARGE" });
                                 const created = await call(record, "GM.xmlHttpRequest", parameters, signal);
                                 sessionId = created.sessionId;
-                                for (let offset = 0; offset < bodyLength; offset += 65536) {
-                                    const segment = body.blob ? new Uint8Array(await body.blob.slice(offset, Math.min(offset + 65536, bodyLength)).arrayBuffer()) : body.bytes.subarray(offset, Math.min(offset + 65536, bodyLength));
-                                    let binary = "";
-                                    for (let index = 0; index < segment.length; index += 1) binary += String.fromCharCode(segment[index]);
-                                    await call(record, "GM.xmlHttpRequest", { operation: "appendBody", sessionId, chunk: btoa(binary) }, signal);
+                                const ensureActive = function () {
+                                    if (record.disposed || signal && signal.aborted) throw Object.assign(new Error("The request body transfer was canceled."), { name: "AbortError", code: "MSP010_CANCELED" });
+                                };
+                                const append = async function (bytes) {
+                                    for (let offset = 0; offset < bytes.length; offset += 65536) {
+                                        ensureActive();
+                                        const segment = bytes.subarray(offset, Math.min(offset + 65536, bytes.length));
+                                        let binary = "";
+                                        for (let index = 0; index < segment.length; index += 1) binary += String.fromCharCode(segment[index]);
+                                        await call(record, "GM.xmlHttpRequest", { operation: "appendBody", sessionId, chunk: btoa(binary) }, signal);
+                                    }
+                                };
+                                if (body.stream) {
+                                    ensureActive();
+                                    bodyReader = body.stream.getReader();
+                                    let staged = 0;
+                                    try {
+                                        for (;;) {
+                                            ensureActive();
+                                            const part = await bodyReader.read();
+                                            ensureActive();
+                                            if (part.done) break;
+                                            if (objectTag(part.value) !== "[object Uint8Array]") throw new TypeError("Stream request bodies require Uint8Array chunks.");
+                                            staged += part.value.byteLength;
+                                            if (staged > (record.bridgeLimits.binaryTransferBytes || 256 * 1024 * 1024)) throw Object.assign(new Error("Request body exceeds the configured transfer budget."), { code: "MSP008_PAYLOAD_TOO_LARGE" });
+                                            await append(part.value);
+                                            if (!part.value.byteLength) await new Promise(resolve => setTimeout(resolve, 0));
+                                        }
+                                    } catch (error) { bodyReader.cancel(error).catch(() => {}); throw error; }
+                                    finally { bodyReader.releaseLock(); bodyReader = null; }
+                                } else for (let offset = 0; offset < bodyLength; offset += 65536) {
+                                    await append(body.blob ? new Uint8Array(await body.blob.slice(offset, Math.min(offset + 65536, bodyLength)).arrayBuffer()) : body.bytes.subarray(offset, Math.min(offset + 65536, bodyLength)));
                                 }
+                                ensureActive();
                                 const response = await call(record, "GM.xmlHttpRequest", {
                                     operation: "execute", sessionId: sessionId
                                 }, signal);
@@ -503,6 +544,7 @@
                             } catch (error) {
                                 handler.failed = true;
                                 streamReady();
+                                if (record.disposed) handler.terminal = true;
                                 if (handler.terminal) throw error;
                                 if (handler.streamController) try { handler.streamController.error(error); } catch (_) { }
                                 const callbackError = legacyError(error);
@@ -517,6 +559,7 @@
                                 handler.terminal = true;
                                 throw error;
                             } finally {
+                                if (signal) signal.removeEventListener("abort", cancelBodyRead);
                                 if (effectiveResponseType !== "stream" || handler.failed || handler.streamConsumed) release();
                             }
                         })();

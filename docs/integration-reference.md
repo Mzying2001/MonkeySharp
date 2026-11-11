@@ -392,3 +392,5 @@ Each case emits a `compatibility-case` JSON record containing `caseId`, `success
 Run `powershell -NoProfile -ExecutionPolicy Bypass -File Mzying2001.MonkeySharp.CefSharp.SmokeHost/Test-SmokeResults.ps1` to check result validation without launching a browser. Both Windows PowerShell and PowerShell 7 can run the scripts.
 
 Logs are written to `artifacts/smoke/<version>-<platform>/` (`restore.log`, `clean.log`, `build.log` when output is present, `stdout.log`, `stderr.log`, and `results.jsonl`); `-OutputDirectory` overrides the location. CI uploads that directory as `chromium-<version>-<platform>` even on failure. Inspect failed `compatibility-case` records first, then the adjacent lifecycle, console and diagnostic records.
+
+HTTP ReadableStream inputs are consumed only after session creation authorization and staged through appendBody before execute. The repeatable IUserScriptHttpBody therefore supports redirect replay using the existing CEF bytes/file backend; no native source backpressure or live stream upload is promised.

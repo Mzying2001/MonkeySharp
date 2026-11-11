@@ -578,6 +578,12 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                         await WriteChunkedAsync(stream).ConfigureAwait(false);
                         return;
                     }
+                    if (request.Path == "/compat/body-redirect")
+                    {
+                        await WriteResponseAsync(stream, 307, "Temporary Redirect", "text/plain",
+                            new Dictionary<string, string> { ["Location"] = "/echo" }, new byte[0]).ConfigureAwait(false);
+                        return;
+                    }
                     if (request.Path == "/compat/progress-gzip")
                     {
                         byte[] compressed;

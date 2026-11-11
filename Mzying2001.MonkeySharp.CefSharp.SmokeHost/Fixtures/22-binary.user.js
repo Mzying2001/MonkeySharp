@@ -27,6 +27,15 @@
             r.file = fromFile.responseText === 'file text';
             const echo = await GM.xmlHttpRequest({ url: new URL('/echo', location.href), method: 'POST', data: blob, responseType: 'arraybuffer' });
             r.echo = echo.response.byteLength === bytes.length && new Uint8Array(echo.response).every((b, i) => b === bytes[i]);
+            let bodyPulls = 0;
+            const uploadBody = new ReadableStream({ pull(controller) {
+                bodyPulls++;
+                if (bodyPulls === 1) controller.enqueue(bytes);
+                else controller.close();
+            } }, { highWaterMark: 0 });
+            const upload = await GM.xmlHttpRequest({ url: '/compat/body-redirect', method: 'POST', data: uploadBody, responseType: 'arraybuffer' });
+            r.streamUpload = upload.response.byteLength === bytes.length && new Uint8Array(upload.response).every((b, i) => b === bytes[i]);
+            r.streamReplay = bodyPulls === 2 && !uploadBody.locked;
             if (!r.echo) throw new Error('echo length ' + echo.response.byteLength + ' expected ' + bytes.length);
             const form = new FormData(); form.append('text', 'form value'); form.append('binary', new File(['file value'], 'file.txt'));
             const multi = await GM.xmlHttpRequest({ url: '/echo', method: 'POST', data: form });

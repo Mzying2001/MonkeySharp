@@ -368,7 +368,7 @@ Modern result: a `Promise<Response>` with an immediate `.abort()` method. Non-st
 | `url` | HTTP(S) string/URL, Blob/File, or blob URL | Relative URLs resolve against the document; local inputs use renderer bytes. |
 | `method` | String, `"GET"` | Valid HTTP token, case-insensitive; CONNECT, TRACE, TRACK are rejected. |
 | `headers` | String-to-string object, `{}` | Header names/values validated; CR/LF injection rejected. |
-| `data` | Optional body | String, ArrayBuffer, typed array, DataView, Blob/File, FormData, URLSearchParams, object, or array. Null/omission gives no body. |
+| `data` | Optional body | String, ArrayBuffer, typed array, DataView, Blob/File, FormData, URLSearchParams, ReadableStream of Uint8Array, object, or array. Null/omission gives no body. |
 | `binary` | Boolean, `false` | Requires string body; sends low eight bits of each UTF-16 code unit. Normal strings use UTF-8. |
 | `responseType` | String, `"text"` | `text`, `json`, `arraybuffer`, `blob`, `document`, `xml`, or `stream`; empty string means text. |
 | `responseXML` | Boolean, `false` | `true` overrides responseType to `document`, parsed through the page DOMParser as XML. |
@@ -756,3 +756,5 @@ Defaults: ordinary bridge requests/responses are limited to 1 MiB each, resource
 ## Reference sources
 
 MonkeySharp behavior was checked against the [grant catalog](../Mzying2001.MonkeySharp.Core/Compatibility/UserScriptGrantCatalog.cs), [JavaScript facade](../Mzying2001.MonkeySharp.Core/Js/Init.js), [Core API providers](../Mzying2001.MonkeySharp.Core/Apis/), [metadata parser](../Mzying2001.MonkeySharp.Core/Parsing/UserScriptMetadataParser.cs), [runtime info builder](../Mzying2001.MonkeySharp.Core/Runtime/UserScriptEngine.cs), [CefSharp services](../Mzying2001.MonkeySharp.CefSharp/), and [JavaScript contract tests](../Mzying2001.MonkeySharp.Core.Tests/JavaScript/). The [Demo guide](../Mzying2001.MonkeySharp.Demo/README.md) documents its concrete persistence and interaction services. Use these sources when upgrading the runtime or replacing host services.
+
+ReadableStream request input is authorized before reader acquisition, pulled one chunk at a time and staged in the existing bounded spool before CEF sends it. Unknown lengths share the 256 MiB default total budget; individual bridge appends are at most 64 KiB. This is staged upload, without end-to-end network streaming. Locked/disturbed input, non-Uint8Array chunks and producer errors reject; abort/navigation cancels the reader and staging. Redirects replay the completed spool without rereading the stream. The [pinned preview](compatibility/p1-follow-up.md) has different reader-release and replay behavior.

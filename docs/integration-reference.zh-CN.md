@@ -396,3 +396,5 @@ SmokeHost 从 `Fixtures` 目录内嵌原创 `.user.js`，通过正常仓库安�
 执行 `powershell -NoProfile -ExecutionPolicy Bypass -File Mzying2001.MonkeySharp.CefSharp.SmokeHost/Test-SmokeResults.ps1` 可在不启动浏览器的情况下验证结果解析。脚本同时支持 Windows PowerShell 和 PowerShell 7。
 
 日志保存到 `artifacts/smoke/<version>-<platform>/`（构建步骤有输出时的 `restore.log`、`clean.log`、`build.log`，以及 `stdout.log`、`stderr.log`、`results.jsonl`）；可通过 `-OutputDirectory` 覆盖路径。CI 在失败时也将该目录上传为 `chromium-<version>-<platform>`。定位问题时先查看失败的 `compatibility-case`，再检查相邻的生命周期、console 和 diagnostic 记录。
+
+HTTP ReadableStream 输入仅在 session create 授权后消费，通过 appendBody 暂存完毕再 execute。可重放 IUserScriptHttpBody 沿用 CEF bytes/file 后端处理重定向，不承诺原生源背压或边读边发。

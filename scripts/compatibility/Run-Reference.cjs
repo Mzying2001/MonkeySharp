@@ -40,6 +40,15 @@ async function main() {
                 else { received.push(value); resolveEvidence(value); }
                 response.end("ok");
             });
+        } else if (request.url.startsWith('/p1-body')) {
+            const chunks = [];
+            request.on('data', chunk => chunks.push(chunk));
+            request.on('end', () => {
+                if (request.url.startsWith('/p1-body-redirect')) { response.statusCode = 307; response.setHeader('Location', '/p1-body'); }
+                const bytes = Buffer.concat(chunks);
+                response.setHeader('Content-Type', 'application/json');
+                response.end(JSON.stringify({ length: bytes.length, sha256: crypto.createHash('sha256').update(bytes).digest('hex'), method: request.method }));
+            });
         } else if (request.url.startsWith('/p1-progress')) {
             response.setHeader('Content-Type', 'text/plain; charset=utf-8');
             response.write(Buffer.from([97, 228, 189]));
@@ -65,6 +74,8 @@ async function main() {
     const server = http.createServer(requestHandler);
     await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
     const partitionProbe = path.basename(fixture) === 'partition-cookies.user.js';
+    const streamBodyProbe = path.basename(fixture) === 'p1-stream-body.user.js';
+    const tlsProbe = partitionProbe || streamBodyProbe;
     let tls;
     const matching = path.basename(fixture) === "matching-conditions.user.js";
     const matchingScenarios = matching ? JSON.parse(fs.readFileSync(fixture.replace(/\.user\.js$/, ".json"), "utf8")) : [];
@@ -72,8 +83,10 @@ async function main() {
     const ipv6 = matching ? http.createServer(requestHandler) : null;
     let context;
     try {
-        if (partitionProbe) {
-            tls = https.createServer({pfx:fs.readFileSync(path.join(root,'Mzying2001.MonkeySharp.CefSharp.SmokeHost/Fixtures/loopback.pfx')),passphrase:'fixture'},requestHandler);
+        if (tlsProbe) {
+            const transport = streamBodyProbe ? require('node:http2') : https;
+            tls = transport.createSecureServer ? transport.createSecureServer({pfx:fs.readFileSync(path.join(root,'Mzying2001.MonkeySharp.CefSharp.SmokeHost/Fixtures/loopback.pfx')),passphrase:'fixture',allowHTTP1:true},requestHandler) :
+                transport.createServer({pfx:fs.readFileSync(path.join(root,'Mzying2001.MonkeySharp.CefSharp.SmokeHost/Fixtures/loopback.pfx')),passphrase:'fixture'},requestHandler);
             await new Promise(resolve => tls.listen(0,'127.0.0.1',resolve));
         }
         if (ipv6) await new Promise((resolve, reject) => { ipv6.once("error", reject); ipv6.listen(0, "::1", resolve); });
@@ -81,7 +94,7 @@ async function main() {
             executablePath: path.resolve(browserPath), headless: pin.settings?.headless !== false,
             args: [`--disable-extensions-except=${extensionSnapshot}`, `--load-extension=${extensionSnapshot}`, "--no-first-run",
                 ...(matching ? ["--no-proxy-server", "--host-resolver-rules=MAP xn--fsqu00a.xn--0zwm56d 127.0.0.1"] : []),
-                ...(partitionProbe ? ['--ignore-certificate-errors'] : [])]
+                ...(tlsProbe ? ['--ignore-certificate-errors'] : [])]
         });
         let worker = context.serviceWorkers()[0] || await context.waitForEvent("serviceworker");
         if (await worker.evaluate(() => chrome.runtime.getManifest().version) !== manifest.version ||
@@ -165,7 +178,15 @@ async function main() {
             result.effects.afterManagerReload = privateReloadEvidence;
         }
         result.effects.tabsAfter = await worker.evaluate(() => chrome.tabs.query({}).then(tabs => tabs.length));
-        const checks = result.caseId === 'p1-progress' ? {
+        const checks = result.caseId === 'p1-stream-body' ? {
+            noError: !result.effects.error,
+            exactBytes: result.effects.upload?.sha256 === result.effects.expectedHash && result.effects.upload?.length === 150003,
+            previewRedirectRefusesDisturbedReplay: result.effects.redirectError?.status === 408,
+            previewReaderRemainsLocked: result.effects.locked === true,
+            lockedRejected: result.promise.locked?.state === 'rejected',
+            disturbedAndProducerPendingWithinProbe: result.promise.disturbed?.state === 'pending' && result.promise.producer?.state === 'pending',
+            emptyBody: result.effects.empty?.length === 0
+        } : result.caseId === 'p1-progress' ? {
             noError: !result.effects.error,
             partialText: result.events.some(event => event.name === 'progress' && event.text === 'a'),
             finalText: result.effects.text === 'a你好',
@@ -248,7 +269,7 @@ async function main() {
                 manifestVersion: manifest.manifest_version, channel: pin.channel, extensionId, contentSha256,
                 minimumChromeVersion: manifest.minimum_chrome_version,
                 settings: { ...pin.settings, headless: pin.settings?.headless !== false, userScriptsAccess: true, freshProfile: true,
-                    ignoreLoopbackCertificateErrors: partitionProbe, legacyPfxProvider: process.execArgv.includes('--openssl-legacy-provider') },
+                    ignoreLoopbackCertificateErrors: tlsProbe, legacyPfxProvider: process.execArgv.includes('--openssl-legacy-provider') },
                 commit: execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim(),
                 sourcePatchSha256: crypto.createHash('sha256').update(execFileSync('git', ['diff', '--binary', 'HEAD'], { cwd: root })).digest('hex'),
                 runnerSha256: crypto.createHash('sha256').update(fs.readFileSync(__filename)).digest('hex'),

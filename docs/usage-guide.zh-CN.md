@@ -389,7 +389,7 @@ attributes 是可选对象：textContent/innerHTML 设置内容，字符串 styl
 | `url` | HTTP(S) 字符串/URL、Blob/File 或 blob URL | 相对 URL 在 renderer 中解析；支持 Blob/File 和 blob URL。 |
 | `method` | 字符串，"GET" | 有效 HTTP token，不区分大小写；禁止 CONNECT、TRACE、TRACK。 |
 | `headers` | 字符串到字符串的对象，{} | 校验头名称和值，禁止 CR/LF 注入。 |
-| `data` | 可选主体 | 字符串、ArrayBuffer、类型化数组、DataView、Blob/File、FormData、URLSearchParams、对象或数组；null/省略表示无主体。 |
+| `data` | 可选主体 | 字符串、ArrayBuffer、类型化数组、DataView、Blob/File、FormData、URLSearchParams、Uint8Array 块组成的 ReadableStream、对象或数组；null/省略表示无主体。 |
 | `binary` | 布尔值，false | 必须使用字符串主体；每个 UTF-16 码元取低 8 位发送，普通字符串按 UTF-8 编码。 |
 | `responseType` | 字符串，"text" | text、json、arraybuffer、blob、document、xml 或 stream；空字符串视为 text。 |
 | `responseXML` | 布尔值，false | true 时覆盖 responseType 为 document，通过页面 DOMParser 按 XML 解析。 |
@@ -802,3 +802,5 @@ window.addEventListener("urlchange", onRoute);
 ## 参考来源
 
 MonkeySharp 行为依据[授权目录](../Mzying2001.MonkeySharp.Core/Compatibility/UserScriptGrantCatalog.cs)、[JavaScript 门面](../Mzying2001.MonkeySharp.Core/Js/Init.js)、[Core API 提供器](../Mzying2001.MonkeySharp.Core/Apis/)、[元数据解析器](../Mzying2001.MonkeySharp.Core/Parsing/UserScriptMetadataParser.cs)、[运行时信息构建](../Mzying2001.MonkeySharp.Core/Runtime/UserScriptEngine.cs)、[CefSharp 服务](../Mzying2001.MonkeySharp.CefSharp/)及 [JavaScript 行为测试](../Mzying2001.MonkeySharp.Core.Tests/JavaScript/)核对。具体持久化及交互服务见 [Demo 指南](../Mzying2001.MonkeySharp.Demo/README.md)。升级运行时或替换宿主服务时，可据此复核。
+
+ReadableStream 请求输入在授权后获取 reader，逐块读取并先放入现有有界暂存，再由 CEF 发送。未知总长同样受默认 256 MiB 总预算约束，单个 bridge append 最多 64 KiB。这是暂存后上传，不是网络端到端流式发送。locked/disturbed 输入、非 Uint8Array 块及 producer 异常会拒绝；abort/导航取消 reader 与暂存。重定向重放已完成的暂存，不再读取原流。[固定预览](compatibility/p1-follow-up.zh-CN.md)的 reader 释放和重放行为不同。
