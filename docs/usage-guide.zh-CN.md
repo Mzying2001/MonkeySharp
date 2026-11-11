@@ -2,7 +2,7 @@
 
 [English](usage-guide.md) | **简体中文**
 
-本文面向脚本作者，描述当前 MonkeySharp 3 源码中的 JavaScript 用户脚本功能，包括如何编写脚本、全部内置脚本 API，以及与 Tampermonkey 的行为差异。宿主应用可以调整服务、权限、限制和兼容模式。.NET 接入请参阅[集成参考](integration-reference.zh-CN.md)，安装和界面操作请参阅 [Demo 指南](../Mzying2001.MonkeySharp.Demo/README.md)。
+本文面向脚本作者，描述当前 MonkeySharp 3 源码中的 JavaScript 用户脚本功能，包括如何编写脚本、全部内置脚本 API，以及与 Tampermonkey 的行为差异。宿主应用可以调整服务、权限和限制。.NET 接入请参阅[集成参考](integration-reference.zh-CN.md)，安装和界面操作请参阅 [Demo 指南](../Mzying2001.MonkeySharp.Demo/README.md)。
 
 比较分别依据[官方契约](compatibility/api-contract.md)、[固定稳定版观察](compatibility/api-contract.md#pinned-reference-observations)及 MonkeySharp 主动保证，不表示已对所有管理器/浏览器版本完成差分。
 
@@ -97,7 +97,7 @@
 
 ## 元数据
 
-依赖和资源在安装或编辑时获取并校验；准备失败保留原版本。新 frame 和离线导航复用不可变内容，用户代码启动前同步资源已就绪。宿主通过仓库上的 `UserScriptPreparer` 配置服务，详见[安装契约](integration-reference.zh-CN.md#资源完整性与更新检查)。
+依赖和资源在安装、编辑或更新时获取并校验，准备失败不会发布新版本。后续框架及离线导航复用已准备内容；详见[依赖、资源与更新](#依赖资源与更新)。
 
 元数据头以 `// ==UserScript==` 开始，以 `// ==/UserScript==` 结束。为便于迁移，请放在文件开头。默认解析器允许在前 128 行、64 Ki 个 UTF-16 字符内查找元数据头；元数据错误会阻止安装，警告则保留给宿主查看。已知单值字段使用第一次出现的值，重复声明产生警告；集合字段使用多行重复声明。未知字段会保留，但不会因此获得运行时效果。
 
@@ -114,7 +114,7 @@
 | `@grant name` | 除默认可用的 info 属性外，为每项能力分别声明。规范名称及已知旧版别名区分大小写。`none` 不能与其他授权混用；未知授权产生警告且不会暴露。 |
 | `@connect target` | XHR 目标白名单：主机名、IP、`localhost`、`*.example.com`、`self`、`*` 或绝对 HTTP(S) URL，详见 [HTTP 请求](#http-requests)。 |
 | `@require url` | 通过宿主依赖提供器获取，在主源码前按声明顺序执行的依赖。它不是 API 授权。 |
-| `@resource name url` | 命名资源，通过资源 API 和宿主资源提供器读取。名称区分大小写。 |
+| `@resource name url` | 命名资源，由宿主在安装时准备，再通过资源 API 读取。名称区分大小写。 |
 | `@homepage`、`@homepageURL`、`@website`、`@source`、`@supportURL` | 项目及支持链接。主页优先级为 homepageURL、homepage、website、source。 |
 | `@downloadURL`、`@updateURL` | 更新信息。Demo 提供手动检查并安装，运行时不安排自动更新。`@downloadURL none` 禁止检查。 |
 | `@antifeature type description` | 功能披露信息，支持 `@antifeature:locale` 本地化声明。 |
@@ -124,7 +124,7 @@
 
 ### 匹配与生命周期
 
-`@match https://example.com/*` 匹配该主机；`@match https://*.example.com/*` 匹配裸域名 `example.com` 及其所有层级的子域名，与 [Tampermonkey 的 match 约定](https://www.tampermonkey.net/documentation.php?q=include)一致。`@exclude-match` 使用相同的主机通配符规则。`*://` 和 `http*://` 匹配 HTTP/HTTPS；显式端口会被检查。主机名会进行 IDN 规范化，URL 片段被忽略，查询字符串参与匹配。
+`@match https://example.com/*` 匹配该主机；`@match https://*.example.com/*` 匹配裸域名 `example.com` 及其所有层级的子域名，与 [Tampermonkey 的 match 约定](https://www.tampermonkey.net/documentation.php?q=include)一致。`@exclude-match` 使用相同的主机通配符规则。`*://` 和 `http*://` 匹配 HTTP/HTTPS；显式端口会被检查。浏览器 URL 的主机名按 IDN 规范化；`@match` 主机声明应使用 Punycode。URL 片段被忽略，查询字符串参与匹配。
 
 仍支持宿主提供的 `file:///*` 和 MonkeySharp 显式扩展 `about:blank`。`<all_urls>` 会被拒绝；固定管理器对照中此声明不产生自动执行。缺少正向选择器也不自动执行。include/exclude 的 glob 和 `/expression/` 忽略大小写及片段，? 是普通字符，query 参与匹配；scheme/host 中的 * 不能跨越对应边界。浏览器 href 中已转义的非保留 path/query 字符会保留，不交给 System.Uri 静默解码。
 
@@ -142,13 +142,13 @@ URL 正则支持有界的 ECMAScript 子集：字面量、字符类、分组/非
 | `document-idle` | 在 DOMContentLoaded 后调度，不等待缓慢资源的 load；无法取得早期信号时 load 作为晚期补发。 |
 | `context-menu` | 仅在用户选择匹配脚本的原生右键菜单项后执行，每次选择都创建新的执行实例。 |
 
-每个 `(document, frame, script, run-at)` 组合只执行一次。同文档导航会更新匹配上下文，并可产生 urlchange，但不会自动重跑同一生命周期调用。SPA 更新请使用 [window.onurlchange](#window-extensions) 或 DOM 观察器。完整导航会撤销旧执行实例及其待处理操作、监听器和注册项。
+自动执行对每个 `(document, frame, script, run-at)` 组合只运行一次；手动 context-menu 每次选择创建新执行。同文档导航会更新匹配上下文，并可产生 urlchange，但不会自动重跑同一生命周期调用。SPA 更新请使用 [window.onurlchange](#window-extensions) 或 DOM 观察器。完整导航会撤销旧执行实例及其待处理操作、监听器和注册项。
 
 ### 依赖、资源与更新
 
 `@require` 和 `@resource` URL 支持 md5/sha1/sha256/sha384/sha512 完整性片段：`#sha256=<digest>` 或 `#sha256-<digest>`，摘要可以是十六进制或标准 Base64。以逗号/分号分隔的多个声明选取最后一个受支持的哈希。请求和缓存前移除 URL 片段；使用前及读取缓存时都检查原始字节。声明格式错误、没有可用受支持哈希或摘要不一致都会阻止加载。
 
-获取及缓存由宿主负责。缺少依赖提供器时会跳过声明 require 的脚本，不区分调用风格。不要依赖未声明的全局变量，也不要假定内置 CDN 库。资源 API 还需要各自的授权和资源提供器。
+依赖和资源由宿主在安装准备时获取。缺少对应提供器、获取失败或校验失败都会使安装/更新失败；更新失败保留原版本。执行时读取已准备内容，不会跳过依赖后单独执行主源码。资源 API 还需要对应授权。
 
 Demo 手动更新时优先从 `@updateURL` 检查，其次使用 `@downloadURL`；安装源码优先取自 `@downloadURL`，其次使用检查来源。候选脚本必须具有相同且非空的名称/命名空间，下载版本必须更高。更新保留安装身份、启用状态及存储值。该下载器不带浏览器登录 Cookie，详见[更新与完整性参考](integration-reference.zh-CN.md#资源完整性与更新检查)。
 
@@ -156,27 +156,27 @@ Demo 手动更新时优先从 `@updateURL` 检查，其次使用 `@downloadURL`�
 
 ## 执行、授权与兼容性
 
-现在只有一套契约。[固定 Tampermonkey 5.5.1 证据](compatibility/api-contract.md) 确认：未声明、none、未知授权和 info-only 均提供 GM_info 与 GM.info，但保留不同元数据状态。none 不提供 unsafeWindow；其他情况指向页面 global。
+现代 `GM.*` 与旧式 `GM_*` 共享一套契约。未声明、`none`、未知授权和 info-only 都提供 `GM_info` 与 `GM.info`，元数据仍保留各自的声明状态，详见[固定授权观察](compatibility/api-contract.md#pinned-reference-observations)。
 
 旧式 GM_* 名称需要精确声明。现代存储、资源、菜单和标签数据 API 按家族开放：GM_getValue 还允许现代存储写入，但不会暴露未声明的 GM_setValue 全局，也不授权其他家族。宿主服务和权限政策仍决定操作是否可用、是否获准。
 
-调用风格不强制 strict，也不选择世界；strict 由源码指令决定。顶层 this 为 window 门面，但 none 使用固定 5.5.1 对照观察到的独立对象作为接收者。DOM/content 使用每脚本独立世界和原生 context 验证的派发；raw/默认/Chromium JavaScript 使用受宿主信任政策约束的页面世界。DOM 与 unsafeWindow 冲突、未支持的 unwrap 会在源码执行前拒绝。隔离世界提供脚本全局和派发身份边界，不是操作系统沙箱。document-start 保持 best effort，显式要求保证时拒绝执行。
+调用风格不强制 strict，也不选择执行世界；strict 由源码指令决定。顶层 `this` 为 window 门面，`@grant none` 使用独立对象作为接收者。默认/raw/Chromium JavaScript 使用页面世界，DOM/content 使用每脚本隔离世界。页面世界中包含已识别的 info 以外授权的执行需要宿主 `TrustedPageWorld`；隔离世界通过原生 context 验证派发，仍需授权、服务和宿主许可。选择方式见 [README 安全模型](../README.zh-CN.md#安全模型)。
 
-旧式同步存储和资源依赖完整快照，总序列化预算默认 64 MiB、每份快照准备超时 5 秒；单条桥接消息默认 1 MiB，较大快照完整分块传输。宿主交互需要对应服务。[集成说明](integration-reference.zh-CN.md#授权与-api-契约) 说明信任、服务和真实环境信息。
+页面世界中，`unsafeWindow` 除 `@grant none` 外指向页面全局；DOM 隔离世界不暴露它，显式 DOM 与 `unsafeWindow` 授权冲突会拒绝执行。旧式同步存储和资源须在用户代码启动前取得完整快照；限制见[错误与排查](#errors-and-troubleshooting)。
 
 ### 原生隔离世界与生命周期
 
-DOM/content 需求使用每安装脚本的独立 CDP 世界，身份来自原生 frame/loader/context 事件，派发绑定脚本及版本，源码/通知通过固定 context 代际的 remote object 投递。页面绑定拒绝隔离执行证明。raw/默认/Chromium JavaScript 需求仍使用页面世界和明确的 TrustedPageWorld 政策；DOM + unsafeWindow 冲突及未支持的 unwrap 会在源码启动前以 MSR215 拒绝，不静默退回 raw。
+隔离世界分离脚本全局及派发身份，不是操作系统沙箱。冲突的执行世界、DOM 与显式 `unsafeWindow` 授权、未支持的 unwrap 都在源码启动前拒绝，不静默退回页面世界。完整 GM 的 document-start 仍为尽力执行；要求保证时机会拒绝执行。
 
-document-idle 在 DOMContentLoaded 后调度，不等待缓慢资源的 load。沙箱 window 按脚本私有地回放 DOMContentLoaded/load 缓存，回放事件 isTrusted 为 false；idle 不回放更早的 DOMContentLoaded。监听支持 once、移除及 abort，执行结束清理运行时拥有的监听；直接在页面 DOM 上注册的监听由用户代码管理。源码、DOM、样式的 CSP 效果分别验证，不全站关闭 CSP。
+沙箱 window 按脚本私有地回放缓存的 DOMContentLoaded/load 事件，回放事件的 `isTrusted` 为 false；document-idle 不回放更早的 DOMContentLoaded。window 监听支持 once、移除和 AbortSignal，执行结束清理运行时拥有的监听；直接注册到页面 DOM 的监听由脚本管理。源码、DOM 和样式的 CSP 效果分别有边界，不提供全站 CSP 绕过。
 
-完整 GM 的 document-start 仍为 best effort，显式保证要求会拒绝。isolated OOPIF 使用原生 child session，失败时没有 raw 回退；BFCache 缓存执行撤销，需要新导航。isolated 的历史 page-frame webRequest 不支持，84 的同进程 isolated 子 frame 手动菜单已映射，121/151 保留主 frame。详见[执行证据和边界](compatibility/execution-worlds.md)。
+隔离 OOPIF 已支持经验证的源码、存储、资源及 XHR 范围，不代表菜单或 webRequest 均可用。隔离世界的手动菜单在三个已测版本均支持主 frame，84 另支持同进程子 frame；121/151 仍仅主 frame，隔离 OOPIF 菜单不支持。页面世界的菜单使用当前原生 CEF frame 会话。BFCache 缓存执行会被撤销，需要新导航。详见[执行世界与限制](compatibility/execution-worlds.md)，严格 start 与 CSP 的评估见[专项决策](compatibility/start-csp-decision.md)。
 
 <a id="api-index"></a>
 
 ## API 索引
 
-除非另有说明，每行需要第一列中的能力授权。`Promise<T>` 表示使用 await；立即取得 ID/句柄并不意味着后台注册已完成。旧版名称需要精确声明。后文逐项说明详细行为、错误和示例。
+除 info 和下文说明的 `unsafeWindow` 外，每行需要所属能力家族或精确旧式名称授权。`Promise<T>` 表示使用 await；立即取得 ID/句柄并不意味着后台注册已完成。旧版名称需要精确声明。后文逐项说明详细行为、错误和示例。
 
 | 能力 / 现代成员 | 旧版名称 | 现代返回值 | 实现来源 |
 | --- | --- | --- | --- |
@@ -193,8 +193,8 @@ document-idle 在 DOMContentLoaded 后调度，不等待缓慢资源的 load。�
 | `GM.removeValueChangeListener` | `GM_removeValueChangeListener` | `Promise<undefined>` | Core |
 | `GM.addStyle` | `GM_addStyle` | `Promise<HTMLStyleElement>` | 页面 DOM |
 | `GM.addElement` | `GM_addElement` | `Promise<Element/null>` | 页面 DOM |
-| `GM.getResourceText` | `GM_getResourceText` | `Promise<string>` | 资源提供器 |
-| `GM.getResourceUrl` | `GM_getResourceURL` | `Promise<string>` | 资源提供器 |
+| `GM.getResourceText` | `GM_getResourceText` | `Promise<string>` | 已准备资源 |
+| `GM.getResourceUrl` | `GM_getResourceURL` | `Promise<string>` | 已准备资源 |
 | `GM.xmlHttpRequest` | `GM_xmlhttpRequest` | 可 abort 的 `Promise<Response>` | CefSharp 默认服务 |
 | `GM.registerMenuCommand` | `GM_registerMenuCommand` | `Promise<ID>` | 菜单服务 |
 | `GM.unregisterMenuCommand` | `GM_unregisterMenuCommand` | `Promise<undefined>` | 菜单服务 |
@@ -208,7 +208,7 @@ document-idle 在 DOMContentLoaded 后调度，不等待缓慢资源的 load。�
 | `GM.cookie` | `GM_cookie` | 含 list/set/delete 的命名空间 | CefSharp 默认服务 |
 | `GM.audio.*` | `GM_audio.*` | 静音/状态/监听的 Promise；旧版回调 | 音频服务，audible 仅可靠后端可用 |
 | `GM.webRequest` | `GM_webRequest` | undefined；替换/撤销规则 | CefSharp 默认服务 |
-| `unsafeWindow` | 同名 | 页面全局对象 | 精确授权 |
+| `unsafeWindow` | 同名 | 页面全局对象或 undefined | 取决于执行世界及 none 声明，见下文 |
 | `window.close`、`window.focus` | 同名 | undefined | 窗口服务 |
 | `window.onurlchange` | 同名 | 属性/事件注册 | Core |
 
@@ -216,21 +216,33 @@ document-idle 在 DOMContentLoaded 后调度，不等待缓慢资源的 load。�
 
 ## 信息与日志
 
-默认适配器在 GM.info.compatibility.capabilities 报告已知限制：execution.documentStart 为 best-effort，execution.oopif 支持已验证的 isolated child-target session 范围，execution.bfcache 要求新导航，execution.contextMenuFrame 在 84 支持同进程 frame，121/151 仅主 frame，OOPIF 不支持；GM.xmlHttpRequest.cookie/.cookiePartition 不支持；GM.cookie.partitionKey 在 84 不支持、121 无 ancestor 维度、151 支持可序列化身份；没有可靠来源时 GM.audio.audible 不可用，GM.registerMenuCommand.clickedFrame 要求宿主证明当前文档/frame，未知 frame 时不派发。自定义后端的未知事实省略，不能将字段缺失或主 API 可用推断为细分能力已支持。
+`GM.info.compatibility.capabilities` 同时报告 API 可用性和细分能力。自定义后端的未知事实省略；不能将字段缺失或主 API 可用推断为某个子功能已支持。
+
+| 能力键 | 默认适配器的范围 |
+| --- | --- |
+| `execution.documentStart` | 尽力执行，不保证早于页面脚本。 |
+| `execution.oopif` | 已验证的隔离 child-target session 范围。 |
+| `execution.bfcache` | 缓存执行撤销，需要新导航。 |
+| `execution.contextMenuFrame` | 隔离菜单：84 支持同进程子 frame；121/151 仅主 frame，隔离 OOPIF 菜单不支持。 |
+| `GM.xmlHttpRequest.cookie`、`GM.xmlHttpRequest.cookiePartition` | 默认后端不支持显式 Cookie 或请求分区选择。 |
+| `GM.cookie.partitionKey` | 84 不支持；121 无 ancestor 维度；151 支持可序列化分区身份。 |
+| `GM.audio.audible` | 没有可靠来源时不可用。 |
+| `GM.registerMenuCommand.clickedFrame` | 须有宿主证明的当前文档/frame；未知 frame 不派发。 |
 
 ### GM.info / GM_info
 
-只读、递归冻结的安装信息快照，`GM_info === GM.info`。单一契约下两种名称都默认可用，无需授权。无授权、@grant none 或仅声明 info 授权的脚本无需桥接绑定和握手。元数据保留原始声明；没有参数，不返回 Promise。
+只读、递归冻结的安装信息快照，`GM_info === GM.info`。单一契约下两种名称都默认可用，无需授权。无授权、@grant none 或仅声明 info 授权的脚本无需桥接绑定和握手。显式 info 授权仍可使用，元数据保留原始声明；没有参数，不返回 Promise，缺少的可选元数据通常为 `null`。
 
 | 字段 | 含义 |
 | --- | --- |
 | `scriptKey` | 稳定的安装标识。 |
-| `name`、`namespace`、`description` | 顶层元数据便利字段。version 是管理器实际版本，脚本版本位于 script.version。 |
+| `name`、`namespace`、`description` | 顶层元数据便利字段。 |
+| `version` | 管理器实际版本；脚本版本位于 `script.version`。 |
 | `grants`、`grantDeclarationState` | 原始授权名称，以及 Missing、ExplicitNone 或 ExplicitList。授权别名在内部规范化，这些列表保留原始写法。 |
 | `scriptHandler`、`sandboxMode` | 管理器为 MonkeySharp；执行世界为 raw 或 DOM。 |
 | `downloadMode`、`isIncognito`、`scriptWillUpdate` | 下载服务实际模式及宿主 context/更新策略；未知字段省略。 |
 | `scriptMetaStr`、`scriptUpdateURL` | 原始元数据头和声明的更新 URL。 |
-| `compatibility` | contractVersion: 2，包含实际世界、能力状态及字段来源。capabilities 同时包含宿主确认的细分能力限制，见下文。 |
+| `compatibility` | `contractVersion: 2`、`handler: "MonkeySharp"`，真实 context 决定 `executionWorld`/`isolatedWorld`，`fields` 记录字段来源，`capabilities` 报告上表细分能力。 |
 | `script` | 下述脚本元数据对象。 |
 
 script 包含 name、namespace、version、description、author、copyright、name_i18n、description_i18n、icon、icon64、homepage、supportURL、downloadURL、updateURL、fileURL（安装来源）、header、grant、connects、matches、includes、excludes（含 exclude-match）、resources、antifeatures、webRequest、run-at 和 unwrap。lastModified 是安装更新时间的 Unix **毫秒数**；不提供没有管理器状态来源的 position/blockers 字段。resources 项为 `{name, url, integrity: [{algorithm, digest}]}`；antifeatures 先按类型、再按语言分组（无语言时为 default）。未声明 webRequest 时为 null。options 包含 sandbox、noframes、unwrap 和 run_at。
@@ -348,11 +360,11 @@ attributes 是可选对象：textContent/innerHTML 设置内容，字符串 styl
 
 ### GM.getResourceText(name) / GM_getResourceText(name)
 
-需要对应授权、资源提供器和 @resource name url。name 是非空、区分大小写的字符串。现代返回 `Promise<string>`，使用提供器给出的文本，否则将字节按 UTF-8 解码。旧版从完整启动资源快照立即返回字符串。未声明的资源导致拒绝；缺少旧版快照时不暴露别名，在可用快照中找不到名称时抛出错误。
+需要资源家族授权和 `@resource name url`，内容由宿主在安装时准备。name 是非空、区分大小写的字符串。现代返回 `Promise<string>`：优先使用宿主解码文本，否则按声明 charset 解码，默认 UTF-8。旧版从完整启动资源快照立即返回字符串。未声明的资源导致拒绝；快照必须在用户源码启动前完整准备。
 
 ### GM.getResourceUrl(name) / GM_getResourceURL(name)
 
-前提和名称规则相同，但需要自己的授权。现代返回 `Promise<string>`，内容为 **data URL**：`data:<media-type>;base64,<bytes>`；旧版从快照立即返回该 URL。它不是原始下载地址，也不是需要 revoke 的对象 URL。不支持 isBlobUrl 参数。两种资源 API 均应用完整性检查和大小限制。
+前提和名称规则相同，属于现代资源授权家族；旧式名称仍须精确声明。现代返回 `Promise<string>`，内容为 **data URL**：`data:<media-type>;base64,<bytes>`；旧版从快照立即返回该 URL。它不是原始下载地址，也不是需要 revoke 的对象 URL。不支持 isBlobUrl 参数。两种资源 API 均应用完整性检查和大小限制。
 
 现代名称仅为 `GM.getResourceUrl`，官方旧式名称为 `GM_getResourceURL`。资源按现代家族授权；旧式全局需精确声明和完整快照。不提供 `GM.getResourceURL`。
 
@@ -437,9 +449,7 @@ attributes 是可选对象：textContent/innerHTML 设置内容，字符串 styl
 
 回调的 this 指向响应状态。现代方法的前置校验可能在返回 Promise 前同步抛出，应将整个调用与 await 放进 try/catch。启动后失败会拒绝 Promise，可读取可用的 .code/.name。回调错误类别包括 not_supported、not_permitted、timeout 和 not_succeeded。旧版门面尽可能将即时请求校验失败传给 onerror，但非法回调类型仍可能直接抛出。
 
-XHR 主体分块传输；默认每个请求/响应体限制为 256 MiB，前 256 KiB 保存在内存，之后暂存到临时文件。这独立于普通桥接消息限制。JavaScript 侧仍会在内存中组装非流式响应，大响应优先使用 stream。
-
-**与 Tampermonkey 的差异：** 传输由 CefSharp/宿主实现；不支持代理和分区 Cookie 控制；DOMParser 的 XML/document 类型及 upload/signal 控制遵循 MonkeySharp 行为。显式 redirect 及 anonymous 会启用 fetch；文本进度采用 5.6.6242 预览契约，固定 beta 一致性另行记录。两者当前文档都不支持同步请求，不应将这一共同限制写成 MonkeySharp 特有差异。参见[官方 XHR 参考](https://www.tampermonkey.net/documentation.php?q=GM_xmlhttpRequest)。
+**与 Tampermonkey 的差异：** 默认传输由 CEF URLRequest 实现，不支持代理和请求分区控制。提供 `redirect`（包括 `"follow"`）或设置 `anonymous: true` 也会启用 fetch 语义，忽略 timeout/进度且只报告 readyState 4；固定 5.6.6242 参考中的 fetch 进度与此不同。增量文本及流输入的对照边界见[网络兼容性](compatibility/network.md)。
 
 ```javascript
 // @grant GM.xmlHttpRequest
@@ -462,11 +472,15 @@ XHR 主体分块传输；默认每个请求/响应体限制为 256 MiB，前 256
 
 权限提示显示安装脚本、权限和准确目标 origin。Demo 提供允许一次、记忆允许、拒绝并记住；允许一次仅覆盖当前同范围的合并等待批次。通过权限按钮撤销该安装的决定，标签页会刷新以清理旧执行状态。导航关闭失效等待，同意或记忆允许都不能绕过 connect 或 Cookie URL 声明。
 
-
-
 ### 二进制传输与流完成
 
-文本按声明字符集增量解码，保留跨分块的多字节字符；HTML MIME 使用 HTML 解析器，无效 XML 返回 null。显式 redirect 或 anonymous 会启用 fetch 语义，忽略传输 timeout/进度且只报告 readyState 4。HTTP stream 的 Promise 在响应头和流可用时兑现，后续失败通过流传播；onload/onloadend 随网络完成触发。renderer 每次按需拉取最多 64 KiB，宿主在 256 KiB 后转存磁盘，并受总预算约束。这限制桥接队列，但 CEF URLRequest 本身不能暂停网络源。暂存流在 EOF、取消或执行结束时释放；非流响应仍在 renderer 内组装。文本进度在网络完成前通过同一个解码器拉取带 offset 的 64 KiB 增量，回调间隔至少 50 ms。JSON/document 仍在完成时解析；二进制/stream 不暴露部分文本。同一时刻只有一个主体读取，网络源仍受暂存总预算约束。无效字节采用 TextDecoder 替换语义。
+非 fetch 的 text/JSON/document/XML 进度提供累计 `responseText`，text 的 `response` 同步提供累计文本；JSON/document 仍在完成时解析。解码器保留跨分块的多字节字符，无效字节使用替换字符。二进制/stream 不提供部分文本，fetch 语义不发进度。
+
+`data` 可使用由 `Uint8Array` 块组成的 ReadableStream。授权完成后才获取 reader，每次读取等待上一块暂存确认，全部暂存后才由 CEF 发送；这不是边读边发的网络流上传。locked/disturbed 输入、其他块类型、producer 异常及超预算都会拒绝。abort、导航或失败清理 reader 和暂存；重定向重放完整暂存，不重读源流。
+
+请求体、响应体及暂存下载默认各限 256 MiB，宿主可调整。单个桥接分块最多 64 KiB；宿主前 256 KiB 保留内存，之后转存临时文件。非流式响应仍在 renderer 内存中组装，大响应优先使用 `responseType: "stream"`。
+
+响应流的 Promise 在响应头和流可用时兑现，后续错误通过流传播；`onload`/`onloadend` 随网络完成触发，不等待消费完毕。流在 EOF、取消或执行结束时释放。按需拉取限制桥接队列，但不能暂停 CEF 网络源。[宿主传输与预算](integration-reference.zh-CN.md#二进制传输与流完成)和[固定参考差异](compatibility/network.md)有进一步说明。
 
 <a id="menus-notifications-and-clipboard"></a>
 
@@ -533,7 +547,7 @@ GM_setClipboard('已复制', 'text', () => console.log('已写入'));
 | `GM.saveTab(value)` | 必需 JSON 对象，替换状态；拒绝数组和基础类型。 | `Promise<undefined>` | GM_saveTab(value, callback?) 返回 undefined，提交后调用回调；失败记录日志。 |
 | `GM.getTabs()` | 读取本脚本存活标签页的状态映射，以宿主标签页 ID 为键。 | `Promise<object>` | GM_getTabs(callback) 返回 undefined，回调/错误约定同 getTab。 |
 
-旧版 getTab/getTabs 错误为结构化 {error, details, code} 对象。修改 getTab 返回的对象不会自动保存。Demo 初始状态为 {}，完整页面导航后保留状态，关闭标签页后删除；应用启动时清除过期状态，不恢复浏览器会话。
+同一执行的标签保存和读取按调用顺序提交，旧版不 await 的调用也遵守顺序；保存先捕获 JSON 对象。旧版 getTab/getTabs 错误为结构化 `{error, details, code}` 对象。修改 getTab 返回的对象不会自动保存。Demo 初始状态为 `{}`，完整页面导航后保留状态，关闭标签后删除，应用启动时清理历史状态；不恢复浏览器会话。
 
 ```javascript
 // @grant GM.openInTab
@@ -551,7 +565,7 @@ GM_setClipboard('已复制', 'text', () => console.log('已写入'));
 })().catch(console.error);
 ```
 
-同一执行的标签状态保存和读取按调用顺序提交，旧版不 await 的调用也遵守顺序；保存先捕获 JSON 对象。Demo 按稳定 TabId 及脚本安装身份隔离状态，跨导航保持，标签关闭删除，应用重启清理。window.close/focus 在门面返回 undefined；Demo 允许聚焦存活页、关闭当前页，并拒绝脚本关闭最后一个标签。GM.info 的更新策略来自真实宿主配置，Demo 未启用自动调度，scriptWillUpdate 为 false；未配置策略的宿主省略该字段。
+`window.close`/`window.focus` 是单独授权的[窗口扩展](#window-extensions)，不属于标签状态 API。
 
 <a id="downloads"></a>
 
@@ -559,11 +573,11 @@ GM_setClipboard('已复制', 'text', () => console.log('已写入'));
 
 ### GM.download(details) / GM_download(details)
 
-需要对应授权和下载服务。两种形式都接受选项对象或 `(url, name?)`；url 接受 HTTP(S) 字符串、Blob/File 和 blob URL。支持 Blob/File 和 blob URL 输入；相对 HTTP URL 按文档地址解析。
+需要对应授权和下载服务。两种形式都接受选项对象或 `(url, name?)`；url 接受 HTTP(S) 字符串、Blob/File 和 blob URL，相对 HTTP URL 按文档地址解析。
 
 | 字段 | 类型 / 默认值 | 行为 |
 | --- | --- | --- |
-| `url` | 必填 HTTP(S) 字符串 | 初始目标及重定向均经过宿主授权。 |
+| `url` | 必填 HTTP(S) 字符串、Blob/File 或 blob URL | 网络目标及重定向均经过宿主授权。 |
 | `name` | 可选字符串 | 建议文件名，最终路径由宿主选择及清理。 |
 | `headers` | 字符串字典，`{}` | 使用共用的浏览器网络服务。 |
 | `anonymous` | 布尔值，false | 不带浏览器 Cookie 和凭据。 |
@@ -598,7 +612,7 @@ const handle = GM_download({
 // handle.abort();
 ```
 
-Blob/File 下载逐块等待宿主确认，再使用共用的保存、取消、临时文件和原子提交路径。provider 在终态前持有 DownloadRequest.Body，自定义下载服务应读取该字节源，不应通过 HTTP 访问 blob 标识。失败或导航清理未启动的暂存；已接受下载可在文档结束后继续，回调已分离。context 保留本地原始对象；固定 TM 5.5.1 对照会跨扩展边界复制对象，因此不声称引用身份一致。
+Blob/File 下载先逐块暂存，再进入相同的保存、取消及原子提交流程。暂存失败或导航会清理未启动的正文；已接受下载可在文档结束后继续，旧文档回调停止。自定义服务契约见[集成参考](integration-reference.zh-CN.md#二进制传输与流完成)。
 
 <a id="cookies"></a>
 
@@ -661,7 +675,7 @@ set/delete 接受同一 partitionKey 对象，修改中的空对象选择普通�
 
 `GM.openInTab(url, {incognito:true})` 及旧式调用请求真实私密上下文。Demo 提供 **私密＋** 按钮及私密标签标识。省略 incognito 时继承来源标签，false 显式打开普通标签。宿主通过 `ITabService.SupportsIncognito` 声明能力；不支持的服务在打开前拒绝私密请求。
 
-Demo 的 `TabContext` 绑定稳定 tab 身份、原生 RequestContext、隐私状态、值存储、权限策略和 tab 数据。一次私密会话内的标签共享独立内存 RequestContext，Cookie 和缓存与普通浏览隔离；权限记忆及 tab 数据只在内存中。最后一个私密标签关闭并排空宿主任务后释放上下文、清除会话。`@run-in`、`GM.info.isIncognito`、网络 API 和标签打开均使用同一真实上下文。
+Demo 的私密标签共享独立内存 RequestContext，Cookie 和缓存与普通浏览隔离；权限记忆及标签数据只在内存中。最后私密标签关闭并排空任务后清除会话。`@run-in`、`GM.info.isIncognito` 及网络 API 使用同一实际上下文，宿主实现见[集成参考](integration-reference.zh-CN.md#私密浏览)。
 
 GM 值遵循固定 TM 5.5.1 临时私密会话实测：每脚本首次私密访问时复制普通初值，此后私密写入及监听只在私密会话内流转，不回写普通存储，最后私密标签关闭后不保留。这里是初值副本，不是实时共享。tab 数据枚举也按隐私上下文隔离。
 
@@ -675,9 +689,9 @@ GM 值遵循固定 TM 5.5.1 临时私密会话实测：每脚本首次私密访�
 
 `addStateChangeListener(listener)`、`removeStateChangeListener(listener)` 按函数身份注册/移除。现代形式返回完成 Promise，旧式形式返回 undefined，可提供完成回调。监听应在修改前注册；事件含 `muted`（已知原因、`"unknown"` 或 false），只有可靠后端才提供 `audible`。导航和 detach 清理执行所属监听。
 
-默认 CefSharp 服务在 84/121/151 提供真实静音读写，跨 frame 和导航保持同一标签状态。151 SmokeHost 的已测导航会将原生静音重置为 false，84/121 保持；服务反映真实状态，不承诺 151 导航保持静音。原生读写在 CEF UI 线程执行，每 200 ms 轮询其他宿主静音操作；短于轮询间隔的变化可能漏报。未知原因在状态中省略，在事件中标为 `"unknown"`。不提供 `isAudible`/`audible`：WebAudio 或音频流存在不能证明真实可听状态。`GM.info.compatibility.capabilities["GM.audio"]` 明确报告 `partial:mute-only;audible-unavailable`。
+默认 CefSharp 服务在 84/121/151 提供真实静音状态。已测 151 导航会将原生静音重置为 false，84/121 保持，因此不要假定跨导航保留。外部静音变化每 200 ms 轮询，可能漏报更短的变化。不提供可靠 `isAudible`/`audible`，能力报告 `partial:mute-only;audible-unavailable`；未知原因在状态中省略，在事件中为 `"unknown"`。
 
-宿主可通过 `UseTabAudioService` 注入独立的 `ITabAudioService`，或用 `EnableDefaultAudioService = false` 禁用原生默认服务；网络配置不控制音频。应用传入的服务仍归应用所有。证据见 [音频范围与证据](compatibility/README.md#tab-audio)。
+音频服务可由宿主替换或关闭，配置与所有权见[集成参考](integration-reference.zh-CN.md#标签音频)；返回值与版本差异见[音频证据](compatibility/README.md#tab-audio)。
 
 ```javascript
 // @grant GM.audio
@@ -722,7 +736,7 @@ GM_webRequest([
 
 | 能力 | 参数与行为 | 返回值 |
 | --- | --- | --- |
-| `unsafeWindow` | 精确授权，暴露页面全局对象；是值而非函数。 | 页面全局对象。 |
+| `unsafeWindow` | 页面世界除 `@grant none` 外指向页面全局；隔离世界为 undefined，显式 DOM 与该授权冲突会拒绝执行。它是值而非函数。 | 页面全局对象或 undefined。 |
 | `window.close()` | 精确 window.close 授权及窗口服务，请求宿主关闭来源标签页/窗口。 | `undefined`，宿主政策可能拒绝操作。 |
 | `window.focus()` | 精确 window.focus 授权及窗口服务，请求宿主聚焦来源标签页/窗口。 | `undefined`，宿主政策可能拒绝操作。 |
 | `window.onurlchange` | 精确授权，可赋值函数/null，或 window.addEventListener("urlchange", handler)。 | 属性/事件注册，回调接收 {url, oldURL}。 |
@@ -747,7 +761,7 @@ window.addEventListener("urlchange", onRoute);
 
 | 方面 | 迁移时的处理 |
 | --- | --- |
-| 执行边界 | DOM/content 使用每脚本隔离世界；raw 权限需宿主信任。严格 start、OOPIF、透明 BFCache 恢复及通用 CSP 绕过不可用。 |
+| 执行边界 | DOM/content 使用每脚本隔离世界；页面特权执行需宿主信任。隔离 OOPIF 支持已验证的源码/存储/资源/XHR 范围；严格 start、透明 BFCache 恢复及通用 CSP 绕过不可用，详见[执行限制](compatibility/execution-worlds.md#remaining-limits)。 |
 | 授权 | info 默认可用，旧式全局需要精确声明；现代 API 家族按固定 5.5.1 实测开放。 |
 | 时机 / SPA | 不依赖保证的 document-start 或历史导航后的自动重跑。 |
 | 子域名匹配 | `*.domain` 的 match 模式包含裸域名及其所有层级的子域名。 |
@@ -778,22 +792,22 @@ window.addEventListener("urlchange", onRoute);
 | `MSP005_PERMISSION_DENIED` | 宿主策略、XHR connect 白名单或目标 URL 规则拒绝。 |
 | `MSP006_NOT_SUPPORTED` | 缺少实现/服务或参数不受支持。 |
 | `MSP007_INVALID_PARAMS` | 类型错误、缺少必需字段或非法值。 |
-| `MSP008_PAYLOAD_TOO_LARGE` | 超过普通桥接/资源限额。 |
+| `MSP008_PAYLOAD_TOO_LARGE` | 超过消息、资源、快照或整体传输预算。 |
 | `MSP009_TIMEOUT`、`MSP010_CANCELED` | 超时或取消，应处理终态。 |
 | `MSP999_INTERNAL` | 提供器/内部失败，查看宿主诊断。 |
 
-默认普通桥接请求和响应各限制 1 MiB，资源/依赖限制 10 MiB，普通请求超时 30 秒，每个文档最多 64 个待处理调用。宿主可以修改。分块 XHR 传输及其长时间 execute 操作使用独立控制，不将 1 MiB 当作整体主体上限。启动快照另有前述限制。
+默认每条桥接请求/响应各限 1 MiB，每个资源限 10 MiB，存储/资源启动快照各有 64 MiB 总预算及 5 秒准备超时。安装源码和依赖/资源内容共用 32 MiB 预算；HTTP 正文及暂存下载使用独立的 256 MiB 预算。普通桥接请求超时 30 秒、每文档最多 64 个待处理调用；HTTP `execute`/`readBody` 豁免普通超时。宿主可调整这些限制，完整配置见[集成参考](integration-reference.zh-CN.md#生命周期与诊断)。
 
 | 现象 | 排查项 |
 | --- | --- |
-| 脚本没有执行 | 启用状态、正向匹配、排除项、框架规则、run-at、元数据错误；显式授权还需要宿主信任选项（MSR201_BRIDGE_INTEGRITY_REQUIRED）。 |
-| GM 或方法为 undefined | 授权状态、大小写、兼容模式及宿主服务。缺失 API 通常根本不暴露，而非提供空实现。 |
+| 脚本没有执行 | 启用状态、正向匹配、排除项、框架规则、run-at 和元数据错误；页面世界特权执行还需 `TrustedPageWorld`（`MSR201_BRIDGE_INTEGRITY_REQUIRED`），DOM 隔离仍需授权及宿主许可。 |
+| GM 或方法为 undefined | 授权状态、大小写、执行世界及宿主服务。缺失 API 通常不暴露，而非提供空实现。 |
 | 用户代码在第一句前失败 | 检查完整的存储/资源准备、快照分块、重放保留范围及大小/时间预算；MSC410_COMPATIBILITY_BOOTSTRAP_FAILED。准备失败会阻止执行，不会删去已授权 API 后继续。 |
 | 旧版写入看似成功后又回退 | 异步提交失败，查看 MSC413_COMPATIBILITY_MUTATION_FAILED；改用可 await 的现代写入。 |
-| 依赖不可用 | 检查宿主依赖提供器及 MSR400_DEPENDENCY_RESOLUTION_FAILED / MSR401_DEPENDENCY_PROVIDER_UNAVAILABLE。 |
+| 依赖不可用 | 查看安装/更新返回的异常，检查仓库 preparer 的依赖/资源提供器、网络、完整性和内容预算。准备失败不会发布新版本。 |
 | 执行过晚或世界不符 | document-start 尽力执行（MSR100/MSR101），不支持或冲突的执行世界明确拒绝（MSR215），参见执行矩阵。 |
 | XHR 重定向后失败 | @connect 必须允许每个重定向目标，并检查宿主策略。 |
-| 浏览器已登录但下载失败 | 检查实际 RequestContext、anonymous 选项、重定向授权及宿主权限；GM 下载共用浏览器网络服务；如果应用提供认证下载/原生下载路径，可使用该路径。 |
+| 浏览器已登录但下载失败 | 检查实际 RequestContext、anonymous、重定向授权及宿主权限；自定义下载服务须使用正确的浏览器网络上下文。 |
 | 导航后异步回调停止 | 旧执行已释放，需要在新文档重新注册。 |
 | JavaScript 异常 | 查看开发者工具及宿主 MSR300_SCRIPT_EXCEPTION，显式捕获异步错误。 |
 
@@ -802,9 +816,3 @@ window.addEventListener("urlchange", onRoute);
 ## 参考来源
 
 MonkeySharp 行为依据[授权目录](../Mzying2001.MonkeySharp.Core/Compatibility/UserScriptGrantCatalog.cs)、[JavaScript 门面](../Mzying2001.MonkeySharp.Core/Js/Init.js)、[Core API 提供器](../Mzying2001.MonkeySharp.Core/Apis/)、[元数据解析器](../Mzying2001.MonkeySharp.Core/Parsing/UserScriptMetadataParser.cs)、[运行时信息构建](../Mzying2001.MonkeySharp.Core/Runtime/UserScriptEngine.cs)、[CefSharp 服务](../Mzying2001.MonkeySharp.CefSharp/)及 [JavaScript 行为测试](../Mzying2001.MonkeySharp.Core.Tests/JavaScript/)核对。具体持久化及交互服务见 [Demo 指南](../Mzying2001.MonkeySharp.Demo/README.md)。升级运行时或替换宿主服务时，可据此复核。
-
-ReadableStream 请求输入在授权后获取 reader，逐块读取并先放入现有有界暂存，再由 CEF 发送。未知总长同样受默认 256 MiB 总预算约束，单个 bridge append 最多 64 KiB。这是暂存后上传，不是网络端到端流式发送。locked/disturbed 输入、非 Uint8Array 块及 producer 异常会拒绝；abort/导航取消 reader 与暂存。重定向重放已完成的暂存，不再读取原流。[固定预览](compatibility/network.md#stream-request-bodies)的 reader 释放和重放行为不同。
-
-OOPIF 的普通/私密上下文、进程迁移与 session 身份范围见[隔离 OOPIF 路由](compatibility/execution-worlds.md#isolated-oopif-routing)，不据此推断菜单、严格 start 或 BFCache 已支持。
-
-严格 start 与 CSP 的独立评估、失败证据及后续渲染子进程设计要求见[专项决策](compatibility/start-csp-decision.md)。

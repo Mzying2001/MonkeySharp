@@ -93,9 +93,9 @@ Use F12 in the Demo to open DevTools. `GM` and `GM_*` are wrapper-local bindings
 
 ## Metadata
 
-Dependencies and resources are fetched and verified when a script is installed or edited. A failed preparation leaves the existing version active. Executions, including new frames and offline navigation, reuse that immutable content. Legacy resource reads are ready before user code starts. Hosts configure `UserScriptPreparer` on the repository; see the [installation contract](integration-reference.md#resource-integrity-and-update-checks).
+Dependencies and resources are fetched and verified during installation, editing or update. Failed preparation publishes no new revision; later frames and offline navigation reuse prepared content. See [dependencies, resources and updates](#dependencies-resources-and-updates).
 
-The header begins with `// ==UserScript==` and ends with `// ==/UserScript==`. Put it first for portability. The default parser allows a preamble within 128 lines/64 Ki UTF-16 characters; Metadata errors prevent installation; warnings remain available to the host. For known single-valued keys, the first occurrence wins and duplicates produce a warning; repeat collection fields on separate lines. Unknown entries are preserved but do not acquire runtime behavior.
+The header begins with `// ==UserScript==` and ends with `// ==/UserScript==`. Put it first for portability. The default parser allows a preamble within 128 lines/64 Ki UTF-16 characters; metadata errors prevent installation; warnings remain available to the host. For known single-valued keys, the first occurrence wins and duplicates produce a warning; repeat collection fields on separate lines. Unknown entries are preserved but do not acquire runtime behavior.
 
 | Fields | Syntax and behavior |
 | --- | --- |
@@ -110,7 +110,7 @@ The header begins with `// ==UserScript==` and ends with `// ==/UserScript==`. P
 | `@grant name` | Repeat for each exact capability other than the always-available info properties. Canonical and recognized legacy spellings are case-sensitive. `none` cannot be combined with another grant. Unknown grants warn and are not exposed. |
 | `@connect target` | XHR destination allowlist: host, IP, `localhost`, `*.example.com`, `self`, `*`, or absolute HTTP(S) URL. See [HTTP requests](#http-requests). |
 | `@require url` | Dependency source executed before the main source in declaration order, through a host dependency provider. Not an API grant. |
-| `@resource name url` | Named resource, read through the resource APIs and a host resource provider. Resource names are case-sensitive. |
+| `@resource name url` | Named resource prepared by the host at installation, then read through resource APIs. Names are case-sensitive. |
 | `@homepage`, `@homepageURL`, `@website`, `@source`, `@supportURL` | Source/support links. Homepage priority is `homepageURL`, `homepage`, `website`, then `source`. |
 | `@downloadURL`, `@updateURL` | Update information. The Demo offers manual check/install; the runtime does not schedule automatic updates. `@downloadURL none` disables checking. |
 | `@antifeature type description` | Disclosure information, including localized `@antifeature:locale` declarations. |
@@ -120,7 +120,7 @@ The header begins with `// ==UserScript==` and ends with `// ==/UserScript==`. P
 
 ### Matching and lifecycle
 
-`@match https://example.com/*` covers that host; `@match https://*.example.com/*` covers the bare `example.com` and all its subdomains, following the [Tampermonkey match contract](https://www.tampermonkey.net/documentation.php?q=include). The same host wildcard rule applies to `@exclude-match`. `*://` and `http*://` cover HTTP/HTTPS; explicit ports are checked. URL hosts are IDN-normalized, fragments are ignored, and query strings participate in matching.
+`@match https://example.com/*` covers that host; `@match https://*.example.com/*` covers the bare `example.com` and all its subdomains, following the [Tampermonkey match contract](https://www.tampermonkey.net/documentation.php?q=include). The same host wildcard rule applies to `@exclude-match`. `*://` and `http*://` cover HTTP/HTTPS; explicit ports are checked. Browser URL hosts are IDN-normalized; use Punycode in `@match` host declarations. Fragments are ignored, and query strings participate in matching.
 
 `file:///*` and the explicit MonkeySharp `about:blank` pattern remain available for exposed documents. `<all_urls>` is rejected, matching the pinned manager's lack of automatic injection for that declaration. No positive selector means no automatic injection. Include/exclude globs and `/expression/` rules ignore case and fragments; `?` is literal, queries participate, and scheme/host `*` cannot consume separators outside that component. Escaped unreserved path/query characters are preserved from browser hrefs instead of being silently decoded by `System.Uri`.
 
@@ -138,33 +138,37 @@ Unicode host text in `@match` is retained but does not match normalized browser 
 | `document-idle` | Scheduled after DOMContentLoaded, without waiting for slow subresources or load. Load remains a late fallback when earlier lifecycle signals were unavailable. |
 | `context-menu` | Runs only when the user selects the matching script's native context-menu entry; each selection creates a fresh execution. |
 
-Each `(document, frame, script, run-at)` executes once. Same-document navigation updates matching context and can emit `urlchange`; it does not automatically rerun the same lifecycle invocation. Use [window.onurlchange](#window-extensions) or DOM observers for SPA updates. Full navigation revokes the old execution and its pending operations, listeners, and registrations.
+Automatic execution runs each `(document, frame, script, run-at)` once; manual context-menu selection creates a fresh execution each time. Same-document navigation updates matching context and can emit `urlchange`; it does not automatically rerun the same lifecycle invocation. Use [window.onurlchange](#window-extensions) or DOM observers for SPA updates. Full navigation revokes the old execution and its pending operations, listeners, and registrations.
 
 ### Dependencies, resources, and updates
 
 `@require` and `@resource` URLs accept `md5`/`sha1`/`sha256`/`sha384`/`sha512` integrity fragments: `#sha256=<digest>` or `#sha256-<digest>`, with hexadecimal or standard Base64 digests. Comma/semicolon-separated declarations select the last supported hash. Fragments are stripped before fetching/caching. Original bytes are checked before use and on cache reads. Malformed declarations, unusable unsupported hashes, and mismatches prevent loading.
 
-The host fetches and caches dependencies. A script declaring `@require` is skipped if its provider is absent; dependency failure never silently executes the main source alone. Resource APIs require a resource provider.
+The host prepares dependencies and resources during installation. Missing providers, fetch failures or validation failures reject installation/update; a failed update retains the previous revision. Execution reads prepared content and never silently runs the main source without its dependencies. Resource APIs also require their grant family.
 
 The Demo's manual updater checks `@updateURL` before `@downloadURL`, and installs from `@downloadURL` before the check source. Candidates require the same non-empty name/namespace and a newer downloaded version. Applying an update preserves installation identity, enabled state, and stored values. Its downloader has no browser login cookies. See the [update and integrity reference](integration-reference.md#resource-integrity-and-update-checks).
 
 ## Execution, grants, and compatibility
 
-There is one contract. [Pinned Tampermonkey 5.5.1 evidence](compatibility/api-contract.md) confirms that missing grants, `none`, unknown grants and info-only declarations expose `GM_info` and `GM.info`. These declarations remain distinct in metadata. `unsafeWindow` is absent with `none`; otherwise it refers to the page global.
+Modern `GM.*` methods and legacy `GM_*` names share one contract. Missing, `none`, unknown and info-only grants all expose `GM_info` and `GM.info`, while metadata preserves their distinct declaration states. See the [pinned grant observations](compatibility/api-contract.md#pinned-reference-observations).
 
 Legacy `GM_*` names require their exact declarations. Modern storage, resource, menu and tab-data APIs are granted as families, matching the pinned runtime: `GM_getValue` also enables modern storage writes, but does not expose the undeclared `GM_setValue` global. Other families remain ungranted. Providers and host policy still determine whether operations are available and permitted.
 
-Calling style does not force strictness or select a world. Source directives control strictness. Top-level this is the window facade, except `none` uses a separate object receiver as observed in 5.5.1. Raw/default and Chromium JavaScript access use the page world; DOM access uses a per-script isolated world and native context-authenticated dispatch. Conflicting unsafeWindow/DOM requirements and unsupported unwrap fail before source execution. Document-start remains best effort, and guaranteed timing requirements fail explicitly.
+Calling style does not force strictness or select an execution world; source directives control strictness. Top-level `this` is the window facade, except `@grant none` uses a separate object receiver. Default/raw/Chromium JavaScript uses the page world; DOM/content uses per-script isolated worlds. Page-world executions with recognized grants other than info require host `TrustedPageWorld`; isolated dispatch is context-authenticated and still requires grants, services and host authorization. See the [README security model](../README.md#security-model).
 
-Legacy synchronous storage/resource reads require complete snapshots. Preparation uses complete chunked snapshots with a 64 MiB total bootstrap budget and a five-second host snapshot timeout. Host-backed UI APIs require their services. [Integration details](integration-reference.md#api-contract-and-grants) describe trust, providers and actual environment facts.
+In the page world, `unsafeWindow` refers to the page global except with `@grant none`. DOM isolated worlds do not expose it, and explicit DOM plus an `unsafeWindow` grant rejects execution. Legacy synchronous storage/resource reads require complete snapshots before user code starts; limits are listed under [troubleshooting](#errors-and-troubleshooting).
 
 ### Native isolated execution and lifecycle
 
-The sandbox window privately replays cached DOMContentLoaded/load events after listener registration, using untrusted synthetic events as observed in the reference. Document-idle does not replay the earlier DOMContentLoaded event. Window listeners support once/removal/abort and are cleared with their execution; direct page DOM listeners remain user-owned. Raw source evaluation and inserted styles remain subject to page CSP. Isolated source/DOM and style effects have separate browser evidence; the adapter never enables whole-page CSP bypass.
+Isolated worlds separate script globals and dispatch identity, not operating-system processes. Conflicting worlds, DOM plus an explicit `unsafeWindow` grant, and unsupported unwrap reject before source starts, without silent page-world fallback. Full-GM document-start remains best effort; requiring guaranteed timing rejects execution.
+
+The sandbox window privately replays cached DOMContentLoaded/load events with `isTrusted: false`; document-idle does not replay the earlier DOMContentLoaded event. Window listeners support once/removal/AbortSignal and are cleared with their execution; direct page DOM listeners remain script-owned. Source, DOM and style CSP effects have separate limits, without whole-page CSP bypass.
+
+Isolated OOPIF supports the validated source/storage/resource/XHR scope, not every menu or webRequest feature. For isolated manual menus, all three tested versions support the main frame and 84 also supports same-process child frames; 121/151 remain main-only, and isolated OOPIF menus are unsupported. Page-world menus use the current native CEF frame session. BFCache cached executions are revoked and require fresh navigation. See [execution worlds and limits](compatibility/execution-worlds.md) and the [strict-start/CSP assessment](compatibility/start-csp-decision.md).
 
 ## API index
 
-Each row requires its capability family or exact legacy declaration unless stated otherwise. `Promise<T>` means use `await`; an immediate ID/handle is not a readiness guarantee for its background registration. Legacy names require their exact declarations. Details, errors, and examples follow.
+Except for info and `unsafeWindow` as described below, each row requires its capability family or exact legacy declaration. `Promise<T>` means use `await`; an immediate ID/handle is not a readiness guarantee for its background registration. Legacy names require their exact declarations. Details, errors, and examples follow.
 
 | Capability / modern member | Legacy name | Modern result | Implementation |
 | --- | --- | --- | --- |
@@ -181,8 +185,8 @@ Each row requires its capability family or exact legacy declaration unless state
 | `GM.removeValueChangeListener` | `GM_removeValueChangeListener` | `Promise<undefined>` | Core |
 | `GM.addStyle` | `GM_addStyle` | `Promise<HTMLStyleElement>` | Page DOM |
 | `GM.addElement` | `GM_addElement` | `Promise<Element/null>` | Page DOM |
-| `GM.getResourceText` | `GM_getResourceText` | `Promise<string>` | Resource provider |
-| `GM.getResourceUrl` | `GM_getResourceURL` | `Promise<string>` | Resource provider |
+| `GM.getResourceText` | `GM_getResourceText` | `Promise<string>` | Prepared resources |
+| `GM.getResourceUrl` | `GM_getResourceURL` | `Promise<string>` | Prepared resources |
 | `GM.xmlHttpRequest` | `GM_xmlhttpRequest` | Abortable `Promise<Response>` | CefSharp default |
 | `GM.registerMenuCommand` | `GM_registerMenuCommand` | `Promise<ID>` | Menu service |
 | `GM.unregisterMenuCommand` | `GM_unregisterMenuCommand` | `Promise<undefined>` | Menu service |
@@ -196,13 +200,24 @@ Each row requires its capability family or exact legacy declaration unless state
 | `GM.cookie` | `GM_cookie` | Namespace with list/set/delete | CefSharp default |
 | `GM.audio.*` | `GM_audio.*` | Promise for mute/state/listeners; legacy callbacks | Audio service; audible needs a reliable backend |
 | `GM.webRequest` | `GM_webRequest` | undefined; replace/revoke rules | CefSharp default |
-| `unsafeWindow` | Same name | Page global object | Exact grant |
+| `unsafeWindow` | Same name | Page global object or undefined | World/none declaration; see below |
 | `window.close`, `window.focus` | Same names | `undefined` | Window service |
 | `window.onurlchange` | Same name | Property/event registration | Core |
 
 ## Information and logging
 
-The default adapter reports known limits through `GM.info.compatibility.capabilities`: `execution.documentStart` (best-effort), `execution.oopif` (isolated child-target sessions), `execution.bfcache` (fresh navigation required), `execution.contextMenuFrame` (84 same-process frames; 121/151 main only; OOPIF unavailable), `GM.xmlHttpRequest.cookie` and `.cookiePartition`, `GM.cookie.partitionKey` (84 unsupported, 121 without ancestor dimension, 151 serializable keys), `GM.audio.audible` (unavailable without a reliable source) and `GM.registerMenuCommand.clickedFrame` (host-attested document required; unknown frame suppressed). Missing custom-backend facts are omitted, not inferred to be supported. API availability alone does not establish these subfeatures.
+`GM.info.compatibility.capabilities` reports both API availability and subfeature status. Unknown custom-backend facts are omitted; neither a missing key nor an available parent API establishes subfeature support.
+
+| Capability key | Default adapter scope |
+| --- | --- |
+| `execution.documentStart` | Best effort, without a pre-page guarantee. |
+| `execution.oopif` | Validated isolated child-target session scope. |
+| `execution.bfcache` | Cached executions revoked; fresh navigation required. |
+| `execution.contextMenuFrame` | Isolated menus: 84 same-process child frames; 121/151 main only; no isolated OOPIF menus. |
+| `GM.xmlHttpRequest.cookie`, `GM.xmlHttpRequest.cookiePartition` | No explicit Cookie or request-partition selection in the default backend. |
+| `GM.cookie.partitionKey` | 84 unsupported; 121 without ancestor dimension; 151 serializable partition identities. |
+| `GM.audio.audible` | Unavailable without a reliable source. |
+| `GM.registerMenuCommand.clickedFrame` | Host-attested current document/frame required; unknown frame suppressed. |
 
 ### GM.info / GM_info
 
@@ -217,7 +232,7 @@ Read-only, recursively frozen installation snapshot. `GM_info === GM.info`. Both
 | `scriptHandler`, `sandboxMode` | MonkeySharp identity and actual execution mode. |
 | `downloadMode`, `isIncognito`, `scriptWillUpdate` | Actual download backend and host context/update policy. Unknown context/policy fields are omitted. |
 | `scriptMetaStr`, `scriptUpdateURL` | Raw metadata header and declared update URL. |
-| `compatibility` | `contractVersion: 2`, `handler: "MonkeySharp"`, `executionWorld` and `isolatedWorld` from the actual native context; `fields` records field provenance. |
+| `compatibility` | `contractVersion: 2`, `handler: "MonkeySharp"`, `executionWorld`/`isolatedWorld` from the actual context, `fields` for provenance, and `capabilities` for the subfeatures above. |
 | `script` | Metadata object detailed below. |
 
 `script` contains `name`, `namespace`, `version`, `description`, `author`, `copyright`, `name_i18n`, `description_i18n`, `icon`, `icon64`, `homepage`, `supportURL`, `downloadURL`, `updateURL`, `fileURL` (installation source), `header`, `grant`, `connects`, `matches`, `includes`, `excludes` (including exclude-match entries), `resources`, `antifeatures`, `webRequest`, `run-at`, and `unwrap`. `lastModified` is installation-update Unix **milliseconds**; unsupported manager-only `position` and `blockers` fields are omitted. `resources` entries are `{name, url, integrity: [{algorithm, digest}]}`; antifeatures are grouped by type, then locale (`default` for unlocalized). `webRequest` is `null` when absent. `options` contains `sandbox`, `noframes`, `unwrap`, and `run_at`.
@@ -329,11 +344,11 @@ Legacy: `GM_addElement` with the same overloads; grant `GM.addElement` or its al
 
 ### GM.getResourceText(name) / GM_getResourceText(name)
 
-Requires its grant, a resource provider, and `@resource name url`. `name` is a non-empty, case-sensitive string. Modern result: `Promise<string>`, using provider text or UTF-8 decoding of bytes. Legacy returns a string immediately from the complete bootstrap resource snapshot. An undeclared resource rejects; a missing legacy snapshot makes the alias unavailable, and an absent name in an available snapshot throws.
+Requires a resource-family grant and `@resource name url`, with content prepared by the host at installation. `name` is a nonempty case-sensitive string. Modern returns `Promise<string>` using host-decoded text first, otherwise the declared charset, defaulting to UTF-8. Legacy returns the string immediately from the complete startup resource snapshot. Undeclared resources reject; snapshots must be complete before user source starts.
 
 ### GM.getResourceUrl(name) / GM_getResourceURL(name)
 
-Same prerequisites and name rules, with its own grant. Modern result: `Promise<string>` containing a **data URL**, `data:<media-type>;base64,<bytes>`; legacy returns that URL immediately from its snapshot. It is not the download URL and is not a revocable object URL. There is no supported `isBlobUrl` parameter. Integrity and size limits apply to both resource APIs.
+The same prerequisites and name rules apply through the modern resource grant family; legacy names still require exact declarations. Modern returns `Promise<string>` containing a **data URL**, `data:<media-type>;base64,<bytes>`; legacy returns it immediately from its snapshot. It is not the download URL or a revocable object URL. No `isBlobUrl` parameter is supported. Both resource APIs apply integrity checks and size limits.
 
 The modern spelling is `GM.getResourceUrl`; the official legacy spelling is `GM_getResourceURL`. Either resource capability enables the modern resource family. Legacy globals require their exact declaration and complete snapshots; `GM.getResourceURL` is absent.
 
@@ -416,9 +431,7 @@ Objects/arrays are sent as JSON, URLSearchParams as form encoding, and FormData 
 
 Callbacks run with `this` set to the response state. Modern preflight validation can throw synchronously before returning a Promise; wrap the entire call in `try/catch` as well as awaiting it. Failures after start reject the Promise; inspect `.code`/`.name` when available. Callback errors use categories such as `not_supported`, `not_permitted`, `timeout`, and `not_succeeded`. The legacy facade reports immediate request validation failures through onerror where possible; malformed callback types may still throw.
 
-XHR bodies are transferred in chunks; the default total limit is 256 MiB per body, keeps the first 256 KiB in memory, then spools to temporary files. This is separate from ordinary bridge-message limits. The JavaScript side still assembles non-stream response bodies in memory. Prefer `stream` for large responses.
-
-**Tampermonkey differences:** transport is CefSharp/host-backed; proxy and partitioned-cookie controls are absent; DOMParser XML/document types and the upload/signal controls are MonkeySharp behavior. Explicit redirect mode and anonymous requests imply fetch mode. Text progress follows the 5.6.6242 preview contract; pinned beta parity is recorded separately. Synchronous requests are unsupported in both current documented APIs; do not treat that shared restriction as a MonkeySharp-only difference. Compare the [official XHR reference](https://www.tampermonkey.net/documentation.php?q=GM_xmlhttpRequest).
+**Tampermonkey differences:** the default transport is CEF URLRequest, without proxy or request-partition controls. Supplying `redirect` (including `"follow"`) or setting `anonymous: true` also selects fetch semantics, ignoring timeout/progress and reporting only readyState 4; the fixed 5.6.6242 reference emits fetch progress instead. See [network compatibility](compatibility/network.md) for incremental-text and stream-input comparisons.
 
 ```javascript
 // @grant GM.xmlHttpRequest
@@ -441,11 +454,15 @@ XHR bodies are transferred in chunks; the default total limit is 256 MiB per bod
 
 Permission prompts identify the installed script, capability and exact target origin. The Demo offers allow once, remember allow, or remember deny. Allow once covers the currently waiting same-scope batch only. Use the Permissions button to revoke an installation's remembered decisions; tabs reload so cached execution state cannot retain a revoked decision. Navigation closes obsolete waits. Neither an interactive allow nor a stored allow can override connect or Cookie URL declarations.
 
-
-
 ### Binary transport and stream completion
 
-Text decoding preserves split multibyte sequences and declared charsets. HTML MIME uses DOMParser's HTML parser; invalid XML returns null. HTTP stream Promises resolve when headers and the stream are available. Subsequent failures error the stream; onload/onloadend follow network completion independently of consumer speed. The renderer pulls at most 64 KiB at a time; the host spools unread bytes (256 KiB in memory, then disk) within the total budget. This bounds bridge queues; CEF URLRequest cannot pause the network source itself. Stream spools live until EOF/cancel/execution end. Non-stream responses are assembled in renderer memory. Text progress pulls indexed 64 KiB increments through one decoder before network completion, with callbacks at most once per 50 ms plus the final data chunk. JSON/document parsing still occurs at completion; binary/stream data is never exposed as partial text. Only one body read is outstanding; the network source remains subject to the total spool budget. Invalid byte sequences use TextDecoder replacement semantics.
+Non-fetch text/JSON/document/XML progress exposes cumulative `responseText`; text also exposes cumulative `response`. JSON/document parsing remains final-only. Decoding preserves split multibyte characters and replaces malformed bytes. Binary/stream responses expose no partial text, and fetch semantics suppress progress.
+
+`data` may be a ReadableStream of `Uint8Array` chunks. The reader is acquired only after authorization; each read waits for the previous staging acknowledgment, and CEF sends only after the entire body is staged. This is staged upload, without live network streaming. Locked/disturbed input, other chunk types, producer errors and budget overflow reject. Abort, navigation and failure clean up the reader and spool; redirects replay the completed spool without rereading the source.
+
+Request bodies, response bodies and staged downloads default to 256 MiB each, configurable by the host. Bridge chunks are at most 64 KiB; the host retains up to 256 KiB in memory before spooling to disk. Non-stream responses still assemble in renderer memory; prefer `responseType: "stream"` for large responses.
+
+A stream response Promise resolves when headers and the stream are available; later failures error the stream. `onload`/`onloadend` follow network completion, not consumption. The stream is released at EOF, cancellation or execution end. Pull-based reads bound bridge queues but cannot pause CEF's network source. See [host transport and budgets](integration-reference.md#binary-transport-and-stream-completion) and [fixed-reference differences](compatibility/network.md).
 
 ## Menus, notifications, and clipboard
 
@@ -490,7 +507,6 @@ await GM.setClipboard('<b>Hello</b>', {type:'html',mimetype:'text/html'});
 GM_setClipboard('Copied', 'text', () => console.log('Written'));
 ```
 
-
 ## Tabs and tab state
 
 ### GM.openInTab(url, options?) / GM_openInTab(url, options?)
@@ -527,15 +543,17 @@ Save/read calls from one execution are ordered, including legacy calls made with
 })().catch(console.error);
 ```
 
+`window.close`/`window.focus` are separately granted [window extensions](#window-extensions), not tab-state APIs.
+
 ## Downloads
 
 ### GM.download(details) / GM_download(details)
 
-Requires its grant and a download service. Both forms accept an options object or `(url, name?)`, where `url` is an HTTP(S) string, Blob/File value, or renderer blob URL. Blob/File values and blob URL strings are supported; relative HTTP URLs resolve against the document.
+Requires its grant and a download service. Both forms accept an options object or `(url, name?)`, where `url` is an HTTP(S) string, Blob/File value or renderer blob URL. Relative HTTP URLs resolve against the document.
 
 | Field | Type / default | Behavior |
 | --- | --- | --- |
-| `url` | Required HTTP(S) string | Initial target and redirects pass host authorization. |
+| `url` | Required HTTP(S) string, Blob/File or blob URL | Network destinations and redirects pass host authorization. |
 | `name` | Optional string | Suggested filename; the host selects and sanitizes the destination. |
 | `headers` | String-to-string object, `{}` | Uses the shared browser network service. |
 | `anonymous` | Boolean, `false` | Omit browser cookies and credentials. |
@@ -570,7 +588,7 @@ const handle = GM_download({
 // handle.abort();
 ```
 
-Blob/File downloads stage acknowledged 64 KiB chunks and share the file pipeline's save/abort/atomic commit semantics. The provider owns DownloadRequest.Body until the download's terminal event; custom services must read these bytes without dereferencing its blob identifier through HTTP. Incomplete staging is released on failure/navigation. Accepted downloads may outlive their document with callbacks detached. Callback context remains the original local object; the fixed TM 5.5.1 reference clones that object across its extension boundary, so object identity equivalence is not claimed.
+Blob/File downloads stage their bytes before entering the same save/abort/atomic-commit pipeline. Failure or navigation clears incomplete staging; accepted downloads can continue after document end with old callbacks detached. Custom service requirements are in the [integration reference](integration-reference.md#binary-transport-and-stream-completion).
 
 ## Cookies
 
@@ -627,7 +645,7 @@ XHR cookiePartition remains unsupported on every tested version. The native requ
 
 `GM.openInTab(url, {incognito:true})` and the legacy form request an actual private context. The Demo also provides a **私密＋** button and marks private tabs. Omitted `incognito` inherits the originating tab; false explicitly opens a normal tab. Hosts declare `ITabService.SupportsIncognito`; a private request is rejected before opening when the service does not support it.
 
-The Demo's `TabContext` binds stable tab identity, the native RequestContext, privacy state, value store, permission policy and tab-state service. All private tabs in one live session share a separate in-memory RequestContext. Cookies and cache are isolated from normal browsing; permission decisions and tab data stay in memory. The last private tab closes and drains its host before releasing that context and clearing the private session. `@run-in`, `GM.info.isIncognito`, network APIs and tab opening all use that same actual context.
+Demo private tabs share a separate in-memory RequestContext, isolating cookies/cache from normal browsing; permission decisions and tab data stay in memory. The session is cleared after the last private tab closes and its tasks drain. `@run-in`, `GM.info.isIncognito` and network APIs use that same actual context; see [host integration](integration-reference.md#private-browsing).
 
 Private GM values follow the pinned Tampermonkey 5.5.1 temporary-session behavior: each script receives a copy of its normal baseline on first private access, then private changes and listeners stay within the private session. Writes do not return to normal storage or persist after the last private tab closes. This is a copied baseline, not live sharing. Tab-state enumeration is also separated by privacy context.
 
@@ -639,9 +657,9 @@ Grant `GM.audio` or `GM_audio`. Modern `GM.audio.getState()` returns a Promise o
 
 `addStateChangeListener(listener)` and `removeStateChangeListener(listener)` use the exact function identity. Modern calls resolve after registration/removal; legacy calls return undefined and accept a completion callback. Register before changing mute state. Events contain `muted` (known reason, `"unknown"`, or false), and `audible` only when a reliable backend supplies it. Listeners belong to their execution and are removed on navigation/detach.
 
-The default CefSharp service supports mute on 84/121/151 and follows the native browser across frames and navigation. In the tested 151 SmokeHost navigation, CEF resets native mute to false; 84/121 retain it. The service reports the actual state and does not promise retention on 151. It reads native state on the CEF UI thread and polls every 200 ms for changes made by other host controls; transitions shorter than that interval may not be observed. Unknown reasons are omitted from state and identified as `"unknown"` in changes. `isAudible`/`audible` are omitted: WebAudio or stream existence is not a reliable audible source. `GM.info.compatibility.capabilities["GM.audio"]` reports `partial:mute-only;audible-unavailable`.
+The default CefSharp service provides actual mute state on 84/121/151. The tested 151 navigation resets native mute to false, while 84/121 retain it, so do not assume retention across navigation. External changes are polled every 200 ms and shorter transitions may be missed. No reliable `isAudible`/`audible` source is provided; capabilities report `partial:mute-only;audible-unavailable`. Unknown reasons are omitted from state and reported as `"unknown"` in events.
 
-Hosts can supply an independent `ITabAudioService` through `UseTabAudioService`, or disable the native default with `EnableDefaultAudioService = false`; network-service options do not control audio. Application-supplied services remain application-owned. See the [audio evidence](compatibility/README.md#tab-audio).
+Hosts can replace or disable the audio service; see [configuration and ownership](integration-reference.md#tab-audio) and [audio evidence](compatibility/README.md#tab-audio) for version/return-value differences.
 
 ```javascript
 // @grant GM.audio
@@ -682,7 +700,7 @@ GM_webRequest([
 
 | Capability | Parameters and behavior | Result |
 | --- | --- | --- |
-| `unsafeWindow` | Exact grant; exposes the page's global object. It is a value, not a function. | Page global object. |
+| `unsafeWindow` | Page global in the page world except with `@grant none`; undefined in isolated worlds, where an explicit grant conflicts with DOM execution. A value, not a function. | Page global object or undefined. |
 | `window.close()` | Exact `window.close` grant plus window service; asks the host to close the originating tab/window. | `undefined`; host policy may refuse the action. |
 | `window.focus()` | Exact `window.focus` grant plus window service; asks the host to focus the originating tab/window. | `undefined`; host policy may refuse the action. |
 | `window.onurlchange` | Exact grant; assign a function or null, or use `window.addEventListener("urlchange", handler)`. | Assignment/event registration; callbacks receive `{url, oldURL}`. |
@@ -705,7 +723,7 @@ window.addEventListener("urlchange", onRoute);
 
 | Area | Porting action |
 | --- | --- |
-| Runtime boundary | DOM/content uses per-script isolated contexts; raw privileges require host trust. Strict start, OOPIF, transparent BFCache restore and general CSP bypass are unavailable. |
+| Runtime boundary | DOM/content uses per-script isolated worlds; page-world privileged execution requires host trust. Isolated OOPIF covers validated source/storage/resource/XHR. Strict start, transparent BFCache restore and general CSP bypass are unavailable; see [execution limits](compatibility/execution-worlds.md#remaining-limits). |
 | Grants | Info is implicit; legacy globals require exact declarations, while modern API families follow the pinned 5.5.1 evidence. |
 | Timing / SPA | Do not require guaranteed document-start or automatic reruns on history changes. |
 | Match subdomains | `*.domain` match patterns include the bare domain and all its subdomains. |
@@ -734,31 +752,25 @@ Most modern bridge operations reject with errors carrying `.code` and `.message`
 | `MSP005_PERMISSION_DENIED` | Host policy, XHR connect allowlist, or target URL rules deny the operation. |
 | `MSP006_NOT_SUPPORTED` | Missing implementation/service or unsupported control. |
 | `MSP007_INVALID_PARAMS` | Invalid type, missing required field, or bad value. |
-| `MSP008_PAYLOAD_TOO_LARGE` | Ordinary bridge/resource limit exceeded. |
+| `MSP008_PAYLOAD_TOO_LARGE` | Message, resource, snapshot or total-transfer budget exceeded. |
 | `MSP009_TIMEOUT`, `MSP010_CANCELED` | Timeout or cancellation; handle the terminal outcome. |
 | `MSP999_INTERNAL` | Provider/internal failure; consult host diagnostics. |
 
-Defaults: ordinary bridge requests/responses are limited to 1 MiB each, resources/dependencies to 10 MiB, ordinary requests to 30 seconds, and pending calls to 64 per document. Hosts can override these limits. Chunked XHR transfers and their long-running execute operation use their own controls rather than applying a 1 MiB total-body cap. Bootstrap snapshots have separate limits described above.
+Defaults: each bridge request/response is limited to 1 MiB, each resource to 10 MiB, and storage/resource bootstrap snapshots each have a 64 MiB total budget and five-second preparation timeout. Installation source plus dependency/resource content shares a 32 MiB budget; HTTP bodies and staged downloads use a separate 256 MiB budget. Ordinary bridge requests time out after 30 seconds, with 64 pending calls per document; HTTP `execute`/`readBody` are exempt from that timeout. Hosts can adjust these limits; see the [integration reference](integration-reference.md#lifecycle-and-diagnostics).
 
 | Symptom | Check |
 | --- | --- |
-| Script never runs | Enabled installation, positive URL match, exclusions, iframe rules, run-at, metadata errors; explicit grants also require host trust opt-in (`MSR201_BRIDGE_INTEGRITY_REQUIRED`). |
+| Script never runs | Enabled installation, URL match/exclusions, iframe rules, run-at and metadata errors; page-world privileged execution also needs `TrustedPageWorld` (`MSR201_BRIDGE_INTEGRITY_REQUIRED`), while DOM isolation still requires grants and host authorization. |
 | `GM` or one method is undefined | Grant state, exact spelling, execution world, and host service. Missing APIs are usually absent, not stubs. |
 | User code fails before its first statement | Complete storage/resource preparation, snapshot chunk delivery, replay retention and configured byte/time budgets; `MSC410_COMPATIBILITY_BOOTSTRAP_FAILED`. Preparation failure does not remove granted APIs and continue. |
 | A legacy write seemed to succeed but data reverted | Async commit failed; inspect `MSC413_COMPATIBILITY_MUTATION_FAILED`; use awaited modern writes. |
-| A dependency is missing | Host dependency provider and `MSR400_DEPENDENCY_RESOLUTION_FAILED` / `MSR401_DEPENDENCY_PROVIDER_UNAVAILABLE`. |
+| A dependency is missing | Inspect the installation/update exception and repository preparer providers, network, integrity and content budget. Failed preparation publishes no revision. |
 | Code runs too late or in the wrong world | document-start is best effort (`MSR100`/`MSR101`); explicit unsupported/conflicting worlds reject (`MSR215`); see the [execution matrix](compatibility/execution-worlds.md). |
 | XHR fails after a redirect | Allow every redirect destination with `@connect`; check host policy. |
-| Download fails despite browser login | Check the actual RequestContext, anonymous option, redirect authorization, and host permission policy. |
+| Download fails despite browser login | Actual RequestContext, anonymous option, redirect authorization and host permissions; custom download services must use the correct browser network context. |
 | Async callback stopped after navigation | The old execution was released; register again in the new document. |
 | JavaScript exception | DevTools console and host `MSR300_SCRIPT_EXCEPTION`; catch asynchronous work explicitly. |
 
 ## Reference sources
 
 MonkeySharp behavior was checked against the [grant catalog](../Mzying2001.MonkeySharp.Core/Compatibility/UserScriptGrantCatalog.cs), [JavaScript facade](../Mzying2001.MonkeySharp.Core/Js/Init.js), [Core API providers](../Mzying2001.MonkeySharp.Core/Apis/), [metadata parser](../Mzying2001.MonkeySharp.Core/Parsing/UserScriptMetadataParser.cs), [runtime info builder](../Mzying2001.MonkeySharp.Core/Runtime/UserScriptEngine.cs), [CefSharp services](../Mzying2001.MonkeySharp.CefSharp/), and [JavaScript contract tests](../Mzying2001.MonkeySharp.Core.Tests/JavaScript/). The [Demo guide](../Mzying2001.MonkeySharp.Demo/README.md) documents its concrete persistence and interaction services. Use these sources when upgrading the runtime or replacing host services.
-
-ReadableStream request input is authorized before reader acquisition, pulled one chunk at a time and staged in the existing bounded spool before CEF sends it. Unknown lengths share the 256 MiB default total budget; individual bridge appends are at most 64 KiB. This is staged upload, without end-to-end network streaming. Locked/disturbed input, non-Uint8Array chunks and producer errors reject; abort/navigation cancels the reader and staging. Redirects replay the completed spool without rereading the stream. The [pinned preview](compatibility/network.md#stream-request-bodies) has different reader-release and replay behavior.
-
-See the [OOPIF scope and native evidence](compatibility/execution-worlds.md#isolated-oopif-routing) for normal/private contexts, migrations and per-session identity.
-
-The [start/CSP decision](compatibility/start-csp-decision.md) separates full-GM timing, node/resource effects and the cost of a future renderer subprocess. No new strict-start guarantee is made.

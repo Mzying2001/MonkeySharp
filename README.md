@@ -4,7 +4,7 @@
 
 MonkeySharp 3 is a userscript runtime for applications that embed CefSharp. Browser-independent parsing, URL matching, repositories, storage, permissions, and API dispatch live in Core; browser lifecycle integration lives in the CefSharp adapter.
 
-One userscript contract provides both official calling forms over an asynchronous bridge. Legacy names follow exact declarations; modern API families follow the pinned reference evidence and actual host services.
+Scripts can use modern `GM.*` methods and legacy `GM_*` names. Availability depends on declared grants and host services; the [userscript guide](docs/usage-guide.md#execution-grants-and-compatibility) explains their calling conventions.
 
 | To… | Start here |
 | --- | --- |
@@ -86,7 +86,7 @@ host.Attach(browser);
 form.Controls.Add(browser);
 ```
 
-The `true` argument enables the installation. After the page loads, evaluate `document.documentElement.dataset.monkeySharp` in DevTools; it should be `"ready"`. This example uses `@grant none`; grants other than `none` or info require the [trust opt-in](#security-model) and any corresponding host services.
+The `true` argument enables the installation. After the page loads, evaluate `document.documentElement.dataset.monkeySharp` in DevTools; it should be `"ready"`. This example uses `@grant none`. For privileged APIs, choose an execution world under the [security model](#security-model) and supply any required host services.
 
 Keep the host and browser for the form's lifetime. Dispose the MonkeySharp host before its browser, then call `CefSharp.Cef.Shutdown()` once all browsers have been disposed. Host disposal is idempotent and cancels document sessions and pending API requests. The [SmokeHost](Mzying2001.MonkeySharp.CefSharp.SmokeHost/Program.cs) provides a complete WinForms startup and shutdown example.
 
@@ -108,14 +108,15 @@ Only compose slots that already have application handlers. `Attach` rejects occu
 
 ## Security Model
 
-Page-world bootstrap uses CefSharp binding and is reported as `Unverified`; per-script DOM worlds use a context-authenticated CDP transport.
+The default page world and explicit DOM isolated worlds have different bridge requirements:
 
-- Page-world execution with host-backed grants requires `TrustedPageWorld`; no-grant/none/info scripts can run without that opt-in. Explicit DOM worlds use the verified isolated transport and still require metadata grants and host authorization.
-- `TrustedPageWorld` enables explicitly granted APIs only when the application trusts both the page and installed scripts.
-- Per-execution capabilities prevent unrelated callers from impersonating an installation, but they are not an extension-style isolation boundary. Hostile page code can intercept a capability and invoke APIs granted to that script.
-- Installed userscripts are trusted code. Applications need their own review, signature, or trust policy for unknown sources.
+| Execution | Bridge requirement |
+| --- | --- |
+| Page world, no recognized grants / `none` / info-only | No bridge binding or trust opt-in needed. |
+| Page world, recognized grants other than info | Requires `TrustedPageWorld`; only enable it for trusted pages and scripts. |
+| `@sandbox DOM` or `@inject-into content` | Uses per-script isolated worlds with context-authenticated CDP transport; still requires grants, services and host authorization. |
 
-Enable page-world privileged APIs only after accepting that limitation:
+Page-world binding is reported as `Unverified`. Its per-execution capabilities are not an extension-style isolation boundary: hostile page code can intercept them and invoke APIs granted to the script. To accept that limitation for a trusted page-world application:
 
 ```csharp
 var host = new CefSharpUserScriptHostBuilder(repository)
@@ -123,9 +124,9 @@ var host = new CefSharpUserScriptHostBuilder(repository)
     .Build();
 ```
 
-Default-mode suppressions emit `MSR201_BRIDGE_INTEGRITY_REQUIRED`; trusted-mode executions that require the bridge emit `MSR200_UNVERIFIED_BRIDGE`. Info-only executions need no bridge binding or handshake.
+Page-world executions skipped for lack of trust emit `MSR201_BRIDGE_INTEGRITY_REQUIRED`; trusted page-world executions that need the bridge emit `MSR200_UNVERIFIED_BRIDGE`.
 
-`@sandbox DOM` (or `@inject-into content`) selects a per-installation isolated world with context-authenticated CDP dispatch. Raw/default and Chromium JavaScript access use the page world and the trust policy above. DOM isolation cannot expose the actual page unsafeWindow; conflicting requirements and unsupported unwrap are rejected. Full GM document-start is best effort, and OOPIF/BFCache limits are explicit. See [execution evidence](docs/compatibility/execution-worlds.md).
+Installed scripts are trusted code and need an application trust policy for unknown sources. DOM isolation separates script globals and dispatch identity, but cannot expose the page's `unsafeWindow`; conflicting requirements and unsupported unwrap are rejected. Document-start remains best effort. See [execution worlds and limits](docs/compatibility/execution-worlds.md) for OOPIF, menus, CSP and BFCache.
 
 ## Metadata
 
@@ -133,38 +134,34 @@ Metadata covers script identity, URL selection, execution timing, grants, depend
 
 `@require` and `@resource` are fetched and verified by a repository `UserScriptPreparer` before installation or update activates a revision. Executions reuse the prepared content offline and across frames. The Demo persists these revisions and offers manual script updates. Hash syntax, budgets and update rules are documented in the [integration reference](docs/integration-reference.md#resource-integrity-and-update-checks).
 
-Static `@webRequest` rules are compiled at installation and activated before prepared navigation. Dynamic `GM.webRequest(...)` replaces this execution's rules; `[]` revokes them. See the [webRequest scope and evidence](docs/compatibility/README.md#historical-webrequest).
-
 ## GM API Support
 
-`GM.info` and `GM_info` are always available without a grant or bridge, under the single contract. Missing `@grant` and explicit `@grant none` expose only info; other APIs require their declared capability families and any corresponding host providers.
+`GM.info` and `GM_info` are always available without a grant or bridge. Other GM APIs require declared capability families and any corresponding host services. Legacy `GM_*` globals require their exact declared names.
 
 This table summarizes availability. Parameters, return values, callbacks, and [Tampermonkey differences](docs/usage-guide.md#tampermonkey-compatibility-checklist) are covered in the [userscript guide](docs/usage-guide.md#api-index).
 
 | API | Availability | Notes |
 | --- | --- | --- |
 | `GM.info` / `GM_info` | Core | Same frozen installation information; always available without a grant or bridge. |
-| `GM.log` / `GM_log` | Core | Delivered to the builder's logging callback. |
-| Value storage and change listeners | Core | Single-key and bulk `getValues`/`setValues`/`deleteValues` APIs with `GM_*` aliases; Typed value storage (including stored `undefined`) isolated by stable `ScriptKey`, with synchronous local listeners and deduplicated remote commit notifications. |
+| `GM.log` / `GM_log` | Core | Local console output and an optional host logging callback. |
+| Value storage and change listeners | Core | Typed single-key/bulk storage isolated by installation; persistent when the host supplies a durable store. |
 | `GM.addStyle`, `GM.addElement` and aliases | Bootstrap | Page-local implementations. |
 | `GM.getResourceText`, `GM.getResourceUrl`, `GM_getResourceText`, `GM_getResourceURL` | Supported | Consume the declared resources prepared with the installation; legacy names require exact grants. |
-| `GM.xmlHttpRequest` / `GM_xmlhttpRequest` | CefSharp default | Requires `@connect`; supports redirects, credentials, progress, abort, and binary/multipart bodies. See [HTTP requests](docs/usage-guide.md#http-requests) for response types and limitations. |
+| `GM.xmlHttpRequest` / `GM_xmlhttpRequest` | CefSharp default | Requires `@connect`; supports credentials, abort, incremental text and binary/multipart/staged stream bodies. See [HTTP requests](docs/usage-guide.md#http-requests). |
 | `GM.registerMenuCommand`, `GM.unregisterMenuCommand` and aliases | Conditional | Require `IMenuService`. |
 | `GM.notification`, `GM.setClipboard`, `GM.openInTab` and aliases | Conditional | Require their corresponding host services. |
-| `GM.download` / `GM_download` | Conditional | Requires `IDownloadService`. Modern calls immediately return an abortable completion Promise; both forms support callbacks. Demo shares the browser network context. See [downloads](docs/usage-guide.md#downloads). |
+| `GM.download` / `GM_download` | Conditional | Requires `IDownloadService`; completion follows file commit. Demo shares the browser network context. See [downloads](docs/usage-guide.md#downloads). |
 | `GM.getTab`, `GM.saveTab`, `GM.getTabs` and aliases | Conditional | Require `ITabStateService`. |
-| `GM.cookie` / `GM_cookie` | CefSharp default | Verified CRUD through shared CDP in the attached RequestContext, with SameSite and exact deletion. No custom listeners or partition support. |
+| `GM.cookie` / `GM_cookie` | CefSharp default | CRUD in the attached RequestContext; partition CRUD on 121/151, unavailable on 84. No change listeners or XHR request-partition selection. |
 | `GM.audio` / `GM_audio` | CefSharp default | Native mute state, operations and listeners; audible omitted and partial capability reported. |
 | `GM.webRequest` / `GM_webRequest` | CefSharp default | Scoped cancel/redirect rules, capture substitution, asynchronous result callbacks, and static metadata rules. No removal handle. |
 | `window.close`, `window.focus` | Conditional | Require their exact grants and `IUserScriptWindowService`; the host may refuse to close the last tab. |
 | `window.onurlchange` | Core | Requires the exact grant; observes `pushState`, `replaceState`, `popstate`, and `hashchange` URL changes. |
-| `unsafeWindow` | Trusted page world only | Exposed only for its exact grant. |
+| `unsafeWindow` | Page world | Page global except with `@grant none`; unavailable in DOM isolated worlds. See [window extensions](docs/usage-guide.md#window-extensions). |
 
-Legacy globals other than `GM_info` require exact declared names. Synchronous storage/resource aliases also need complete bootstrap snapshots. Return values and error-reporting channels vary by API; some legacy failures are logged to the page console. See [API contract](docs/integration-reference.md#api-contract-and-grants) and [error handling](docs/usage-guide.md#errors-and-troubleshooting).
+Synchronous legacy storage/resource APIs use complete bootstrap snapshots. Return values and error channels vary by API; see the [API index](docs/usage-guide.md#api-index) and [error handling](docs/usage-guide.md#errors-and-troubleshooting).
 
 If a declared API has no provider, it is normally absent and direct bridge calls return `MSP006_NOT_SUPPORTED`. Undeclared methods return `MSP004_GRANT_DENIED`.
-
-Partitioned Cookie CRUD is verified on 121/151; 84 and request cookiePartition controls reject explicitly. See [partition scope](docs/usage-guide.md#partitioned-cookie-scope).
 
 ## Host Services
 
@@ -176,9 +173,9 @@ See the [host service reference](docs/integration-reference.md#host-service-cont
 
 ## Lifecycle and Diagnostics
 
-Each `(document, frame, script, run-at)` combination executes once. `@run-at context-menu` scripts are added to the native CefSharp context menu for matching frames and create a fresh execution only after the user selects an entry. Navigation, context release, detach, and disposal invalidate capabilities and cancel pending work. `@noframes` suppresses child-frame execution.
+Scripts run once per matching document/frame/lifecycle stage; `@noframes` suppresses child frames. `@run-at context-menu` executes only after a native menu selection. Navigation, context release, detach and disposal revoke old executions and pending API calls; accepted downloads can continue until completion or host disposal.
 
-Same-document URL changes from `history.pushState`, `history.replaceState`, `popstate`, and `hashchange` do not reinject scripts. Scripts granted `window.onurlchange` can subscribe through the property or `addEventListener("urlchange", ...)`. Existing `GM.info` snapshots remain fixed; subsequent executions use the current URL.
+Same-document navigation does not reinject scripts. Use the granted `window.onurlchange` API or DOM observers for SPA updates; see [matching and lifecycle](docs/usage-guide.md#matching-and-lifecycle).
 
 CefSharp provides only best-effort document-start injection. Such executions emit `MSR100_DOCUMENT_START_BEST_EFFORT`; set `RequireGuaranteedDocumentStart = true` to skip them with `MSR101_DOCUMENT_START_UNAVAILABLE`.
 
