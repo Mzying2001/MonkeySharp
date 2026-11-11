@@ -12,7 +12,7 @@
 | 33 | 严格 start 与 CSP 分别完成原生评估；严格 start 及 CSP 绕过未实现；[决策](start-csp-decision.md)。 |
 | 34 | 本轮未纳入；没有取得新的原生请求分区路线，请求 cookiePartition 继续不支持。已有分区 CRUD 不计为本步完成。 |
 | 35 | 本轮未选择新增语料专项；audible、历史 MV2 对照及其他候选任务继续保留原有限制。 |
-| 36 | 待最终矩阵。 |
+| 36 | 实现 1ef4c4f 的六组原生/包消费矩阵及三版 x64 WPF 已通过选定增强范围；[报告](m2-report.zh-CN.md)、[证据](../../scripts/compatibility/evidence/enhanced-follow-up-delivery-p1.json)。完整 M1 和第 30 步仍未完成。 |
 
 JSON/document 保留最终解析时机，二进制/stream 不暴露部分文本。保留现有 fetch 不报告进度/中间 readyState 的边界；固定 5.6.6242 实际报告 fetch 进度，这一有意差异不算对齐。无效字节使用替换字符，未知字符集沿用 UTF-8 回退。
 
@@ -32,7 +32,7 @@ OOPIF 命令和事件携带原生 session，context ID 在 session 内使用，r
 
 第 33 步使用完整 prepared revision、require、同步值/资源及真实 GM 请求，在普通/私密主 frame 和真正 OOPIF 读取首 inline 标记。三版均为首 inline 后 GM 才就绪；一次归探针所有的 debugger parser 暂停在两秒观察窗内仍没有门面/请求确认/完成标记，未集成生产。严格要求继续在源码副作用前拒绝。CSP 单独证明 isolated 源码/节点/字节及 GM 网络可用，页面/注入 inline、样式和资源 data URL 副作用受限；允许的同源外部脚本生效。151 outline-width 为 3px 但 style:none，首轮错误断言与修正保留。渲染子进程的三版双架构 ABI、部署、包维护、身份及清理要求列入独立设计任务，未隐式引入。
 
-第 36 步准备扩展 NuGet-only consumer，直接验证增量文本、流输入暂存上传、菜单事件字段与真正 iframe target 内的 isolated GM。121/x64 PackageOnly pilot 已通过全部声明检查，不算最终交付。原轮询 guard 竞态及修正保留在[pilot 证据](../../scripts/compatibility/evidence/enhanced-consumer-pilot-p1.json)。delivery 在清理成功 worktree 前复制原生 OOPIF 报告。
+第 36 步扩展 NuGet-only consumer，直接验证增量文本、流输入暂存上传、菜单事件字段与真正 iframe target 内的 isolated GM。初期 121/x64 PackageOnly pilot 仅为诊断，后续[限定范围最终交付](m2-report.zh-CN.md)已完成六组合矩阵。原轮询 guard 竞态及修正保留在[pilot 证据](../../scripts/compatibility/evidence/enhanced-consumer-pilot-p1.json)。delivery 在清理成功 worktree 前复制原生 OOPIF 报告。
 
 原生进程迁移可能在 frame 查找与位置探测之间释放借用的 CEF frame。求值抛出 ObjectDisposedException 且 frame 已释放或失效时，初始化跳过该旧文档；有效 frame 的意外错误仍报告 MSC101，回归测试覆盖两种结果。OOPIF 门禁现拒绝 MSC101/MSC231/MSC233/MSC236 初始化和派发诊断，不再仅以副作用成功判定通过。
 

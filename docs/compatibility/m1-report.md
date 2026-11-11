@@ -2,6 +2,8 @@
 
 [简体中文](m1-report.zh-CN.md)
 
+This is the steps 21–27 implementation snapshot. Later enhancements and current native/package validation are recorded separately in the [enhanced delivery assessment](m2-report.md); they do not close the missing M1 reference evidence below.
+
 The code and native validation cover a **limited-scope stable delivery**. Full M1 and original step 15 remain **incomplete**: the reference browser did not grant downloads permission, the third-party history-refresh reference assertion failed, and native Tampermonkey notification/download interaction comparisons are still missing. Native test counts are not a compatibility percentage.
 
 The evaluated implementation is `fe3c8df` (steps 21–26 plus the WPF polling and native test-host fixes). The [final matrix evidence](../../scripts/compatibility/evidence/stable-follow-up-delivery-p0.json) records the exact commit/patch, versions/platforms, package consumers, source corpus, WPF checks and earlier failures. Historical `p2-delivery.json` remains a separate dated result.

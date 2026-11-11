@@ -61,4 +61,6 @@ Guaranteed full-GM document-start and transparent BFCache restoration remain una
 
 Historical MV2 comparison remains pending. The [seven-category corpus](../../scripts/compatibility/corpus/README.md) now has pinned sources and functional runs; saved-file reference permission and the reference history-refresh failure still prevent complete M1 acceptance. See [delivery assessment](m1-report.md) / [中文](m1-report.zh-CN.md). [Validation](validation.md) distinguishes native checks, pinned-reference observations and deliberate differences. Raw logs remain local artifacts; concise evidence and fixtures are tracked.
 
-Enhanced implementation status and fixed beta references: [P1 follow-up](p1-follow-up.md) / [??](p1-follow-up.zh-CN.md).
+Enhanced implementation status and fixed beta references: [P1 follow-up](p1-follow-up.md) / [中文](p1-follow-up.zh-CN.md).
+
+The [enhanced scoped delivery assessment](m2-report.md) / [中文](m2-report.zh-CN.md) records the selected steps, final native/package matrix and explicitly unselected P2 tasks. The stable report remains a historical implementation snapshot with open M1 reference requirements.

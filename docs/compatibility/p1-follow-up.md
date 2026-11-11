@@ -12,7 +12,7 @@ This tracks steps 28–33 and the step 36 delivery. [M1 gaps](m1-report.md) rema
 | 33 | Separate start and CSP assessments completed; strict start remains unguaranteed and CSP continues to apply; [decision](start-csp-decision.md). |
 | 34 | Not selected for this delivery. No new native request-partition route was established; request cookiePartition remains unsupported. Partition CRUD is a separate capability. |
 | 35 | No additional corpus-driven specialties selected. Audible, historical MV2 comparison and the other optional tasks retain their documented limits. |
-| 36 | Pending final matrix. |
+| 36 | Selected enhancement scope passed all six native/package combinations and three x64 WPF gates on implementation 1ef4c4f; [report](m2-report.md), [evidence](../../scripts/compatibility/evidence/enhanced-follow-up-delivery-p1.json). Full M1 and step 30 remain incomplete. |
 
 Text responses also expose cumulative response. JSON/document response stays null until final parsing; binary/stream never exposes partial text. Fetch mode retains MonkeySharp's existing suppression of progress and intermediate readyState events. Fixed 5.6.6242 actually emits fetch progress: this is a recorded intentional difference, not parity. UTF-8 decoding uses replacement for malformed bytes; unsupported charset names retain the existing UTF-8 fallback.
 
@@ -34,7 +34,7 @@ The native fixture uses distinct sites, real iframe targets and actual prepared 
 
 Step 33 now has separate [start and CSP decisions](start-csp-decision.md), with main/OOPIF and normal/private evidence, a bounded owned parser-pause candidate, actual GM effects and a separately scoped renderer deployment task. Strict start and CSP bypass remain unimplemented.
 
-Step 36 preparation extends the NuGet-only consumer with actual incremental text, staged stream upload, menu event fields and isolated GM in a real iframe target. The 121/x64 package-only pilot passed all declared checks; it is not the final delivery. The earlier polling guard race and correction are retained in [pilot evidence](../../scripts/compatibility/evidence/enhanced-consumer-pilot-p1.json). Delivery now copies native OOPIF reports before cleaning successful worktrees.
+Step 36 extends the NuGet-only consumer with actual incremental text, staged stream upload, menu event fields and isolated GM in a real iframe target. The initial 121/x64 package-only pilot was diagnostic; the [final scoped delivery](m2-report.md) subsequently passed all six combinations. The earlier polling guard race and correction are retained in [pilot evidence](../../scripts/compatibility/evidence/enhanced-consumer-pilot-p1.json). Delivery copies native OOPIF reports before cleaning successful worktrees.
 
 During native process migration a borrowed CEF frame can retire between lookup and the location probe. Initialization skips that retired document when evaluation throws ObjectDisposedException and the frame is disposed or invalid; unexpected failures on live frames still report MSC101. Regression coverage checks both outcomes. The OOPIF gate now rejects MSC101/MSC231/MSC233/MSC236 initialization and dispatch diagnostics instead of accepting successful effects alone.
 
