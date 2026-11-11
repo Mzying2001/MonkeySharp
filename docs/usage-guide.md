@@ -2,7 +2,7 @@
 
 **English** | [简体中文](usage-guide.zh-CN.md)
 
-This guide describes the JavaScript userscript surface in the current MonkeySharp 3 source tree. It covers writing scripts, every built-in script API, and differences from Tampermonkey. Applications can change services, permissions, and limits. For .NET integration, see the [integration reference](integration-reference.md); for installation and UI operations, see the [Demo guide](../Mzying2001.MonkeySharp.Demo/README.md).
+This guide describes MonkeySharp's JavaScript userscript support. It covers writing scripts, every built-in script API, and differences from Tampermonkey. Applications can change services, permissions, and limits. For .NET integration, see the [integration reference](integration-reference.md); for installation and UI operations, see the [Demo guide](../Mzying2001.MonkeySharp.Demo/README.md).
 
 Tampermonkey comparisons distinguish [official contracts](compatibility/api-contract.md), [pinned stable observations](compatibility/api-contract.md#pinned-reference-observations) and MonkeySharp guarantees. They do not establish parity with every manager/browser version.
 
@@ -606,7 +606,7 @@ Omitted details/url use the current frame URL. Name is an optional exact list fi
 
 List returns actual name/value/domain/path, hostOnly, session, secure, httpOnly and normalized sameSite. Persistent cookies include expirationDate in Unix seconds; session cookies omit it. Unknown first-party/partition state is not invented. Set checks the protocol result and reads back the complete selected identity and attributes; a policy-rejected or silently discarded write is an error. An expired set verifies absence. Delete selects one visible matching identity (longest path first; host-only first on a tie), expires its exact domain/path/partition identity, then verifies absence. Explicit domain/path further constrain deletion; it never broadly removes every cookie with the same name. Deleting an absent cookie is harmless.
 
-The default backend uses the host's shared CDP session, which belongs to the attached browser's actual RequestContext. It keeps one session throughout each operation and never detaches another consumer's observer. Navigation can cancel a document's calls; detach/disposal invalidate the native session. `new CefSharpCookieService(host)` is available to direct hosts; the former request-context-only constructors are removed. A custom ICookieService implements only CRUD and must return actual verified state.
+The default backend uses the host's shared CDP session, which belongs to the attached browser's actual RequestContext. It keeps one session throughout each operation and never detaches another consumer's observer. Navigation can cancel a document's calls; detach/disposal invalidate the native session. Hosts can construct the service directly with `new CefSharpCookieService(host)`. A custom ICookieService implements only CRUD and must return actual verified state.
 
 partitionKey CRUD is supported on tested 121/151 engines as described below; 84 rejects it. cookiePartition and firstPartyDomain remain unsupported. Unspecified partition keys only access normal cookies. Legacy callback failures are reported once, independently of the completed operation. Calling the legacy namespace itself is unsupported; use its three documented methods.
 

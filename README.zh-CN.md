@@ -1,8 +1,8 @@
-# MonkeySharp 3.0
+# MonkeySharp
 
 [English](README.md) | **中文**
 
-MonkeySharp 3 是面向 CefSharp 嵌入式应用的用户脚本运行时。Core 包含与浏览器无关的解析、URL 匹配、仓库、存储、权限和 API 分发；CefSharp 适配器负责浏览器生命周期集成。
+MonkeySharp 是面向 CefSharp 嵌入式应用的用户脚本运行时。Core 包含与浏览器无关的解析、URL 匹配、仓库、存储、权限和 API 分发；CefSharp 适配器负责浏览器生命周期集成。
 
 脚本可以使用现代 `GM.*` 方法和旧式 `GM_*` 名称。可用能力由授权声明和宿主服务共同决定，调用约定见[用户脚本使用指南](docs/usage-guide.zh-CN.md#execution-grants-and-compatibility)。
 
@@ -187,10 +187,6 @@ host.Diagnostic += (_, diagnostic) =>
 ```
 
 协议错误码和桥接限制见[集成参考](docs/integration-reference.zh-CN.md#生命周期与诊断)。
-
-## 从 v1 迁移
-
-版本 3 的宿主服务契约不兼容旧源码，并替代了 `Injector`、`JScript`、`IDataStore` 和 WCF 桥接。保留 v1 数据时必须显式迁移存储键。当前的类型化存储及服务要求见[宿主服务契约](docs/integration-reference.zh-CN.md#宿主服务契约)。
 
 ## 构建与测试
 

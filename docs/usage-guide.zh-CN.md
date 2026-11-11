@@ -2,7 +2,7 @@
 
 [English](usage-guide.md) | **简体中文**
 
-本文面向脚本作者，描述当前 MonkeySharp 3 源码中的 JavaScript 用户脚本功能，包括如何编写脚本、全部内置脚本 API，以及与 Tampermonkey 的行为差异。宿主应用可以调整服务、权限和限制。.NET 接入请参阅[集成参考](integration-reference.zh-CN.md)，安装和界面操作请参阅 [Demo 指南](../Mzying2001.MonkeySharp.Demo/README.md)。
+本文面向脚本作者，介绍 MonkeySharp 的 JavaScript 用户脚本功能，包括如何编写脚本、全部内置脚本 API，以及与 Tampermonkey 的行为差异。宿主应用可以调整服务、权限和限制。.NET 接入请参阅[集成参考](integration-reference.zh-CN.md)，安装和界面操作请参阅 [Demo 指南](../Mzying2001.MonkeySharp.Demo/README.md)。
 
 比较分别依据[官方契约](compatibility/api-contract.md)、[固定稳定版观察](compatibility/api-contract.md#pinned-reference-observations)及 MonkeySharp 主动保证，不表示已对所有管理器/浏览器版本完成差分。
 
@@ -99,7 +99,7 @@
 
 依赖和资源在安装、编辑或更新时获取并校验，准备失败不会发布新版本。后续框架及离线导航复用已准备内容；详见[依赖、资源与更新](#依赖资源与更新)。
 
-元数据头以 `// ==UserScript==` 开始，以 `// ==/UserScript==` 结束。为便于迁移，请放在文件开头。默认解析器允许在前 128 行、64 Ki 个 UTF-16 字符内查找元数据头；元数据错误会阻止安装，警告则保留给宿主查看。已知单值字段使用第一次出现的值，重复声明产生警告；集合字段使用多行重复声明。未知字段会保留，但不会因此获得运行时效果。
+元数据头以 `// ==UserScript==` 开始，以 `// ==/UserScript==` 结束。为兼容其他脚本管理器，建议放在文件开头。默认解析器允许在前 128 行、64 Ki 个 UTF-16 字符内查找元数据头；元数据错误会阻止安装，警告则保留给宿主查看。已知单值字段使用第一次出现的值，重复声明产生警告；集合字段使用多行重复声明。未知字段会保留，但不会因此获得运行时效果。
 
 | 字段 | 格式与行为 |
 | --- | --- |
@@ -632,7 +632,7 @@ Blob/File 下载先逐块暂存，再进入相同的保存、取消及原子提�
 
 列表返回真实 name/value/domain/path、hostOnly、session、secure、httpOnly 及规范化 sameSite；持久 Cookie 含 Unix 秒 expirationDate，session Cookie 省略该字段。未知 first-party/partition 状态不伪造。set 检查协议结果，再读回完整身份及属性；策略拒绝或静默丢弃都报错。过期时间在过去的 set 验证 Cookie 已不存在。delete 选择一个可见身份（路径最长优先，同长时 host-only 优先），过期准确 domain/path/partition 身份并验证不存在；显式 domain/path 进一步限定，不会按名字批量误删。删除不存在项无副作用。
 
-默认后端使用宿主共享 CDP 会话，对应已附加浏览器的真实 RequestContext。单次操作始终使用同一会话，不解除其他消费者的观察器。导航可取消文档调用，detach/dispose 使原生会话失效。直接宿主可使用 new CefSharpCookieService(host)，旧的仅 RequestContext 构造器已移除。自定义 ICookieService 仅实现 CRUD，并须提供经过验证的实际状态。
+默认后端使用宿主共享 CDP 会话，对应已附加浏览器的真实 RequestContext。单次操作始终使用同一会话，不解除其他消费者的观察器。导航可取消文档调用，detach/dispose 使原生会话失效。宿主可通过 `new CefSharpCookieService(host)` 直接构造服务。自定义 ICookieService 仅实现 CRUD，并须提供经过验证的实际状态。
 
 partitionKey CRUD 在已测 121/151 支持，84 明确拒绝；cookiePartition、firstPartyDomain 仍不支持。省略分区键仅访问普通 Cookie。旧版回调异常只单独报告一次，不改变已完成操作。请使用旧版命名空间的三个公开方法，不支持直接调用命名空间本身。
 
@@ -759,7 +759,7 @@ window.addEventListener("urlchange", onRoute);
 
 ## Tampermonkey 兼容性检查表
 
-| 方面 | 迁移时的处理 |
+| 方面 | 适配要点 |
 | --- | --- |
 | 执行边界 | DOM/content 使用每脚本隔离世界；页面特权执行需宿主信任。隔离 OOPIF 支持已验证的源码/存储/资源/XHR 范围；严格 start、透明 BFCache 恢复及通用 CSP 绕过不可用，详见[执行限制](compatibility/execution-worlds.md#remaining-limits)。 |
 | 授权 | info 默认可用，旧式全局需要精确声明；现代 API 家族按固定 5.5.1 实测开放。 |

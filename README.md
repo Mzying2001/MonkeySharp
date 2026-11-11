@@ -1,8 +1,8 @@
-# MonkeySharp 3.0
+# MonkeySharp
 
 **English** | [中文](README.zh-CN.md)
 
-MonkeySharp 3 is a userscript runtime for applications that embed CefSharp. Browser-independent parsing, URL matching, repositories, storage, permissions, and API dispatch live in Core; browser lifecycle integration lives in the CefSharp adapter.
+MonkeySharp is a userscript runtime for applications that embed CefSharp. Browser-independent parsing, URL matching, repositories, storage, permissions, and API dispatch live in Core; browser lifecycle integration lives in the CefSharp adapter.
 
 Scripts can use modern `GM.*` methods and legacy `GM_*` names. Availability depends on declared grants and host services; the [userscript guide](docs/usage-guide.md#execution-grants-and-compatibility) explains their calling conventions.
 
@@ -187,10 +187,6 @@ host.Diagnostic += (_, diagnostic) =>
 ```
 
 See the [integration reference](docs/integration-reference.md#lifecycle-and-diagnostics) for protocol codes and bridge limits.
-
-## Migrating from v1
-
-Version 3 has source-breaking host service contracts and replaces `Injector`, `JScript`, `IDataStore`, and the WCF bridge. Storage keys must be migrated explicitly when retaining v1 data. See the current [host service contracts](docs/integration-reference.md#host-service-contracts) for typed storage and service requirements.
 
 ## Build and Test
 

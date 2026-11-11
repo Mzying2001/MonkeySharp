@@ -2,7 +2,7 @@
 
 [English](integration-reference.md) | **中文**
 
-本文集中说明实现和维护 MonkeySharp 宿主时需要查阅的兼容性、网络 API、宿主服务、迁移及验证细节。安装和最小接入方式请先阅读仓库 [README](../README.zh-CN.md)。[用户脚本使用指南](usage-guide.zh-CN.md) 介绍脚本侧的参数、返回值和示例；本文侧重宿主实现与验证。
+本文集中说明实现和维护 MonkeySharp 宿主时需要查阅的兼容性、网络 API、宿主服务及验证细节。安装和最小接入方式请先阅读仓库 [README](../README.zh-CN.md)。[用户脚本使用指南](usage-guide.zh-CN.md) 介绍脚本侧的参数、返回值和示例；本文侧重宿主实现与验证。
 
 ## CefSharp 版本兼容性
 
@@ -63,13 +63,11 @@ var repository = new PersistentUserScriptRepository(persistence, parser);
 await repository.InitializeAsync(CancellationToken.None);
 ```
 
-Demo 保留格式 2 数据，在初始化时增量添加准备内容和权限表；不支持的更早开发格式会明确拒绝，不自动删除，请备份后手动恢复。自定义值存储需采用下方的新类型契约。
-
 持久化实现必须保留 `ScriptKey`、安装顺序及时间戳，并原子提交变更。提交成功后即使收到取消也应成功完成；仓库变更通知在提交后发出。稳定的键用于维持脚本与 GM 存储的关联。具体的持久化及恢复实现见 [Demo 指南](../Mzying2001.MonkeySharp.Demo/README.md#portable-data-and-recovery)。
 
 提供程序要求：
 
-- `IUserScriptValueStore.SetAsync` 接收不可变的 `UserScriptValue`，由 `StoredValue.Value` 返回；仅以 `StoredValue.Exists` 区分键是否存在。使用 `UserScriptValue.FromJson(json)`、`UserScriptValue.Undefined` 或 `UserScriptValue.FromEncoded(encoded)` 构造值。这替代原先的原始 JSON 契约，不保留旧重载。
+- `IUserScriptValueStore.SetAsync` 接收不可变的 `UserScriptValue`，由 `StoredValue.Value` 返回；仅以 `StoredValue.Exists` 区分键是否存在。使用 `UserScriptValue.FromJson(json)`、`UserScriptValue.Undefined` 或 `UserScriptValue.FromEncoded(encoded)` 构造值。
 - 持久化 `EncodedValue`，不得丢失类型信息。编码为：undefined 使用 `u`，布尔使用 `btrue`/`bfalse`，数字使用 `n` 加数字或 `NaN`/`Infinity`/`-Infinity`，字符串使用 `s` 加原文，对象/数组/null 使用 `o` 加规范 JSON。`FromEncoded` 校验并规范化编码，用户对象的属性名不会作为协议标记。
 - 同一 `ScriptKey` 的操作必须线性一致。值键允许空字符串，脚本分区 ID 必须非空。提交前取消不产生更改，提交后取消仍成功完成。每个实际提交变更仅发出一次 `ValueChanged`，包括创建或删除已存储的 undefined；相同编码值的重复写入及删除不存在的键不通知。`ListKeysAsync` 保留插入顺序，覆盖不移动，删除再创建移到末尾。
 - `IUserScriptValueStore` 必须提供原子 `GetSnapshotAsync`（值及分区水位）、`GetChangesAsync`（从水位读取连续后缀）和 `ApplyAsync`（携带请求/执行来源的原子批次）。先订阅 `ValueChanged`，再获取快照并重放水位后的变更；没有逐键快照回退。内存与 SQLite 每脚本保留 4096 条变更，过期或未来水位要求重新快照。水位属于一个存储服务会话；宿主重启后执行凭据失效。
@@ -244,7 +242,7 @@ BFCache 缓存执行会被撤销，需要新导航；隔离世界不支持历史
 
 ## 桥协议
 
-当前仅支持桥协议 2，旧版本和未知版本均被拒绝，不保留兼容传输。必要的 CEF 版本适配、值编码和持久化安装身份保持有效。
+桥接使用协议 `2`。消息声明的协议版本不匹配时，返回 `MSP001_PROTOCOL_VERSION`。
 
 ## 构建、打包与验证
 

@@ -6,7 +6,7 @@ Sources are the [official API documentation](https://www.tampermonkey.net/docume
 
 ## API inventory
 
-The names in each row are separate declaration spellings. Legacy globals require their exact name. `GM_info` and `GM.info` are implicit in the pinned runtime. Missing grants and `none` retain separate exposure fixtures; both expose an info-only GM object. Modern storage, resources, menus and tab-data operations are authorized by family; legacy globals retain exact declaration names. This differs from the original plan assumptions and is backed by the committed 5.5.1 probes. Resource URL spellings are intentionally different. No `GM.getResourceURL`, `GM.windowClose`, Cookie listener, or webRequest removal handle is a TM target.
+The names in each row are separate declaration spellings. Legacy globals require their exact name. `GM_info` and `GM.info` are implicit in the pinned runtime. Missing grants and `none` retain separate exposure fixtures; both expose an info-only GM object. Modern storage, resources, menus and tab-data operations are authorized by family; legacy globals retain exact declaration names. These grant rules are backed by the committed Tampermonkey 5.5.1 probes. Resource URL spellings are intentionally different. No `GM.getResourceURL`, `GM.windowClose`, Cookie listener, or webRequest removal handle is a TM target.
 
 | Names / grants | Inputs / overloads | Immediate result (legacy; modern) | Callback / settlement | Backend / conditions |
 | --- | --- | --- | --- | --- |
@@ -76,9 +76,9 @@ The default fixture and companion content live under `scripts/compatibility/fixt
 
 ## Contract interpretation
 
-Bridge protocol 2 is the single current protocol. ApiCatalog.json is shared by host metadata normalization and the composed renderer. Declared spelling, internal authorization and exposed names are independent; source directives choose strictness. The none receiver follows the [raw receiver reference](../../scripts/compatibility/evidence/tampermonkey-5.5.1-raw-receiver.json).
+The bridge uses protocol `2`. ApiCatalog.json is shared by host metadata normalization and the composed renderer. Declared spelling, internal authorization and exposed names are independent; source directives choose strictness. The none receiver follows the [raw receiver reference](../../scripts/compatibility/evidence/tampermonkey-5.5.1-raw-receiver.json).
 
-The grant and [storage-authority probes](../../scripts/compatibility/evidence/tampermonkey-5.5.1-storage-authority.json) supersede the original implementation plan's assumptions about exact modern per-method grants and GM absence under none. These are evidence-based contract decisions, not compatibility switches. GM.info reports actual manager, installation and execution facts, and capability reasons distinguish missing services, host policy and engine limits. Unknown host facts are omitted rather than replaced with placeholders.
+The [storage-authority probe](../../scripts/compatibility/evidence/tampermonkey-5.5.1-storage-authority.json) records modern storage-family authorization and exact legacy global exposure. GM.info reports actual manager, installation and execution facts, and capability reasons distinguish missing services, host policy and engine limits. Unknown host facts are omitted rather than replaced with placeholders.
 
 ## Real-script corpus intake
 

@@ -40,7 +40,7 @@ See [page and tab services](../integration-reference.md#page-helpers-and-stable-
 
 ## Historical webRequest
 
-Official selectors, cancel/redirect actions and capture substitution replace the earlier custom rule language. Registration replaces an execution's rules; an empty array revokes them. Static metadata rules are prepared before navigation. Native request ownership scopes rules to their browser/frame/document; unowned requests do not inherit another frame's rules. Listeners report asynchronously and cannot decide network I/O. Static loading cannot open an interactive permission prompt.
+webRequest rules use official selectors, cancel/redirect actions and capture substitution. Registration replaces an execution's rules; an empty array revokes them. Static metadata rules are prepared before navigation. Native request ownership scopes rules to their browser/frame/document; unowned requests do not inherit another frame's rules. Listeners report asynchronously and cannot decide network I/O. Static loading cannot open an interactive permission prompt.
 
 The [native matrix](../../scripts/compatibility/evidence/webrequest-p2.json) verifies first-request effects, capture redirects, replacement and revocation. A pinned historical MV2 reference is unavailable: immediate void returns and first-match overlap behavior remain implementation decisions awaiting that comparison. WebSocket interception, OOPIF and isolated-frame dynamic page interception are not passed capabilities. See the [request interception guide](../usage-guide.md#request-interception) and [host integration](../integration-reference.md#web-requests).
 

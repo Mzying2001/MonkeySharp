@@ -26,7 +26,9 @@ dotnet build Mzying2001.MonkeySharp.Demo/Mzying2001.MonkeySharp.Demo.csproj -c R
 
 ## Portable data and recovery
 
-The current Demo uses SQLite schema format **2**. Earlier development databases are rejected with a startup error; no migration or automatic deletion is performed. Close all Demo processes, back up the complete `Data/` directory, then manually move the old `Data/monkeysharp.db` and its `-wal`/`-shm` companions out of the profile before restarting. The new database starts empty: script source files are not automatically reimported. Custom storage providers must adopt the [typed value contract](../docs/integration-reference.md#host-service-contracts).
+The Demo uses SQLite schema format **2** and validates the database format at startup. An unsupported format causes a startup error; the existing database is left intact.
+
+If startup reports an unsupported database format, close all Demo processes and back up the complete `Data/` directory. To start with an empty database, move `Data/monkeysharp.db` and its `-wal`/`-shm` companions out of the profile before restarting. Recreating the database does not restore installed scripts or GM values; source files are not automatically reimported. Custom storage providers must follow the [typed value contract](../docs/integration-reference.md#host-service-contracts).
 
 ```text
 <executable directory>/Data/
@@ -46,7 +48,7 @@ SQLite stores stable script keys, source locations/hashes, origins, timestamps, 
 
 Do not edit installed source files behind the running application: the hash check deliberately detects unreviewed external changes. Paste/import a reviewed source into the existing manager entry to recover its stable identity and values. Uninstall removes that script's stored values as well. Back up the entire `Data` directory **after closing the application**, including SQLite sidecar files if present. Log rotation retains one previous Demo log at approximately 5 MiB.
 
-Core's new `IUserScriptRepositoryPersistence`, `UserScriptPersistenceRecord`, and `PersistentUserScriptRepository` are database-independent. Initialize the repository before attaching hosts. Durable implementations must not report cancellation after a successful commit; mutation notifications follow commit.
+Core's `IUserScriptRepositoryPersistence`, `UserScriptPersistenceRecord`, and `PersistentUserScriptRepository` are database-independent. Initialize the repository before attaching hosts. Durable implementations must not report cancellation after a successful commit; mutation notifications follow commit.
 
 ## Private browsing
 
