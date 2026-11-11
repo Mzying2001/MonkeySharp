@@ -143,7 +143,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                         var lifecycle = new ConcurrentQueue<DocumentLifecycleEventArgs>();
                         var diagnostics = new ConcurrentQueue<string>();
                         host.DocumentLifecycle += (_, args) => lifecycle.Enqueue(args);
-                        host.Diagnostic += (_, args) => diagnostics.Enqueue(args.Code + ":" + args.Message + ":" + args.Exception?.Message);
+                        host.Diagnostic += (_, args) => diagnostics.Enqueue(args.Code + ":" + args.Message + ":" + args.Exception?.ToString());
                         host.Attach(_browser);
                         using (var cookies = new CefSharpCookieService(host))
                             await cookies.SetAsync(new UserScriptCookieMutation(new Uri("http://b.monkeysharp-other.test:" + _fixture.Port + "/"), "oopif-proof", _private ? "private" : "normal"), CancellationToken.None);

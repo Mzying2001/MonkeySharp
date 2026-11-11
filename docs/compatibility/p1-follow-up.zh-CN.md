@@ -10,6 +10,8 @@
 | 31 | 可行性评估完成；84/121/151 的对照及运行时往返均未真正命中缓存，恢复功能未实现；[证据](../../scripts/compatibility/evidence/bfcache-follow-up-p1.json)。 |
 | 32 | 84/121/151 已实现 isolated OOPIF target/session 路由、嵌套、值/资源就绪、XHR 授权、进程迁移及普通/私密上下文验证；[证据](../../scripts/compatibility/evidence/oopif-follow-up-p1.json)。 |
 | 33 | 严格 start 与 CSP 分别完成原生评估；严格 start 及 CSP 绕过未实现；[决策](start-csp-decision.md)。 |
+| 34 | 本轮未纳入；没有取得新的原生请求分区路线，请求 cookiePartition 继续不支持。已有分区 CRUD 不计为本步完成。 |
+| 35 | 本轮未选择新增语料专项；audible、历史 MV2 对照及其他候选任务继续保留原有限制。 |
 | 36 | 待最终矩阵。 |
 
 JSON/document 保留最终解析时机，二进制/stream 不暴露部分文本。保留现有 fetch 不报告进度/中间 readyState 的边界；固定 5.6.6242 实际报告 fetch 进度，这一有意差异不算对齐。无效字节使用替换字符，未知字符集沿用 UTF-8 回退。
@@ -32,4 +34,6 @@ OOPIF 命令和事件携带原生 session，context ID 在 session 内使用，r
 
 第 36 步准备扩展 NuGet-only consumer，直接验证增量文本、流输入暂存上传、菜单事件字段与真正 iframe target 内的 isolated GM。121/x64 PackageOnly pilot 已通过全部声明检查，不算最终交付。原轮询 guard 竞态及修正保留在[pilot 证据](../../scripts/compatibility/evidence/enhanced-consumer-pilot-p1.json)。delivery 在清理成功 worktree 前复制原生 OOPIF 报告。
 
-????????? frame ?????????????? CEF frame????? ObjectDisposedException ? frame ???????????????????? frame ???????? MSC101????????????OOPIF ????? MSC101/MSC231/MSC233/MSC236 ???????????????????????
+原生进程迁移可能在 frame 查找与位置探测之间释放借用的 CEF frame。求值抛出 ObjectDisposedException 且 frame 已释放或失效时，初始化跳过该旧文档；有效 frame 的意外错误仍报告 MSC101，回归测试覆盖两种结果。OOPIF 门禁现拒绝 MSC101/MSC231/MSC233/MSC236 初始化和派发诊断，不再仅以副作用成功判定通过。
+
+收紧后的 84/x86 门禁还发现位置求值完成后、源码派发时的释放窗口。派发先检查 IsDisposed 再读 IsValid，避免旧 CEF wrapper 对已释放对象读取 IsValid 时抛异常；派发前或派发期间确认目标已释放时取消该操作，不向替代上下文执行源码，有效 frame 的释放异常仍正常传播。原生失败记录保留完整异常堆栈。

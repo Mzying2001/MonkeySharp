@@ -524,13 +524,19 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     if (refreshedFrame != null)
                         targetFrame = refreshedFrame;
                 }
-                if (!targetFrame.IsValid || targetFrame.IsDisposed)
-                    throw new InvalidOperationException("The target CefSharp frame is no longer valid.");
+                if (targetFrame.IsDisposed || !targetFrame.IsValid)
+                    throw new OperationCanceledException("The target CefSharp frame is no longer valid.", cancellationToken);
 
                 targetFrame.ExecuteJavaScriptAsync(
                     javaScript,
                     "monkeysharp://runtime/" + frame.DocumentId,
                     1);
+            }
+            catch (ObjectDisposedException exception) when (targetFrame.IsDisposed)
+            {
+                // A native wrapper can retire after the validity check, including
+                // while IsValid itself is being read. Never dispatch to a successor.
+                throw new OperationCanceledException("The target CefSharp frame was retired.", exception, cancellationToken);
             }
             finally
             {

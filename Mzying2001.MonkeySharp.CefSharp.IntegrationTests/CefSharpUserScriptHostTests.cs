@@ -300,6 +300,34 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
         }
 
         [Fact]
+        public async Task FrameRetiredAfterLocationResolutionDoesNotInjectOrReportAnInitializationFault()
+        {
+            using (var host = await CreateHostAsync(Script("none", "document-start")))
+            {
+                var browser = new BrowserFixture();
+                browser.Frame.Setup(item => item.EvaluateScriptAsync(
+                    "location.href", It.IsAny<string>(), It.IsAny<int>(), It.IsAny<TimeSpan?>()
+#if !CEF_SHARP_LEGACY_EVALUATION
+                    , false
+#endif
+                    )).Returns(() =>
+                    {
+                        browser.Frame.SetupGet(item => item.IsDisposed).Returns(true);
+                        browser.Frame.SetupGet(item => item.IsValid).Throws(new ObjectDisposedException("retired callback frame"));
+                        return Task.FromResult(new JavascriptResponse { Success = true, Result = "https://example.com/current" });
+                    });
+                var diagnostics = new ConcurrentQueue<UserScriptDiagnostic>();
+                host.Diagnostic += (_, item) => diagnostics.Enqueue(item);
+                host.Attach(browser.Browser.Object);
+                browser.CreateContext();
+                browser.ReleaseContext();
+                await host.DetachAsync(CancellationToken.None);
+                Assert.Empty(browser.Scripts);
+                Assert.DoesNotContain(diagnostics, item => item.Code == "MSC101_CONTEXT_INITIALIZATION_FAILED");
+            }
+        }
+
+        [Fact]
         public async Task FailedRendererLocationResolutionSkipsInjection()
         {
             using (var host = await CreateHostAsync(Script("none", "document-end")))
@@ -377,6 +405,34 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
 
                 Assert.DoesNotContain(diagnostics, item => item.Code == "MSC103_LOAD_FALLBACK_FAILED");
                 Assert.Contains(browser.Scripts, script => script.Contains("__MonkeySharpRuntime"));
+            }
+        }
+
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public async Task DispatchDisposalCancelsOnlyWhenTheNativeFrameWasRetired(bool retired)
+        {
+            using (var host = await CreateHostAsync(Script("none", "document-start")))
+            {
+                var browser = new BrowserFixture();
+                DocumentFrame target = null;
+                host.DocumentLifecycle += (_, item) => target = item.Frame;
+                host.Attach(browser.Browser.Object);
+                browser.CreateContext();
+                await browser.WaitForScriptCountAsync(1);
+                browser.Frame.Setup(item => item.ExecuteJavaScriptAsync("dispatch-race", It.IsAny<string>(), It.IsAny<int>()))
+                    .Callback(() =>
+                    {
+                        browser.Frame.SetupGet(item => item.IsDisposed).Returns(retired);
+                        throw new ObjectDisposedException("native frame retired during dispatch");
+                    });
+
+                if (retired)
+                    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => host.ExecuteAsync(target, "dispatch-race", CancellationToken.None));
+                else
+                    await Assert.ThrowsAsync<ObjectDisposedException>(() => host.ExecuteAsync(target, "dispatch-race", CancellationToken.None));
+                Assert.Single(browser.Scripts);
             }
         }
 
