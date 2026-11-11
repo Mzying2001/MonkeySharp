@@ -88,6 +88,10 @@ foreach ($version in $CefSharpVersions) {
             if (!$PackageOnly) {
                 Copy-Item -LiteralPath (Join-Path $checkout "artifacts/smoke/$version-$platform/results.jsonl") -Destination (Join-Path $caseRoot 'smoke-results.jsonl')
                 Copy-Item -LiteralPath (Join-Path $checkout "artifacts/smoke/$version-$platform/cdp-probe.jsonl") -Destination (Join-Path $caseRoot 'cdp-probe.jsonl')
+                $nativeProbes = Join-Path $checkout 'artifacts/native-probes'
+                if (!(Test-Path -LiteralPath $nativeProbes)) { throw 'Native OOPIF evidence is missing.' }
+                Copy-Item -LiteralPath $nativeProbes -Destination (Join-Path $caseRoot 'native-probes') -Recurse
+                $record.oopif = 'passed'
                 $baselineCorpus = Get-ChildItem -LiteralPath (Join-Path $checkout 'artifacts/corpus') -Filter results.json -Recurse | Select-Object -First 1
                 if (!$baselineCorpus) { throw 'Baseline corpus evidence is missing.' }
                 Copy-Item -LiteralPath $baselineCorpus.FullName -Destination (Join-Path $caseRoot 'baseline-corpus.json')
