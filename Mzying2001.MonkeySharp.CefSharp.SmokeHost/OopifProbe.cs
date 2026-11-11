@@ -182,6 +182,9 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                         facts["runtimeContextBalance"] = created.Length;
                         facts["runtimeFrameScopes"] = created.Select(frame => frame.FrameId).ToArray();
                         facts["runtimeDiagnostics"] = diagnostics.ToArray();
+                        Require(!diagnostics.Any(item => item.StartsWith("MSC101_", StringComparison.Ordinal) ||
+                            item.StartsWith("MSC231_", StringComparison.Ordinal) || item.StartsWith("MSC233_", StringComparison.Ordinal) ||
+                            item.StartsWith("MSC236_", StringComparison.Ordinal)), "Native context initialization and dispatch have no unexplained errors");
                         facts["runtimeValidated"] = true;
                     }
                 }

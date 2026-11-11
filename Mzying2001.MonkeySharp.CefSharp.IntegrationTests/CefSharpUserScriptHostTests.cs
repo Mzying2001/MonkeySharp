@@ -264,6 +264,41 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
             }
         }
 
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public async Task LocationProbeDisposalOnlySkipsInitializationFaultForRetiredFrames(bool retired)
+        {
+            using (var host = await CreateHostAsync(Script("none", "document-start")))
+            {
+                var browser = new BrowserFixture();
+                browser.Frame.Setup(item => item.EvaluateScriptAsync(
+                    "location.href", It.IsAny<string>(), It.IsAny<int>(), It.IsAny<TimeSpan?>()
+#if !CEF_SHARP_LEGACY_EVALUATION
+                    , false
+#endif
+                    )).Returns(() =>
+                    {
+                        browser.Frame.SetupGet(item => item.IsDisposed).Returns(retired);
+                        throw new ObjectDisposedException("native location probe");
+                    });
+                var diagnostics = new ConcurrentQueue<UserScriptDiagnostic>();
+                host.Diagnostic += (_, item) => diagnostics.Enqueue(item);
+                host.Attach(browser.Browser.Object);
+                browser.CreateContext();
+                browser.ReleaseContext();
+                await host.DetachAsync(CancellationToken.None);
+                Assert.Empty(browser.Scripts);
+                Assert.Equal(!retired, diagnostics.Any(item => item.Code == "MSC101_CONTEXT_INITIALIZATION_FAILED"));
+                browser.Frame.Verify(item => item.EvaluateScriptAsync(
+                    "location.href", It.IsAny<string>(), It.IsAny<int>(), It.IsAny<TimeSpan?>()
+#if !CEF_SHARP_LEGACY_EVALUATION
+                    , false
+#endif
+                    ), Times.Once);
+            }
+        }
+
         [Fact]
         public async Task FailedRendererLocationResolutionSkipsInjection()
         {

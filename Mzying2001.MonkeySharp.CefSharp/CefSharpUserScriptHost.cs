@@ -798,8 +798,20 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 var refreshedFrame = browser == null ? null : GetFrameByIdentifier(browser.GetBrowser(), session.Frame.FrameId);
                 try
                 {
-                    var response = await (refreshedFrame ?? session.CefFrame).EvaluateScriptAsync(
-                        "location.href", timeout: TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+                    var nativeFrame = refreshedFrame ?? session.CefFrame;
+                    if (nativeFrame == null || nativeFrame.IsDisposed || !nativeFrame.IsValid) return;
+                    JavascriptResponse response;
+                    try
+                    {
+                        response = await nativeFrame.EvaluateScriptAsync(
+                            "location.href", timeout: TimeSpan.FromSeconds(2)).ConfigureAwait(false);
+                    }
+                    catch (ObjectDisposedException) when (nativeFrame.IsDisposed || !nativeFrame.IsValid)
+                    {
+                        // Native process migration can retire a borrowed frame after lookup.
+                        // Its document must not initialize or fall back into a replacement context.
+                        return;
+                    }
                     session.Cancellation.Token.ThrowIfCancellationRequested();
                     if (response == null || !response.Success || !(response.Result is string location) ||
                         !Uri.TryCreate(location, UriKind.Absolute, out var currentUrl))
