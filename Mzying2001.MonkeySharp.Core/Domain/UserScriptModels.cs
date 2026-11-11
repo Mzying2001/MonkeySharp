@@ -154,7 +154,10 @@ namespace Mzying2001.MonkeySharp.Core.Domain
 
         /// <summary>Gets whether the runtime can verify this algorithm.</summary>
         public bool IsSupported => string.Equals(Algorithm, "md5", StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(Algorithm, "sha256", StringComparison.OrdinalIgnoreCase);
+            string.Equals(Algorithm, "sha256", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(Algorithm, "sha1", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(Algorithm, "sha384", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(Algorithm, "sha512", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -235,7 +238,7 @@ namespace Mzying2001.MonkeySharp.Core.Domain
             UserScriptRunAt runAt,
             GrantDeclarationState grantDeclarationState,
             bool noFrames,
-            string runIn,
+            IEnumerable<string> runIn,
             string injectInto,
             string sandbox,
             bool unwrap,
@@ -272,7 +275,7 @@ namespace Mzying2001.MonkeySharp.Core.Domain
             RunAt = runAt;
             GrantDeclarationState = grantDeclarationState;
             NoFrames = noFrames;
-            RunIn = runIn;
+            RunIn = ReadOnlyList(runIn);
             InjectInto = injectInto;
             Sandbox = sandbox;
             Unwrap = unwrap;
@@ -284,6 +287,7 @@ namespace Mzying2001.MonkeySharp.Core.Domain
             ExcludeMatches = ReadOnlyList(excludeMatches);
             DeclaredGrants = ReadOnlyList(declaredGrants);
             Grants = ReadOnlyList(grants);
+            Capabilities = Compatibility.UserScriptGrantCatalog.GetCapabilities(Grants);
             Connects = ReadOnlyList(connects);
             Requires = new ReadOnlyCollection<UserScriptDependencyDeclaration>(requires.ToList());
             Resources = new ReadOnlyCollection<ResourceDeclaration>(resources.ToList());
@@ -348,7 +352,7 @@ namespace Mzying2001.MonkeySharp.Core.Domain
         public bool NoFrames { get; }
 
         /// <summary>Gets the declared execution environment.</summary>
-        public string RunIn { get; }
+        public IReadOnlyList<string> RunIn { get; }
 
         /// <summary>Gets the declared JavaScript world into which the script should be injected.</summary>
         public string InjectInto { get; }
@@ -382,6 +386,9 @@ namespace Mzying2001.MonkeySharp.Core.Domain
 
         /// <summary>Gets the normalized canonical capabilities granted to the script.</summary>
         public IReadOnlyList<string> Grants { get; }
+
+        /// <summary>Gets authorized operations after expanding the target's modern API families.</summary>
+        public IReadOnlyList<string> Capabilities { get; }
 
         /// <summary>Gets the network targets declared with <c>@connect</c>.</summary>
         public IReadOnlyList<string> Connects { get; }
@@ -486,6 +493,15 @@ namespace Mzying2001.MonkeySharp.Core.Domain
         /// <summary>Gets the immutable revision identity for optimistic concurrency.</summary>
         public Guid RevisionId { get; }
 
+        /// <summary>Gets the verified immutable content activated with this revision.</summary>
+        public Repository.PreparedScriptRevision PreparedRevision { get; private set; }
+
+        internal UserScriptInstallation WithPreparedRevision(Repository.PreparedScriptRevision prepared)
+        {
+            PreparedRevision = prepared;
+            return this;
+        }
+
         /// <summary>Gets the installed script definition.</summary>
         public UserScriptDefinition Definition { get; }
 
@@ -508,7 +524,8 @@ namespace Mzying2001.MonkeySharp.Core.Domain
 
         internal UserScriptInstallation WithEnabled(bool enabled, DateTimeOffset updatedAt)
         {
-            return new UserScriptInstallation(ScriptKey, Definition, SourceOrigin, enabled, InstalledAt, updatedAt);
+            return new UserScriptInstallation(ScriptKey, Definition, SourceOrigin, enabled, InstalledAt, updatedAt)
+                .WithPreparedRevision(PreparedRevision);
         }
     }
 }

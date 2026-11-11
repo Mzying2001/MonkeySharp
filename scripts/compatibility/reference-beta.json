@@ -1,0 +1,17 @@
+{
+  "channel": "beta",
+  "version": "5.6.6242",
+  "manifestVersion": 3,
+  "extensionId": "gcalenpjmijncebpfijmoaglllgpjagf",
+  "contentSha256": "6936ae52a79fa581044553cf8dbd7a54c18ea03efcad10070fefa31b810fce15",
+  "acquisition": {
+    "url": "https://clients2.google.com/service/update2/crx",
+    "packageSha256": "0b16978b2d4ee11ac376e888b78ef14f27150c0525a534fd671d7c14955679b3",
+    "signature": "CRX3 RSA SHA256 verified",
+    "transformation": "Only manifest.key restored from signed CRX public key for unpacked identity; executable source unchanged"
+  },
+  "settings": {
+    "downloadMode": "fresh-profile-default",
+    "privateStorage": "split; no incognito access unless private-tabs fixture"
+  }
+}

@@ -1,0 +1,193 @@
+{
+  "schemaVersion": 1,
+  "caseId": "audio-p2",
+  "date": "2026-11-07",
+  "baseCommit": "af3281f",
+  "fixtureSha256": "d9fe5d1e4db455d0e08d1df16d0b911581421a34ef998af5888c9fca3ad7878e",
+  "runs": [
+    {
+      "version": "84.4.10",
+      "platform": "x64",
+      "status": "passed",
+      "checks": {
+        "initial": true,
+        "partialInfo": true,
+        "noFakeAudible": true,
+        "silentStream": true,
+        "webAudio": true,
+        "muteReturn": true,
+        "muted": true,
+        "callbackReturn": true,
+        "callbackState": true,
+        "unmuted": true,
+        "multipleFrames": true,
+        "removed": true,
+        "otherHostMute": true,
+        "navigationMatchesNative": true
+      },
+      "navigation": {
+        "type": "audio-navigation-probe",
+        "nativeBefore": true,
+        "nativeAfter": true,
+        "status": "passed"
+      },
+      "audible": "unavailable"
+    },
+    {
+      "version": "84.4.10",
+      "platform": "x86",
+      "status": "passed",
+      "checks": {
+        "initial": true,
+        "partialInfo": true,
+        "noFakeAudible": true,
+        "silentStream": true,
+        "webAudio": true,
+        "muteReturn": true,
+        "muted": true,
+        "callbackReturn": true,
+        "callbackState": true,
+        "unmuted": true,
+        "multipleFrames": true,
+        "removed": true,
+        "otherHostMute": true,
+        "navigationMatchesNative": true
+      },
+      "navigation": {
+        "type": "audio-navigation-probe",
+        "nativeBefore": true,
+        "nativeAfter": true,
+        "status": "passed"
+      },
+      "audible": "unavailable"
+    },
+    {
+      "version": "121.3.70",
+      "platform": "x64",
+      "status": "passed",
+      "checks": {
+        "initial": true,
+        "partialInfo": true,
+        "noFakeAudible": true,
+        "silentStream": true,
+        "webAudio": true,
+        "muteReturn": true,
+        "muted": true,
+        "callbackReturn": true,
+        "callbackState": true,
+        "unmuted": true,
+        "multipleFrames": true,
+        "removed": true,
+        "otherHostMute": true,
+        "navigationMatchesNative": true
+      },
+      "navigation": {
+        "type": "audio-navigation-probe",
+        "nativeBefore": true,
+        "nativeAfter": true,
+        "status": "passed"
+      },
+      "audible": "unavailable"
+    },
+    {
+      "version": "121.3.70",
+      "platform": "x86",
+      "status": "passed",
+      "checks": {
+        "initial": true,
+        "partialInfo": true,
+        "noFakeAudible": true,
+        "silentStream": true,
+        "webAudio": true,
+        "muteReturn": true,
+        "muted": true,
+        "callbackReturn": true,
+        "callbackState": true,
+        "unmuted": true,
+        "multipleFrames": true,
+        "removed": true,
+        "otherHostMute": true,
+        "navigationMatchesNative": true
+      },
+      "navigation": {
+        "type": "audio-navigation-probe",
+        "nativeBefore": true,
+        "nativeAfter": true,
+        "status": "passed"
+      },
+      "audible": "unavailable"
+    },
+    {
+      "version": "151.3.240",
+      "platform": "x64",
+      "status": "passed",
+      "checks": {
+        "initial": true,
+        "partialInfo": true,
+        "noFakeAudible": true,
+        "silentStream": true,
+        "webAudio": true,
+        "muteReturn": true,
+        "muted": true,
+        "callbackReturn": true,
+        "callbackState": true,
+        "unmuted": true,
+        "multipleFrames": true,
+        "removed": true,
+        "otherHostMute": true,
+        "navigationMatchesNative": true
+      },
+      "navigation": {
+        "type": "audio-navigation-probe",
+        "nativeBefore": true,
+        "nativeAfter": false,
+        "status": "expected-engine-limitation"
+      },
+      "audible": "unavailable"
+    },
+    {
+      "version": "151.3.240",
+      "platform": "x86",
+      "status": "passed",
+      "checks": {
+        "initial": true,
+        "partialInfo": true,
+        "noFakeAudible": true,
+        "silentStream": true,
+        "webAudio": true,
+        "muteReturn": true,
+        "muted": true,
+        "callbackReturn": true,
+        "callbackState": true,
+        "unmuted": true,
+        "multipleFrames": true,
+        "removed": true,
+        "otherHostMute": true,
+        "navigationMatchesNative": true
+      },
+      "navigation": {
+        "type": "audio-navigation-probe",
+        "nativeBefore": true,
+        "nativeAfter": false,
+        "status": "expected-engine-limitation"
+      },
+      "audible": "unavailable"
+    }
+  ],
+  "tests": {
+    "84-x64": 384,
+    "121-x64": 384,
+    "JavaScript": 114
+  },
+  "wpf": {
+    "84.4.10": "passed",
+    "121.3.70": "passed"
+  },
+  "reference": "tampermonkey-5.5.1-audio.json",
+  "limitations": [
+    "Audible has no reliable native backend and is omitted",
+    "External changes use a 200 ms poll; transient changes may be missed",
+    "Unknown native mute reasons are not attributed to user or extension",
+    "151 SmokeHost resets native mute across the tested navigation; state reflects native readback"
+  ]
+}

@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "caseId": "grants-legacy",
+  "events": [
+    {
+      "name": "source",
+      "thisIsWindow": true
+    }
+  ],
+  "promise": {},
+  "effects": {
+    "grants": [
+      "GM_getValue"
+    ],
+    "tabsBefore": 4,
+    "tabsAfter": 4
+  },
+  "immediateReturn": {
+    "GM": "object",
+    "GM_info": "object",
+    "GM.info": "object",
+    "GM_getValue": "function",
+    "GM.getValue": "function",
+    "GM_setValue": "undefined",
+    "GM.setValue": "function",
+    "unsafeWindow": "object"
+  },
+  "info": {
+    "handler": "Tampermonkey",
+    "version": "5.5.1",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36 Edg/156.0.0.0"
+  },
+  "fixtureHash": "979ce3ac73eb64e703db7582572eb2e291cdb005994716a5a5a1fa3cbd13711e",
+  "contractSource": [
+    "https://www.tampermonkey.net/documentation.php?locale=en",
+    "Tampermonkey 5.5.1/MV3 runtime"
+  ],
+  "environment": {
+    "manager": "Tampermonkey",
+    "managerVersion": "5.5.1",
+    "chromiumVersion": "Edg/156.0.4314.58",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36 Edg/156.0.0.0",
+    "manifestVersion": 3,
+    "settings": {
+      "headless": true,
+      "userScriptsAccess": true,
+      "freshProfile": true
+    },
+    "commit": "955b8b031177b59a53cb2ee30280921dda9cec4e",
+    "platform": "x64",
+    "capabilities": {
+      "referenceReturnProbe": true
+    },
+    "world": "manager-selected"
+  },
+  "checks": {
+    "exposureRecorded": true
+  },
+  "status": "passed"
+}

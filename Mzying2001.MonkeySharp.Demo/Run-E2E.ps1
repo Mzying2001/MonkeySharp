@@ -24,4 +24,13 @@ if (!(Test-Path -LiteralPath $report)) { throw "No smoke report was produced: $r
 $result = Get-Content -LiteralPath $report -Raw | ConvertFrom-Json
 Get-Content -LiteralPath $report -Raw
 if (!$result.success -or $process.ExitCode -ne 0) { throw "Demo smoke failed. See $report and $($result.profile)/Data/Logs/demo.log" }
+$expectedVersion = [version]$CefSharpVersion
+if (!$result.environment -or $result.environment.platform -ne 'x64') { throw 'Demo smoke requires actual x64 process evidence.' }
+$actualVersion = [version]$result.environment.cefSharpVersion
+if ($actualVersion.Major -ne $expectedVersion.Major -or $actualVersion.Minor -ne $expectedVersion.Minor -or $actualVersion.Build -ne $expectedVersion.Build) {
+    throw "Demo ran CefSharp $actualVersion, requested $expectedVersion."
+}
+if (@($result.checks.PSObject.Properties).Count -eq 0 -or @($result.checks.PSObject.Properties | Where-Object { $_.Value -isnot [bool] -or !$_.Value }).Count -gt 0) {
+    throw 'Demo smoke has missing or unsuccessful assertions.'
+}
 Write-Host "WPF/Chromium smoke passed. Report: $report"

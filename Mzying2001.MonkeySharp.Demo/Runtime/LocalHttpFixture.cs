@@ -15,6 +15,8 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
         private readonly CancellationTokenSource _cancellation = new CancellationTokenSource();
         private readonly ConcurrentBag<TcpClient> _clients = new ConcurrentBag<TcpClient>();
         private int _slowRequests;
+        private readonly ConcurrentDictionary<string, int> _requests = new ConcurrentDictionary<string, int>();
+        public int RequestCount(string path) => _requests.TryGetValue(path, out var count) ? count : 0;
         public LocalHttpFixture()
         {
             _listener.Start();
@@ -47,6 +49,7 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                     var request = await reader.ReadLineAsync().ConfigureAwait(false);
                     if (request == null) return;
                     var path = request.Split(' ')[1].Split('?')[0];
+                    _requests.AddOrUpdate(path, 1, (_, count) => count + 1);
                     var headers = new StringBuilder();
                     string line;
                     while (!string.IsNullOrEmpty(line = await reader.ReadLineAsync().ConfigureAwait(false))) headers.AppendLine(line);
@@ -60,6 +63,12 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                         case "/page":
                             body = "<!doctype html><html><head><title>MonkeySharp E2E</title><link rel='icon' href='/favicon.ico'></head><body><h1>Local userscript fixture</h1><iframe src='/frame'></iframe></body></html>";
                             mime = "text/html; charset=utf-8"; break;
+                        case "/private-normal": case "/private-main": case "/private-second":
+                            body = "<!doctype html><html><head><script src='/private-cache.js'></script></head><body>Private context fixture</body></html>";
+                            mime = "text/html; charset=utf-8"; break;
+                        case "/private-cache.js":
+                            body = "globalThis.privateCacheLoaded=true;"; mime = "application/javascript";
+                            extra = "Cache-Control: public, max-age=86400\r\n"; break;
                         case "/favicon.ico":
                             body = string.Empty;
                             responseBytes = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAAcSURBVDhPYzCMqv1PCR41YNQAEB41YBgYUPsfADNDBx9pB+vtAAAAAElFTkSuQmCC");
@@ -71,7 +80,11 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                         case "/redirect": body = "redirect"; status = "302 Found"; extra = "Location: /resource\r\n"; break;
                         case "/bad-redirect": body = "redirect"; status = "302 Found"; extra = "Location: file:///C:/Windows/win.ini\r\n"; break;
                         case "/oversize": body = string.Empty; break;
-                        case "/download": case "/slow": body = new string('d', 256 * 1024); break;
+                        case "/download":
+                            if (headers.ToString().Contains("demo-cookie=ready")) body = new string('d', 256 * 1024);
+                            else { body = "Login required"; status = "401 Unauthorized"; }
+                            break;
+                        case "/slow": body = new string('d', 256 * 1024); break;
                         default: body = "fixture"; break;
                     }
                     if (path == "/slow") Interlocked.Increment(ref _slowRequests);

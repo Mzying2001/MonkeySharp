@@ -18,5 +18,7 @@
   <ItemGroup>
     <EmbeddedResource Include="JavaScript\fixtures\legacy-userscript.user.js"
                       LogicalName="Mzying2001.MonkeySharp.Core.Tests.legacy-userscript.user.js" />
+    <EmbeddedResource Include="..\scripts\compatibility\fixtures\matching-conditions.user.js" LogicalName="matching.source" />
+    <EmbeddedResource Include="..\scripts\compatibility\evidence\tampermonkey-5.5.1-matching-conditions.json" LogicalName="matching.reference" />
   </ItemGroup>
 </Project>

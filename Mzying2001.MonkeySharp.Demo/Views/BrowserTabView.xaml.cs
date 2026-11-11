@@ -1,4 +1,4 @@
-using CefSharp;
+﻿using CefSharp;
 using CefSharp.Handler;
 using CefSharp.Wpf;
 using Mzying2001.MonkeySharp.CefSharp;
@@ -22,13 +22,13 @@ namespace Mzying2001.MonkeySharp.Demo.Views
         {
             InitializeComponent();
             _runtime = runtime; _tab = tab; DataContext = tab;
-            _browser = new ChromiumWebBrowser(tab.Address) { RequestContext = runtime.RequestContext, Background = System.Windows.Media.Brushes.White };
+            _browser = new ChromiumWebBrowser(tab.Address) { RequestContext = runtime.GetTabContext(tab).RequestContext, Background = System.Windows.Media.Brushes.White };
             var requestHandlers = new CefSharpWebRequestHandlerMultiplexer();
             requestHandlers.Add(new NavigationHandler(OpenTab));
             _browser.RequestHandler = requestHandlers;
             _browser.DisplayHandler = new FaviconDisplayHandler(FaviconChanged);
             _browser.LifeSpanHandler = new PopupHandler(OpenTab);
-            _browser.DownloadHandler = new BrowserDownloadHandler(runtime.Paths.DownloadsDirectory, runtime.MainWindow.Diagnostics.Report);
+            _browser.DownloadHandler = new BrowserDownloadHandler(runtime.Paths.DownloadsDirectory, Report);
             _scope = runtime.AttachTab(tab, _browser);
             _browser.AddressChanged += AddressChanged;
             _browser.TitleChanged += TitleChanged;
@@ -39,6 +39,8 @@ namespace Mzying2001.MonkeySharp.Demo.Views
             BrowserContainer.Children.Add(_browser);
         }
 
+        private void Report(string message) { if (!_tab.IsIncognito) _runtime.MainWindow.Diagnostics.Report(message); }
+
         private void Post(Action action) { if (!Dispatcher.HasShutdownStarted) Dispatcher.BeginInvoke(new Action(() => { if (!_tab.IsClosed) action(); })); }
         private void AddressChanged(object sender, DependencyPropertyChangedEventArgs args) => Post(() =>
         {
@@ -47,7 +49,7 @@ namespace Mzying2001.MonkeySharp.Demo.Views
         });
         private void TitleChanged(object sender, DependencyPropertyChangedEventArgs args) => Post(() =>
             _tab.Title = string.IsNullOrWhiteSpace(args.NewValue as string) ? _tab.Address : (string)args.NewValue);
-        private void FaviconChanged(string iconUrl) => Post(() => _tab.IconUrl = iconUrl);
+        private void FaviconChanged(string iconUrl) => Post(() => _tab.IconUrl = _tab.IsIncognito ? null : iconUrl);
         private void LoadingChanged(object sender, LoadingStateChangedEventArgs args) => Post(() =>
         {
             _tab.IsLoading = args.IsLoading; _tab.CanGoBack = args.CanGoBack; _tab.CanGoForward = args.CanGoForward;
@@ -63,14 +65,14 @@ namespace Mzying2001.MonkeySharp.Demo.Views
         private void LoadError(object sender, LoadErrorEventArgs args)
         {
             if (args.ErrorCode == CefErrorCode.Aborted) return;
-            Post(() => { _tab.Error = args.ErrorCode + ": " + args.ErrorText; _runtime.MainWindow.Diagnostics.Report(_tab.Error); });
+            Post(() => { _tab.Error = args.ErrorCode + ": " + args.ErrorText; Report(_tab.Error); });
         }
         private void ConsoleMessage(object sender, ConsoleMessageEventArgs args)
-            => _runtime.MainWindow.Diagnostics.Report("Console " + args.Level + ": " + args.Message);
+            => Report("Console " + args.Level + ": " + args.Message);
         private void OpenTab(string url, bool active) => Post(() =>
         {
             try { _runtime.MainWindow.NewTab(MainWindowViewModel.NormalizeAddress(url), active, _tab, true, true); }
-            catch (ArgumentException exception) { _runtime.MainWindow.Diagnostics.Report(exception.Message); }
+            catch (ArgumentException exception) { Report(exception.Message); }
         });
 
         public void Load(string address) { _tab.Error = null; _browser.Load(address); }
@@ -106,6 +108,7 @@ namespace Mzying2001.MonkeySharp.Demo.Views
 
         private async void ReadDeclaredFavicon()
         {
+            if (_tab.IsIncognito) return;
             var address = _tab.Address;
             try
             {

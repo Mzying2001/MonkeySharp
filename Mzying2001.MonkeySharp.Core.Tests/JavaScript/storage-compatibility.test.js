@@ -4,7 +4,7 @@ const { install, waitFor } = require("./storage-harness");
 
 // Observable expectations checked against the published Chromium Tampermonkey 5.5.1
 // storage facade on 2026-11-01. Host commit acknowledgement remains MonkeySharp-specific.
-for (const options of [{ mirror: true }, { mirror: false }, { strict: true, mirror: false }]) {
+for (const options of [{ chunked: false }, { chunked: true }]) {
     const mode = JSON.stringify(options);
     test(`stored undefined is distinct from absence and null (${mode})`, async () => {
         const { api, single } = await install(options);
@@ -102,21 +102,21 @@ test("modern listener registration rejects host failure and removes the local ca
     assert.ok(requests.some(request => request.method === "runtime.reportError"));
 });
 
-for (const mirror of [true, false]) {
-    test(`late single-value events are deduplicated per listener (mirror=${mirror})`, async () => {
-        const { api, notifications, deliver } = await install({ mirror, deferNotifications: true });
+for (const chunked of [false, true]) {
+    test(`late single-value events are deduplicated per listener (chunked=${chunked})`, async () => {
+        const { api, notifications, deliver } = await install({ chunked, deferNotifications: true });
         const changes = [];
         await api.addValueChangeListener("key", (...args) => changes.push(args));
         await api.setValue("key", 1);
-        assert.deepEqual(changes, []);
+        assert.deepEqual(changes, [["key", undefined, 1, false]]);
         notifications.forEach(deliver);
         notifications.forEach(deliver);
         assert.deepEqual(changes, [["key", undefined, 1, false]]);
     });
 }
 
-test("legacy listener aliases are synchronous even without a storage mirror", async () => {
-    const { single, api, requests } = await install({ mirror: false });
+test("legacy listener aliases are synchronous with a chunked snapshot", async () => {
+    const { single, api, requests } = await install({ chunked: true });
     const changes = [];
     const id = single.add("key", (...args) => changes.push(args));
     assert.equal(typeof id, "number");
@@ -127,11 +127,11 @@ test("legacy listener aliases are synchronous even without a storage mirror", as
     await waitFor(() => requests.some(request => request.method === "GM.removeValueChangeListener"));
 });
 
-for (const mirror of [true, false]) {
-    test(`bulk defaults are captured before an asynchronous lookup (mirror=${mirror})`, async () => {
+for (const chunked of [false, true]) {
+    test(`bulk defaults are captured before an asynchronous lookup (chunked=${chunked})`, async () => {
         let release;
         const barrier = new Promise(resolve => { release = resolve; });
-        const { api } = await install({ mirror, beforeRead: () => barrier });
+        const { api } = await install({ chunked, beforeRead: () => barrier });
         const original = {};
         const defaults = { primitive: "before", reference: original, missing: undefined };
         const reading = api.getValues(defaults);

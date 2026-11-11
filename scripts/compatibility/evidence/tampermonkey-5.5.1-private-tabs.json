@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "caseId": "private-tabs",
+  "immediateReturn": {
+    "open": "function"
+  },
+  "promise": {},
+  "events": [],
+  "effects": {
+    "normalIncognito": false,
+    "fromPrivate": null,
+    "modernFromPrivate": null,
+    "tabsBefore": 4,
+    "private": {
+      "isIncognito": true,
+      "normal": "shared-from-normal",
+      "readback": "shared-from-private"
+    },
+    "privateSnapshot": {
+      "allowed": true
+    },
+    "afterManagerReload": {
+      "isIncognito": false,
+      "fromPrivate": null
+    },
+    "tabsAfter": 3
+  },
+  "fixtureHash": "924d3264265e2aeda9edb1a41ef1f84228c1dcffb26fd0d5b79753048fc99ad3",
+  "contractSource": [
+    "https://www.tampermonkey.net/documentation.php?locale=en",
+    "Tampermonkey 5.5.1/MV3 runtime"
+  ],
+  "environment": {
+    "manager": "Tampermonkey",
+    "managerVersion": "5.5.1",
+    "chromiumVersion": "Edg/156.0.4314.58",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36 Edg/156.0.0.0",
+    "manifestVersion": 3,
+    "settings": {
+      "headless": true,
+      "userScriptsAccess": true,
+      "freshProfile": true
+    },
+    "commit": "b6045558c0443d6657d95c3d9d6ba3008e0dfba6",
+    "platform": "x64",
+    "capabilities": {
+      "referenceReturnProbe": true
+    },
+    "world": "manager-selected"
+  },
+  "checks": {
+    "noError": true,
+    "contexts": true,
+    "copiedBaseline": true,
+    "isolatedWrites": true
+  },
+  "status": "passed"
+}

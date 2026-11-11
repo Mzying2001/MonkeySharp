@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
+using Mzying2001.MonkeySharp.Core.Runtime;
 
 namespace Mzying2001.MonkeySharp.Core.Bridge
 {
@@ -17,7 +18,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                 {
                     writer.WriteStartObject();
                     writer.WriteString("type", "response");
-                    writer.WriteNumber("protocol", 1);
+                    writer.WriteNumber("protocol", InjectionPlan.CurrentProtocolVersion);
                     writer.WriteString("requestId", requestId ?? string.Empty);
                     writer.WriteBoolean("ok", true);
                     writer.WritePropertyName("result");
@@ -37,7 +38,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                 {
                     writer.WriteStartObject();
                     writer.WriteString("type", hello ? "hello-result" : "response");
-                    writer.WriteNumber("protocol", 1);
+                    writer.WriteNumber("protocol", InjectionPlan.CurrentProtocolVersion);
                     if (!hello)
                         writer.WriteString("requestId", requestId ?? string.Empty);
                     writer.WriteBoolean("ok", false);
@@ -61,13 +62,14 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             var payload = new Dictionary<string, object>
             {
                 ["type"] = "hello-result",
-                ["protocol"] = 1,
+                ["protocol"] = InjectionPlan.CurrentProtocolVersion,
                 ["ok"] = true,
                 ["limits"] = new Dictionary<string, object>
                 {
                     ["requestBytes"] = options.MaxRequestBytes,
                     ["responseBytes"] = options.MaxResponseBytes,
                     ["resourceBytes"] = options.MaxResourceBytes,
+                    ["binaryTransferBytes"] = options.MaxBinaryTransferBytes,
                     ["timeoutMilliseconds"] = (long)options.RequestTimeout.TotalMilliseconds,
                     ["pendingRequests"] = options.MaxPendingRequestsPerDocument,
                     ["replayRequestsPerExecution"] = options.MaxReplayEntriesPerExecution

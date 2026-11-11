@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "caseId": "p1-progress",
+  "immediateReturn": {
+    "promise": "function"
+  },
+  "promise": {
+    "text": {
+      "state": "fulfilled"
+    }
+  },
+  "events": [
+    {
+      "name": "progress",
+      "text": "a",
+      "response": "a",
+      "readyState": 3,
+      "loaded": 3
+    },
+    {
+      "name": "progress",
+      "text": "a你好",
+      "response": "a你好",
+      "readyState": 3,
+      "loaded": 7
+    }
+  ],
+  "effects": {
+    "text": "a你好",
+    "fetchProgress": 2,
+    "tabsBefore": 4,
+    "tabsAfter": 4
+  },
+  "fixtureHash": "388ce4e9253fd7465158d63a0de2cac562138fb95d364f10dd688db5676afa96",
+  "contractSource": [
+    "https://www.tampermonkey.net/documentation.php?locale=en",
+    "Tampermonkey 5.6.6242/beta/MV3 runtime"
+  ],
+  "environment": {
+    "manager": "Tampermonkey",
+    "managerVersion": "5.6.6242",
+    "chromiumVersion": "Edg/157.0.4341.42",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/157.0.0.0 Safari/537.36 Edg/157.0.0.0",
+    "manifestVersion": 3,
+    "channel": "beta",
+    "extensionId": "lfoeajgcchlidpicbabpmckkejpckcfb",
+    "contentSha256": "b7f0b8a8779aceecb0b9acc2784ef6b1c6351bcae90ab4a927237761efb63e3a",
+    "minimumChromeVersion": "120",
+    "settings": {
+      "downloadMode": "fresh-profile-default",
+      "privateStorage": "split; no incognito access unless private-tabs fixture",
+      "headless": true,
+      "userScriptsAccess": true,
+      "freshProfile": true,
+      "ignoreLoopbackCertificateErrors": false,
+      "legacyPfxProvider": false
+    },
+    "commit": "1cc6a60925d9b25e2977b01154726466a86bd969",
+    "sourcePatchSha256": "95b9cac202af2d162f79d10619b235ae231cba98e058e59f75716a30ce03dc2e",
+    "runnerSha256": "bd1e7baab60452295b40af15dec2ec89b9a2179b3ff11f951962f27c4ccae1f6",
+    "platform": "x64",
+    "capabilities": {
+      "referenceReturnProbe": true
+    },
+    "world": "manager-selected"
+  },
+  "checks": {
+    "noError": true,
+    "partialText": true,
+    "finalText": true,
+    "decoderBoundary": true,
+    "fetchBoundary": false
+  },
+  "status": "failed"
+}

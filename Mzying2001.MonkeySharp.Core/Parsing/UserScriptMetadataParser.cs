@@ -1,4 +1,4 @@
-using Mzying2001.MonkeySharp.Core.Domain;
+﻿using Mzying2001.MonkeySharp.Core.Domain;
 using Mzying2001.MonkeySharp.Core.Compatibility;
 using Mzying2001.MonkeySharp.Core.Security;
 using Mzying2001.MonkeySharp.Core.Matching;
@@ -31,17 +31,17 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
         private static readonly HashSet<string> CollectionKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "match", "include", "exclude", "exclude-match", "grant", "connect", "require", "resource",
-            "antifeature", "webrequest"
+            "antifeature", "webrequest", "run-in"
         };
 
         private static readonly HashSet<string> SingletonKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "name", "namespace", "version", "description", "author", "license", "copyright", "icon", "iconurl",
             "icon64", "icon64url", "downloadurl", "updateurl", "homepage", "homepageurl", "website", "source",
-            "supporturl", "noframes", "run-at", "run-in", "inject-into", "sandbox", "unwrap"
+            "supporturl", "noframes", "run-at", "inject-into", "sandbox", "unwrap"
         };
 
-        /// <summary>Initializes a parser with the default legacy-compatible rules.</summary>
+        /// <summary>Initializes a parser with bounded metadata scanning.</summary>
         public UserScriptMetadataParser()
             : this(null)
         {
@@ -107,6 +107,16 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
             ValidateMatchPatterns(matches, "match", diagnostics, values);
             ValidateMatchPatterns(excludeMatches, "exclude-match", diagnostics, values);
 
+            foreach (var selector in ReadCollection(values, "run-in"))
+            {
+                if (selector == "normal-tabs" || selector == "incognito-tabs") continue;
+                var container = selector.StartsWith("container-id-", StringComparison.Ordinal) &&
+                    int.TryParse(selector.Substring("container-id-".Length), NumberStyles.None, CultureInfo.InvariantCulture, out var id) && id >= 0;
+                diagnostics.Add(new MetadataDiagnostic(container ? "MSM083_UNSUPPORTED_CONTAINER" : "MSM082_INVALID_RUN_IN",
+                    container ? DiagnosticSeverity.Warning : DiagnosticSeverity.Error,
+                    container ? "Container selection is not implemented by the Chromium host." : "Unknown @run-in selector '" + selector + "'."));
+            }
+
             var declaredGrants = ReadCollection(values, "grant").ToList();
             var grantDeclarationState = declaredGrants.Count == 0
                 ? GrantDeclarationState.Missing
@@ -124,7 +134,7 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
             foreach (var declaredGrant in declaredGrants)
             {
                 if (UserScriptGrantCatalog.TryNormalize(
-                    declaredGrant, _options.AcceptLegacyGrantAliases, out var canonicalGrant))
+                    declaredGrant, out var canonicalGrant))
                 {
                     if (!grants.Contains(canonicalGrant, StringComparer.Ordinal))
                         grants.Add(canonicalGrant);
@@ -137,8 +147,6 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
                         "Unknown grant '" + declaredGrant + "' will not be exposed."));
                 }
             }
-            if (grants.Count == 0 && grantDeclarationState != GrantDeclarationState.Missing)
-                grants.Add("none");
 
             var runAt = ParseRunAt(First(values, "run-at"), diagnostics);
             var resources = ParseResources(values, diagnostics);
@@ -150,7 +158,7 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
                 "name", "namespace", "version", "description", "author", "license", "copyright", "icon", "iconurl",
                 "icon64", "icon64url", "downloadurl", "updateurl", "homepage", "homepageurl", "website", "source",
                 "supporturl", "match", "include", "exclude", "exclude-match", "noframes", "run-at", "run-in",
-                "inject-into", "sandbox", "unwrap", "grant", "connect", "require", "resource", "antifeature", "webrequest"
+                "inject-into", "sandbox", "unwrap", "grant", "connect", "require", "resource", "antifeature", "webrequest", "run-in"
             };
             var additional = values
                 .Where(pair => !knownKeys.Contains(BaseKey(pair.Key)))
@@ -178,7 +186,7 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
                 runAt,
                 grantDeclarationState,
                 values.ContainsKey("noframes"),
-                First(values, "run-in"),
+                ReadCollection(values, "run-in"),
                 First(values, "inject-into"),
                 First(values, "sandbox"),
                 values.ContainsKey("unwrap"),
@@ -235,8 +243,7 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
                     }
                     if (trimmed != "// ==UserScript==")
                     {
-                        var preamble = options.AllowHeaderPreamble &&
-                            index < options.MaxHeaderScanLines &&
+                        var preamble = index < options.MaxHeaderScanLines &&
                             scannedCharacters + lines[index].Length <= options.MaxHeaderScanCharacters &&
                             (trimmed.StartsWith("//", StringComparison.Ordinal) ||
                              trimmed.StartsWith("/*", StringComparison.Ordinal) ||
@@ -556,13 +563,12 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
                     using (var document = JsonDocument.Parse(entry.Value))
                     {
                         var root = document.RootElement;
-                        if (root.ValueKind != JsonValueKind.Object ||
-                            !root.TryGetProperty("selector", out var selector) ||
-                            !root.TryGetProperty("action", out var action) ||
-                            !IsValidWebRequestSelector(selector) ||
-                            !IsValidWebRequestAction(action))
-                            throw new FormatException("A webRequest rule requires a valid selector and action.");
-                        result.Add(new UserScriptWebRequestRule(selector, action));
+                        var rules = root.ValueKind == JsonValueKind.Array ? root.EnumerateArray().ToArray() : new[] { root };
+                        foreach (var rule in rules)
+                        {
+                            Apis.WebRequestApiProvider.CompileRule(rule, null);
+                            result.Add(new UserScriptWebRequestRule(rule.GetProperty("selector"), rule.GetProperty("action")));
+                        }
                     }
                 }
                 catch (JsonException exception)
@@ -573,7 +579,7 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
                         "@webRequest is not valid JSON: " + exception.Message,
                         entry.Line));
                 }
-                catch (FormatException exception)
+                catch (BridgeProtocolException exception)
                 {
                     diagnostics.Add(new MetadataDiagnostic(
                         "MSM062_INVALID_WEBREQUEST",
@@ -583,57 +589,6 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
                 }
             }
             return result.AsReadOnly();
-        }
-
-        private static bool IsValidWebRequestSelector(JsonElement value)
-        {
-            if (value.ValueKind == JsonValueKind.String)
-                return !string.IsNullOrWhiteSpace(value.GetString());
-            if (value.ValueKind != JsonValueKind.Object)
-                return false;
-            var found = false;
-            foreach (var name in new[] { "include", "match", "exclude" })
-            {
-                if (!value.TryGetProperty(name, out var item))
-                    continue;
-                found = true;
-                if (item.ValueKind == JsonValueKind.String)
-                {
-                    if (string.IsNullOrWhiteSpace(item.GetString())) return false;
-                }
-                else if (item.ValueKind == JsonValueKind.Array)
-                {
-                    if (!item.EnumerateArray().Any(element => element.ValueKind != JsonValueKind.String ||
-                        string.IsNullOrWhiteSpace(element.GetString()))) return false;
-                }
-                else return false;
-            }
-            return found;
-        }
-
-        private static bool IsValidWebRequestAction(JsonElement value)
-        {
-            if (value.ValueKind == JsonValueKind.String)
-                return string.Equals(value.GetString(), "cancel", StringComparison.OrdinalIgnoreCase) ||
-                    IsHttpUrl(value.GetString());
-            if (value.ValueKind != JsonValueKind.Object)
-                return false;
-            if (value.TryGetProperty("cancel", out var cancel) &&
-                cancel.ValueKind == JsonValueKind.True)
-                return true;
-            if (!value.TryGetProperty("redirect", out var redirect))
-                return false;
-            if (redirect.ValueKind == JsonValueKind.String)
-                return IsHttpUrl(redirect.GetString()) || !string.IsNullOrWhiteSpace(redirect.GetString());
-            return redirect.ValueKind == JsonValueKind.Object &&
-                redirect.TryGetProperty("from", out var from) && from.ValueKind == JsonValueKind.String &&
-                redirect.TryGetProperty("to", out var to) && to.ValueKind == JsonValueKind.String;
-        }
-
-        private static bool IsHttpUrl(string value)
-        {
-            return Uri.TryCreate(value, UriKind.Absolute, out var uri) &&
-                (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
         }
 
         private static void ValidateConnects(
@@ -671,6 +626,12 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
         {
             foreach (var pattern in patterns)
             {
+                var scheme = pattern.IndexOf("://", StringComparison.Ordinal);
+                var slash = scheme < 0 ? -1 : pattern.IndexOf('/', scheme + 3);
+                if (slash >= 0 && pattern.Substring(scheme + 3, slash - scheme - 3).Any(value => value > 127))
+                    diagnostics.Add(new MetadataDiagnostic("MSM084_UNSUPPORTED_IDN_MATCH", DiagnosticSeverity.Warning,
+                        "Unicode @match hosts do not match normalized browser URLs in the pinned manager; use the punycode host.",
+                        values[key].First(item => item.Value == pattern).Line));
                 if (!MatchPatternCompiler.TryCompile(pattern, out _, out var error))
                 {
                     var line = values[key].First(item => item.Value == pattern).Line;

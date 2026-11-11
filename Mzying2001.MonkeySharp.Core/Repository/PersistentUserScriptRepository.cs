@@ -14,7 +14,7 @@ namespace Mzying2001.MonkeySharp.Core.Repository
     {
         /// <summary>Initializes a durable record. Null source represents an unavailable source file.</summary>
         public UserScriptPersistenceRecord(ScriptKey scriptKey, string source, string sourceOrigin,
-            bool isEnabled, DateTimeOffset installedAt, DateTimeOffset updatedAt)
+            bool isEnabled, DateTimeOffset installedAt, DateTimeOffset updatedAt, string preparedRevisionJson = null)
         {
             if (!ScriptKey.TryParse(scriptKey.ToString(), out var validatedKey))
                 throw new ArgumentException("A nonempty script key is required.", nameof(scriptKey));
@@ -24,7 +24,11 @@ namespace Mzying2001.MonkeySharp.Core.Repository
             IsEnabled = isEnabled;
             InstalledAt = installedAt;
             UpdatedAt = updatedAt;
+            PreparedRevisionJson = preparedRevisionJson;
         }
+
+        /// <summary>Gets the verified content persisted atomically with the source revision.</summary>
+        public string PreparedRevisionJson { get; }
 
         /// <summary>Gets the stable installation identity.</summary>
         public ScriptKey ScriptKey { get; }
@@ -65,6 +69,7 @@ namespace Mzying2001.MonkeySharp.Core.Repository
         private readonly SemaphoreSlim _mutations = new SemaphoreSlim(1, 1);
         private readonly IUserScriptRepositoryPersistence _persistence;
         private readonly IUserScriptMetadataParser _parser;
+        private readonly UserScriptPreparer _preparer;
         private readonly Dictionary<ScriptKey, UserScriptInstallation> _installations =
             new Dictionary<ScriptKey, UserScriptInstallation>();
         private readonly List<ScriptKey> _order = new List<ScriptKey>();
@@ -72,10 +77,11 @@ namespace Mzying2001.MonkeySharp.Core.Repository
 
         /// <summary>Creates a repository that must be initialized before it is attached to a runtime.</summary>
         public PersistentUserScriptRepository(IUserScriptRepositoryPersistence persistence,
-            IUserScriptMetadataParser parser = null)
+            IUserScriptMetadataParser parser = null, UserScriptPreparer preparer = null)
         {
             _persistence = persistence ?? throw new ArgumentNullException(nameof(persistence));
             _parser = parser ?? new UserScriptMetadataParser();
+            _preparer = preparer ?? new UserScriptPreparer();
         }
 
         /// <inheritdoc />
@@ -97,9 +103,21 @@ namespace Mzying2001.MonkeySharp.Core.Repository
                     cancellationToken.ThrowIfCancellationRequested();
                     var source = record.Source ?? string.Empty;
                     var parsed = _parser.Parse(source);
-                    restored.Add(record.ScriptKey, new UserScriptInstallation(record.ScriptKey,
+                    var installation = new UserScriptInstallation(record.ScriptKey,
                         new UserScriptDefinition(source, parsed), record.SourceOrigin,
-                        record.IsEnabled && parsed.CanEnable, record.InstalledAt, record.UpdatedAt));
+                        record.IsEnabled && parsed.CanEnable, record.InstalledAt, record.UpdatedAt);
+                    if (parsed.CanEnable)
+                    {
+                        if (record.PreparedRevisionJson != null)
+                            installation.WithPreparedRevision(PreparedScriptRevision.Restore(installation.Definition, record.PreparedRevisionJson));
+                        else
+                        {
+                            // One-time preparation of development records, before any execution is possible.
+                            installation = await _preparer.PrepareAsync(installation, cancellationToken).ConfigureAwait(false);
+                            await _persistence.SaveAsync(ToRecord(installation), cancellationToken).ConfigureAwait(false);
+                        }
+                    }
+                    restored.Add(record.ScriptKey, installation);
                     order.Add(record.ScriptKey);
                 }
                 lock (_sync)
@@ -220,9 +238,8 @@ namespace Mzying2001.MonkeySharp.Core.Repository
                     cancellationToken.ThrowIfCancellationRequested();
                     installation = create();
                 }
-                await _persistence.SaveAsync(new UserScriptPersistenceRecord(installation.ScriptKey,
-                    installation.Definition.Source, installation.SourceOrigin, installation.IsEnabled,
-                    installation.InstalledAt, installation.UpdatedAt), cancellationToken).ConfigureAwait(false);
+                installation = await _preparer.PrepareAsync(installation, cancellationToken).ConfigureAwait(false);
+                await _persistence.SaveAsync(ToRecord(installation), cancellationToken).ConfigureAwait(false);
                 lock (_sync)
                 {
                     if (!_installations.ContainsKey(installation.ScriptKey)) _order.Add(installation.ScriptKey);
@@ -240,6 +257,11 @@ namespace Mzying2001.MonkeySharp.Core.Repository
             if (!parsed.CanEnable) throw new MetadataValidationException(parsed);
             return new UserScriptDefinition(source, parsed);
         }
+
+        private static UserScriptPersistenceRecord ToRecord(UserScriptInstallation installation) =>
+            new UserScriptPersistenceRecord(installation.ScriptKey, installation.Definition.Source,
+                installation.SourceOrigin, installation.IsEnabled, installation.InstalledAt, installation.UpdatedAt,
+                installation.PreparedRevision?.Serialize(installation.Definition.Source));
 
         private UserScriptInstallation GetRequired(ScriptKey key)
         {

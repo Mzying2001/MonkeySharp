@@ -1,4 +1,4 @@
-using Mzying2001.MonkeySharp.Core.Domain;
+﻿using Mzying2001.MonkeySharp.Core.Domain;
 using Mzying2001.MonkeySharp.Core.Apis;
 using Mzying2001.MonkeySharp.Core.Security;
 using Mzying2001.MonkeySharp.Core.Compatibility;
@@ -12,6 +12,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Text.RegularExpressions;
 
 namespace Mzying2001.MonkeySharp.Core.Runtime
 {
@@ -23,7 +24,6 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
         private readonly IUserScriptRepository _repository;
         private readonly IUserScriptMatcher _matcher;
         private readonly UserScriptEngineOptions _options;
-        private readonly IUserScriptSourceResolver _sourceResolver;
         private readonly SemaphoreSlim _queue = new SemaphoreSlim(1, 1);
         private readonly object _stateLock = new object();
         private readonly Dictionary<string, DocumentState> _documents =
@@ -31,24 +31,23 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
         private readonly Dictionary<string, ExecutionRecord> _executions =
             new Dictionary<string, ExecutionRecord>(StringComparer.Ordinal);
         private bool _disposed;
+        private IReadOnlyCollection<string> _hostCapabilities = new[] { "GM.info", "GM.addStyle", "GM.addElement" };
+
+        internal void SetHostCapabilities(IEnumerable<string> capabilities)
+            => _hostCapabilities = new ReadOnlyCollection<string>(capabilities.Distinct(StringComparer.Ordinal).ToArray());
 
         /// <summary>Initializes a userscript execution engine.</summary>
         /// <param name="repository">The repository containing installed userscripts.</param>
         /// <param name="matcher">The URL matcher, or <see langword="null"/> to use the default matcher.</param>
         /// <param name="options">Execution safety requirements, or <see langword="null"/> for defaults.</param>
-        /// <param name="sourceResolver">An optional resolver for script dependencies and final source.</param>
         public UserScriptEngine(
             IUserScriptRepository repository,
             IUserScriptMatcher matcher = null,
-            UserScriptEngineOptions options = null,
-            IUserScriptSourceResolver sourceResolver = null)
+            UserScriptEngineOptions options = null)
         {
             _repository = repository ?? throw new ArgumentNullException(nameof(repository));
-            _matcher = matcher ?? new UserScriptMatcher();
+            _matcher = matcher;
             _options = options ?? new UserScriptEngineOptions();
-            if (_options.Compatibility == null)
-                _options.Compatibility = new UserScriptCompatibilityOptions();
-            _sourceResolver = sourceResolver;
         }
 
         /// <summary>Occurs when script selection or source resolution produces a diagnostic.</summary>
@@ -91,6 +90,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
         {
             if (frame == null)
                 throw new ArgumentNullException(nameof(frame));
+            var diagnostics = new List<UserScriptDiagnostic>();
             await _queue.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
@@ -100,7 +100,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                     .Where(item => item.IsEnabled && item.Definition.Metadata != null &&
                         item.Definition.Metadata.RunAt == UserScriptRunAt.ContextMenu &&
                         (frame.IsMainFrame || !item.Definition.Metadata.NoFrames) &&
-                        _matcher.IsMatch(item.Definition.Metadata, frame.Url))
+                        Matches(item, frame, true, diagnostics))
                     .Select(item => new ContextMenuEntry(item.ScriptKey,
                         string.IsNullOrWhiteSpace(item.Definition.Metadata.Name)
                             ? item.ScriptKey.ToString()
@@ -111,6 +111,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
             finally
             {
                 _queue.Release();
+                foreach (var diagnostic in diagnostics) Diagnostic?.Invoke(this, diagnostic);
             }
         }
 
@@ -134,7 +135,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                 var metadata = installation.Definition.Metadata;
                 if (metadata.RunAt != UserScriptRunAt.ContextMenu ||
                     (!frame.IsMainFrame && metadata.NoFrames) ||
-                    !_matcher.IsMatch(metadata, frame.Url))
+                    !Matches(installation, frame, metadata.RunAt == UserScriptRunAt.ContextMenu, diagnostics))
                     return EmptyPlan(frame, UserScriptRunAt.ContextMenu);
                 if (_options.RequireVerifiedBridge &&
                     frame.BridgeIntegrity == BridgeIntegrityGuarantee.Unverified && RequiresBridge(metadata))
@@ -145,38 +146,8 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                         documentId: frame.DocumentId, frameId: frame.FrameId));
                     return EmptyPlan(frame, UserScriptRunAt.ContextMenu);
                 }
-                if (_options.Compatibility.Profile == UserScriptCompatibilityProfile.LegacyCompatible &&
-                    metadata.Requires.Count != 0 && _sourceResolver == null)
-                {
-                    diagnostics.Add(new UserScriptDiagnostic(
-                        "MSR401_DEPENDENCY_PROVIDER_UNAVAILABLE", DiagnosticSeverity.Error,
-                        "The script declares @require entries but no dependency provider is configured.",
-                        scriptKey: installation.ScriptKey, documentId: frame.DocumentId, frameId: frame.FrameId));
-                    return EmptyPlan(frame, UserScriptRunAt.ContextMenu);
-                }
-                string source;
-                try
-                {
-                    source = _sourceResolver == null
-                        ? installation.Definition.Source
-                        : await _sourceResolver.ResolveSourceAsync(installation, cancellationToken).ConfigureAwait(false);
-                    if (source == null)
-                        throw new InvalidOperationException("The script source resolver returned null.");
-                }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                {
-                    throw;
-                }
-                catch (Exception exception)
-                {
-                    diagnostics.Add(new UserScriptDiagnostic(
-                        exception is ResourceIntegrityException integrityException
-                            ? integrityException.Code : "MSR400_DEPENDENCY_RESOLUTION_FAILED",
-                        DiagnosticSeverity.Error, "The script dependencies could not be resolved.", exception,
-                        installation.ScriptKey, frame.DocumentId, frame.FrameId));
-                    return EmptyPlan(frame, UserScriptRunAt.ContextMenu);
-                }
-                var invocation = CreateInvocation(installation, source);
+                var source = installation.PreparedRevision?.Source ?? throw new InvalidOperationException("The installation has no prepared revision.");
+                var invocation = CreateInvocation(installation, source, frame);
                 var execution = new ExecutionRecord(frame, installation, invocation, new CancellationTokenSource());
                 lock (_stateLock)
                 {
@@ -269,6 +240,34 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
             }
         }
 
+        internal async Task<bool> IsInstallationActiveAsync(UserScriptInstallation installation, CancellationToken token)
+        {
+            try
+            {
+                var current = await _repository.GetAsync(installation.ScriptKey, token).ConfigureAwait(false);
+                return current.IsEnabled && current.RevisionId == installation.RevisionId;
+            }
+            catch (KeyNotFoundException) { return false; }
+        }
+
+        internal async Task InvalidateExecutionAsync(string executionId, CancellationToken token)
+        {
+            ExecutionRecord ended = null;
+            await _queue.WaitAsync(token).ConfigureAwait(false);
+            try
+            {
+                lock (_stateLock)
+                    if (_executions.TryGetValue(executionId, out ended))
+                    {
+                        _executions.Remove(executionId);
+                        if (_documents.TryGetValue(ended.Frame.DocumentId, out var document)) document.ExecutionIds.Remove(executionId);
+                        ended.Cancellation.Cancel(); ended.Cancellation.Dispose();
+                    }
+            }
+            finally { _queue.Release(); }
+            if (ended != null) NotifyExecutionsEnded(new[] { ended });
+        }
+
         private async Task<InjectionPlan> ProcessLifecycleCoreAsync(
             DocumentLifecycleEventArgs lifecycle,
             ICollection<UserScriptDiagnostic> diagnostics,
@@ -305,7 +304,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                 var metadata = installation.Definition.Metadata;
                 if (!installation.IsEnabled || metadata.RunAt != runAt ||
                     (!frame.IsMainFrame && metadata.NoFrames) ||
-                    !_matcher.IsMatch(metadata, frame.Url))
+                    !Matches(installation, frame, metadata.RunAt == UserScriptRunAt.ContextMenu, diagnostics))
                     continue;
 
                 var onceKey = installation.ScriptKey + ":" + runAt;
@@ -361,89 +360,8 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                         frameId: frame.FrameId));
                 }
 
-                if (!string.IsNullOrEmpty(metadata.InjectInto) &&
-                    !string.Equals(metadata.InjectInto, "page", StringComparison.OrdinalIgnoreCase))
-                {
-                    diagnostics.Add(new UserScriptDiagnostic(
-                        "MSR210_UNSUPPORTED_INJECT_WORLD",
-                        DiagnosticSeverity.Warning,
-                        "The requested @inject-into world is not available in the CefSharp page world.",
-                        scriptKey: installation.ScriptKey,
-                        documentId: frame.DocumentId,
-                        frameId: frame.FrameId));
-                }
-                if (!string.IsNullOrEmpty(metadata.RunIn))
-                {
-                    diagnostics.Add(new UserScriptDiagnostic(
-                        "MSR211_UNSUPPORTED_RUN_IN",
-                        DiagnosticSeverity.Warning,
-                        "The requested @run-in environment is preserved but not implemented by this host.",
-                        scriptKey: installation.ScriptKey,
-                        documentId: frame.DocumentId,
-                        frameId: frame.FrameId));
-                }
-                if (!string.IsNullOrEmpty(metadata.Sandbox) &&
-                    !string.Equals(metadata.Sandbox, "raw", StringComparison.OrdinalIgnoreCase))
-                {
-                    diagnostics.Add(new UserScriptDiagnostic(
-                        "MSR212_UNSUPPORTED_SANDBOX",
-                        DiagnosticSeverity.Warning,
-                        "The requested @sandbox mode is not available; the script remains in the page world.",
-                        scriptKey: installation.ScriptKey,
-                        documentId: frame.DocumentId,
-                        frameId: frame.FrameId));
-                }
-                if (metadata.Unwrap)
-                {
-                    diagnostics.Add(new UserScriptDiagnostic(
-                        "MSR213_UNSUPPORTED_UNWRAP",
-                        DiagnosticSeverity.Warning,
-                        "@unwrap is not available; the script remains inside the MonkeySharp wrapper.",
-                        scriptKey: installation.ScriptKey,
-                        documentId: frame.DocumentId,
-                        frameId: frame.FrameId));
-                }
-                if (_options.Compatibility.Profile == UserScriptCompatibilityProfile.LegacyCompatible &&
-                    metadata.Requires.Count != 0 && _sourceResolver == null)
-                {
-                    diagnostics.Add(new UserScriptDiagnostic(
-                        "MSR401_DEPENDENCY_PROVIDER_UNAVAILABLE",
-                        DiagnosticSeverity.Error,
-                        "The script declares @require entries but no dependency provider is configured.",
-                        scriptKey: installation.ScriptKey,
-                        documentId: frame.DocumentId,
-                        frameId: frame.FrameId));
-                    continue;
-                }
-
-                string source;
-                try
-                {
-                    source = _sourceResolver == null
-                        ? installation.Definition.Source
-                        : await _sourceResolver.ResolveSourceAsync(installation, cancellationToken).ConfigureAwait(false);
-                    if (source == null)
-                        throw new InvalidOperationException("The script source resolver returned null.");
-                }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                {
-                    throw;
-                }
-                catch (Exception exception)
-                {
-                    diagnostics.Add(new UserScriptDiagnostic(
-                        exception is ResourceIntegrityException integrityException
-                            ? integrityException.Code
-                            : "MSR400_DEPENDENCY_RESOLUTION_FAILED",
-                        DiagnosticSeverity.Error,
-                        "The script dependencies could not be resolved.",
-                        exception,
-                        installation.ScriptKey,
-                        frame.DocumentId,
-                        frame.FrameId));
-                    continue;
-                }
-                var invocation = CreateInvocation(installation, source);
+                var source = installation.PreparedRevision?.Source ?? throw new InvalidOperationException("The installation has no prepared revision.");
+                var invocation = CreateInvocation(installation, source, frame);
                 var execution = new ExecutionRecord(frame, installation, invocation, new CancellationTokenSource());
                 lock (_stateLock)
                     _executions.Add(invocation.ExecutionId, execution);
@@ -498,24 +416,73 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                 ExecutionEnded?.Invoke(execution);
         }
 
-        private ScriptInvocation CreateInvocation(UserScriptInstallation installation, string source)
+        /// <summary>Resolves the requested Chromium world without silently downgrading an explicit requirement.</summary>
+        public static string RequestedWorld(UserScriptMetadata metadata)
+        {
+            var sandbox = metadata.Sandbox;
+            if (!string.IsNullOrEmpty(sandbox) && !new[] { "raw", "JavaScript", "DOM" }.Contains(sandbox, StringComparer.OrdinalIgnoreCase)) return null;
+            var world = string.Equals(sandbox, "DOM", StringComparison.OrdinalIgnoreCase) ? "isolated" : "page";
+            if (!string.IsNullOrEmpty(metadata.InjectInto) && metadata.InjectInto != "auto")
+            {
+                if (metadata.InjectInto == "content") { if (sandbox != null && world != "isolated") return null; world = "isolated"; }
+                else if (metadata.InjectInto != "page" || world != "page") return null;
+            }
+            return world;
+        }
+
+        private bool Matches(UserScriptInstallation installation, DocumentFrame frame, bool contextMenu, ICollection<UserScriptDiagnostic> diagnostics)
         {
             var metadata = installation.Definition.Metadata;
-            var info = JsonSerializer.Serialize(BuildInfo(installation));
+            if (frame.ScriptScope.HasValue && frame.ScriptScope.Value != installation.ScriptKey) return false;
+            if (frame.RevisionScope.HasValue && frame.RevisionScope.Value != installation.RevisionId) return false;
+            var world = RequestedWorld(metadata);
+            string unsupported = null;
+            if (world == null) unsupported = "The requested execution world is not supported.";
+            else if (metadata.Unwrap) unsupported = "@unwrap requires direct top-level execution and cannot use this wrapper.";
+            else if (world == "isolated" && metadata.Capabilities.Contains("unsafeWindow")) unsupported = "DOM isolation cannot expose the page's unsafeWindow; request raw/JavaScript access explicitly.";
+            else if (world == "isolated" && !_options.SupportsIsolatedWorlds) unsupported = "This host does not supply per-script isolated contexts.";
+            if (unsupported != null)
+            {
+                diagnostics.Add(new UserScriptDiagnostic("MSR215_EXECUTION_WORLD_UNAVAILABLE", DiagnosticSeverity.Error, unsupported,
+                    scriptKey: installation.ScriptKey, documentId: frame.DocumentId, frameId: frame.FrameId));
+                return false;
+            }
+            if (world != frame.ExecutionWorld) return false;
+            var rules = installation.PreparedRevision.UrlRules;
+            var context = _options.EnvironmentProvider?.Invoke(frame)?.IsIncognito;
+            if (!rules.AllowsEnvironment(context, out var reason))
+            {
+                diagnostics.Add(new UserScriptDiagnostic("MSR211_RUN_IN_UNAVAILABLE", DiagnosticSeverity.Warning, reason,
+                    scriptKey: installation.ScriptKey, documentId: frame.DocumentId, frameId: frame.FrameId));
+                return false;
+            }
+            try { return _matcher != null ? _matcher.IsMatch(installation.Definition.Metadata, frame.Url) : rules.IsMatch(frame.Url, contextMenu); }
+            catch (RegexMatchTimeoutException exception)
+            {
+                diagnostics.Add(new UserScriptDiagnostic("MSR214_URL_RULE_TIMEOUT", DiagnosticSeverity.Error,
+                    "A URL rule exceeded its time limit; execution was rejected.", exception, installation.ScriptKey, frame.DocumentId, frame.FrameId));
+                return false;
+            }
+        }
+
+        private ScriptInvocation CreateInvocation(UserScriptInstallation installation, string source, DocumentFrame frame)
+        {
+            var metadata = installation.Definition.Metadata;
+            var environment = _options.EnvironmentProvider?.Invoke(frame) ?? new UserScriptExecutionEnvironment();
+            var info = JsonSerializer.Serialize(BuildInfo(installation, environment, frame));
             return new ScriptInvocation(
                 Guid.NewGuid().ToString("D"),
                 installation.ScriptKey,
                 source,
                 metadata.DeclaredGrants,
-                metadata.Grants,
+                metadata.Capabilities,
                 metadata.GrantDeclarationState,
                 info,
                 CreateToken(),
-                CreateToken(),
-                new ScriptCompatibilityDescriptor(_options.Compatibility));
+                CreateToken());
         }
 
-        private static object BuildInfo(UserScriptInstallation installation)
+        private object BuildInfo(UserScriptInstallation installation, UserScriptExecutionEnvironment environment, DocumentFrame frame)
         {
             var metadata = installation.Definition.Metadata;
             var header = ExtractMetadataHeader(installation.Definition.Source);
@@ -547,7 +514,6 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
             {
                 ["antifeatures"] = antifeatures,
                 ["author"] = metadata.Author,
-                ["blockers"] = new string[0],
                 ["connects"] = metadata.Connects,
                 ["copyright"] = metadata.Copyright,
                 ["description_i18n"] = metadata.LocalizedDescriptions.Count == 0 ? null : metadata.LocalizedDescriptions,
@@ -566,7 +532,6 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                 ["name_i18n"] = metadata.LocalizedNames.Count == 0 ? null : metadata.LocalizedNames,
                 ["name"] = metadata.Name,
                 ["namespace"] = metadata.Namespace,
-                ["position"] = 0,
                 ["resources"] = resources,
                 ["supportURL"] = metadata.SupportUrl,
                 ["run-at"] = ToMetadataRunAt(metadata.RunAt),
@@ -578,39 +543,43 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                 {
                     ["sandbox"] = metadata.Sandbox,
                     ["noframes"] = metadata.NoFrames,
+                    ["run-in"] = metadata.RunIn.ToArray(),
                     ["unwrap"] = metadata.Unwrap,
                     ["run_at"] = ToMetadataRunAt(metadata.RunAt)
                 }
             };
-            return new Dictionary<string, object>
+            var result = new Dictionary<string, object>
             {
                 ["scriptKey"] = installation.ScriptKey.ToString(),
                 ["name"] = metadata.Name,
                 ["namespace"] = metadata.Namespace,
-                ["version"] = metadata.Version,
+                ["version"] = typeof(UserScriptEngine).Assembly.GetName().Version.ToString(3),
                 ["description"] = metadata.Description,
                 ["grants"] = metadata.DeclaredGrants,
                 ["grantDeclarationState"] = metadata.GrantDeclarationState.ToString(),
-                ["downloadMode"] = "disabled",
-                ["isIncognito"] = false,
-                ["sandboxMode"] = "raw",
+                ["downloadMode"] = environment.DownloadMode,
+                ["sandboxMode"] = frame.ExecutionWorld == "isolated" ? "DOM" : "raw",
                 ["scriptHandler"] = "MonkeySharp",
                 ["scriptMetaStr"] = header,
                 ["scriptUpdateURL"] = metadata.UpdateUrl,
-                ["scriptWillUpdate"] = false,
                 ["compatibility"] = new Dictionary<string, object>
                 {
-                    ["contractVersion"] = 1,
+                    ["contractVersion"] = 2,
                     ["handler"] = "MonkeySharp",
-                    ["executionWorld"] = "page",
-                    ["isolatedWorld"] = false,
+                    ["executionWorld"] = frame.ExecutionWorld,
+                    ["isolatedWorld"] = frame.ExecutionWorld == "isolated",
+                    ["capabilities"] = UserScriptGrantCatalog.KnownCanonicalGrants
+                        .Where(name => name.StartsWith("GM.", StringComparison.Ordinal))
+                        .Concat(environment.CapabilityStatus.Keys).Distinct(StringComparer.Ordinal)
+                        .ToDictionary(name => name, name => environment.CapabilityStatus.TryGetValue(name, out var status) ? status : frame.ExecutionWorld == "isolated" && name == "GM.webRequest" ? "isolated-frame-interception-unavailable" : _hostCapabilities.Contains(name) ? "available" :
+                            environment.UnavailableCapabilities.TryGetValue(name, out var reason) ? reason : "service-unavailable"),
                     ["fields"] = new Dictionary<string, object>
                     {
                         ["scriptHandler"] = "fixed",
-                        ["sandboxMode"] = "fixed",
-                        ["downloadMode"] = "fixed",
-                        ["isIncognito"] = "fixed",
-                        ["scriptWillUpdate"] = "fixed",
+                        ["sandboxMode"] = "execution",
+                        ["downloadMode"] = "host",
+                        ["isIncognito"] = "host-when-known",
+                        ["scriptWillUpdate"] = "host-when-known",
                         ["scriptUpdateURL"] = "metadata",
                         ["script"] = "mixed",
                         ["scriptKey"] = "extension",
@@ -619,6 +588,9 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                 },
                 ["script"] = script
             };
+            if (environment.IsIncognito.HasValue) result["isIncognito"] = environment.IsIncognito.Value;
+            if (environment.ScriptWillUpdate.HasValue) result["scriptWillUpdate"] = environment.ScriptWillUpdate.Value;
+            return result;
         }
 
         private static string ToMetadataRunAt(UserScriptRunAt runAt)
@@ -679,6 +651,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                 case DocumentLifecycleKind.DocumentStart: return UserScriptRunAt.DocumentStart;
                 case DocumentLifecycleKind.BodyAvailable: return UserScriptRunAt.DocumentBody;
                 case DocumentLifecycleKind.DomContentLoaded: return UserScriptRunAt.DocumentEnd;
+                case DocumentLifecycleKind.DocumentIdle:
                 case DocumentLifecycleKind.Load: return UserScriptRunAt.DocumentIdle;
                 default: throw new ArgumentOutOfRangeException(nameof(kind), kind, "The lifecycle event does not run scripts.");
             }

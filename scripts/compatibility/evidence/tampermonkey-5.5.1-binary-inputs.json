@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "caseId": "binary-inputs",
+  "immediateReturn": {
+    "abort": "function"
+  },
+  "events": [
+    {
+      "name": "load"
+    }
+  ],
+  "promise": {},
+  "effects": {
+    "callbackThis": true,
+    "contextIdentity": false,
+    "blobText": "blob text 你好",
+    "urlBytes": [
+      0,
+      255,
+      1
+    ],
+    "fileText": "file text",
+    "tabsBefore": 4,
+    "tabsAfter": 4
+  },
+  "fixtureHash": "5d180aa2d2302f563079234c6423cfa5a3a81404caab4a7352f7e6811a85b4b8",
+  "contractSource": [
+    "https://www.tampermonkey.net/documentation.php?locale=en",
+    "Tampermonkey 5.5.1/MV3 runtime"
+  ],
+  "environment": {
+    "manager": "Tampermonkey",
+    "managerVersion": "5.5.1",
+    "chromiumVersion": "Edg/156.0.4314.58",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36 Edg/156.0.0.0",
+    "manifestVersion": 3,
+    "settings": {
+      "headless": true,
+      "userScriptsAccess": true,
+      "freshProfile": true
+    },
+    "commit": "f71e6dd36add45f2ff4c6cf2286d2140233886ca",
+    "platform": "x64",
+    "capabilities": {
+      "referenceReturnProbe": true
+    },
+    "world": "manager-selected"
+  },
+  "checks": {
+    "blobText": true,
+    "fileText": true,
+    "urlBytes": true,
+    "callbackReceiver": true,
+    "abortHandle": true
+  },
+  "status": "passed"
+}

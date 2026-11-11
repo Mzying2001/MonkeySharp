@@ -146,100 +146,13 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Fact]
-        public async Task DependencyResolutionFailureSkipsInvocationAndProducesDiagnostic()
-        {
-            var repository = new InMemoryUserScriptRepository();
-            var source = MetadataAndMatchingTests.Script(
-                "// @name dependencies\n// @match https://example.com/*\n// @grant none\n" +
-                "// @require https://cdn.example/dependency.js\n// @run-at document-end");
-            await repository.InstallAsync(source, "test", true, CancellationToken.None);
-            using (var engine = new UserScriptEngine(repository, sourceResolver: new FailingSourceResolver()))
-            {
-                var diagnostics = new List<UserScriptDiagnostic>();
-                engine.Diagnostic += (_, item) => diagnostics.Add(item);
-
-                var plan = await engine.ProcessLifecycleAsync(
-                    new DocumentLifecycleEventArgs(DocumentLifecycleKind.DomContentLoaded, Frame("doc", true)),
-                    CancellationToken.None);
-
-                Assert.Empty(plan.Invocations);
-                Assert.Contains(diagnostics, item =>
-                    item.Code == "MSR400_DEPENDENCY_RESOLUTION_FAILED" && item.Exception is InvalidOperationException);
-            }
-        }
-
-        [Fact]
-        public async Task CanceledSourceResolutionCanBeRetriedForTheSameDocument()
-        {
-            var repository = new InMemoryUserScriptRepository();
-            await repository.InstallAsync(Script("document-end"), "test", true, CancellationToken.None);
-            var resolver = new CancelingOnceSourceResolver();
-            using (var engine = new UserScriptEngine(repository, sourceResolver: resolver))
-            using (var cancellation = new CancellationTokenSource())
-            {
-                resolver.Cancellation = cancellation;
-                var lifecycle = new DocumentLifecycleEventArgs(
-                    DocumentLifecycleKind.DomContentLoaded, Frame("retry-canceled", true));
-
-                await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-                    engine.ProcessLifecycleAsync(lifecycle, cancellation.Token));
-                var retry = await engine.ProcessLifecycleAsync(lifecycle, CancellationToken.None);
-                var duplicate = await engine.ProcessLifecycleAsync(lifecycle, CancellationToken.None);
-
-                Assert.Single(retry.Invocations);
-                Assert.Empty(duplicate.Invocations);
-            }
-        }
-
-        [Fact]
-        public async Task FailedSourceResolutionCanBeRetriedForTheSameDocument()
-        {
-            var repository = new InMemoryUserScriptRepository();
-            await repository.InstallAsync(Script("document-end"), "test", true, CancellationToken.None);
-            using (var engine = new UserScriptEngine(
-                repository,
-                sourceResolver: new FailingOnceSourceResolver()))
-            {
-                var lifecycle = new DocumentLifecycleEventArgs(
-                    DocumentLifecycleKind.DomContentLoaded, Frame("retry-failed", true));
-
-                var failed = await engine.ProcessLifecycleAsync(lifecycle, CancellationToken.None);
-                var retry = await engine.ProcessLifecycleAsync(lifecycle, CancellationToken.None);
-                var duplicate = await engine.ProcessLifecycleAsync(lifecycle, CancellationToken.None);
-
-                Assert.Empty(failed.Invocations);
-                Assert.Single(retry.Invocations);
-                Assert.Empty(duplicate.Invocations);
-            }
-        }
-
-        [Fact]
-        public async Task MissingDependencyProviderSkipsLegacyInvocation()
-        {
-            var repository = new InMemoryUserScriptRepository();
-            await repository.InstallAsync(CompatibilityFixtures.MissingDependencyProvider, "test", true, CancellationToken.None);
-            using (var engine = new UserScriptEngine(repository))
-            {
-                var diagnostics = new List<UserScriptDiagnostic>();
-                engine.Diagnostic += (_, item) => diagnostics.Add(item);
-
-                var plan = await engine.ProcessLifecycleAsync(
-                    new DocumentLifecycleEventArgs(DocumentLifecycleKind.Load, Frame("missing", true)),
-                    CancellationToken.None);
-
-                Assert.Empty(plan.Invocations);
-                Assert.Contains(diagnostics, item => item.Code == "MSR401_DEPENDENCY_PROVIDER_UNAVAILABLE");
-            }
-        }
-
-        [Fact]
-        public async Task UnsupportedWorldMetadataProducesWarningsButDoesNotChangePageExecution()
+        public async Task UnavailableWorldDoesNotFallBackToPageExecution()
         {
             var repository = new InMemoryUserScriptRepository();
             await repository.InstallAsync(
                 MetadataAndMatchingTests.Script(
                     "// @name worlds\n// @match https://example.com/*\n// @grant none\n" +
-                    "// @inject-into content\n// @run-in content\n// @run-at document-end"),
+                    "// @inject-into content\n// @run-at document-end"),
                 "test", true, CancellationToken.None);
             using (var engine = new UserScriptEngine(repository))
             {
@@ -249,16 +162,15 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                     new DocumentLifecycleEventArgs(DocumentLifecycleKind.DomContentLoaded, Frame("worlds", true)),
                     CancellationToken.None);
 
-                Assert.Single(plan.Invocations);
-                Assert.Contains(diagnostics, item => item.Code == "MSR210_UNSUPPORTED_INJECT_WORLD");
-                Assert.Contains(diagnostics, item => item.Code == "MSR211_UNSUPPORTED_RUN_IN");
+                Assert.Empty(plan.Invocations);
+                Assert.Contains(diagnostics, item => item.Code == "MSR215_EXECUTION_WORLD_UNAVAILABLE" && item.Severity == DiagnosticSeverity.Error);
             }
         }
 
         [Fact]
         public async Task InvocationContainsTampermonkeyInfoSnapshot()
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = new InMemoryUserScriptRepository(preparer: new UserScriptPreparer(resources: new PreparedScriptRevisionTests.Content()));
             await repository.InstallAsync(
                 MetadataAndMatchingTests.Script(
                     "// @name info\n// @namespace tests\n// @version 1.2.3\n" +
@@ -276,12 +188,14 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                     var root = document.RootElement;
                     Assert.Equal("MonkeySharp", root.GetProperty("scriptHandler").GetString());
                     Assert.Equal("disabled", root.GetProperty("downloadMode").GetString());
+                    Assert.False(root.TryGetProperty("isIncognito", out _));
+                    Assert.False(root.TryGetProperty("scriptWillUpdate", out _));
                     Assert.Equal("info", root.GetProperty("script").GetProperty("name").GetString());
                     Assert.Equal("document-end", root.GetProperty("script").GetProperty("run-at").GetString());
                     Assert.Equal("icon", root.GetProperty("script").GetProperty("resources")[0].GetProperty("name").GetString());
                     Assert.Equal("raw", root.GetProperty("sandboxMode").GetString());
                     var compatibility = root.GetProperty("compatibility");
-                    Assert.Equal(1, compatibility.GetProperty("contractVersion").GetInt32());
+                    Assert.Equal(2, compatibility.GetProperty("contractVersion").GetInt32());
                     Assert.Equal("page", compatibility.GetProperty("executionWorld").GetString());
                     Assert.False(compatibility.GetProperty("isolatedWorld").GetBoolean());
                     Assert.Equal("metadata", compatibility.GetProperty("fields").GetProperty("scriptUpdateURL").GetString());
@@ -292,7 +206,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Fact]
-        public async Task SandboxAndUnwrapDeclarationsProduceExplicitWarnings()
+        public async Task UnsupportedUnwrapRejectsExecutionInsteadOfKeepingAWrapper()
         {
             var repository = new InMemoryUserScriptRepository();
             await repository.InstallAsync(
@@ -308,9 +222,8 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                     new DocumentLifecycleEventArgs(DocumentLifecycleKind.DomContentLoaded, Frame("isolation", true)),
                     CancellationToken.None);
 
-                Assert.Single(plan.Invocations);
-                Assert.Contains(diagnostics, item => item.Code == "MSR212_UNSUPPORTED_SANDBOX");
-                Assert.Contains(diagnostics, item => item.Code == "MSR213_UNSUPPORTED_UNWRAP");
+                Assert.Empty(plan.Invocations);
+                Assert.Contains(diagnostics, item => item.Code == "MSR215_EXECUTION_WORLD_UNAVAILABLE" && item.Severity == DiagnosticSeverity.Error);
             }
         }
 
@@ -331,16 +244,8 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 MetadataAndMatchingTests.Script(
                     "// @name info policy\n// @match https://example.com/*\n" + grantLines +
                     "// @run-at document-end"), "test", true, CancellationToken.None);
-            foreach (var profile in new[]
             {
-                UserScriptCompatibilityProfile.LegacyCompatible,
-                UserScriptCompatibilityProfile.ModernStrict
-            })
-            {
-                using (var engine = new UserScriptEngine(repository, options: new UserScriptEngineOptions
-                {
-                    Compatibility = new UserScriptCompatibilityOptions { Profile = profile }
-                }))
+                using (var engine = new UserScriptEngine(repository))
                 {
                     var diagnostics = new List<UserScriptDiagnostic>();
                     engine.Diagnostic += (_, item) => diagnostics.Add(item);
@@ -356,10 +261,41 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                     {
                         var invocation = Assert.Single(plan.Invocations);
                         Assert.Equal(installation.Definition.Metadata.DeclaredGrants, invocation.DeclaredGrants);
-                        Assert.Equal(installation.Definition.Metadata.Grants, invocation.Grants);
+                        Assert.Equal(installation.Definition.Metadata.Capabilities, invocation.Grants);
                         Assert.Equal(installation.Definition.Metadata.GrantDeclarationState, invocation.GrantDeclarationState);
                         Assert.DoesNotContain(diagnostics, item => item.Code == "MSR201_BRIDGE_INTEGRITY_REQUIRED");
                     }
+                }
+            }
+        }
+
+        [Theory]
+        [InlineData("native", false, false)]
+        [InlineData("browser", true, true)]
+        public async Task InfoUsesTheManagerVersionAndActualHostEnvironment(string mode, bool privateContext, bool updates)
+        {
+            var repository = new InMemoryUserScriptRepository();
+            await repository.InstallAsync(MetadataAndMatchingTests.Script(
+                "// @name environment\n// @version 1.2.3\n// @match https://example.com/*\n// @run-at document-end"), "test", true, CancellationToken.None);
+            using (var engine = new UserScriptEngine(repository, options: new UserScriptEngineOptions
+            {
+                EnvironmentProvider = frame => new UserScriptExecutionEnvironment(mode, privateContext, updates,
+                    capabilityStatus: new Dictionary<string, string> { ["execution.documentStart"] = "best-effort", ["GM.xmlHttpRequest.cookie"] = "unsupported:cef-urlrequest" })
+            }))
+            {
+                var plan = await engine.ProcessLifecycleAsync(new DocumentLifecycleEventArgs(DocumentLifecycleKind.DomContentLoaded, Frame("environment", true)), CancellationToken.None);
+                using (var info = JsonDocument.Parse(Assert.Single(plan.Invocations).SerializedInfo))
+                {
+                    Assert.Equal(typeof(UserScriptEngine).Assembly.GetName().Version.ToString(3), info.RootElement.GetProperty("version").GetString());
+                    Assert.Equal("1.2.3", info.RootElement.GetProperty("script").GetProperty("version").GetString());
+                    Assert.Equal(mode, info.RootElement.GetProperty("downloadMode").GetString());
+                    Assert.Equal(privateContext, info.RootElement.GetProperty("isIncognito").GetBoolean());
+                    Assert.Equal(updates, info.RootElement.GetProperty("scriptWillUpdate").GetBoolean());
+                    var capabilities = info.RootElement.GetProperty("compatibility").GetProperty("capabilities");
+                    Assert.Equal("best-effort", capabilities.GetProperty("execution.documentStart").GetString());
+                    Assert.Equal("unsupported:cef-urlrequest", capabilities.GetProperty("GM.xmlHttpRequest.cookie").GetString());
+                    Assert.False(info.RootElement.GetProperty("script").TryGetProperty("position", out _));
+                    Assert.False(info.RootElement.GetProperty("script").TryGetProperty("blockers", out _));
                 }
             }
         }
@@ -388,47 +324,5 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 BridgeIntegrityGuarantee.Unverified);
         }
 
-        private sealed class FailingSourceResolver : IUserScriptSourceResolver
-        {
-            public Task<string> ResolveSourceAsync(
-                UserScriptInstallation installation,
-                CancellationToken cancellationToken)
-            {
-                throw new InvalidOperationException("Dependency fixture failure.");
-            }
-        }
-
-        private sealed class CancelingOnceSourceResolver : IUserScriptSourceResolver
-        {
-            private int _calls;
-
-            public CancellationTokenSource Cancellation { get; set; }
-
-            public Task<string> ResolveSourceAsync(
-                UserScriptInstallation installation,
-                CancellationToken cancellationToken)
-            {
-                if (Interlocked.Increment(ref _calls) == 1)
-                {
-                    Cancellation.Cancel();
-                    cancellationToken.ThrowIfCancellationRequested();
-                }
-                return Task.FromResult(installation.Definition.Source);
-            }
-        }
-
-        private sealed class FailingOnceSourceResolver : IUserScriptSourceResolver
-        {
-            private int _calls;
-
-            public Task<string> ResolveSourceAsync(
-                UserScriptInstallation installation,
-                CancellationToken cancellationToken)
-            {
-                if (Interlocked.Increment(ref _calls) == 1)
-                    throw new InvalidOperationException("Transient source resolution failure.");
-                return Task.FromResult(installation.Definition.Source);
-            }
-        }
     }
 }

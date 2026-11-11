@@ -22,6 +22,37 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
 {
     public sealed class HostServiceTests
     {
+        [Fact]
+        public Task PermissionWindowUsesExplicitChoicesAndClosesOnCancellation() => OnDispatcher(async () =>
+        {
+            var repository = new Mzying2001.MonkeySharp.Core.Repository.InMemoryUserScriptRepository();
+            var script = await repository.InstallAsync(PersistenceTests.Source, "test", true, CancellationToken.None);
+            var frame = new Mzying2001.MonkeySharp.Core.Runtime.DocumentFrame("browser", "document", "main", new Uri("https://example.com/"), true,
+                Mzying2001.MonkeySharp.Core.Runtime.TimingGuarantee.BestEffortDocumentStart);
+            var request = new Mzying2001.MonkeySharp.Core.Permissions.ApiAuthorizationRequest(script, frame, "GM.download", "https://example.com/file", "summary", new[] { "GM.download" });
+            var scope = Mzying2001.MonkeySharp.Core.Permissions.UserScriptPermissionScope.From(request);
+            var prompt = new WpfPermissionPrompt(Dispatcher.CurrentDispatcher);
+            prompt.Opened += dialog =>
+            {
+                var panel = (StackPanel)dialog.Content;
+                var buttons = panel.Children.OfType<WrapPanel>().Single().Children.OfType<Button>().ToArray();
+                Assert.Equal(3, buttons.Length);
+                buttons.Single(button => (string)button.Content == "允许一次").RaiseEvent(new System.Windows.RoutedEventArgs(Button.ClickEvent));
+            };
+            var choice = await prompt.PromptAsync(request, scope, CancellationToken.None);
+            Assert.Equal(Mzying2001.MonkeySharp.Core.Permissions.PermissionDecision.Allow, choice.Decision);
+            Assert.False(choice.Remember);
+            using (var canceled = new CancellationTokenSource())
+            {
+                var second = new WpfPermissionPrompt(Dispatcher.CurrentDispatcher);
+                System.Windows.Window opened = null;
+                second.Opened += dialog => { opened = dialog; canceled.Cancel(); };
+                await Assert.ThrowsAnyAsync<OperationCanceledException>(() => second.PromptAsync(request, scope, canceled.Token));
+                await Dispatcher.CurrentDispatcher.InvokeAsync(() => { });
+                Assert.False(opened.IsVisible);
+            }
+        });
+
         [Theory]
         [InlineData(0, 1)]
         [InlineData(1, 0)]
@@ -106,13 +137,41 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
         });
 
         [Fact]
+        public Task NumericTabInsertionAndWindowActionsRespectActualTabLifetime() => OnDispatcher(async () =>
+        {
+            using (var fixture = await PersistenceTests.Fixture.Create())
+            {
+                var main = new MainWindowViewModel(new DiagnosticsViewModel(Dispatcher.CurrentDispatcher, fixture.Paths.LogsDirectory));
+                var origin = main.NewTab("https://origin.example/");
+                var window = new WpfWindowService(main, origin, Dispatcher.CurrentDispatcher);
+                Assert.False(await window.CloseAsync(null, CancellationToken.None));
+                Assert.Same(origin, Assert.Single(main.Tabs));
+                var service = new WpfTabService(main, origin, Dispatcher.CurrentDispatcher);
+                using (var handle = await service.OpenAsync(new OpenTabRequest(new Uri("about:blank"), true, false, true, 0), CancellationToken.None))
+                {
+                    Assert.Equal(handle.TabId, main.Tabs[0].TabId);
+                    Assert.NotSame(origin, main.SelectedTab);
+                    Assert.True(await window.FocusAsync(null, CancellationToken.None));
+                    Assert.Same(origin, main.SelectedTab);
+                    Assert.True(await window.CloseAsync(null, CancellationToken.None));
+                    Assert.False(await window.FocusAsync(null, CancellationToken.None));
+                    Assert.True(origin.IsClosed);
+                    var closures = 0; handle.OnClose += (_, __) => closures++;
+                    await handle.CloseAsync(CancellationToken.None); await handle.CloseAsync(CancellationToken.None);
+                    Assert.Equal(1, closures);
+                }
+                main.CloseAll();
+            }
+        });
+
+        [Fact]
         public Task MenuRegistrationHasUserVisibleCommandAndDeterministicRemoval() => OnDispatcher(async () =>
         {
             var tab = new BrowserTabViewModel("about:blank");
             var menu = new WpfMenuService(tab, Dispatcher.CurrentDispatcher);
             var invoked = 0;
             var key = ScriptKey.Parse(Guid.NewGuid().ToString());
-            var registration = await menu.RegisterAsync(new MenuCommandRequest(key, "Test command", "t"), () => invoked++, CancellationToken.None);
+            var registration = await menu.RegisterAsync(new MenuCommandRequest(key, "Test command", "t"), _ => invoked++, CancellationToken.None);
             Assert.Contains("Test command", Assert.Single(tab.MenuCommands).Label);
             tab.MenuCommands[0].InvokeCommand.Execute(null);
             Assert.Equal(1, invoked);
@@ -132,6 +191,30 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
             => Assert.Equal(expected, DownloadService.SafeFileName(supplied));
 
         [Fact]
+        public async Task PreparedRevisionsSurviveOfflineRepositoryReload()
+        {
+            using (var fixture = await PersistenceTests.Fixture.Create())
+            using (var server = new LocalHttpFixture())
+            using (var content = new HttpContentService(fixture.Paths))
+            {
+                var repository = new Mzying2001.MonkeySharp.Core.Repository.PersistentUserScriptRepository(fixture.Persistence,
+                    preparer: new Mzying2001.MonkeySharp.Core.Repository.UserScriptPreparer(content, content));
+                await repository.InitializeAsync(CancellationToken.None);
+                var source = PersistenceTests.Source.Replace("// @grant none", "// @grant none\n// @require " + server.BaseUrl +
+                    "/dependency.js\n// @resource text " + server.BaseUrl + "/redirect");
+                var script = await repository.InstallAsync(source, "origin", true, CancellationToken.None);
+                server.Dispose();
+                var restored = new Mzying2001.MonkeySharp.Core.Repository.PersistentUserScriptRepository(fixture.Persistence);
+                await restored.InitializeAsync(CancellationToken.None);
+                var loaded = await restored.GetAsync(script.ScriptKey, CancellationToken.None);
+                Assert.True(loaded.IsEnabled);
+                Assert.Equal(script.PreparedRevision.Source, loaded.PreparedRevision.Source);
+                Assert.Equal("demo-resource", loaded.PreparedRevision.Resources["text"].DecodeText());
+                Assert.Equal(script.PreparedRevision.Resources["text"].Bytes, loaded.PreparedRevision.Resources["text"].Bytes);
+            }
+        }
+
+        [Fact]
         public async Task DependenciesAreCachedAndContentHasRedirectAndSizeLimits()
         {
             using (var fixture = await PersistenceTests.Fixture.Create())
@@ -139,7 +222,9 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
             using (var content = new HttpContentService(fixture.Paths))
             {
                 var source = PersistenceTests.Source.Replace("// @grant none", "// @grant none\n// @require " + server.BaseUrl + "/dependency.js");
-                var script = await fixture.Repository.InstallAsync(source, "origin", true, CancellationToken.None);
+                var repository = new Mzying2001.MonkeySharp.Core.Repository.InMemoryUserScriptRepository(
+                    preparer: new Mzying2001.MonkeySharp.Core.Repository.UserScriptPreparer(content, content));
+                var script = await repository.InstallAsync(source, "origin", true, CancellationToken.None);
                 Assert.Equal("demo-resource", (await content.FetchAsync(server.BaseUrl + "/redirect", CancellationToken.None)).Text);
                 await Assert.ThrowsAsync<ArgumentException>(() => content.FetchAsync(server.BaseUrl + "/bad-redirect", CancellationToken.None));
                 await Assert.ThrowsAsync<IOException>(() => content.FetchAsync(server.BaseUrl + "/oversize", CancellationToken.None));
@@ -163,7 +248,9 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
                     digest = Convert.ToBase64String(sha.ComputeHash(expectedBytes));
                 var source = PersistenceTests.Source.Replace("// @grant none", "// @grant none\n// @require " +
                     server.BaseUrl + "/dependency.js#sha256=" + digest);
-                var script = await fixture.Repository.InstallAsync(source, "origin", true, CancellationToken.None);
+                var repository = new Mzying2001.MonkeySharp.Core.Repository.InMemoryUserScriptRepository(
+                    preparer: new Mzying2001.MonkeySharp.Core.Repository.UserScriptPreparer(content, content));
+                var script = await repository.InstallAsync(source, "origin", true, CancellationToken.None);
                 var dependency = script.Definition.Metadata.Requires.Single();
                 var first = await content.GetScriptAsync(script, dependency, CancellationToken.None);
                 Assert.Equal(Encoding.UTF8.GetString(expectedBytes), first.Text);
@@ -190,9 +277,10 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
             {
                 var main = new MainWindowViewModel(new DiagnosticsViewModel(Dispatcher.CurrentDispatcher, fixture.Paths.LogsDirectory));
                 var key = ScriptKey.Parse(Guid.NewGuid().ToString());
-                using (var service = new DownloadService(fixture.Paths.DownloadsDirectory, Dispatcher.CurrentDispatcher, main))
+                var network = new DownloadTestHttp();
+                using (var service = new DownloadService(fixture.Paths.DownloadsDirectory, Dispatcher.CurrentDispatcher, main, network))
                 {
-                    var operation = await service.DownloadAsync(new DownloadRequest(
+                    var operation = await service.CreateAsync(new DownloadRequest(
                         key,
                         new Uri(server.BaseUrl + "/download"),
                         "../result.txt",
@@ -203,19 +291,22 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
                     var completed = 0;
                     operation.Progress += (sender, args) => progress++;
                     operation.Completed += (sender, args) => completed++;
+                    Assert.Equal(0, network.Requests);
+                    operation.Start();
                     await operation.Completion;
                     Assert.True(progress > 0); Assert.Equal(1, completed);
                     var replayed = 0;
                     operation.Completed += (sender, args) => replayed++;
-                    Assert.Equal(1, replayed);
+                    Assert.Equal(0, replayed);
                     Assert.Equal(256 * 1024, new FileInfo(Path.Combine(fixture.Paths.DownloadsDirectory, "result.txt")).Length);
-                    var second = await service.DownloadAsync(new DownloadRequest(key, new Uri(server.BaseUrl + "/slow"), "cancel.txt", false), CancellationToken.None);
+                    var second = await service.CreateAsync(new DownloadRequest(key, new Uri(server.BaseUrl + "/slow"), "cancel.txt", false), CancellationToken.None);
                     second.Abort();
+                    second.Start();
                     await Assert.ThrowsAnyAsync<OperationCanceledException>(() => second.Completion);
                     await service.DrainAsync();
                     Assert.False(File.Exists(Path.Combine(fixture.Paths.DownloadsDirectory, "cancel.txt")));
                     Assert.Empty(Directory.GetFiles(fixture.Paths.DownloadsDirectory, "*.part"));
-                    var timedOut = await service.DownloadAsync(new DownloadRequest(
+                    var timedOut = await service.CreateAsync(new DownloadRequest(
                         key,
                         new Uri(server.BaseUrl + "/slow"),
                         "timeout.txt",
@@ -225,11 +316,59 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
                         TimeSpan.FromMilliseconds(20)), CancellationToken.None);
                     var timeoutCallbacks = 0;
                     timedOut.TimedOut += (sender, args) => timeoutCallbacks++;
-                    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => timedOut.Completion);
+                    timedOut.Start();
+                    await Assert.ThrowsAsync<TimeoutException>(() => timedOut.Completion);
                     Assert.Equal(1, timeoutCallbacks);
                 }
             }
         });
+
+        [Fact]
+        public Task PrivateDownloadsKeepSavedFilesAndClearTransientHistory() => OnDispatcher(async () =>
+        {
+            using (var fixture = await PersistenceTests.Fixture.Create())
+            {
+                var main = new MainWindowViewModel(new DiagnosticsViewModel(Dispatcher.CurrentDispatcher, fixture.Paths.LogsDirectory));
+                var service = new DownloadService(fixture.Paths.DownloadsDirectory, Dispatcher.CurrentDispatcher, main, new DownloadTestHttp(), isPrivate: true);
+                var operation = await service.CreateAsync(new DownloadRequest(ScriptKey.Parse(Guid.NewGuid().ToString()),
+                    new Uri("https://example.com/private"), "explicit-private-save.bin", false), CancellationToken.None);
+                operation.Start();
+                await operation.Completion;
+                await Dispatcher.CurrentDispatcher.InvokeAsync(() => { });
+                Assert.Single(main.Downloads);
+                service.Dispose();
+                await service.DrainAsync();
+                await Dispatcher.CurrentDispatcher.InvokeAsync(() => { });
+                Assert.Empty(main.Downloads);
+                Assert.True(File.Exists(Path.Combine(fixture.Paths.DownloadsDirectory, "explicit-private-save.bin")));
+            }
+        });
+
+        private sealed class DownloadTestHttp : IHttpRequestService
+        {
+            public int Requests;
+            public IHttpRequestOperation SendAsync(UserScriptHttpRequest request, IUserScriptHttpObserver observer, CancellationToken cancellationToken)
+            {
+                Interlocked.Increment(ref Requests);
+                var completion = Task.Run(async () =>
+                {
+                    if (request.Url.AbsolutePath == "/slow") await Task.Delay(500, cancellationToken);
+                    cancellationToken.ThrowIfCancellationRequested();
+                    var response = new UserScriptHttpResponse(200, "OK", request.Url, new Dictionary<string, string>(), "", "application/octet-stream", null);
+                    observer.OnResponseStarted(response);
+                    var bytes = new byte[64 * 1024];
+                    for (var index = 0; index < 4; index++) observer.OnResponseData(bytes, 0, bytes.Length);
+                    return response;
+                }, cancellationToken);
+                return new DownloadTestOperation(completion);
+            }
+            private sealed class DownloadTestOperation : IHttpRequestOperation
+            {
+                public DownloadTestOperation(Task<UserScriptHttpResponse> completion) { Completion = completion; }
+                public Task<UserScriptHttpResponse> Completion { get; }
+                public void Abort() { }
+            }
+        }
 
         private static Task OnDispatcher(Func<Task> action)
         {

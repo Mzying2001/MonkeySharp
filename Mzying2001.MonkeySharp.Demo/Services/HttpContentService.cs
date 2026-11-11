@@ -50,7 +50,7 @@ namespace Mzying2001.MonkeySharp.Demo.Services
                     var charset = response.Content.Headers.ContentType?.CharSet?.Trim('"');
                     var encoding = string.IsNullOrWhiteSpace(charset) ? Encoding.UTF8 : Encoding.GetEncoding(charset);
                     return new ResourceContent(bytes, response.Content.Headers.ContentType?.MediaType,
-                        encoding.GetString(bytes).TrimStart('\uFEFF'));
+                        encoding.GetString(bytes).TrimStart('\uFEFF'), charset);
                 }
             }
         }
@@ -70,7 +70,7 @@ namespace Mzying2001.MonkeySharp.Demo.Services
             CancellationToken cancellationToken)
         {
             RequireHttp(url);
-            var cacheKey = installation.ScriptKey + ":" + installation.UpdatedAt.ToString("O") + ":" + url;
+            var cacheKey = installation.ScriptKey + ":" + installation.RevisionId.ToString("N") + ":" + url;
             var path = Path.Combine(_directory, SqliteUserScriptRepositoryPersistence.Hash(Encoding.UTF8.GetBytes(cacheKey)) + ".json");
             await _cacheGate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
@@ -83,7 +83,7 @@ namespace Mzying2001.MonkeySharp.Demo.Services
                         {
                             var root = document.RootElement;
                             var cached = new ResourceContent(Convert.FromBase64String(root.GetProperty("bytes").GetString()),
-                                root.GetProperty("mime").GetString(), root.GetProperty("text").GetString());
+                                root.GetProperty("mime").GetString(), root.GetProperty("text").GetString(), root.TryGetProperty("charset", out var charset) ? charset.GetString() : null);
                             ResourceIntegrityVerifier.Verify(cached.Bytes, integrity, url);
                             return cached;
                         }
@@ -99,7 +99,7 @@ namespace Mzying2001.MonkeySharp.Demo.Services
                 try
                 {
                     File.WriteAllText(temporary, JsonSerializer.Serialize(new
-                    { bytes = Convert.ToBase64String(content.Bytes), mime = content.MediaType, text = content.Text }), new UTF8Encoding(false));
+                    { bytes = Convert.ToBase64String(content.Bytes), mime = content.MediaType, text = content.Text, charset = content.Charset }), new UTF8Encoding(false));
                     File.Move(temporary, path);
                 }
                 finally { if (File.Exists(temporary)) File.Delete(temporary); }

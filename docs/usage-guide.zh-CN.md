@@ -2,15 +2,15 @@
 
 [English](usage-guide.md) | **简体中文**
 
-本文面向脚本作者，描述当前 MonkeySharp 3 源码中的 JavaScript 用户脚本功能，包括如何编写脚本、全部内置脚本 API，以及与 Tampermonkey 的行为差异。宿主应用可以调整服务、权限、限制和兼容模式。.NET 接入请参阅[集成参考](integration-reference.zh-CN.md)，安装和界面操作请参阅 [Demo 指南](../Mzying2001.MonkeySharp.Demo/README.md)。
+本文面向脚本作者，描述当前 MonkeySharp 3 源码中的 JavaScript 用户脚本功能，包括如何编写脚本、全部内置脚本 API，以及与 Tampermonkey 的行为差异。宿主应用可以调整服务、权限和限制。.NET 接入请参阅[集成参考](integration-reference.zh-CN.md)，安装和界面操作请参阅 [Demo 指南](../Mzying2001.MonkeySharp.Demo/README.md)。
 
-与 Tampermonkey 的比较于 **2026-11-01** 对照其[官方文档](https://www.tampermonkey.net/documentation.php)核对。比较的是公开行为约定，并不表示已对所有 Tampermonkey 和浏览器版本进行差分测试。
+比较分别依据[官方契约](compatibility/api-contract.md)、[固定稳定版观察](compatibility/api-contract.md#pinned-reference-observations)及 MonkeySharp 主动保证，不表示已对所有管理器/浏览器版本完成差分。
 
 ## 目录
 
 - [编写并安装脚本](#write-and-install-a-script)
 - [元数据](#metadata)
-- [执行、授权与兼容模式](#execution-grants-and-compatibility)
+- [执行、授权与兼容性](#execution-grants-and-compatibility)
 - [API 索引](#api-index)
 - [信息与日志](#information-and-logging)
 - [存储与值变更监听](#values-and-change-listeners)
@@ -21,6 +21,8 @@
 - [标签页及标签页状态](#tabs-and-tab-state)
 - [下载](#downloads)
 - [Cookie](#cookies)
+- [私密浏览](#private-browsing)
+- [标签音频](#tab-audio)
 - [请求拦截](#request-interception)
 - [window 扩展](#window-extensions)
 - [Tampermonkey 兼容性检查表](#tampermonkey-compatibility-checklist)
@@ -95,7 +97,9 @@
 
 ## 元数据
 
-元数据头以 `// ==UserScript==` 开始，以 `// ==/UserScript==` 结束。为便于迁移，请放在文件开头。默认解析器允许在前 128 行、64 Ki 个 UTF-16 字符内查找元数据头；`ModernStrict` 要求第一个非空行就是元数据头。元数据错误会阻止安装，警告则保留给宿主查看。已知单值字段使用第一次出现的值，重复声明产生警告；集合字段使用多行重复声明。未知字段会保留，但不会因此获得运行时效果。
+依赖和资源在安装、编辑或更新时获取并校验，准备失败不会发布新版本。后续框架及离线导航复用已准备内容；详见[依赖、资源与更新](#依赖资源与更新)。
+
+元数据头以 `// ==UserScript==` 开始，以 `// ==/UserScript==` 结束。为便于迁移，请放在文件开头。默认解析器允许在前 128 行、64 Ki 个 UTF-16 字符内查找元数据头；元数据错误会阻止安装，警告则保留给宿主查看。已知单值字段使用第一次出现的值，重复声明产生警告；集合字段使用多行重复声明。未知字段会保留，但不会因此获得运行时效果。
 
 | 字段 | 格式与行为 |
 | --- | --- |
@@ -103,77 +107,81 @@
 | `@description`、`@author`、`@license`、`@copyright` | 描述性字符串。`@name:locale` 和 `@description:locale` 保留本地化版本。 |
 | `@icon`、`@iconURL`、`@icon64`、`@icon64URL` | 图标 URL；带 URL 后缀的字段优先于对应短名称，Demo 优先显示 64 像素图标。 |
 | `@match pattern` | 可重复的 WebExtension 风格正向匹配规则。至少需要一个匹配的 `@match` 或 `@include` 才能执行。 |
-| `@include pattern` | 可重复的 URL 通配符或斜杠包围的 .NET 正则表达式，例如 `/^https:\/\/example\.com\//`。正则执行时间限制为 100 毫秒。 |
+| `@include pattern` | 可重复的忽略大小写 URL glob 或受限 ECMAScript `/expression/`；scheme/host 通配符有边界，? 是普通字符。求值限时 100 ms。 |
 | `@exclude`、`@exclude-match` | 分别使用通配符/正则和 match 模式进行排除。任何排除规则都优先于正向规则。非法 match 模式和正则是元数据错误。 |
 | `@run-at value` | `document-start`、`document-body`、`document-end`、`document-idle`（默认）或 `context-menu`，见后文执行说明。 |
 | `@noframes` | 只要存在就禁止子框架执行，无需值；否则每个匹配的框架都可能执行。 |
 | `@grant name` | 除默认可用的 info 属性外，为每项能力分别声明。规范名称及已知旧版别名区分大小写。`none` 不能与其他授权混用；未知授权产生警告且不会暴露。 |
 | `@connect target` | XHR 目标白名单：主机名、IP、`localhost`、`*.example.com`、`self`、`*` 或绝对 HTTP(S) URL，详见 [HTTP 请求](#http-requests)。 |
 | `@require url` | 通过宿主依赖提供器获取，在主源码前按声明顺序执行的依赖。它不是 API 授权。 |
-| `@resource name url` | 命名资源，通过资源 API 和宿主资源提供器读取。名称区分大小写。 |
+| `@resource name url` | 命名资源，由宿主在安装时准备，再通过资源 API 读取。名称区分大小写。 |
 | `@homepage`、`@homepageURL`、`@website`、`@source`、`@supportURL` | 项目及支持链接。主页优先级为 homepageURL、homepage、website、source。 |
 | `@downloadURL`、`@updateURL` | 更新信息。Demo 提供手动检查并安装，运行时不安排自动更新。`@downloadURL none` 禁止检查。 |
 | `@antifeature type description` | 功能披露信息，支持 `@antifeature:locale` 本地化声明。 |
-| `@webRequest JSON` | 校验后的 selector/action 元数据，可通过 `GM.info.script.webRequest` 查看，**不会**激活拦截；请使用 `GM.webRequest` 注册。 |
-| `@run-in`、`@inject-into`、`@sandbox`、`@unwrap` | 保留执行声明，但不会创建扩展隔离世界、选择隐私/容器环境或移除包装函数。非 raw 沙箱和 unwrap 会产生诊断。 |
+| `@webRequest JSON` | 安装期编译 selector/action JSON，导航前激活；同时写入 `GM.info.script.webRequest`。 |
+| `@run-in selector` | 可重复 normal-tabs/incognito-tabs，按 OR 合并。单一隐私条件要求宿主明确实际上下文；两者同时声明覆盖支持的两种环境。容器选择会诊断且不匹配 Chromium 上下文。 |
+| `@inject-into`、`@sandbox`、`@unwrap` | 执行世界声明，遵循适配器公布的限制。 |
 
 ### 匹配与生命周期
 
-`@match https://example.com/*` 匹配该主机；`@match https://*.example.com/*` 匹配裸域名 `example.com` 及其所有层级的子域名，与 [Tampermonkey 的 match 约定](https://www.tampermonkey.net/documentation.php?q=include)一致。`@exclude-match` 使用相同的主机通配符规则。`*://` 和 `http*://` 匹配 HTTP/HTTPS；显式端口会被检查。主机名会进行 IDN 规范化，URL 片段被忽略，查询字符串参与匹配。
+`@match https://example.com/*` 匹配该主机；`@match https://*.example.com/*` 匹配裸域名 `example.com` 及其所有层级的子域名，与 [Tampermonkey 的 match 约定](https://www.tampermonkey.net/documentation.php?q=include)一致。`@exclude-match` 使用相同的主机通配符规则。`*://` 和 `http*://` 匹配 HTTP/HTTPS；显式端口会被检查。浏览器 URL 的主机名按 IDN 规范化；`@match` 主机声明应使用 Punycode。URL 片段被忽略，查询字符串参与匹配。
 
-MonkeySharp 还接受 `file:///*`、`about:blank` 和 `<all_urls>`（HTTP、HTTPS、file，不包含 about:blank），实际取决于应用提供的页面。Tampermonkey 的公开 match 语法不支持 `<all_urls>`。include/exclude 通配符针对规范化后的整个 URL 区分大小写匹配，支持 `*` 和 `?`，没有实现 Tampermonkey 基于主机的 include 特殊处理；选择主机时优先使用 @match。元数据正则使用 .NET 语法及 `/expression/` 分隔形式，不接受 `/i` 等 JavaScript 字面量标志。
+仍支持宿主提供的 `file:///*` 和 MonkeySharp 显式扩展 `about:blank`。`<all_urls>` 会被拒绝；固定管理器对照中此声明不产生自动执行。缺少正向选择器也不自动执行。include/exclude 的 glob 和 `/expression/` 忽略大小写及片段，? 是普通字符，query 参与匹配；scheme/host 中的 * 不能跨越对应边界。浏览器 href 中已转义的非保留 path/query 字符会保留，不交给 System.Uri 静默解码。
+
+URL 正则支持有界的 ECMAScript 子集：字面量、字符类、分组/非捕获分组、前瞻、锚点及普通量词。字面量 flags、后瞻/命名分组、反向引用、Unicode 属性转义、.NET 专属构造及字符类相减会在安装时以 MSM021_INVALID_URL_REGEX 拒绝。超时包括排除规则超时，都会以 MSR214_URL_RULE_TIMEOUT 拒绝该脚本。规则编译到准备版本中并跨 frame 复用，缓存随元数据释放。
+
+显式 context-menu 选择忽略 include/exclude，仍保留 match/exclude-match、noframes、run-in 及宿主信任检查。自动和手动执行都会检查 run-in。宿主必须通过 CefSharpHostOptions.IsIncognito 描述其实际拥有的 RequestContext；未知环境不满足单一隐私限制。筛选不创建私密标签页或 Firefox 容器。
+
+固定管理器中，@match 的 Unicode 主机声明被保留但不匹配规范化后的浏览器主机；应使用 Punycode。安装会以 MSM084_UNSUPPORTED_IDN_MATCH 提示该无效声明。Punycode 规则可匹配 IDN 浏览器 URL。
 
 | 执行阶段 | MonkeySharp 行为 |
 | --- | --- |
 | `document-start` | 由 CefSharp 尽力注入，不保证早于页面脚本。要求保证时机的宿主可以跳过此类执行。 |
 | `document-body` | body 可用时执行。 |
 | `document-end` | 对应 DOMContentLoaded 生命周期事件。 |
-| `document-idle` | 对应 load 生命周期事件，不应假定与 Tampermonkey 的调度策略相同。 |
+| `document-idle` | 在 DOMContentLoaded 后调度，不等待缓慢资源的 load；无法取得早期信号时 load 作为晚期补发。 |
 | `context-menu` | 仅在用户选择匹配脚本的原生右键菜单项后执行，每次选择都创建新的执行实例。 |
 
-每个 `(document, frame, script, run-at)` 组合只执行一次。同文档导航会更新匹配上下文，并可产生 urlchange，但不会自动重跑同一生命周期调用。SPA 更新请使用 [window.onurlchange](#window-extensions) 或 DOM 观察器。完整导航会撤销旧执行实例及其待处理操作、监听器和注册项。
+自动执行对每个 `(document, frame, script, run-at)` 组合只运行一次；手动 context-menu 每次选择创建新执行。同文档导航会更新匹配上下文，并可产生 urlchange，但不会自动重跑同一生命周期调用。SPA 更新请使用 [window.onurlchange](#window-extensions) 或 DOM 观察器。完整导航会撤销旧执行实例及其待处理操作、监听器和注册项。
 
 ### 依赖、资源与更新
 
-`@require` 和 `@resource` URL 支持 md5/sha256 完整性片段：`#sha256=<digest>` 或 `#sha256-<digest>`，摘要可以是十六进制或标准 Base64。以逗号/分号分隔的多个声明选取最后一个受支持的哈希。请求和缓存前移除 URL 片段；使用前及读取缓存时都检查原始字节。声明格式错误、没有可用受支持哈希或摘要不一致都会阻止加载。
+`@require` 和 `@resource` URL 支持 md5/sha1/sha256/sha384/sha512 完整性片段：`#sha256=<digest>` 或 `#sha256-<digest>`，摘要可以是十六进制或标准 Base64。以逗号/分号分隔的多个声明选取最后一个受支持的哈希。请求和缓存前移除 URL 片段；使用前及读取缓存时都检查原始字节。声明格式错误、没有可用受支持哈希或摘要不一致都会阻止加载。
 
-获取及缓存由宿主负责。`LegacyCompatible` 中缺少依赖提供器会跳过声明 `@require` 的脚本；`ModernStrict` 中缺少提供器时主源码保持原样，依赖不会被补入。不要依赖未声明的全局变量，也不要假定内置 CDN 库。资源 API 还需要各自的授权和资源提供器。
+依赖和资源由宿主在安装准备时获取。缺少对应提供器、获取失败或校验失败都会使安装/更新失败；更新失败保留原版本。执行时读取已准备内容，不会跳过依赖后单独执行主源码。资源 API 还需要对应授权。
 
 Demo 手动更新时优先从 `@updateURL` 检查，其次使用 `@downloadURL`；安装源码优先取自 `@downloadURL`，其次使用检查来源。候选脚本必须具有相同且非空的名称/命名空间，下载版本必须更高。更新保留安装身份、启用状态及存储值。该下载器不带浏览器登录 Cookie，详见[更新与完整性参考](integration-reference.zh-CN.md#资源完整性与更新检查)。
 
 <a id="execution-grants-and-compatibility"></a>
 
-## 执行、授权与兼容模式
+## 执行、授权与兼容性
 
-MonkeySharp 在**页面世界**中，通过函数包装执行可信脚本。CefSharp 桥接的完整性被标记为未验证。默认宿主会抑制带显式特权授权的脚本，除非应用启用 `TrustedPageWorld`；Demo 已显式启用。授权限制可暴露的能力，但不能防御同一页面世界中的恶意 JavaScript。
+现代 `GM.*` 与旧式 `GM_*` 共享一套契约。未声明、`none`、未知授权和 info-only 都提供 `GM_info` 与 `GM.info`，元数据仍保留各自的声明状态，详见[固定授权观察](compatibility/api-contract.md#pinned-reference-observations)。
 
-| 授权声明 | 可见内容 |
-| --- | --- |
-| 没有 `@grant` | 提供 GM.info 和 GM_info，仍可进行普通页面操作。 |
-| 只有 `@grant none` | 提供 GM.info 和 GM_info。 |
-| 显式授权列表 | 默认提供 GM.info 和 GM_info，其他能力需要逐项授权且有可用实现。 |
+旧式 GM_* 名称需要精确声明。现代存储、资源、菜单和标签数据 API 按家族开放：GM_getValue 还允许现代存储写入，但不会暴露未声明的 GM_setValue 全局，也不授权其他家族。宿主服务和权限政策仍决定操作是否可用、是否获准。
 
-旧版别名通常会授权对应的规范能力，两个调用形式都可能可用。例如 `@grant GM_getValue` 会规范化为 GM.getValue，但不会授予 GM.setValue。宿主可以单独禁用授权别名解析。
+调用风格不强制 strict，也不选择执行世界；strict 由源码指令决定。顶层 `this` 为 window 门面，`@grant none` 使用独立对象作为接收者。默认/raw/Chromium JavaScript 使用页面世界，DOM/content 使用每脚本隔离世界。页面世界中包含已识别的 info 以外授权的执行需要宿主 `TrustedPageWorld`；隔离世界通过原生 context 验证派发，仍需授权、服务和宿主许可。选择方式见 [README 安全模型](../README.zh-CN.md#安全模型)。
 
-| 兼容模式 | 行为 |
-| --- | --- |
-| `LegacyCompatible`（默认） | 非严格包装，顶层 this 是 window 门面；提供现代 API 及启用的 GM_* 别名。旧版存储/资源别名依赖完整的启动快照。 |
-| `ModernStrict` | 严格包装，顶层 this 为 undefined；旧版全局绑定中仅保留 GM_info。现代 API 仍各自遵循实际返回约定，包括同步返回 ID/句柄的方法。 |
+页面世界中，`unsafeWindow` 除 `@grant none` 外指向页面全局；DOM 隔离世界不暴露它，显式 DOM 与 `unsafeWindow` 授权冲突会拒绝执行。旧式同步存储和资源须在用户代码启动前取得完整快照；限制见[错误与排查](#errors-and-troubleshooting)。
 
-宿主可以独立禁用 GM_info 以外的旧版全局绑定或快照。启动快照默认限制为 1 MiB，准备超时为 5 秒；失败、不完整或超限会使同步存储/资源别名不可用，现代方法仍可走桥接。存储不支持原子快照时会产生降级诊断。需要观察完成和失败时优先使用现代 API，同时注意默认模式中的现代读取也可能来自本地镜像。
+### 原生隔离世界与生命周期
 
-菜单、通知、剪贴板、标签页、下载、标签页状态和窗口控制 API 在缺少对应宿主服务时不会出现。CefSharp 默认提供 XHR、Cookie 和 webRequest 服务，除非被禁用或替换。可用 `typeof GM !== "undefined" && typeof GM.download === "function"` 检查；声明授权不会安装缺失的服务。参阅[宿主服务契约](integration-reference.zh-CN.md#宿主服务契约)。
+隔离世界分离脚本全局及派发身份，不是操作系统沙箱。冲突的执行世界、DOM 与显式 `unsafeWindow` 授权、未支持的 unwrap 都在源码启动前拒绝，不静默退回页面世界。完整 GM 的 document-start 仍为尽力执行；要求保证时机会拒绝执行。
+
+沙箱 window 按脚本私有地回放缓存的 DOMContentLoaded/load 事件，回放事件的 `isTrusted` 为 false；document-idle 不回放更早的 DOMContentLoaded。window 监听支持 once、移除和 AbortSignal，执行结束清理运行时拥有的监听；直接注册到页面 DOM 的监听由脚本管理。源码、DOM 和样式的 CSP 效果分别有边界，不提供全站 CSP 绕过。
+
+隔离 OOPIF 已支持经验证的源码、存储、资源及 XHR 范围，不代表菜单或 webRequest 均可用。隔离世界的手动菜单在三个已测版本均支持主 frame，84 另支持同进程子 frame；121/151 仍仅主 frame，隔离 OOPIF 菜单不支持。页面世界的菜单使用当前原生 CEF frame 会话。BFCache 缓存执行会被撤销，需要新导航。详见[执行世界与限制](compatibility/execution-worlds.md)，严格 start 与 CSP 的评估见[专项决策](compatibility/start-csp-decision.md)。
 
 <a id="api-index"></a>
 
 ## API 索引
 
-除非另有说明，每行需要第一列中的能力授权。`Promise<T>` 表示使用 await；立即取得 ID/句柄并不意味着后台注册已完成。旧版名称需要旧版兼容模式。后文逐项说明详细行为、错误和示例。
+除 info 和下文说明的 `unsafeWindow` 外，每行需要所属能力家族或精确旧式名称授权。`Promise<T>` 表示使用 await；立即取得 ID/句柄并不意味着后台注册已完成。旧版名称需要精确声明。后文逐项说明详细行为、错误和示例。
 
 | 能力 / 现代成员 | 旧版名称 | 现代返回值 | 实现来源 |
 | --- | --- | --- | --- |
 | `GM.info` | `GM_info` | 冻结对象，不是函数 | Core |
-| `GM.log` | `GM_log` | `Promise<undefined>` | Core 日志回调 |
+| `GM.log` | `GM_log` | `Promise<undefined>` | 本地 console 及可选宿主接收器 |
 | `GM.getValue` | `GM_getValue` | `Promise<value>` | 值存储 |
 | `GM.setValue` | `GM_setValue` | `Promise<undefined>` | 值存储 |
 | `GM.deleteValue` | `GM_deleteValue` | `Promise<undefined>` | 值存储 |
@@ -184,51 +192,66 @@ MonkeySharp 在**页面世界**中，通过函数包装执行可信脚本。CefS
 | `GM.addValueChangeListener` | `GM_addValueChangeListener` | `Promise<number>` | Core |
 | `GM.removeValueChangeListener` | `GM_removeValueChangeListener` | `Promise<undefined>` | Core |
 | `GM.addStyle` | `GM_addStyle` | `Promise<HTMLStyleElement>` | 页面 DOM |
-| `GM.addElement` | `GM_addElement` | `Promise<Element>` | 页面 DOM |
-| `GM.getResourceText` | `GM_getResourceText` | `Promise<string>` | 资源提供器 |
-| `GM.getResourceURL` / `GM.getResourceUrl` | `GM_getResourceURL` | `Promise<string>` | 资源提供器 |
+| `GM.addElement` | `GM_addElement` | `Promise<Element/null>` | 页面 DOM |
+| `GM.getResourceText` | `GM_getResourceText` | `Promise<string>` | 已准备资源 |
+| `GM.getResourceUrl` | `GM_getResourceURL` | `Promise<string>` | 已准备资源 |
 | `GM.xmlHttpRequest` | `GM_xmlhttpRequest` | 可 abort 的 `Promise<Response>` | CefSharp 默认服务 |
-| `GM.registerMenuCommand` | `GM_registerMenuCommand` | `Promise<number>` | 菜单服务 |
-| `GM.unregisterMenuCommand` | `GM_unregisterMenuCommand` | `Promise<boolean>` | 菜单服务 |
-| `GM.notification` | `GM_notification` | `Promise<{id: string}>` | 通知服务 |
+| `GM.registerMenuCommand` | `GM_registerMenuCommand` | `Promise<ID>` | 菜单服务 |
+| `GM.unregisterMenuCommand` | `GM_unregisterMenuCommand` | `Promise<undefined>` | 菜单服务 |
+| `GM.notification` | `GM_notification` | `Promise<boolean>` | 通知服务 |
 | `GM.setClipboard` | `GM_setClipboard` | `Promise<undefined>` | 剪贴板服务 |
-| `GM.openInTab` | `GM_openInTab` | 立即返回标签页句柄 | 标签页服务 |
+| `GM.openInTab` | `GM_openInTab` | `Promise<TabHandle>` | 标签页服务 |
 | `GM.getTab` | `GM_getTab` | `Promise<object>` | 标签页状态服务 |
 | `GM.saveTab` | `GM_saveTab` | `Promise<undefined>` | 标签页状态服务 |
 | `GM.getTabs` | `GM_getTabs` | `Promise<object>` | 标签页状态服务 |
-| `GM.download` | `GM_download` | `Promise<DownloadHandle>` | 下载服务 |
-| `GM.cookie` | `GM_cookie` | 包含 CRUD/监听方法的对象 | CefSharp 默认服务 |
-| `GM.webRequest` | `GM_webRequest` | 立即返回可移除句柄 | CefSharp 默认服务 |
-| `unsafeWindow` | 同名 | 页面全局对象 | 精确授权 |
-| `window.close`、`window.focus` | 同名 | 各返回 `Promise<boolean>` | 窗口服务 |
+| `GM.download` | `GM_download` | `Promise<DownloadDetails> & {abort()}` | 下载服务 |
+| `GM.cookie` | `GM_cookie` | 含 list/set/delete 的命名空间 | CefSharp 默认服务 |
+| `GM.audio.*` | `GM_audio.*` | 静音/状态/监听的 Promise；旧版回调 | 音频服务，audible 仅可靠后端可用 |
+| `GM.webRequest` | `GM_webRequest` | undefined；替换/撤销规则 | CefSharp 默认服务 |
+| `unsafeWindow` | 同名 | 页面全局对象或 undefined | 取决于执行世界及 none 声明，见下文 |
+| `window.close`、`window.focus` | 同名 | undefined | 窗口服务 |
 | `window.onurlchange` | 同名 | 属性/事件注册 | Core |
 
 <a id="information-and-logging"></a>
 
 ## 信息与日志
 
+`GM.info.compatibility.capabilities` 同时报告 API 可用性和细分能力。自定义后端的未知事实省略；不能将字段缺失或主 API 可用推断为某个子功能已支持。
+
+| 能力键 | 默认适配器的范围 |
+| --- | --- |
+| `execution.documentStart` | 尽力执行，不保证早于页面脚本。 |
+| `execution.oopif` | 已验证的隔离 child-target session 范围。 |
+| `execution.bfcache` | 缓存执行撤销，需要新导航。 |
+| `execution.contextMenuFrame` | 隔离菜单：84 支持同进程子 frame；121/151 仅主 frame，隔离 OOPIF 菜单不支持。 |
+| `GM.xmlHttpRequest.cookie`、`GM.xmlHttpRequest.cookiePartition` | 默认后端不支持显式 Cookie 或请求分区选择。 |
+| `GM.cookie.partitionKey` | 84 不支持；121 无 ancestor 维度；151 支持可序列化分区身份。 |
+| `GM.audio.audible` | 没有可靠来源时不可用。 |
+| `GM.registerMenuCommand.clickedFrame` | 须有宿主证明的当前文档/frame；未知 frame 不派发。 |
+
 ### GM.info / GM_info
 
-只读、递归冻结的安装信息快照，`GM_info === GM.info`。两种名称都默认可用，无需授权，包括 ModernStrict 模式和关闭旧版全局绑定时。无授权、@grant none 或仅声明 info 授权的脚本无需桥接绑定和握手。仍支持显式声明 info 授权，元数据保留原始声明。没有参数，不返回 Promise。未填写的可选元数据通常为 null。
+只读、递归冻结的安装信息快照，`GM_info === GM.info`。单一契约下两种名称都默认可用，无需授权。无授权、@grant none 或仅声明 info 授权的脚本无需桥接绑定和握手。显式 info 授权仍可使用，元数据保留原始声明；没有参数，不返回 Promise，缺少的可选元数据通常为 `null`。
 
 | 字段 | 含义 |
 | --- | --- |
 | `scriptKey` | 稳定的安装标识。 |
-| `name`、`namespace`、`version`、`description` | 便于读取的顶层元数据。 |
+| `name`、`namespace`、`description` | 顶层元数据便利字段。 |
+| `version` | 管理器实际版本；脚本版本位于 `script.version`。 |
 | `grants`、`grantDeclarationState` | 原始授权名称，以及 Missing、ExplicitNone 或 ExplicitList。授权别名在内部规范化，这些列表保留原始写法。 |
-| `scriptHandler`、`sandboxMode` | 固定为 "MonkeySharp" 和 "raw"。 |
-| `downloadMode`、`isIncognito`、`scriptWillUpdate` | 固定为 "disabled"、false、false，属于兼容占位值，**不能用于能力检测**。即使 downloadMode 为 disabled，也可能存在下载服务。 |
+| `scriptHandler`、`sandboxMode` | 管理器为 MonkeySharp；执行世界为 raw 或 DOM。 |
+| `downloadMode`、`isIncognito`、`scriptWillUpdate` | 下载服务实际模式及宿主 context/更新策略；未知字段省略。 |
 | `scriptMetaStr`、`scriptUpdateURL` | 原始元数据头和声明的更新 URL。 |
-| `compatibility` | contractVersion: 1、handler: "MonkeySharp"、executionWorld: "page"、isolatedWorld: false；fields 记录字段来源。 |
+| `compatibility` | `contractVersion: 2`、`handler: "MonkeySharp"`，真实 context 决定 `executionWorld`/`isolatedWorld`，`fields` 记录字段来源，`capabilities` 报告上表细分能力。 |
 | `script` | 下述脚本元数据对象。 |
 
-script 包含 name、namespace、version、description、author、copyright、name_i18n、description_i18n、icon、icon64、homepage、supportURL、downloadURL、updateURL、fileURL（安装来源）、header、grant、connects、matches、includes、excludes（含 exclude-match）、resources、antifeatures、webRequest、run-at 和 unwrap。lastModified 是安装更新时间的 Unix **毫秒数**；position 固定为 0，blockers 是空数组。resources 项为 `{name, url, integrity: [{algorithm, digest}]}`；antifeatures 先按类型、再按语言分组（无语言时为 default）。未声明 webRequest 时为 null。options 包含 sandbox、noframes、unwrap 和 run_at。
+script 包含 name、namespace、version、description、author、copyright、name_i18n、description_i18n、icon、icon64、homepage、supportURL、downloadURL、updateURL、fileURL（安装来源）、header、grant、connects、matches、includes、excludes（含 exclude-match）、resources、antifeatures、webRequest、run-at 和 unwrap。lastModified 是安装更新时间的 Unix **毫秒数**；不提供没有管理器状态来源的 position/blockers 字段。resources 项为 `{name, url, integrity: [{algorithm, digest}]}`；antifeatures 先按类型、再按语言分组（无语言时为 default）。未声明 webRequest 时为 null。options 包含 sandbox、noframes、unwrap 和 run_at。
 
-**与 Tampermonkey 的差异：** 这是 MonkeySharp 自身的快照，包含来源标记及占位值，不保证提供全部 [Tampermonkey GM_info 字段](https://www.tampermonkey.net/documentation.php?q=GM_info)、实时浏览器设置或扩展更新状态。
+**与 Tampermonkey 的差异：** 这是 MonkeySharp 自身的快照，包含来源标记和真实环境事实，不保证提供全部 [Tampermonkey GM_info 字段](https://www.tampermonkey.net/documentation.php?q=GM_info)、实时浏览器设置或扩展更新状态。
 
-### GM.log(value) / GM_log(value)
+### GM.log(...values) / GM_log(...values)
 
-value 使用 JSON.stringify/JSON.parse 克隆：顶层 undefined、函数、symbol、BigInt 和循环引用无效。日志规则与下方的存储值编码相互独立。现代方法在投递给宿主日志回调后返回 `Promise<undefined>`；未配置日志接收器时可能没有可见输出。GM_log 返回 undefined，同时输出到页面控制台，并将异步宿主失败记录到控制台。只接收一个值，不提供 console.log 的多参数格式化功能。
+两种形式都会立即将原始多参数传给本地 console，保留对象引用、循环结构及格式化能力。现代返回 Promise<undefined>，旧版返回 undefined。可选宿主接收器得到有界的 JSON 快照，循环、访问器及截断用标记表示；转换或宿主失败不影响已完成的本地日志。固定 TM 5.5.1 对照会拒绝循环对象；此处接受循环对象是明确的本地控制台行为。
 
 ```javascript
 // @grant GM.log
@@ -261,11 +284,13 @@ value 使用 JSON.stringify/JSON.parse 克隆：顶层 undefined、函数、symb
 | `GM.addValueChangeListener(key, callback)` | 注册 callback(key, oldValue, newValue, remote)；缺失或已删除值为 undefined。宿主注册失败时拒绝 Promise。 | `Promise<number>` |
 | `GM.removeValueChangeListener(listenerId)` | 移除当前执行实例的正整数监听器 ID；未知 ID 无操作。 | `Promise<undefined>` |
 
-每个方法均需单独授权，批量与单键授权互不包含。监听范围为同一安装实例的活动执行。每个已提交变更向每个监听器通知一次：来源执行实例收到 remote: false，其他执行实例或宿主直接修改时为 true。该行为适用于有镜像、无镜像及 ModernStrict 模式。重复写入相同编码值、删除不存在的键不通知。创建或删除已存储的 undefined 会通知，即使回调的旧值和新值均为 undefined。回调在提交后执行，也可能晚于写入 Promise 兑现。执行实例释放时清理监听器。
+现代存储按家族授权，旧式全局需要精确声明。每次执行先准备完整快照。本地监听在镜像更新后、setter 返回前同步触发；同值写入和删除不存在键不通知，创建/删除已存储 undefined 会通知。回调异常不阻止其他监听器或排队写入。远端已提交变更以 remote: true 通知一次，来源执行的提交回声被去除。保留范围内的缺失变更按序重放；历史无法重建时恢复值并报告 MSC414_STORAGE_REPLAY_RESET。
 
-旧式签名使用相同参数：GM_getValue/GM_getValues/GM_listValues 同步返回值；GM_setValue/GM_deleteValue/GM_setValues/GM_deleteValues/GM_removeValueChangeListener 返回 undefined；GM_addValueChangeListener 立即返回数字 ID。同步值读写需要完整存储镜像，监听别名不依赖镜像。写入立即修改镜像，再串行异步提交；失败时回滚并重新同步，产生 MSC413_COMPATIBILITY_MUTATION_FAILED。同步返回成功不代表持久化完成。旧式监听注册失败时会移除本地处理器，并异步报告失败。
+旧式签名使用相同参数：GM_getValue/GM_getValues/GM_listValues 同步返回；写入、删除和监听移除返回 undefined；GM_addValueChangeListener 立即返回数字 ID。监听立即在本地生效，移除立即停止回调。导航、执行失效及宿主分离会清理监听和待提交本地状态。
 
-现代写入共享提交队列，通过 Promise 观察宿主提交成功或失败。每次批量写入或删除仅发送一个桥接请求，再逐键提交，不保证整批原子性：中途失败会停止后续操作，保留已提交的键及对应通知。参数校验失败不会修改任何键。失败后重新同步镜像并重放后续排队操作。空批次合法。
+现代与旧式写入共用有序提交队列和编码。现代 Promise 等待宿主提交/重放确认或在失败时拒绝；这一确认边界是明确的宿主契约，不宣称 IPC 延迟与 Tampermonkey 完全相同。本地回调描述本地变更，后续持久化失败时回调已发生。恢复从已确认值重放尚待提交的操作，不发出补偿回调，也不会用旧值覆盖后续写入。旧式失败报告 MSC413_COMPATIBILITY_MUTATION_FAILED。
+
+批量操作在任何本地修改前完整校验，仅发送一个变更请求。宿主原子提交整批；失败保留原宿主分区且不发送部分宿主事件。这是 MonkeySharp 存储契约，不宣称 Tampermonkey 保证事务。空批次合法。读取保留缺省对象引用、typed undefined、顶层非有限数及 JavaScript 键顺序；批量结果使用固定对照证实的无原型对象。
 
 ```javascript
 // @grant GM.getValues
@@ -279,7 +304,7 @@ value 使用 JSON.stringify/JSON.parse 克隆：顶层 undefined、函数、symb
 })().catch(console.error);
 ```
 
-**与 Tampermonkey 的关系：** 值转换、默认值和存储 API 返回类型遵循[官方参考](https://www.tampermonkey.net/documentation.php?q=GM_values)及已核查的 5.5.1 门面。MonkeySharp 保留宿主提交确认，在成功提交后通知；Tampermonkey 则立即更新本地状态并通知。启动快照限额及对不支持存储类型的明确拒绝仍是 MonkeySharp 的约束。
+**与 Tampermonkey 的关系：** 值转换、默认值和存储 API 返回类型遵循[官方参考](https://www.tampermonkey.net/documentation.php?q=GM_values)及已核查的 5.5.1 门面。二者都立即更新本地状态并触发本地监听。MonkeySharp 额外保留宿主提交/重放确认后才兑现现代写入 Promise；确认边界不改变本地监听时机。启动快照限额及对不支持存储类型的明确拒绝仍是 MonkeySharp 的约束。
 
 ```javascript
 // @grant GM.getValue
@@ -311,11 +336,11 @@ value 使用 JSON.stringify/JSON.parse 克隆：顶层 undefined、函数、symb
 
 ### GM.addElement(tagName, attributes?) / GM.addElement(parent, tagName, attributes?)
 
-旧版为相同重载的 GM_addElement；需要 GM.addElement 或其别名授权。tagName 是非空字符串。parent 必须具有 appendChild；省略时使用 document.body 或 document.documentElement。
+旧版为相同重载的 GM_addElement；需要 GM.addElement 或其别名授权。tagName 是字符串。parent 必须具有 appendChild；省略时依次选择可用的 document.head、document.body、document.documentElement。
 
-attributes 是可选对象：textContent/innerHTML 设置内容，字符串 style 设置 style.cssText，已有 DOM 属性（包括函数事件处理器）直接赋值，其他字段转换成字符串后使用 setAttribute。现代返回 `Promise<Element>`，旧版立即返回 Element。非法输入和 DOM 失败会拒绝/抛出，而非返回 null。
+attributes 是可选对象：textContent/innerHTML 设置内容，字符串 style 设置 style.cssText，已有 DOM 属性（包括函数事件处理器）直接赋值，其他字段转换成字符串后使用 setAttribute。现代返回 `Promise<Element/null>`，旧版立即返回 Element/null。创建、属性赋值或插入的 DOM 异常（包括空 tag 或非法 tag）返回 null，现代 Promise 完成为 null；参数类型错误及内部编程错误仍抛出/拒绝。使用节点前应检查 null。参见[固定版本对照](compatibility/api-contract.md#pinned-reference-observations)。
 
-**与 Tampermonkey 的差异：** 这些是普通页面 DOM 操作，不提供扩展级 CSP 绕过。省略 addElement 父节点时优先使用 body，不应假定与 [Tampermonkey 辅助方法的插入位置及错误行为](https://www.tampermonkey.net/documentation.php?q=GM_addElement)相同。
+**与 Tampermonkey 的差异：** 这些是普通页面 DOM 操作，不提供扩展级 CSP 绕过。默认插入 head 的行为遵循固定版本对照；页面 CSP 仍决定源码及样式是否生效。参见 [Tampermonkey 辅助方法](https://www.tampermonkey.net/documentation.php?q=GM_addElement)。
 
 ```javascript
 // @grant GM.addStyle
@@ -335,13 +360,13 @@ attributes 是可选对象：textContent/innerHTML 设置内容，字符串 styl
 
 ### GM.getResourceText(name) / GM_getResourceText(name)
 
-需要对应授权、资源提供器和 @resource name url。name 是非空、区分大小写的字符串。现代返回 `Promise<string>`，使用提供器给出的文本，否则将字节按 UTF-8 解码。旧版从完整启动资源快照立即返回字符串。未声明的资源导致拒绝；缺少旧版快照时不暴露别名，在可用快照中找不到名称时抛出错误。
+需要资源家族授权和 `@resource name url`，内容由宿主在安装时准备。name 是非空、区分大小写的字符串。现代返回 `Promise<string>`：优先使用宿主解码文本，否则按声明 charset 解码，默认 UTF-8。旧版从完整启动资源快照立即返回字符串。未声明的资源导致拒绝；快照必须在用户源码启动前完整准备。
 
-### GM.getResourceURL(name) / GM.getResourceUrl(name) / GM_getResourceURL(name)
+### GM.getResourceUrl(name) / GM_getResourceURL(name)
 
-前提和名称规则相同，但需要自己的授权。现代返回 `Promise<string>`，内容为 **data URL**：`data:<media-type>;base64,<bytes>`；旧版从快照立即返回该 URL。它不是原始下载地址，也不是需要 revoke 的对象 URL。不支持 isBlobUrl 参数。两种资源 API 均应用完整性检查和大小限制。
+前提和名称规则相同，属于现代资源授权家族；旧式名称仍须精确声明。现代返回 `Promise<string>`，内容为 **data URL**：`data:<media-type>;base64,<bytes>`；旧版从快照立即返回该 URL。它不是原始下载地址，也不是需要 revoke 的对象 URL。不支持 isBlobUrl 参数。两种资源 API 均应用完整性检查和大小限制。
 
-`GM.getResourceUrl` 与 `GM.getResourceURL` 引用同一个函数。声明任一现代拼写的 grant，即授权两个名称；所有兼容模式均支持，包括 `AcceptLegacyGrantAliases` 为 false 时。接受旧版 grant 别名时，`GM_getResourceURL` 也授权两个现代名称；其同步全局函数仍需要启用旧版全局及完整资源快照。原始 grant 声明保留，运行时能力和桥接方法仍为 `GM.getResourceURL`。
+现代名称仅为 `GM.getResourceUrl`，官方旧式名称为 `GM_getResourceURL`。资源按现代家族授权；旧式全局需精确声明和完整快照。不提供 `GM.getResourceURL`。
 
 请按 data URL 处理，不应假定其他管理器的扩展 URL、对象 URL 或附加选项，参见[官方资源参考](https://www.tampermonkey.net/documentation.php?q=GM_getResource)。
 
@@ -373,15 +398,15 @@ attributes 是可选对象：textContent/innerHTML 设置内容，字符串 styl
 
 | details 字段 | 类型 / 默认值 | 行为 |
 | --- | --- | --- |
-| `url` | 必需，绝对 HTTP(S) 字符串或 URL 对象 | 不支持相对 URL 和 Blob/File URL。 |
+| `url` | HTTP(S) 字符串/URL、Blob/File 或 blob URL | 相对 URL 在 renderer 中解析；支持 Blob/File 和 blob URL。 |
 | `method` | 字符串，"GET" | 有效 HTTP token，不区分大小写；禁止 CONNECT、TRACE、TRACK。 |
 | `headers` | 字符串到字符串的对象，{} | 校验头名称和值，禁止 CR/LF 注入。 |
-| `data` | 可选主体 | 字符串、ArrayBuffer、类型化数组、DataView、Blob/File、FormData、URLSearchParams、对象或数组；null/省略表示无主体。 |
+| `data` | 可选主体 | 字符串、ArrayBuffer、类型化数组、DataView、Blob/File、FormData、URLSearchParams、Uint8Array 块组成的 ReadableStream、对象或数组；null/省略表示无主体。 |
 | `binary` | 布尔值，false | 必须使用字符串主体；每个 UTF-16 码元取低 8 位发送，普通字符串按 UTF-8 编码。 |
 | `responseType` | 字符串，"text" | text、json、arraybuffer、blob、document、xml 或 stream；空字符串视为 text。 |
 | `responseXML` | 布尔值，false | true 时覆盖 responseType 为 document，通过页面 DOMParser 按 XML 解析。 |
 | `timeout` | 非负整数，毫秒 | 0/省略表示不提供单独的 XHR 截止时间；fetch:true 时忽略，宿主仍可设置限制。 |
-| `cookie` | 可选字符串 | 显式 Cookie 头输入。 |
+| `cookie` | 可选字符串 | 显式 Cookie 输入；默认 CefSharp 后端在发送前拒绝。 |
 | `user`、`password` | 可选字符串 | 传给宿主 HTTP 服务的认证凭据。 |
 | `anonymous` | 布尔值，false | 禁用浏览器已存储的 Cookie 和凭据。 |
 | `overrideMimeType` | 可选字符串 | 覆盖响应 MIME/字符集处理。 |
@@ -394,9 +419,9 @@ attributes 是可选对象：textContent/innerHTML 设置内容，字符串 styl
 | `proxy`、`cookiePartition` | 不支持 | 提供任一个都会返回/抛出 MSP006_NOT_SUPPORTED。 |
 | `synchronous:true`、`async:false` | 不支持 | 以 MSP006_NOT_SUPPORTED 拒绝；只支持异步请求。 |
 
-对象/数组按 JSON 发送，URLSearchParams 使用表单编码，FormData 使用包含自动边界、文件名和媒体类型的 multipart。未自行设置时会补入适当 Content-Type。支持 Blob/File **请求体**，但不支持 Blob/File **URL**。
+对象/数组按 JSON 发送，URLSearchParams 使用表单编码，FormData 使用包含自动边界、文件名和媒体类型的 multipart。未自行设置时会补入适当 Content-Type。支持 Blob/File 请求体及 URL 输入；blob URL 由所属 renderer 解引用，本地输入仅支持不含网络头、认证和请求体的 GET。
 
-允许 User-Agent、Referer、Origin 和 Cookie 头。禁止 Host、Content-Length、连接/传输控制头，以及 Sec-*/Proxy-* 头。跨源重定向会移除显式 Cookie 和 Authorization。Cookie 合并及浏览器认证细节仍由宿主服务决定，不应假定与每个 Tampermonkey 浏览器版本完全一致。
+允许 User-Agent、Referer、Origin 头。禁止 Host、Content-Length、连接/传输控制头和 Sec-*/Proxy-* 头。默认 CefSharp 后端对任意大小写的 headers.Cookie 及 cookie 在发送前返回 MSP006_NOT_SUPPORTED，包括 anonymous 组合。84/121/151 原生 URLRequest 忽略这些显式值；普通认证请求仍使用真实 RequestContext jar，anonymous 禁用 jar。自定义且已验证的 HTTP 后端可实现[固定参考合并契约](compatibility/cookies.md#explicit-request-cookies)。跨源重定向移除 Authorization。见[显式 Cookie 证据](compatibility/cookies.md#explicit-request-cookies)。
 
 @connect self 同时检查协议、主机和端口。`example.com` 和 `*.example.com` 均允许裸域名自身及其所有层级的子域名；IP 和 localhost 必须精确匹配。URL 声明还限制协议/端口，但其中路径不构成白名单限制。没有白名单时，同源 XHR 也被拒绝。原始目标和所有重定向目标都必须通过白名单及宿主权限策略。
 
@@ -409,8 +434,8 @@ attributes 是可选对象：textContent/innerHTML 设置内容，字符串 styl
 | `status`、`statusText` | HTTP 状态及描述，初始为 0/空字符串。 |
 | `responseHeaders` | 原始头字符串，保留重复响应头。 |
 | `response` | 文本；解析后的 JSON（空或非法 JSON 为 null）；ArrayBuffer；Blob；document 对应 XML Document；xml 对应文本；stream 对应 Uint8Array 数据块的 ReadableStream。 |
-| `responseText` | text/JSON/document/xml 的解码文本；arraybuffer/blob/stream 为 undefined。进度回调不保证提供逐步接收的文本主体。 |
-| `responseXML` | document/xml 类型下 DOMParser 可用时的 XML Document，否则为 null。无效 XML 可能产生包含解析错误的文档。 |
+| `responseText` | text/JSON/document/xml 的解码文本；arraybuffer/blob/stream 为 undefined。非 fetch 的 text/JSON/document/xml 进度提供累计解码文本；text 的 response 同步提供该文本。 |
+| `responseXML` | document/xml 类型下 DOMParser 可用时的 XML Document，否则为 null。HTML MIME 使用 HTML 解析器，无效 XML 返回 null。 |
 | `context` | 原始 JavaScript context 值。 |
 
 | 回调 | 参数 / 时机 |
@@ -424,9 +449,7 @@ attributes 是可选对象：textContent/innerHTML 设置内容，字符串 styl
 
 回调的 this 指向响应状态。现代方法的前置校验可能在返回 Promise 前同步抛出，应将整个调用与 await 放进 try/catch。启动后失败会拒绝 Promise，可读取可用的 .code/.name。回调错误类别包括 not_supported、not_permitted、timeout 和 not_succeeded。旧版门面尽可能将即时请求校验失败传给 onerror，但非法回调类型仍可能直接抛出。
 
-XHR 主体分块传输；默认宿主不设置整体请求/响应字节上限，前 256 KiB 保存在内存，之后暂存到临时文件。这独立于普通桥接消息限制。JavaScript 侧仍会在内存中组装非流式响应，大响应优先使用 stream。
-
-**与 Tampermonkey 的差异：** 传输由 CefSharp/宿主实现；不支持代理和分区 Cookie 控制；DOMParser 的 XML/document 类型及 upload/signal 控制遵循 MonkeySharp 行为。redirect 模式不会自动启用 fetch；进度回调不保证逐步解码的 responseText。两者当前文档都不支持同步请求，不应将这一共同限制写成 MonkeySharp 特有差异。参见[官方 XHR 参考](https://www.tampermonkey.net/documentation.php?q=GM_xmlhttpRequest)。
+**与 Tampermonkey 的差异：** 默认传输由 CEF URLRequest 实现，不支持代理和请求分区控制。提供 `redirect`（包括 `"follow"`）或设置 `anonymous: true` 也会启用 fetch 语义，忽略 timeout/进度且只报告 readyState 4；固定 5.6.6242 参考中的 fetch 进度与此不同。增量文本及流输入的对照边界见[网络兼容性](compatibility/network.md)。
 
 ```javascript
 // @grant GM.xmlHttpRequest
@@ -445,71 +468,63 @@ XHR 主体分块传输；默认宿主不设置整体请求/响应字节上限，
 })().catch(console.error);
 ```
 
+### 权限提示
+
+权限提示显示安装脚本、权限和准确目标 origin。Demo 提供允许一次、记忆允许、拒绝并记住；允许一次仅覆盖当前同范围的合并等待批次。通过权限按钮撤销该安装的决定，标签页会刷新以清理旧执行状态。导航关闭失效等待，同意或记忆允许都不能绕过 connect 或 Cookie URL 声明。
+
+### 二进制传输与流完成
+
+非 fetch 的 text/JSON/document/XML 进度提供累计 `responseText`，text 的 `response` 同步提供累计文本；JSON/document 仍在完成时解析。解码器保留跨分块的多字节字符，无效字节使用替换字符。二进制/stream 不提供部分文本，fetch 语义不发进度。
+
+`data` 可使用由 `Uint8Array` 块组成的 ReadableStream。授权完成后才获取 reader，每次读取等待上一块暂存确认，全部暂存后才由 CEF 发送；这不是边读边发的网络流上传。locked/disturbed 输入、其他块类型、producer 异常及超预算都会拒绝。abort、导航或失败清理 reader 和暂存；重定向重放完整暂存，不重读源流。
+
+请求体、响应体及暂存下载默认各限 256 MiB，宿主可调整。单个桥接分块最多 64 KiB；宿主前 256 KiB 保留内存，之后转存临时文件。非流式响应仍在 renderer 内存中组装，大响应优先使用 `responseType: "stream"`。
+
+响应流的 Promise 在响应头和流可用时兑现，后续错误通过流传播；`onload`/`onloadend` 随网络完成触发，不等待消费完毕。流在 EOF、取消或执行结束时释放。按需拉取限制桥接队列，但不能暂停 CEF 网络源。[宿主传输与预算](integration-reference.zh-CN.md#二进制传输与流完成)和[固定参考差异](compatibility/network.md)有进一步说明。
+
 <a id="menus-notifications-and-clipboard"></a>
 
 ## 菜单、通知与剪贴板
 
-### GM.registerMenuCommand(name, callback, accessKey?)
+### GM.registerMenuCommand(name, callback, options_or_accessKey?)
 
-需要对应授权和菜单服务。name 是非空字符串；callback 在选中时**不带参数**调用；accessKey 是可选字符串。现代返回注册完成后的 `Promise<number>`。GM_registerMenuCommand 立即返回数字命令 ID，之后的失败记录日志。ID 属于当前执行实例，执行结束时释放注册。Demo 在脚本菜单中展示命令，并支持 Alt+accessKey。
+需要菜单授权及服务。第三参数可以是访问键字符串，或 `{id, accessKey, title, autoClose, clickedFrame}`。id 是正整数或非空字符串，用于更新当前执行的已有注册，不存在则创建；省略时分配数字 ID。现代返回注册后的 `Promise<number|string>`，旧版立即返回 ID。更新和注销按调用顺序排队。渲染器按原生输入事实创建 MouseEvent 或 KeyboardEvent，携带可取得的修饰键、鼠标键和 key/code；未知来源使用普通 menucommand Event。isTrusted 始终为 false，回调异常单独报告。
+
+Demo 将同一安装、同一标签页中 name/title/accessKey 相同的条目合并，点击时调用所有已订阅 frame 的回调。title 显示为提示，autoClose:false 保持菜单打开；合并项有任一订阅要求保持时即保持。注销或结束一个 frame 仅移除该 frame 的订阅，执行结束清理其命令。5.6.6242 的 clickedFrame 按每个订阅的可信当前文档/frame 过滤；false/省略保持广播。无法确定 frame 的入口（含 Demo 标签页弹出菜单）不派发 clickedFrame:true。合并条目分别保留各订阅的选项，固定 beta 重叠/点击一致性仍待原生证据。
 
 ### GM.unregisterMenuCommand(commandId)
 
-需要自己的授权及同一菜单服务。commandId 是正整数。现代返回 `Promise<boolean>`，表示宿主是否移除；旧版 GM_unregisterMenuCommand 返回本地移除布尔值，并异步请求宿主移除。未知 ID 返回 false。
-
-**与 Tampermonkey 的差异：** 不支持[官方菜单 API](https://www.tampermonkey.net/documentation.php?q=GM_registerMenuCommand)中的 options 对象（id、title、autoClose、clickedFrame 等）、按 ID 更新、跨框架合并，也不会向回调传 MouseEvent/KeyboardEvent。
+接受数字或字符串 ID。现代兑现 undefined，旧版立即返回 undefined；未知 ID 无副作用，不返回自有移除布尔值。现代菜单家族同时提供注册及注销，旧版全局仍按准确声明暴露。
 
 ```javascript
-// @grant GM.registerMenuCommand
-// @grant GM.unregisterMenuCommand
-(async function () {
-    const id = await GM.registerMenuCommand("Remove this command", () => {
-        GM.unregisterMenuCommand(id).catch(console.error);
-    }, "r");
-})().catch(console.error);
+const id = await GM.registerMenuCommand('操作', event => console.log(event.type), {title:'执行操作',autoClose:false});
+await GM.registerMenuCommand('更新操作', () => {}, {id});
+await GM.unregisterMenuCommand(id);
 ```
 
-### GM.notification(details)
+### GM.notification(details, ondone?)
 
-需要对应授权和通知服务。接受对象或文本字符串（等同于 {text}）。现代返回通知注册完成后的 `Promise<{id: string}>`，**不是等待关闭**。回调必须放在对象中。
+两种入口均接受 `(details, ondone?)` 或 `(text, title?, image?, onclick?)`，也支持 `(text, ondone)`。现代返回等待交互结束的 `Promise<boolean>`：点击为 true，关闭、超时、替换或仅高亮完成为 false；旧版返回 undefined。ondone 先于 Promise 结算。宿主显示前已登记回调，重复点击和关闭不能重复结算。
 
-| 字段 | 类型 / 默认值 | 含义 |
-| --- | --- | --- |
-| `text` | 字符串 | 除非 highlight:true，否则必需。 |
-| `title` | 可选字符串 | 默认使用脚本名称。 |
-| `image`、`imageUrl` | 可选 URL 字符串 | imageUrl 优先，显示和获取由服务决定。 |
-| `highlight`、`silent` | 布尔值，false | 将请求转交宿主，实际效果取决于实现。 |
-| `timeout` | 可选整数，毫秒 | 传给通知服务，宿主决定计时支持方式。 |
-| `onclick`、`ondone` | 可选函数 | 在宿主点击/完成事件上无参数调用。 |
+选项包括 text（除非 highlight 否则必需）、title（默认脚本名）、image/imageUrl、tag、url、highlight、silent、timeout（非负整数毫秒）、onclick 和 ondone。相同非空 tag 替换该安装在当前宿主中的通知。onclick 收到可取消的 click Event，同步调用 event.preventDefault() 阻止默认 URL 跳转。回调异常单独报告，仍确认点击；宿主等待确认后再执行默认动作，五秒没有确认时按默认动作处理。URL 必须是经过宿主授权的绝对 HTTP(S) 地址。
 
-旧版重载为 GM_notification(details, ondone?)、GM_notification(text, title?, image?, onclick?) 和 GM_notification(text, ondone)，都返回 undefined；投递失败记录日志。现代方法不实现独立第二参数 ondone 或四参数重载，也不暴露移除/更新方法。
-
-Demo 在正数 timeout 到期或用户关闭/点击后关闭通知。它没有为 highlight 或 silent 提供单独实现，传入这些字段不保证系统高亮或声音策略。
-
-**与 Tampermonkey 的差异：** 不提供 tag 替换、url 跳转或 Tampermonkey 的通知句柄/Promise 完成约定。Demo 使用 WPF 窗口，而非扩展或系统通知界面，参见[官方通知 API](https://www.tampermonkey.net/documentation.php?q=GM_notification)。
+Demo 使用 WPF 所属窗口，highlight 选择并激活来源标签；无 text 的高亮直接完成。silent 禁止声音，正数 timeout 到期关闭。普通 URL 点击在回调后打开标签。无 url/tag 的通知在文档结束时关闭；带 url/tag 的通知保留到完成或宿主释放，旧文档回调停止，默认点击动作仍可执行。tag 限于同一宿主中的脚本安装，不是全局系统通知服务。
 
 ```javascript
-// @grant GM.notification
-(async function () {
-    const registration = await GM.notification({
-        title: "MonkeySharp", text: "Operation finished", timeout: 5000,
-        onclick: () => console.log("clicked"), ondone: () => console.log("closed")
-    });
-    console.log("Registered:", registration.id);
-})().catch(console.error);
+const clicked = await GM.notification({text:'已就绪',tag:'status',silent:true,url:'https://example.com/',
+    onclick:event => event.preventDefault(), ondone:() => console.log('已关闭')});
+console.log('点击:', clicked);
 ```
 
-### GM.setClipboard(text, type?) / GM_setClipboard(text, type?)
+### GM.setClipboard(data, info?, callback?) / GM_setClipboard(data, info?, callback?)
 
-需要对应授权及剪贴板服务。text 必须是字符串，type 是可选 MIME 字符串，默认 text/plain；HTML 使用 text/html。现代返回宿主写入后的 `Promise<undefined>`，旧版返回 undefined，失败记录日志。Demo 在 UI 线程写入 Unicode 文本或 CF_HTML，并在剪贴板被占用时短暂重试。
+data 必须是字符串。info 接受 text、html、text/plain、text/html，或 `{type:'text'|'html', mimetype:'text/plain'|'text/html'}`，mimetype 优先，默认文本；其他格式在写入前拒绝。可选 callback 只在实际写入成功后调用。现代在写入和回调后兑现 undefined，旧版立即返回 undefined。回调异常不会撤销写入或使现代调用拒绝。
 
-**与 Tampermonkey 的差异：** 不支持 info 对象或完成回调重载；使用 MIME 字符串，不依赖官方 API 的 `"text"` 或 `"html"` 短名称。其他字符串仅透传，Core 不规范化，参见[官方剪贴板 API](https://www.tampermonkey.net/documentation.php?q=GM_setClipboard)。
+Demo 在 STA dispatcher 写入 Unicode 文本和 HTML 的 CF_HTML 格式，偏移按 UTF-8 字节计算，保留占用重试。HTML 保持原格式，不静默降为纯文本。真实 E2E 检查两种格式，并在检查后恢复原剪贴板。
 
 ```javascript
-// @grant GM.setClipboard
-(async function () {
-    await GM.setClipboard("Copied by MonkeySharp", "text/plain");
-})().catch(console.error);
+await GM.setClipboard('<b>你好</b>', {type:'html',mimetype:'text/html'});
+GM_setClipboard('已复制', 'text', () => console.log('已写入'));
 ```
 
 <a id="tabs-and-tab-state"></a>
@@ -518,20 +533,9 @@ Demo 在正数 timeout 到期或用户关闭/点击后关闭通知。它没有�
 
 ### GM.openInTab(url, options?) / GM_openInTab(url, options?)
 
-需要对应授权和标签页服务。url 是绝对 HTTP(S) 字符串。现代 options 支持布尔值 active（默认 **false**）、insert（false）、setParent（false）。insert:true 请求插入到来源标签页旁边，布局由宿主决定。
+需要对应授权和标签页服务。HTTP(S) 字符串按当前文档解析相对 URL，也支持 about:blank。两种形式统一接受 loadInBackground 布尔简写或 options 对象；active 默认 false，显式 active 优先于 loadInBackground。insert:true 插入来源页旁，false 追加，非负整数指定标签栏位置（Demo 限定在实际可用范围）；setParent:true 关联来源页，以便关闭后恢复选择。incognito:true 请求真实私密上下文，Demo 在省略时继承来源标签；不支持的宿主在打开前拒绝。
 
-**两种形式**都立即返回本地句柄：
-
-| 句柄成员 | 行为 |
-| --- | --- |
-| `id` | 初始为 null，打开后异步填入宿主字符串 ID。 |
-| `closed` | 初始 false，收到宿主关闭通知后变为 true。 |
-| `onclose` | 可以赋值函数，关闭时无参数调用。 |
-| `close()` | `Promise<boolean>`；过早调用会排队等到打开获得 ID。重复调用复用待处理结果或返回 false。 |
-
-打开失败会记录日志，或拒绝待处理的关闭请求；没有等待打开就绪的 Promise。执行实例释放时销毁句柄，但不一定关闭已打开的用户标签页；Demo 会保留它们。
-
-旧版还接受 GM_openInTab(url, loadInBackgroundBoolean) 及 options.loadInBackground；没有显式提供 active 时，设置 `active = !loadInBackground`，现代调用不进行这些转换。不支持 incognito 或数字插入位置。默认不激活的行为与[官方标签页 API](https://www.tampermonkey.net/documentation.php?q=GM_openInTab)一致，不属于兼容差异。
+现代打开完成后返回 Promise<TabHandle>；旧版立即返回本地句柄。句柄只有 close、closed 和 onclose。close() 返回 undefined，过早调用会排队等到打开确认，且只发送一次。closed 反映宿主实际关闭；onclose 无参数且仅触发一次。客户关联 ID 也覆盖打开确认前的关闭事件，宿主 ID 保留在桥接内部。现代打开失败拒绝 Promise，旧版记录日志。执行结束移除回调订阅，保留已经打开的用户标签页。
 
 ### GM.getTab()、GM.saveTab(value)、GM.getTabs()
 
@@ -540,10 +544,10 @@ Demo 在正数 timeout 到期或用户关闭/点击后关闭通知。它没有�
 | API | 参数 / 行为 | 现代返回值 | 旧版约定 |
 | --- | --- | --- | --- |
 | `GM.getTab()` | 读取本脚本当前标签页对象。 | `Promise<object>` | GM_getTab(callback) 返回 undefined；回调为 (value, null) 或 (null, error)。 |
-| `GM.saveTab(value)` | 必需 JSON 对象，替换状态；拒绝数组和基础类型。 | `Promise<undefined>` | GM_saveTab(value) 返回 undefined，失败记录日志；无完成回调重载。 |
+| `GM.saveTab(value)` | 必需 JSON 对象，替换状态；拒绝数组和基础类型。 | `Promise<undefined>` | GM_saveTab(value, callback?) 返回 undefined，提交后调用回调；失败记录日志。 |
 | `GM.getTabs()` | 读取本脚本存活标签页的状态映射，以宿主标签页 ID 为键。 | `Promise<object>` | GM_getTabs(callback) 返回 undefined，回调/错误约定同 getTab。 |
 
-旧版 getTab/getTabs 错误为结构化 {error, details, code} 对象。修改 getTab 返回的对象不会自动保存。Demo 初始状态为 {}，完整页面导航后保留状态，关闭标签页后删除；应用启动时清除过期状态，不恢复浏览器会话。
+同一执行的标签保存和读取按调用顺序提交，旧版不 await 的调用也遵守顺序；保存先捕获 JSON 对象。旧版 getTab/getTabs 错误为结构化 `{error, details, code}` 对象。修改 getTab 返回的对象不会自动保存。Demo 初始状态为 `{}`，完整页面导航后保留状态，关闭标签后删除，应用启动时清理历史状态；不恢复浏览器会话。
 
 ```javascript
 // @grant GM.openInTab
@@ -555,11 +559,13 @@ Demo 在正数 timeout 到期或用户关闭/点击后关闭通知。它没有�
     state.lastAction = "opened help";
     await GM.saveTab(state);
     console.log(await GM.getTabs());
-    const tab = GM.openInTab("https://example.com/", { active: true, setParent: true });
+    const tab = await GM.openInTab("https://example.com/", { active: true, setParent: true });
     tab.onclose = () => console.log("Help tab closed");
-    // Later, while this execution is active: await tab.close();
+    // Later, while this execution is active: tab.close();
 })().catch(console.error);
 ```
+
+`window.close`/`window.focus` 是单独授权的[窗口扩展](#window-extensions)，不属于标签状态 API。
 
 <a id="downloads"></a>
 
@@ -567,54 +573,46 @@ Demo 在正数 timeout 到期或用户关闭/点击后关闭通知。它没有�
 
 ### GM.download(details) / GM_download(details)
 
-需要对应授权和下载服务。现代调用接受选项对象或 URL 字符串；旧版还支持 GM_download(url, name) 和 GM_download(details, onload?, onerror?)。建议使用下述对象形式，便于迁移。
+需要对应授权和下载服务。两种形式都接受选项对象或 `(url, name?)`；url 接受 HTTP(S) 字符串、Blob/File 和 blob URL，相对 HTTP URL 按文档地址解析。
 
 | 字段 | 类型 / 默认值 | 行为 |
 | --- | --- | --- |
-| `url` | 必需，绝对 HTTP(S) 字符串 | 不支持 Blob/File URL。 |
-| `name` | 可选字符串 | 请求的文件名，最终由宿主控制和清理。 |
-| `headers` | 字符串到字符串的对象，{} | 宿主下载请求头，校验可能与 XHR 不同。 |
-| `saveAs` | 布尔值，false | 请求显示目标选择器。 |
-| `conflictAction` | "uniquify"（默认）、"overwrite"、"prompt" | 请求的重名处理方式。 |
-| `timeout` | 可选正整数，毫秒 | 下载超时，此处 0 无效。 |
-| `onload` | 仅旧版，函数 ({id}) | 下载完成。 |
-| `onprogress` | 仅旧版，函数 ({loaded, total}) | 字节进度，total 可为 null/未知。 |
-| `onerror` | 仅旧版，函数 ({error, details, code?}) | 启动、失败或取消信息。 |
-| `ontimeout` | 仅旧版，函数 ({error: "timeout", details}) | 超时；未提供时回退到 onerror。 |
+| `url` | 必填 HTTP(S) 字符串、Blob/File 或 blob URL | 网络目标及重定向均经过宿主授权。 |
+| `name` | 可选字符串 | 建议文件名，最终路径由宿主选择及清理。 |
+| `headers` | 字符串字典，`{}` | 使用共用的浏览器网络服务。 |
+| `anonymous` | 布尔值，false | 不带浏览器 Cookie 和凭据。 |
+| `saveAs` | 布尔值，false | 请求宿主保存对话框。 |
+| `conflictAction` | uniquify / overwrite / prompt | 默认 uniquify；保存和冲突选项需要 browser 模式。 |
+| `timeout` | 正整数毫秒 | 覆盖选择路径、传输及提交；文件服务默认十分钟。 |
+| `onload` | 函数 `({url, name, loaded})` | 最终文件提交成功后调用。 |
+| `onprogress` | 函数 `({loaded, total})` | 字节进度；total 可为 null。 |
+| `onerror` | 函数 `({error, details, code?})` | 启动、传输、取消及磁盘失败。 |
+| `ontimeout` | 函数 | 超时；缺省回退到 onerror。 |
 
-现代返回普通 **`Promise<DownloadHandle>`，在启动后兑现**，不是完成时兑现。await 后得到 {id, abort()}；Promise 自身没有 .abort()。旧版立即返回本地句柄，id 异步可用。句柄 abort() 返回 `Promise<boolean>`，表示是否已向宿主请求/接受中止，而非下载完成结果。旧版句柄没有 ID 时可能返回 false，实际结果应通过终态回调观察。
+现代 GM.download 立即返回**带 abort() 的原始完成 Promise**，只有文件 flush、关闭并原子移动或替换到最终位置后才兑现。支持的完成详情是 `{url, name, loaded}` 子集：最终 URL、实际文件名和提交字节数，不含本地路径和内部 ID。旧版立即返回 `{abort()}`。两者 abort 均返回 undefined，在宿主确认前也能取消，终态后调用无害。两者均支持回调；回调异常单独报告，不会把已提交的下载变成失败。每次操作只结算一次。
 
-**当前现代门面的限制：** GM.download 不会注册 details 中的回调字段，它们会被忽略。现代方法只暴露启动成功/失败和中止句柄，没有供脚本使用的完成/进度通知。需要这些回调时，在 LegacyCompatible 中使用 GM_download；目前 ModernStrict 没有可观察下载完成的下载门面。
+错误使用 {error, details, code?}。权限/授权拒绝为 not_permitted；不支持的选项/后端为 not_supported；I/O、保存取消、主动中止及执行过期为 not_succeeded；传输超时为 timeout。先调用回调再拒绝现代 Promise，只终结一次。not_enabled 表示明确关闭下载功能；not_whitelisted 仅用于宿主实际存在的扩展名政策，Demo 不新增白名单。执行过期不表示功能关闭，成功仍须等文件提交。见[错误分类](compatibility/downloads.md#error-causes)。
 
-错误类别包括 not_enabled（会话失效）、not_permitted（授权）、not_whitelisted（宿主权限）、not_supported、not_succeeded 和 timeout。名称与 Tampermonkey 相似，但 not_whitelisted 不一定代表文件扩展名白名单。现代宿主/启动失败会以普通 {error, details, code} 对象拒绝，而不是带 .message 的 Error；本地校验仍可能拒绝 TypeError。旧版的启动及后续失败通过回调报告。完成/中止/失败均为终态；导航或宿主释放会取消执行实例拥有的下载。
+Demo GM 下载与 GM XHR 使用同一个 CEF HTTP 服务及 RequestContext，继承浏览器登录凭据、匿名语义、重定向授权及配置的 webRequest 组合。内容通过有界缓冲流入临时文件，再提交到 Data/Downloads 或用户选择的位置；失败和取消先清理临时文件，再通知终态。下载由宿主策略授权，不应用 XHR 的 @connect 列表，也没有扩展名白名单偏好设置。
 
-Demo 默认流式保存到 Data/Downloads，清理文件名，支持选择路径和冲突处理，并删除部分文件。其独立 HTTP 客户端**不会继承浏览器登录 Cookie 或凭据**。Core 不会对下载应用 XHR 的 @connect 白名单，访问由宿主下载服务和权限策略决定。不实现 anonymous 选项，也没有内置 Tampermonkey 的扩展名白名单设置。
-
-**与 Tampermonkey 的差异：**[官方现代 API](https://www.tampermonkey.net/documentation.php?q=GM_download)描述的是带 abort 的 Promise，并兑现下载详情；MonkeySharp 兑现启动句柄，在 await 后的句柄上中止，需要完成回调时使用旧版门面。
+已接受的下载属于宿主任务。导航、执行结束、脚本禁用或卸载会停止文档回调，已接受的任务按捕获的授权和重定向策略继续。宿主释放时取消任务，并应在关闭 CEF/网络服务前等待清理完成。完成前显式 abort 会取消任务；未接受或无效调用不启动传输。
 
 ```javascript
 // @grant GM.download
-(async function () {
-    const download = await GM.download({
-        url: "https://example.com/", name: "example.html"
-    });
-    console.log("Started:", download.id);
-    // To cancel after starting: await download.abort();
-})().catch(console.error);
-```
+const pending = GM.download({ url: 'https://example.com/file', name: 'file.bin' });
+// pending.abort(); // 可在调用后立即取消
+pending.then(details => console.log('已提交:', details.name, details.loaded), console.error);
 
-默认旧版模式中，需要完成通知时使用：
-
-```javascript
 // @grant GM_download
-const download = GM_download({
-    url: "https://example.com/", name: "example.html",
-    onload: result => console.log("Finished:", result.id),
-    onerror: error => console.error("Download failed:", error),
-    ontimeout: error => console.error("Download timed out:", error)
+const handle = GM_download({
+    url: 'https://example.com/file', name: 'file.bin',
+    onload: details => console.log('已提交:', details.name),
+    onerror: error => console.error(error)
 });
-// To cancel: download.abort().catch(console.error);
+// handle.abort();
 ```
+
+Blob/File 下载先逐块暂存，再进入相同的保存、取消及原子提交流程。暂存失败或导航会清理未启动的正文；已接受下载可在文档结束后继续，旧文档回调停止。自定义服务契约见[集成参考](integration-reference.zh-CN.md#二进制传输与流完成)。
 
 <a id="cookies"></a>
 
@@ -622,42 +620,87 @@ const download = GM_download({
 
 ### GM.cookie / GM_cookie
 
-授权 GM.cookie 或 GM_cookie，所有子方法共享该授权。需要 Cookie 服务。CefSharp 默认实现使用所附浏览器请求上下文，可读取 HttpOnly Cookie。每个目标 URL 都必须符合脚本 @match/@include 且不被排除；@connect 不能代替这些 URL 规则。
+需要 Cookie 授权与服务。现代 GM.cookie 仅提供 list/set/delete，旧版 GM_cookie 是带这三个方法的函数命名空间；没有 addListener/removeListener 自有扩展。访问后端前检查目标 URL 的 match/include/exclude 规则与宿主策略，@connect 不能替代这些检查。返回值还会在 Core 按 URL、host-only/domain、path 和 secure 范围再次过滤。
 
-| 方法 | 输入 / 行为 | 返回值 |
+| 方法 | 现代结果 | 旧版结果 / 回调 |
 | --- | --- | --- |
-| `GM.cookie.list(details?)` | 按条件筛选，details 默认为 {}。 | `Promise<Cookie[]>` |
-| `GM.cookie.set(details)` | 设置命名 Cookie。 | `Promise<Cookie>`，提供器也可返回 null。 |
-| `GM.cookie.delete(details)` | 删除命名 Cookie。 | `Promise<boolean>` |
-| `GM.cookie.addListener(details?, callback)` | 也可只传 callback；回调参数为 (cookie, cause, removed)。 | 立即返回正整数 ID，注册失败记录日志。 |
-| `GM.cookie.removeListener(listenerId)` | 移除当前执行实例的监听。 | `Promise<boolean>` |
+| list(details?) | 实际 Cookie[] 的 Promise | undefined；callback(cookies, null)，失败为 callback(null, errorString) |
+| set(details) | 验证写入后兑现 undefined | undefined；callback() 或 callback(errorString) |
+| delete(details) | 验证删除后兑现 undefined | undefined；callback() 或 callback(errorString) |
 
-| details 字段 | 用途与默认值 |
-| --- | --- |
-| `url` | 绝对 HTTP(S) 字符串，默认当前框架 URL。 |
-| `name` | list 的可选精确过滤条件，set/delete 必须提供非空字符串。 |
-| `domain`、`path` | list 的可选过滤条件；set 的 domain 默认 URL 主机、path 默认 /。默认 CefSharp 删除使用 URL + name，不按精确 domain/path 选择。 |
-| `value` | set 使用的字符串，省略时为空字符串。 |
-| `expirationDate` | 可选整数 Unix **秒数**或可解析日期字符串；省略创建会话 Cookie。为便于迁移，优先使用 Unix 秒数。 |
-| `secure`、`httpOnly` | set 布尔值，默认 false。 |
-| `sameSite`、`firstPartyDomain` | Core 保留的可选字符串，见下述默认服务限制。 |
+省略 details/url 使用当前 frame URL。name 是可选精确列表过滤条件，set/delete 要求非空字符串。domain/path 是可选精确列表过滤条件。set 不传 domain 创建 host-only Cookie；显式 domain 必须覆盖目标 host，并在 Chromium 接受时创建 domain Cookie。默认 path 是 URL 所在目录（/nested/page 对应 /nested），与固定参考一致；显式路径以 / 开始。value 默认空字符串。expirationDate 是可选整数 Unix 秒，省略即 session Cookie。secure/httpOnly 默认 false。sameSite 接受 unspecified、no_restriction、lax、strict，实际映射到 CDP，而非回显输入。
 
-返回的 Cookie 字段为 name、value、domain、path、expirationDate（Unix 秒数或 null）、firstPartyDomain、hostOnly、session、secure、httpOnly 和 sameSite。
+列表返回真实 name/value/domain/path、hostOnly、session、secure、httpOnly 及规范化 sameSite；持久 Cookie 含 Unix 秒 expirationDate，session Cookie 省略该字段。未知 first-party/partition 状态不伪造。set 检查协议结果，再读回完整身份及属性；策略拒绝或静默丢弃都报错。过期时间在过去的 set 验证 Cookie 已不存在。delete 选择一个可见身份（路径最长优先，同长时 host-only 优先），过期准确 domain/path/partition 身份并验证不存在；显式 domain/path 进一步限定，不会按名字批量误删。删除不存在项无副作用。
 
-旧版 CRUD 返回 undefined：GM_cookie.list(details?, callback?) 成功回调 (cookies, null)，失败回调 (null, errorString)；set(details, callback?) 和 delete(details, callback?) 成功时无参数调用，失败传 errorString。未提供错误回调时记录日志。旧版 addListener 返回同样的数字 ID；旧版 removeListener 返回 undefined，失败记录日志。
+默认后端使用宿主共享 CDP 会话，对应已附加浏览器的真实 RequestContext。单次操作始终使用同一会话，不解除其他消费者的观察器。导航可取消文档调用，detach/dispose 使原生会话失效。直接宿主可使用 new CefSharpCookieService(host)，旧的仅 RequestContext 构造器已移除。自定义 ICookieService 仅实现 CRUD，并须提供经过验证的实际状态。
 
-**默认服务限制 / 与 Tampermonkey 的差异：** 未实现 Cookie partitionKey，未知字段不保证分区选择。当前 CefSharp 写入不会将 sameSite/firstPartyDomain 应用到浏览器 Cookie，即使 Core 接受并保留字符串，set 的返回值也可能回显它们。监听器只报告经该服务完成的显式修改（cause: "explicit"），不是页面/HTTP Cookie 变更及过期事件的完整订阅。相较[官方 Cookie API](https://www.tampermonkey.net/documentation.php?q=GM_cookie)，addListener/removeListener 是 MonkeySharp 扩展，采用上述三参数回调。替换的宿主服务可以实现更多行为。
+partitionKey CRUD 在已测 121/151 支持，84 明确拒绝；cookiePartition、firstPartyDomain 仍不支持。省略分区键仅访问普通 Cookie。旧版回调异常只单独报告一次，不改变已完成操作。请使用旧版命名空间的三个公开方法，不支持直接调用命名空间本身。
+
+```javascript
+await GM.cookie.set({name:'session',value:'ready',sameSite:'lax',path:'/'});
+console.log(await GM.cookie.list({name:'session'}));
+await GM.cookie.delete({name:'session'}); // undefined，不返回删除布尔值
+GM_cookie.list({}, (cookies, error) => console.log(cookies, error));
+```
+
+<a id="partitioned-cookie-scope"></a>
+
+### 分区 Cookie 范围
+
+默认 CDP 后端在已测 121/151 支持可序列化分区 Cookie CRUD。84 对所有显式 partitionKey 在 Cookie 副作用前拒绝。省略 partitionKey 仅选择普通 Cookie；list 的 `{partitionKey:{}}` 包含所有可序列化分区及普通 Cookie，`{partitionKey:{topLevelSite:"https://top-a.test"}}` 选择该站点；显式空 topLevelSite 选择普通 Cookie。
+
+set/delete 接受同一 partitionKey 对象，修改中的空对象选择普通身份。分区 set 要求 secure:true。站点按对应 Chromium 固定版本的 ICANN/私有后缀列表规范化，包含通配与例外规则；返回真实规范化 partitionKey。opaque/nonce 键不在支持范围内。
+
+151 还支持 hasCrossSiteAncestor。省略时 list 匹配两类 ancestor 身份，set 按 Cookie URL 与目标站点推导，delete 按固定参考默认 true；删除同站祖先身份须显式传 false。121 协议没有该维度，会明确拒绝该字段。修改及读回覆盖完整分区身份；删除通过过期准确身份并验证不存在，保留其他分区、路径中的同名 Cookie。
+
+自定义分区后端除 CRUD 外实现 IPartitionedCookieService.NormalizePartitionKeyAsync，在 Core 过滤前验证实际支持并规范化键。其他后端会拒绝 partitionKey，不会静默访问普通存储。
+
+所有已测版本的 XHR cookiePartition 仍不支持。原生请求探针没有公开顶层分区选择字段，发送普通 Cookie，并将 Partitioned 响应存入请求自身站点而非指定站点；该参数在网络发送前拒绝。CRUD 不等于请求分区支持，不使用拼接 Cookie 头模拟。见 [Cookie 范围与证据](compatibility/cookies.md#partitioned-cookie-scope)中的独立结果及固定参考的删除副作用差异。
 
 ```javascript
 // @grant GM.cookie
+// @match https://cookies.example/*
 (async function () {
-    const id = GM.cookie.addListener({}, (cookie, cause, removed) => {
-        console.log(cookie.name, cause, removed);
-    });
-    await GM.cookie.set({ name: "ms_demo", value: "ready", path: "/" });
-    console.log(await GM.cookie.list({ name: "ms_demo" }));
-    console.log("Deleted:", await GM.cookie.delete({ name: "ms_demo" }));
-    await GM.cookie.removeListener(id);
+    const details = {url:'https://cookies.example/',name:'session',value:'ready',secure:true,
+        sameSite:'no_restriction',partitionKey:{topLevelSite:'https://top.example'}};
+    await GM.cookie.set(details);
+    console.log(await GM.cookie.list(details));
+    await GM.cookie.delete(details);
+})().catch(console.error);
+```
+
+<a id="private-browsing"></a>
+
+## 私密浏览
+
+`GM.openInTab(url, {incognito:true})` 及旧式调用请求真实私密上下文。Demo 提供 **私密＋** 按钮及私密标签标识。省略 incognito 时继承来源标签，false 显式打开普通标签。宿主通过 `ITabService.SupportsIncognito` 声明能力；不支持的服务在打开前拒绝私密请求。
+
+Demo 的私密标签共享独立内存 RequestContext，Cookie 和缓存与普通浏览隔离；权限记忆及标签数据只在内存中。最后私密标签关闭并排空任务后清除会话。`@run-in`、`GM.info.isIncognito` 及网络 API 使用同一实际上下文，宿主实现见[集成参考](integration-reference.zh-CN.md#私密浏览)。
+
+GM 值遵循固定 TM 5.5.1 临时私密会话实测：每脚本首次私密访问时复制普通初值，此后私密写入及监听只在私密会话内流转，不回写普通存储，最后私密标签关闭后不保留。这里是初值副本，不是实时共享。tab 数据枚举也按隐私上下文隔离。
+
+私密 console/runtime 诊断及 tab 数据不写入普通 profile；禁用 CEF 外的私密 favicon 自动加载，Demo 禁用原生日志文件，私密下载历史在来源标签关闭时移除。用户明确下载保存的文件及明确复制的剪贴板内容保留。见[对照与真实上下文证据](compatibility/README.md#private-contexts)。
+
+<a id="tab-audio"></a>
+
+## 标签音频
+
+授权 `GM.audio` 或 `GM_audio`。现代 `GM.audio.getState()` 兑现真实标签状态；`GM.audio.setMute({isMuted:true})` 在原生读回后兑现 `{isMuted:true}`，以固定 Tampermonkey 5.5.1 实测为准（官方文档写为 void）。旧式 `GM_audio.getState(callback)`、`GM_audio.setMute(details, callback?)` 返回 undefined，修改回调接收可选错误字符串。
+
+`addStateChangeListener(listener)`、`removeStateChangeListener(listener)` 按函数身份注册/移除。现代形式返回完成 Promise，旧式形式返回 undefined，可提供完成回调。监听应在修改前注册；事件含 `muted`（已知原因、`"unknown"` 或 false），只有可靠后端才提供 `audible`。导航和 detach 清理执行所属监听。
+
+默认 CefSharp 服务在 84/121/151 提供真实静音状态。已测 151 导航会将原生静音重置为 false，84/121 保持，因此不要假定跨导航保留。外部静音变化每 200 ms 轮询，可能漏报更短的变化。不提供可靠 `isAudible`/`audible`，能力报告 `partial:mute-only;audible-unavailable`；未知原因在状态中省略，在事件中为 `"unknown"`。
+
+音频服务可由宿主替换或关闭，配置与所有权见[集成参考](integration-reference.zh-CN.md#标签音频)；返回值与版本差异见[音频证据](compatibility/README.md#tab-audio)。
+
+```javascript
+// @grant GM.audio
+(async function () {
+    const onAudio = change => console.log(change.muted);
+    await GM.audio.addStateChangeListener(onAudio);
+    await GM.audio.setMute({isMuted:true});
+    const state = await GM.audio.getState();
+    await GM.audio.removeStateChangeListener(onAudio);
 })().catch(console.error);
 ```
 
@@ -667,39 +710,24 @@ const download = GM_download({
 
 ### GM.webRequest(rules, listener?) / GM_webRequest(rules, listener?)
 
-授权 GM.webRequest 或 GM_webRequest，需要 webRequest 服务，CefSharp 默认提供。rules 可以是单个规则对象或数组，每项包含 selector 和 action。注册彼此独立，执行结束时释放；新建注册不会替换之前的句柄。
+动态规则须授权 `GM.webRequest` 或 `GM_webRequest`。两种入口返回 `undefined`；重新调用替换本执行的规则和 listener，`GM.webRequest([])` 撤销规则。rules 是 `{selector, action}` 数组；selector 可以是 include 通配符、`/regexp/`，或含字符串/数组的 `{include, match, exclude}`，排除优先。仅拦截 `sub_frame`、`script`、`xhr`、`websocket`。
 
-| 输入 | 支持的格式 |
-| --- | --- |
-| 字符串 selector | URL 通配符、match 风格模式或斜杠包围的 .NET 正则。 |
-| 对象 selector | include、match、exclude 各接受字符串或字符串数组；排除优先，include/match 是或关系，也允许只给 exclude。 |
-| `action: "cancel"` | 取消匹配请求。 |
-| `action: "https://example.com/new"` | 静态 HTTP(S) 重定向。 |
-| `action: {from: "...", to: "..."}` | 将 URL 中首次出现且区分大小写的字面 from 替换为 to，不解析正则或展开捕获；两个字符串都必须非空。 |
-| `listener(info, message, details)` | 可选函数，观察取消/重定向匹配；返回值不能改变网络决定。 |
+action 支持 `"cancel"`、`{cancel:true}`、`{redirect:"https://example.com/new"}` 或 `{redirect:{from:"(https://[^/]+)/old/(.*)",to:"$1/new/$2"}}`。重定向使用受限 ECMAScript 正则、100 ms 超时及 JavaScript 捕获替换；展开后的目标再次校验脚本 URL 范围及宿主授权。不提供头修改或认证动作。
 
-重定向目标必须通过脚本正向 URL 规则及排除规则；静态目标在注册时检查，执行时也会检查。计算出的目标无效或不满足规则时，默认服务会**阻止该请求**。应使用范围明确的 selector。默认适配器评估浏览器资源回调，没有 Tampermonkey 文档所述的四种资源类型限制。MonkeySharp 默认服务中，数组靠后的规则优先级更高。已经发生的请求不能补拦截。
+listener 异步接收 `(action, status, details)`：action 为 `"cancel"`/`"redirect"`，status 为 `"ok"`/`"error"`，details 包含 `rule`、`url`、`redirect_url`、`description`，返回值不改变网络决定。动态规则限定于 browser/frame/document/execution，导航、更新、禁用、卸载及 detach 均会撤销。没有可信归属的请求不会套用其他 frame 的规则。
 
-两种形式都立即返回 {id, remove()}。id 初始为 null，之后变为宿主字符串；remove() 返回 `Promise<boolean>`，可在注册完成前调用。没有 listener 时不允许空规则。注册失败记录日志，或拒绝已经等待的移除请求。
+静态 `@webRequest` JSON 在安装期编译，并通过 `host.NavigateAsync` 在导航前激活，无须等待用户源码执行；仓库变更撤销旧规则。静态规则遵循 URL、frame、run-in 和宿主权限策略，文档加载期间不能弹出交互授权。晚附加无法补拦截已发送的请求。
 
-回调参数为：
-
-- info：{requestId, url, method, type}。
-- message："cancel" 或 "redirect"。
-- details：{phase, redirectUrl, error}，具体值取决于请求通知。这是匹配规则的观察信息，不代表重定向后的请求已成功加载。
-
-**与 Tampermonkey 的差异：**[官方 API](https://www.tampermonkey.net/documentation.php?q=GM_webRequest)使用 {cancel:true}/{redirect: ...} 动作对象、基于正则的重定向替换，以及 (actionString, "ok"|"error", details) 回调。这些**不是** MonkeySharp 的约定，必须使用上表中的字面替换、动作格式和回调对象。MonkeySharp 增加了可移除句柄，不自动应用静态 @webRequest，脚本门面也不暴露任意头修改/认证动作。Tampermonkey 自身还受扩展清单和浏览器版本影响，不能据此推断 MonkeySharp 的可用性。
+目标依据[官方历史契约](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_webRequest)。固定 MV2 差分环境尚缺；OOPIF、isolated frame 动态页面拦截及 WebSocket 覆盖不计为通过，见 [webRequest 范围与证据](compatibility/README.md#historical-webrequest)。
 
 ```javascript
-// @grant GM.webRequest
-// The script also needs @match https://example.com/* for these redirect targets.
-const registration = GM.webRequest([
-    { selector: "https://example.com/tracker/*", action: "cancel" },
-    { selector: "https://example.com/old/*", action: { from: "/old/", to: "/new/" } }
-], (info, message, details) => {
-    console.log(info.url, message, details.redirectUrl);
-});
-// Later: registration.remove().catch(console.error);
+// @grant GM_webRequest
+// @match https://example.com/*
+GM_webRequest([
+  {selector: "https://example.com/tracker/*", action: {cancel:true}},
+  {selector: "https://example.com/old/*", action: {redirect:{from:"/old/(.*)", to:"/new/$1"}}}
+], (action, status, details) => console.log(action, status, details.url));
+// 撤销：GM_webRequest([]);
 ```
 
 <a id="window-extensions"></a>
@@ -708,14 +736,14 @@ const registration = GM.webRequest([
 
 | 能力 | 参数与行为 | 返回值 |
 | --- | --- | --- |
-| `unsafeWindow` | 精确授权，暴露页面全局对象；是值而非函数。 | 页面全局对象。 |
-| `window.close()` | 精确 window.close 授权及窗口服务，请求宿主关闭来源标签页/窗口。 | `Promise<boolean>`；false 可能表示宿主拒绝，例如保留最后一个标签页。 |
-| `window.focus()` | 精确 window.focus 授权及窗口服务，请求宿主聚焦来源标签页/窗口。 | `Promise<boolean>`，表示宿主是否成功处理。 |
+| `unsafeWindow` | 页面世界除 `@grant none` 外指向页面全局；隔离世界为 undefined，显式 DOM 与该授权冲突会拒绝执行。它是值而非函数。 | 页面全局对象或 undefined。 |
+| `window.close()` | 精确 window.close 授权及窗口服务，请求宿主关闭来源标签页/窗口。 | `undefined`，宿主政策可能拒绝操作。 |
+| `window.focus()` | 精确 window.focus 授权及窗口服务，请求宿主聚焦来源标签页/窗口。 | `undefined`，宿主政策可能拒绝操作。 |
 | `window.onurlchange` | 精确授权，可赋值函数/null，或 window.addEventListener("urlchange", handler)。 | 属性/事件注册，回调接收 {url, oldURL}。 |
 
-URL 变化时会观察 pushState、replaceState、popstate 和 hashchange。使用 window.removeEventListener("urlchange", handler) 移除同一函数。回调的 this 为 window 门面；参数是普通对象，不是原生 Event，once/capture 等选项不会改变这套自定义注册行为。没有授权就不会建立 MonkeySharp URL 变更订阅。close/focus 缺少授权或服务时不可用。
+pushState、replaceState、popstate、hashchange 按 URL 去重。参数保持普通 {url, oldURL} 对象；先调用属性处理器，再按注册顺序调用监听器。函数的 this 为 window 门面，监听对象使用自己的 handleEvent。支持 once 和 AbortSignal；重复注册/移除以类型、回调、capture 匹配，capture 不创建 DOM 传播阶段。派发中新增监听等待下一次，移除立即生效；每个回调异常独立隔离。导航/执行结束清除订阅。oldURL、属性处理器、门面 receiver 和 signal 是 MonkeySharp 在[固定 TM 对照](compatibility/api-contract.md#pinned-reference-observations)之外的保证。没有授权不建立 URL 订阅；close/focus 仍需授权及宿主服务。
 
-脚本中的 window 是将普通原生函数绑定到页面窗口的门面，不是隔离沙箱。现代门面在对应 window.close/window.focus 能力启用时还暴露 GM.windowClose()/GM.windowFocus() 辅助名称；同样不接收参数，返回 `Promise<boolean>`。它们**不是单独的授权名称**。
+脚本中的 window 是绑定原生函数到页面窗口的门面。close/focus 返回 undefined，不提供 GM.windowClose/GM.windowFocus 别名。
 
 **与 Tampermonkey 的差异：** 这里的 unsafeWindow 不跨越扩展隔离世界；close/focus 是异步宿主决定。不应从[官方 window API](https://www.tampermonkey.net/documentation.php?q=window)推断存在原生 Event 或扩展隔离。
 
@@ -733,20 +761,20 @@ window.addEventListener("urlchange", onRoute);
 
 | 方面 | 迁移时的处理 |
 | --- | --- |
-| 执行边界 | 将脚本和页面视为可信的页面世界代码，不具有扩展沙箱或保证的 CSP 绕过。 |
-| 授权及模式 | GM.info 和 GM_info 无需授权，默认可用；其他 API 需要声明授权；ModernStrict 使用规范名称。 |
+| 执行边界 | DOM/content 使用每脚本隔离世界；页面特权执行需宿主信任。隔离 OOPIF 支持已验证的源码/存储/资源/XHR 范围；严格 start、透明 BFCache 恢复及通用 CSP 绕过不可用，详见[执行限制](compatibility/execution-worlds.md#remaining-limits)。 |
+| 授权 | info 默认可用，旧式全局需要精确声明；现代 API 家族按固定 5.5.1 实测开放。 |
 | 时机 / SPA | 不依赖保证的 document-start 或历史导航后的自动重跑。 |
 | 子域名匹配 | `*.domain` 的 match 模式包含裸域名及其所有层级的子域名。 |
-| 存储 | 使用支持的存储值，await 现代写入以观察失败，并考虑镜像限额及提交后通知的时序。 |
-| 资源 | 使用 `GM.getResourceUrl` 或 `GM.getResourceURL`，声明任一对应 grant，按 data URL 处理，并确认宿主资源提供器可用。 |
-| XHR | 检查代理/分区/Blob URL 等不支持项，适配进度/XML 行为，显式检查 HTTP 状态。 |
-| 菜单 / 剪贴板 | 使用字符串访问键及 MIME 字符串，移除不支持的选项对象/回调重载。 |
-| 通知 | 只使用支持字段；现代 Promise 在注册后兑现，而非关闭后。 |
-| 标签页 | 两种形式都立即返回句柄；通过 close/onclose 操作，不支持隐私模式和数字插入位置。 |
-| 下载 | await 启动句柄，再调用其 abort；完成回调需要旧版 GM_download，Demo 不继承浏览器凭据。 |
-| Cookie | 没有 partitionKey 语义，默认 SameSite/第一方写入及变更订阅有限。 |
-| webRequest | 改写动作对象及回调，显式注册运行时规则并保留移除句柄。 |
-| 其他管理器 API | 不内置 GM.audio/GM_audio 和扩展专属内容/部署 API；未知授权不会增加它们。 |
+| 存储 | 使用支持的存储值，await 现代写入以观察失败，并考虑镜像限额、本地同步监听及远端提交通知的时序。 |
+| 资源 | 使用 GM_getResourceURL 或 GM.getResourceUrl 及对应 grant；按 data URL 和已准备资源处理。 |
+| XHR | 默认 CEF 拒绝显式 Cookie 和请求分区；proxy 是 Firefox-only。适配 progress/XML 并检查 HTTP 状态。 |
+| 菜单 / 剪贴板 | 菜单选项及 ID 更新、通知交互完成、文本/HTML 剪贴板 info 与回调重载。 |
+| 通知 | 现代 Promise 等待完成并兑现点击状态；点击/tag/导航对照限制仍公开保留。 |
+| 标签页 | 现代返回 Promise，旧版立即返回句柄；Demo 支持数字插入和真实私密上下文，通过 close/onclose 操作。 |
+| 下载 | 立即返回带 abort 的完成 Promise；Demo 共用浏览器网络上下文，文件提交后才完成。 |
+| Cookie | 121/151 支持分区 CRUD；请求 cookiePartition、firstPartyDomain 及变更监听仍不可用。 |
+| webRequest | 历史 MV2 目标；官方 selector/cancel/redirect、返回 void，重新注册替换或 [] 撤销；历史 TM 差分仍 pending。 |
+| 其他管理器 API | 不内置扩展专属内容/部署 API；未知授权不会增加它们。音频按上文提供部分能力。 |
 
 这张表描述支持的约定及已知差异，不保证任意 Tampermonkey 脚本都能原样运行。应在实际宿主应用中验证所用功能。
 
@@ -764,22 +792,22 @@ window.addEventListener("urlchange", onRoute);
 | `MSP005_PERMISSION_DENIED` | 宿主策略、XHR connect 白名单或目标 URL 规则拒绝。 |
 | `MSP006_NOT_SUPPORTED` | 缺少实现/服务或参数不受支持。 |
 | `MSP007_INVALID_PARAMS` | 类型错误、缺少必需字段或非法值。 |
-| `MSP008_PAYLOAD_TOO_LARGE` | 超过普通桥接/资源限额。 |
+| `MSP008_PAYLOAD_TOO_LARGE` | 超过消息、资源、快照或整体传输预算。 |
 | `MSP009_TIMEOUT`、`MSP010_CANCELED` | 超时或取消，应处理终态。 |
 | `MSP999_INTERNAL` | 提供器/内部失败，查看宿主诊断。 |
 
-默认普通桥接请求和响应各限制 1 MiB，资源/依赖限制 10 MiB，普通请求超时 30 秒，每个文档最多 64 个待处理调用。宿主可以修改。分块 XHR 传输及其长时间 execute 操作使用独立控制，不将 1 MiB 当作整体主体上限。启动快照另有前述限制。
+默认每条桥接请求/响应各限 1 MiB，每个资源限 10 MiB，存储/资源启动快照各有 64 MiB 总预算及 5 秒准备超时。安装源码和依赖/资源内容共用 32 MiB 预算；HTTP 正文及暂存下载使用独立的 256 MiB 预算。普通桥接请求超时 30 秒、每文档最多 64 个待处理调用；HTTP `execute`/`readBody` 豁免普通超时。宿主可调整这些限制，完整配置见[集成参考](integration-reference.zh-CN.md#生命周期与诊断)。
 
 | 现象 | 排查项 |
 | --- | --- |
-| 脚本没有执行 | 启用状态、正向匹配、排除项、框架规则、run-at、元数据错误；显式授权还需要宿主信任选项（MSR201_BRIDGE_INTEGRITY_REQUIRED）。 |
-| GM 或方法为 undefined | 授权状态、大小写、兼容模式及宿主服务。缺失 API 通常根本不暴露，而非提供空实现。 |
-| 只有同步存储/资源 API 缺失 | 快照选项、大小和超时；MSC410_COMPATIBILITY_BOOTSTRAP_FAILED、MSC411_COMPATIBILITY_SNAPSHOT_DEGRADED、MSC412_COMPATIBILITY_BOOTSTRAP_LIMIT。 |
+| 脚本没有执行 | 启用状态、正向匹配、排除项、框架规则、run-at 和元数据错误；页面世界特权执行还需 `TrustedPageWorld`（`MSR201_BRIDGE_INTEGRITY_REQUIRED`），DOM 隔离仍需授权及宿主许可。 |
+| GM 或方法为 undefined | 授权状态、大小写、执行世界及宿主服务。缺失 API 通常不暴露，而非提供空实现。 |
+| 用户代码在第一句前失败 | 检查完整的存储/资源准备、快照分块、重放保留范围及大小/时间预算；MSC410_COMPATIBILITY_BOOTSTRAP_FAILED。准备失败会阻止执行，不会删去已授权 API 后继续。 |
 | 旧版写入看似成功后又回退 | 异步提交失败，查看 MSC413_COMPATIBILITY_MUTATION_FAILED；改用可 await 的现代写入。 |
-| 依赖不可用 | 检查宿主依赖提供器及 MSR400_DEPENDENCY_RESOLUTION_FAILED / MSR401_DEPENDENCY_PROVIDER_UNAVAILABLE。 |
-| 执行过晚或世界不符 | document-start 尽力执行（MSR100/MSR101），sandbox/unwrap 不创建隔离（MSR212/MSR213）。 |
+| 依赖不可用 | 查看安装/更新返回的异常，检查仓库 preparer 的依赖/资源提供器、网络、完整性和内容预算。准备失败不会发布新版本。 |
+| 执行过晚或世界不符 | document-start 尽力执行（MSR100/MSR101），不支持或冲突的执行世界明确拒绝（MSR215），参见执行矩阵。 |
 | XHR 重定向后失败 | @connect 必须允许每个重定向目标，并检查宿主策略。 |
-| 浏览器已登录但下载失败 | Demo 下载器是独立 HTTP 客户端；如果应用提供认证下载/原生下载路径，可使用该路径。 |
+| 浏览器已登录但下载失败 | 检查实际 RequestContext、anonymous、重定向授权及宿主权限；自定义下载服务须使用正确的浏览器网络上下文。 |
 | 导航后异步回调停止 | 旧执行已释放，需要在新文档重新注册。 |
 | JavaScript 异常 | 查看开发者工具及宿主 MSR300_SCRIPT_EXCEPTION，显式捕获异步错误。 |
 

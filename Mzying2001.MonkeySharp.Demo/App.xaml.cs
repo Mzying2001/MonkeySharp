@@ -28,7 +28,15 @@ namespace Mzying2001.MonkeySharp.Demo
                     await Mzying2001.MonkeySharp.Demo.Runtime.DemoSmokeTest.RunAsync(Runtime, checks);
                     await Runtime.ShutdownAsync();
                     checks["finalDisposal"] = true;
-                    if (report != null) File.WriteAllText(report, JsonSerializer.Serialize(new { success = true, checks, profile = directory }));
+                    if (report != null) File.WriteAllText(report, JsonSerializer.Serialize(new
+                    {
+                        success = true, checks, profile = directory,
+                        environment = new
+                        {
+                            cefSharpVersion = typeof(global::CefSharp.Cef).Assembly.GetName().Version.ToString(),
+                            platform = Environment.Is64BitProcess ? "x64" : "x86"
+                        }
+                    }));
                     await ((MainWindow)MainWindow).CloseForSmokeAsync(0);
                 }
                 else Runtime.MainWindow.NewTab();

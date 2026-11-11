@@ -1,31 +1,31 @@
+const completePlan = require("./test-plan");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 
-const template = fs.readFileSync(
-    path.resolve(__dirname, "../../Mzying2001.MonkeySharp.Core/Js/Init.js"), "utf8");
+const template = require("./bootstrap-template");
 
 test("XHR classifies HTTP, timeout, network, abort, and stream cancellation outcomes", async () => {
     const sessions = new Map();
     let nextSession = 0;
     const notify = (event, data) => globalThis.__MonkeySharpRuntime.receive({
-        type: "notification", protocol: 1, executionId: "errors-execution",
+        type: "notification", protocol: 2, executionId: "errors-execution",
         deliveryToken: "errors-delivery", event, data
     });
     const success = (request, result) => JSON.stringify({
-        type: "response", protocol: 1, requestId: request.requestId, ok: true, result
+        type: "response", protocol: 2, requestId: request.requestId, ok: true, result
     });
     const failure = (request, code, message) => JSON.stringify({
-        type: "response", protocol: 1, requestId: request.requestId, ok: false,
+        type: "response", protocol: 2, requestId: request.requestId, ok: false,
         error: { code, message }
     });
     globalThis.__MonkeySharpBridge = {
         dispatch: async requestJson => {
             const request = JSON.parse(requestJson);
             if (request.type === "hello") return JSON.stringify({
-                type: "hello-result", protocol: 1, ok: true, limits: {}, apis: ["GM.xmlHttpRequest"]
+                type: "hello-result", protocol: 2, ok: true, limits: {}, apis: ["GM.xmlHttpRequest"]
             });
             if (request.type === "cancel") return success(request, true);
             const params = request.params;
@@ -78,7 +78,7 @@ test("XHR classifies HTTP, timeout, network, abort, and stream cancellation outc
         }
     };
     const payload = {
-        protocol: 1, documentId: "errors-document", frameId: "main", runAt: "DocumentEnd",
+        protocol: 2, documentId: "errors-document", frameId: "main", runAt: "DocumentEnd",
         invocations: [{
             executionId: "errors-execution", scriptKey: "99999999-9999-9999-9999-999999999999",
             source: [
@@ -103,7 +103,7 @@ test("XHR classifies HTTP, timeout, network, abort, and stream cancellation outc
         }]
     };
     vm.runInThisContext(template.replace(
-        "__MONKEYSHARP_PAYLOAD_BASE64__", Buffer.from(JSON.stringify(payload)).toString("base64")));
+        "__MONKEYSHARP_PAYLOAD_BASE64__", Buffer.from(JSON.stringify(completePlan(payload))).toString("base64")));
     while (!globalThis.__errorsPromise) await new Promise(resolve => setTimeout(resolve, 5));
     await globalThis.__errorsPromise;
 

@@ -1,333 +1,239 @@
-using CefSharp;
-using Mzying2001.MonkeySharp.Core.Apis;
+﻿using Mzying2001.MonkeySharp.Core.Apis;
+using Mzying2001.MonkeySharp.Core.Domain;
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.Linq;
+using System.Net;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace Mzying2001.MonkeySharp.CefSharp
 {
-    /// <summary>Maps MonkeySharp cookie operations to a CefSharp request context cookie manager.</summary>
-    public sealed class CefSharpCookieService : ICookieService, IDisposable
+    /// <summary>Cookie CRUD through the attached browser's shared CDP session and actual RequestContext.</summary>
+    public sealed class CefSharpCookieService : IPartitionedCookieService, IDisposable
     {
-        private readonly Func<IRequestContext> _contextAccessor;
-        private readonly object _sync = new object();
-        private readonly Dictionary<Guid, Listener> _listeners = new Dictionary<Guid, Listener>();
-        private readonly HashSet<IPendingOperation> _pending = new HashSet<IPendingOperation>();
-        private long _sequence;
-        private bool _disposed;
+        private readonly Func<CancellationToken, Task<CefSharpCdpSession>> _session;
+        private readonly CancellationTokenSource _lifetime = new CancellationTokenSource();
+        private readonly SemaphoreSlim _mutations = new SemaphoreSlim(1, 1);
+        private int _disposed;
+        private readonly object _protocolLock = new object();
+        private Task<int> _protocol;
 
-        /// <summary>Initializes a cookie service for an initialized browser request context.</summary>
-        public CefSharpCookieService(IRequestContext context)
+        /// <inheritdoc />
+        public async Task<UserScriptCookiePartitionKey> NormalizePartitionKeyAsync(UserScriptCookiePartitionKey partitionKey,
+            Uri cookieUrl, CookiePartitionOperation operation, CancellationToken cancellationToken)
         {
-            if (context == null) throw new ArgumentNullException(nameof(context));
-            _contextAccessor = () => context;
+            if (partitionKey == null) return null;
+            var major = await ProtocolAsync(cancellationToken).ConfigureAwait(false);
+            if (major != 121 && major != 151) throw new UnsupportedApiException("Partitioned Cookie CRUD is verified only on Chromium 121 and 151; this engine is " + major + ".");
+            if (major == 121 && partitionKey.HasCrossSiteAncestor.HasValue) throw new UnsupportedApiException("hasCrossSiteAncestor is not available in the Chromium 121 protocol.");
+            if (string.IsNullOrEmpty(partitionKey.TopLevelSite)) return operation == CookiePartitionOperation.List ? partitionKey : null;
+            var site = SchemefulSite.FromUrl(new Uri(partitionKey.TopLevelSite), major);
+            var ancestor = partitionKey.HasCrossSiteAncestor;
+            if (major == 151 && operation == CookiePartitionOperation.Set)
+            {
+                var crossSite = SchemefulSite.FromUrl(cookieUrl, major) != site;
+                if (ancestor == false && crossSite) throw new ArgumentException("hasCrossSiteAncestor cannot be false for a cross-site cookie URL.");
+                ancestor = ancestor ?? crossSite;
+            }
+            else if (major == 151 && operation == CookiePartitionOperation.Delete) ancestor = ancestor ?? true;
+            return new UserScriptCookiePartitionKey(site, ancestor);
+        }
+        private async Task<int> ProtocolAsync(CancellationToken token)
+        {
+            Task<int> protocol;
+            lock (_protocolLock)
+            {
+                if (_protocol == null || _protocol.IsCanceled || _protocol.IsFaulted) _protocol = ReadProtocolAsync();
+                protocol = _protocol;
+            }
+            var canceled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            using (token.Register(() => canceled.TrySetCanceled())) await await Task.WhenAny(protocol, canceled.Task).ConfigureAwait(false);
+            return await protocol.ConfigureAwait(false);
+        }
+        private async Task<int> ReadProtocolAsync()
+        {
+            var session = await _session(_lifetime.Token).ConfigureAwait(false);
+            var version = await session.ExecuteAsync("Browser.getVersion", cancellationToken: _lifetime.Token).ConfigureAwait(false);
+            var product = version.GetProperty("product").GetString();
+            var number = product.Substring(product.LastIndexOf('/') + 1).Split('.')[0];
+            if (!int.TryParse(number, out var major)) throw new InvalidOperationException("The native engine did not report a usable version.");
+            return major;
         }
 
-        /// <summary>
-        /// Initializes a cookie service that resolves the current browser context for
-        /// each operation. This supports hosts that detach and attach to another browser.
-        /// </summary>
-        public CefSharpCookieService(Func<IRequestContext> contextAccessor)
-        {
-            _contextAccessor = contextAccessor ?? throw new ArgumentNullException(nameof(contextAccessor));
-        }
+        /// <summary>Uses the host's attached browser session. This service never owns/disposes the shared session.</summary>
+        public CefSharpCookieService(CefSharpUserScriptHost host)
+            : this(host == null ? throw new ArgumentNullException(nameof(host)) : new Func<CancellationToken, Task<CefSharpCdpSession>>(host.GetCdpSessionAsync)) { }
 
-        /// <summary>Lists cookies through the currently attached request context.</summary>
-        public Task<IReadOnlyList<UserScriptCookie>> ListAsync(UserScriptCookieQuery query, CancellationToken cancellationToken)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            ThrowIfDisposed();
-            var manager = GetCookieManager();
-            if (manager == null || manager.IsDisposed)
-                throw new ObjectDisposedException(nameof(ICookieManager));
-            var source = new CookieVisitor(query, cancellationToken);
-            AddPending(source);
-            var cancellation = cancellationToken.Register(source.Cancel);
-            source.Completion.ContinueWith(_ =>
-            {
-                cancellation.Dispose();
-                RemovePending(source);
-            }, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, TaskScheduler.Default);
-            try
-            {
-                if (!manager.VisitUrlCookies(query.Url.AbsoluteUri, true, source))
-                {
-                    source.Complete();
-                    return source.Completion;
-                }
-            }
-            catch
-            {
-                source.Cancel();
-                throw;
-            }
-            return source.Completion;
-        }
+        internal CefSharpCookieService(Func<CancellationToken, Task<CefSharpCdpSession>> session)
+        { _session = session ?? throw new ArgumentNullException(nameof(session)); }
 
-        /// <summary>Sets a cookie and publishes the resulting change to listeners.</summary>
-        public async Task<UserScriptCookie> SetAsync(UserScriptCookieMutation mutation, CancellationToken cancellationToken)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            ThrowIfDisposed();
-            var manager = GetCookieManager();
-            if (manager == null || manager.IsDisposed)
-                throw new ObjectDisposedException(nameof(ICookieManager));
-            var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            var pending = new PendingCompletion<bool>(completion);
-            AddPending(pending);
-            var cookie = new Cookie
-            {
-                Name = mutation.Name,
-                Value = mutation.Value,
-                Domain = mutation.Domain,
-                Path = mutation.Path,
-                Secure = mutation.Secure,
-                HttpOnly = mutation.HttpOnly,
-                Expires = mutation.ExpirationDate
-            };
-            try
-            {
-                if (!manager.SetCookie(mutation.Url.AbsoluteUri, cookie, new SetCallback(completion)))
-                    throw new InvalidOperationException("CefSharp rejected the cookie mutation.");
-                using (cancellationToken.Register(pending.Cancel))
-                {
-                    if (!await completion.Task.ConfigureAwait(false))
-                        throw new InvalidOperationException("CefSharp rejected the cookie mutation.");
-                }
-            }
-            finally
-            {
-                RemovePending(pending);
-            }
-            var result = new UserScriptCookie(mutation.Name, mutation.Value, mutation.Domain, mutation.Path,
-                mutation.ExpirationDate, mutation.Secure, mutation.HttpOnly, mutation.SameSite,
-                mutation.FirstPartyDomain, mutation.HostOnly);
-            Publish(result, "explicit", false, mutation.OriginExecutionId);
-            return result;
-        }
-
-        /// <summary>Deletes a cookie and returns whether the browser removed one.</summary>
-        public async Task<bool> DeleteAsync(UserScriptCookieMutation mutation, CancellationToken cancellationToken)
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            ThrowIfDisposed();
-            var manager = GetCookieManager();
-            if (manager == null || manager.IsDisposed)
-                throw new ObjectDisposedException(nameof(ICookieManager));
-            var completion = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
-            var pending = new PendingCompletion<int>(completion);
-            AddPending(pending);
-            try
-            {
-                if (!manager.DeleteCookies(mutation.Url.AbsoluteUri, mutation.Name, new DeleteCallback(completion)))
-                    return false;
-                using (cancellationToken.Register(pending.Cancel))
-                {
-                    var deleted = await completion.Task.ConfigureAwait(false) > 0;
-                    if (deleted)
-                        Publish(new UserScriptCookie(mutation.Name, mutation.Value, mutation.Domain, mutation.Path,
-                            mutation.ExpirationDate, mutation.Secure, mutation.HttpOnly, mutation.SameSite,
-                            mutation.FirstPartyDomain, mutation.HostOnly), "explicit", true,
-                            mutation.OriginExecutionId);
-                    return deleted;
-                }
-            }
-            finally
-            {
-                RemovePending(pending);
-            }
-        }
-
-        /// <summary>Registers a listener owned by the service until disposed.</summary>
-        public ICookieListenerRegistration AddListener(UserScriptCookieQuery query,
-            EventHandler<UserScriptCookieChangedEventArgs> changed)
+        /// <inheritdoc />
+        public async Task<IReadOnlyList<UserScriptCookie>> ListAsync(UserScriptCookieQuery query, CancellationToken cancellationToken)
         {
             if (query == null) throw new ArgumentNullException(nameof(query));
-            if (changed == null) throw new ArgumentNullException(nameof(changed));
-            lock (_sync)
+            using (var linked = Link(cancellationToken))
             {
-                ThrowIfDisposed();
-                var id = Guid.NewGuid();
-                var listener = new Listener(id, query, changed, this);
-                _listeners.Add(id, listener);
-                return listener;
+                var key = await NormalizePartitionKeyAsync(query.PartitionKey, query.Url, CookiePartitionOperation.List, linked.Token).ConfigureAwait(false);
+                var normalized = new UserScriptCookieQuery(query.Url, query.Name, query.Domain, query.Path, key);
+                var session = await _session(linked.Token).ConfigureAwait(false);
+                var result = query.PartitionKey == null
+                    ? await session.ExecuteAsync("Network.getCookies", new { urls = new[] { query.Url.AbsoluteUri } }, linked.Token).ConfigureAwait(false)
+                    : await session.ExecuteAsync("Network.getAllCookies", cancellationToken: linked.Token).ConfigureAwait(false);
+                return Cookies(result).Where(normalized.Matches).ToArray();
             }
         }
 
-        private void Publish(UserScriptCookie cookie, string cause, bool removed, string originExecutionId)
+        /// <inheritdoc />
+        public async Task<UserScriptCookie> SetAsync(UserScriptCookieMutation mutation, CancellationToken cancellationToken)
         {
-            Listener[] listeners;
-            long sequence;
-            lock (_sync)
+            Validate(mutation);
+            using (var linked = Link(cancellationToken))
             {
-                if (_disposed) return;
-                sequence = ++_sequence;
-                listeners = _listeners.Values.Where(item => item.Query.Matches(cookie)).ToArray();
-            }
-            var change = new UserScriptCookieChangedEventArgs(cookie, cause, removed, originExecutionId, sequence);
-            foreach (var listener in listeners)
-                listener.Callback(this, change);
-        }
-
-        private void Remove(Guid id)
-        {
-            lock (_sync) _listeners.Remove(id);
-        }
-
-        private void AddPending(IPendingOperation operation)
-        {
-            lock (_sync)
-            {
-                ThrowIfDisposed();
-                _pending.Add(operation);
-            }
-        }
-
-        private void RemovePending(IPendingOperation operation)
-        {
-            lock (_sync) _pending.Remove(operation);
-        }
-
-        private void ThrowIfDisposed()
-        {
-            if (_disposed) throw new ObjectDisposedException(nameof(CefSharpCookieService));
-        }
-
-        private ICookieManager GetCookieManager()
-        {
-            var context = _contextAccessor();
-            if (context == null)
-                throw new InvalidOperationException("No active CefSharp request context is attached.");
-            return context.GetCookieManager(null);
-        }
-
-        /// <summary>Cancels pending browser operations and releases listener state.</summary>
-        public void Dispose()
-        {
-            IPendingOperation[] pending;
-            lock (_sync)
-            {
-                if (_disposed) return;
-                _disposed = true;
-                _listeners.Clear();
-                pending = _pending.ToArray();
-                _pending.Clear();
-            }
-            foreach (var operation in pending)
-                operation.Cancel();
-        }
-
-        private interface IPendingOperation
-        {
-            void Cancel();
-        }
-
-        private sealed class PendingCompletion<T> : IPendingOperation
-        {
-            private readonly TaskCompletionSource<T> _completion;
-
-            public PendingCompletion(TaskCompletionSource<T> completion)
-            {
-                _completion = completion;
-            }
-
-            public void Cancel()
-            {
-                _completion.TrySetCanceled();
-            }
-
-        }
-
-        private sealed class CookieVisitor : ICookieVisitor, IPendingOperation
-        {
-            private readonly UserScriptCookieQuery _query;
-            private readonly CancellationToken _cancellationToken;
-            private readonly TaskCompletionSource<IReadOnlyList<UserScriptCookie>> _completion =
-                new TaskCompletionSource<IReadOnlyList<UserScriptCookie>>(TaskCreationOptions.RunContinuationsAsynchronously);
-            private readonly List<UserScriptCookie> _cookies = new List<UserScriptCookie>();
-
-            public CookieVisitor(UserScriptCookieQuery query, CancellationToken cancellationToken)
-            { _query = query; _cancellationToken = cancellationToken; }
-            public Task<IReadOnlyList<UserScriptCookie>> Completion => _completion.Task;
-
-            public void Cancel()
-            {
-                _completion.TrySetCanceled();
-            }
-
-            public void Complete()
-            {
-                _completion.TrySetResult(new ReadOnlyCollection<UserScriptCookie>(_cookies));
-            }
-
-            public bool Visit(Cookie cookie, int count, int total, ref bool deleteCookie)
-            {
-                if (_completion.Task.IsCompleted || _cancellationToken.IsCancellationRequested)
+                mutation = WithPartition(mutation, await NormalizePartitionKeyAsync(mutation.PartitionKey, mutation.Url, CookiePartitionOperation.Set, linked.Token).ConfigureAwait(false));
+                if (mutation.PartitionKey != null && !mutation.Secure)
+                    throw new ArgumentException("Partitioned cookies require secure:true.");
+                await _mutations.WaitAsync(linked.Token).ConfigureAwait(false);
+                try
                 {
-                    Cancel();
-                    return false;
+                    var session = await _session(linked.Token).ConfigureAwait(false);
+                    var parameters = await ParametersAsync(mutation, linked.Token).ConfigureAwait(false);
+                    var sameSite = ToProtocolSameSite(mutation.SameSite);
+                    var result = await session.ExecuteAsync("Network.setCookie", parameters, linked.Token).ConfigureAwait(false);
+                    if (result.TryGetProperty("success", out var accepted) && !accepted.GetBoolean())
+                        throw new InvalidOperationException("The browser rejected the cookie.");
+                    // Protocol success is insufficient: Chromium may silently reject policy-invalid cookies.
+                    var actual = (await AllAsync(session, linked.Token).ConfigureAwait(false)).SingleOrDefault(cookie => Identity(cookie, mutation));
+                    if (mutation.ExpirationDate <= DateTime.UtcNow)
+                    {
+                        if (actual != null) throw new InvalidOperationException("The browser retained an expired cookie.");
+                        return null;
+                    }
+                    if (actual == null || actual.Value != mutation.Value || actual.Secure != mutation.Secure || actual.HttpOnly != mutation.HttpOnly ||
+                        actual.Session != !mutation.ExpirationDate.HasValue ||
+                        (mutation.HostOnly && !actual.HostOnly) ||
+                        (!IPAddress.TryParse(mutation.Url.Host, out _) && !mutation.HostOnly && actual.HostOnly) ||
+                        (sameSite != null && actual.SameSite != FromProtocolSameSite(sameSite)) ||
+                        (mutation.ExpirationDate.HasValue && Math.Abs((actual.ExpirationDate.Value - mutation.ExpirationDate.Value.ToUniversalTime()).TotalSeconds) > 1))
+                        throw new InvalidOperationException("The browser did not retain the requested cookie state.");
+                    return actual;
                 }
-                var sameSite = cookie.GetType().GetProperty("SameSite")?.GetValue(cookie, null)?.ToString();
-                var firstPartyDomain = cookie.GetType().GetProperty("FirstPartyDomain")?.GetValue(cookie, null)?.ToString();
-                var value = new UserScriptCookie(cookie.Name, cookie.Value, cookie.Domain, cookie.Path,
-                    cookie.Expires, cookie.Secure, cookie.HttpOnly, sameSite, firstPartyDomain,
-                    string.IsNullOrEmpty(cookie.Domain) || !cookie.Domain.StartsWith(".", StringComparison.Ordinal),
-                    !cookie.Expires.HasValue);
-                if (_query.Matches(value)) _cookies.Add(value);
-                if (total <= 0 || count + 1 >= total)
-                    _completion.TrySetResult(new ReadOnlyCollection<UserScriptCookie>(_cookies));
-                return total <= 0 || count + 1 < total;
-            }
-
-            public void Dispose()
-            {
-                Complete();
+                finally { _mutations.Release(); }
             }
         }
 
-        private sealed class SetCallback : ISetCookieCallback
+        /// <inheritdoc />
+        public async Task<bool> DeleteAsync(UserScriptCookieMutation mutation, CancellationToken cancellationToken)
         {
-            private readonly TaskCompletionSource<bool> _completion;
-            public SetCallback(TaskCompletionSource<bool> completion) { _completion = completion; }
-            public bool IsDisposed => false;
-            public void OnComplete(bool success) { _completion.TrySetResult(success); }
-            public void Dispose() { }
-        }
-
-        private sealed class DeleteCallback : IDeleteCookiesCallback
-        {
-            private readonly TaskCompletionSource<int> _completion;
-            public DeleteCallback(TaskCompletionSource<int> completion) { _completion = completion; }
-            public bool IsDisposed => false;
-            public void OnComplete(int numDeleted) { _completion.TrySetResult(numDeleted); }
-            public void Dispose() { }
-        }
-
-        private sealed class Listener : ICookieListenerRegistration
-        {
-            private readonly CefSharpCookieService _owner;
-            private int _disposed;
-
-            public Listener(Guid id, UserScriptCookieQuery query,
-                EventHandler<UserScriptCookieChangedEventArgs> callback, CefSharpCookieService owner)
+            Validate(mutation);
+            using (var linked = Link(cancellationToken))
             {
-                Id = id;
-                Query = query;
-                Callback = callback;
-                _owner = owner;
-            }
-
-            public Guid Id { get; }
-            public UserScriptCookieQuery Query { get; }
-            public EventHandler<UserScriptCookieChangedEventArgs> Callback { get; }
-            public void Dispose()
-            {
-                if (Interlocked.Exchange(ref _disposed, 1) == 0)
-                    _owner.Remove(Id);
+                mutation = WithPartition(mutation, await NormalizePartitionKeyAsync(mutation.PartitionKey, mutation.Url, CookiePartitionOperation.Delete, linked.Token).ConfigureAwait(false));
+                await _mutations.WaitAsync(linked.Token).ConfigureAwait(false);
+                try
+                {
+                    var session = await _session(linked.Token).ConfigureAwait(false);
+                    var query = new UserScriptCookieQuery(mutation.Url, mutation.Name, mutation.HostOnly ? null : mutation.Domain,
+                        mutation.HasExplicitPath ? mutation.Path : null, mutation.PartitionKey);
+                    var selected = (await AllAsync(session, linked.Token).ConfigureAwait(false)).Where(query.Matches)
+                        .OrderByDescending(cookie => cookie.Path.Length).ThenByDescending(cookie => cookie.HostOnly).FirstOrDefault();
+                    if (selected == null) return false;
+                    // Older deleteCookies commands cannot select a partition; expiration targets one
+                    // complete canonical identity on every supported engine without deleting siblings.
+                    var expired = new UserScriptCookieMutation(mutation.Url, selected.Name, string.Empty,
+                        selected.HostOnly ? null : selected.Domain, selected.Path, new DateTime(1970, 1, 1, 0, 0, 1, DateTimeKind.Utc),
+                        selected.Secure, selected.HttpOnly, selected.SameSite, partitionKey: selected.PartitionKey);
+                    var result = await session.ExecuteAsync("Network.setCookie", await ParametersAsync(expired, linked.Token).ConfigureAwait(false), linked.Token).ConfigureAwait(false);
+                    if (result.TryGetProperty("success", out var accepted) && !accepted.GetBoolean()) throw new InvalidOperationException("The browser rejected the selected cookie expiration.");
+                    if ((await AllAsync(session, linked.Token).ConfigureAwait(false)).Any(cookie =>
+                        cookie.Name == selected.Name && cookie.Domain == selected.Domain && cookie.Path == selected.Path &&
+                        UserScriptCookiePartitionKey.SameIdentity(cookie.PartitionKey, selected.PartitionKey)))
+                        throw new InvalidOperationException("The browser did not remove the selected cookie.");
+                    return true;
+                }
+                finally { _mutations.Release(); }
             }
         }
+
+        private static bool Identity(UserScriptCookie cookie, UserScriptCookieMutation mutation) => cookie.Name == mutation.Name &&
+            cookie.Path == mutation.Path && string.Equals(cookie.Domain.TrimStart('.'), mutation.Domain.TrimStart('.'), StringComparison.OrdinalIgnoreCase) &&
+            UserScriptCookiePartitionKey.SameIdentity(cookie.PartitionKey, mutation.PartitionKey) &&
+            (mutation.HostOnly ? cookie.HostOnly : IPAddress.TryParse(mutation.Url.Host, out _) || !cookie.HostOnly);
+
+        private static UserScriptCookieMutation WithPartition(UserScriptCookieMutation mutation, UserScriptCookiePartitionKey key) =>
+            new UserScriptCookieMutation(mutation.Url, mutation.Name, mutation.Value, mutation.HostOnly ? null : mutation.Domain,
+                mutation.HasExplicitPath ? mutation.Path : null, mutation.ExpirationDate, mutation.Secure, mutation.HttpOnly,
+                mutation.SameSite, mutation.FirstPartyDomain, key);
+
+        private async Task<Dictionary<string, object>> ParametersAsync(UserScriptCookieMutation mutation, CancellationToken token)
+        {
+            var parameters = new Dictionary<string, object> { ["url"] = mutation.Url.AbsoluteUri,
+                ["name"] = mutation.Name, ["value"] = mutation.Value, ["path"] = mutation.Path,
+                ["secure"] = mutation.Secure, ["httpOnly"] = mutation.HttpOnly };
+            if (!mutation.HostOnly) parameters["domain"] = mutation.Domain;
+            if (mutation.ExpirationDate.HasValue) parameters["expires"] = new DateTimeOffset(mutation.ExpirationDate.Value.ToUniversalTime()).ToUnixTimeSeconds();
+            var sameSite = ToProtocolSameSite(mutation.SameSite);
+            if (sameSite != null) parameters["sameSite"] = sameSite;
+            if (mutation.PartitionKey != null)
+            {
+                var major = await ProtocolAsync(token).ConfigureAwait(false);
+                parameters["partitionKey"] = major == 121 ? (object)mutation.PartitionKey.TopLevelSite :
+                    new { topLevelSite = mutation.PartitionKey.TopLevelSite, hasCrossSiteAncestor = mutation.PartitionKey.HasCrossSiteAncestor.Value };
+            }
+            return parameters;
+        }
+
+        private static async Task<IReadOnlyList<UserScriptCookie>> AllAsync(CefSharpCdpSession session, CancellationToken token)
+            => Cookies(await session.ExecuteAsync("Network.getAllCookies", cancellationToken: token).ConfigureAwait(false)).ToArray();
+
+        private static IEnumerable<UserScriptCookie> Cookies(JsonElement result)
+        {
+            foreach (var item in result.GetProperty("cookies").EnumerateArray())
+            {
+                if (item.TryGetProperty("partitionKeyOpaque", out var opaque) && opaque.GetBoolean()) continue;
+                UserScriptCookiePartitionKey partitionKey = null;
+                if (item.TryGetProperty("partitionKey", out var key))
+                {
+                    partitionKey = key.ValueKind == JsonValueKind.String ? new UserScriptCookiePartitionKey(key.GetString()) :
+                        new UserScriptCookiePartitionKey(key.GetProperty("topLevelSite").GetString(), key.GetProperty("hasCrossSiteAncestor").GetBoolean());
+                }
+                var domain = item.GetProperty("domain").GetString();
+                var session = item.GetProperty("session").GetBoolean();
+                DateTime? expiration = session ? (DateTime?)null : DateTimeOffset.FromUnixTimeSeconds((long)item.GetProperty("expires").GetDouble()).UtcDateTime;
+                yield return new UserScriptCookie(item.GetProperty("name").GetString(), item.GetProperty("value").GetString(), domain,
+                    item.GetProperty("path").GetString(), expiration, item.GetProperty("secure").GetBoolean(), item.GetProperty("httpOnly").GetBoolean(),
+                    item.TryGetProperty("sameSite", out var sameSite) ? FromProtocolSameSite(sameSite.GetString()) : "unspecified",
+                    hostOnly: !domain.StartsWith(".", StringComparison.Ordinal), session: session, partitionKey: partitionKey);
+            }
+        }
+        private static string ToProtocolSameSite(string value)
+        {
+            switch (value)
+            {
+                case null: case "unspecified": return null;
+                case "no_restriction": return "None";
+                case "lax": return "Lax";
+                case "strict": return "Strict";
+                default: throw new ArgumentException("Unknown SameSite mode.");
+            }
+        }
+        private static string FromProtocolSameSite(string value)
+        {
+            switch (value) { case "None": return "no_restriction"; case "Lax": return "lax"; case "Strict": return "strict"; default: return "unspecified"; }
+        }
+        private static void Validate(UserScriptCookieMutation mutation)
+        {
+            if (mutation == null) throw new ArgumentNullException(nameof(mutation));
+            if (mutation.FirstPartyDomain != null) throw new UnsupportedApiException("firstPartyDomain is not supported by this CEF backend.");
+            ToProtocolSameSite(mutation.SameSite);
+        }
+        private CancellationTokenSource Link(CancellationToken token)
+        {
+            if (Volatile.Read(ref _disposed) != 0) throw new ObjectDisposedException(nameof(CefSharpCookieService));
+            return CancellationTokenSource.CreateLinkedTokenSource(token, _lifetime.Token);
+        }
+        /// <summary>Cancels this service's calls without detaching the shared protocol observer.</summary>
+        public void Dispose() { if (Interlocked.Exchange(ref _disposed, 1) == 0) _lifetime.Cancel(); }
     }
 }

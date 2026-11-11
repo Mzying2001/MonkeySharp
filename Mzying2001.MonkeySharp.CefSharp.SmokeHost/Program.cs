@@ -22,22 +22,41 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
 {
     internal static class Program
     {
+        internal static bool EnableBackForwardCacheProbe { get; private set; }
         [STAThread]
-        private static void Main()
+        private static void Main(string[] args)
         {
+            if (args.Length == 3 && args[0] == "--corpus") { Environment.ExitCode = global::MonkeySharp.Compatibility.CorpusHost.Run(args[1], args[2]); return; }
             CefSharpSettings.WcfEnabled = false;
             CefSharpSettings.ConcurrentTaskExecution = true;
+            if (args.Contains("--bfcache-probe") || args.Contains("--oopif-probe") || args.Contains("--start-csp-probe")) CefSharpSettings.ShutdownOnExit = false;
             var cachePath = Path.Combine(Path.GetTempPath(), "MonkeySharpSmoke", Guid.NewGuid().ToString("N"));
             var settings = new CefSettings
             {
                 RootCachePath = cachePath
             };
+            // Test-only self-signed loopback TLS; never applied by the production adapter.
+            settings.CefCommandLineArgs.Add("ignore-certificate-errors", "1");
+            settings.CefCommandLineArgs.Add("host-resolver-rules", "MAP cookie.monkeysharp.test 127.0.0.1");
+            settings.CefCommandLineArgs.Add("autoplay-policy", "no-user-gesture-required");
+            if (args.Contains("--oopif-probe") || args.Contains("--start-csp-probe"))
+            {
+                settings.CefCommandLineArgs["host-resolver-rules"] = "MAP *.monkeysharp.test 127.0.0.1, MAP *.monkeysharp-other.test 127.0.0.1";
+                settings.CefCommandLineArgs.Add("site-per-process", "1");
+                settings.CefCommandLineArgs.Add("no-proxy-server", "1");
+            }
+            EnableBackForwardCacheProbe = args.Contains("--enable-bfcache");
+            if (EnableBackForwardCacheProbe) settings.CefCommandLineArgs.Add("enable-features", "BackForwardCache");
             if (!Cef.Initialize(settings))
                 throw new InvalidOperationException("CefSharp initialization failed.");
 
             try
             {
-                RunAsync().GetAwaiter().GetResult();
+                if (args.Contains("--cdp-probe")) CdpProbe.RunAsync().GetAwaiter().GetResult();
+                else if (args.Contains("--bfcache-probe")) BfcacheProbe.RunAsync().GetAwaiter().GetResult();
+                else if (args.Contains("--oopif-probe")) OopifProbe.Run();
+                else if (args.Contains("--start-csp-probe")) StartCspProbe.RunAsync().GetAwaiter().GetResult();
+                else RunAsync().GetAwaiter().GetResult();
             }
             finally
             {
@@ -49,27 +68,38 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
         {
             using (var fixture = new LocalHttpFixture())
             using (var otherFixture = new LocalHttpFixture())
+            using (var values = new PreparedValueStore())
             {
                 var startUri = fixture.Start();
                 otherFixture.Start();
                 fixture.OtherPort = otherFixture.Port;
-                var repository = new InMemoryUserScriptRepository();
+                var preparedContent = new PreparedContent();
+                var repository = new InMemoryUserScriptRepository(preparer: new UserScriptPreparer(preparedContent, preparedContent));
                 await repository.InstallAsync(
                     LegacyFixture.Replace("__PORT__", fixture.Port.ToString()),
                     "smoke://fixture",
                     true,
                     CancellationToken.None);
                 await CompatibilitySuite.InstallAsync(repository, fixture.Port, otherFixture.Port);
+                preparedContent.Offline = true;
+                foreach (var script in await repository.GetSnapshotAsync(CancellationToken.None))
+                    if (script.Definition.Metadata.Name.StartsWith("Replay ", StringComparison.Ordinal)) values.SnapshotDelays[script.ScriptKey.ToString()] = TimeSpan.FromMilliseconds(500);
+                var preparedScript = (await repository.GetSnapshotAsync(CancellationToken.None)).Single(script => script.Definition.Metadata.Name == "Prepared content");
+                await values.SetAsync(preparedScript.ScriptKey.ToString(), "large", Mzying2001.MonkeySharp.Core.Storage.UserScriptValue.FromEncoded("s" + new string('v', 600000)), CancellationToken.None);
 
-                using (var downloads = new SmokeHttpDownloadService(fixture.Port))
+                SmokeHttpDownloadService downloads = null;
+                using (var permissions = new SmokePermissionPolicy(otherFixture.Port))
                 {
                     using (var host = new CefSharpUserScriptHostBuilder(repository)
+                        .UseValueStore(values)
+                        .UsePermissionPolicy(permissions)
                         .UseNotificationService(new SmokeNotificationService())
                         .UseTabService(new SmokeTabService())
-                        .UseDownloadService(downloads)
+                        .UseDownloadServiceFactory(http => downloads = new SmokeHttpDownloadService(fixture.Port, http))
                         .Configure(new CefSharpHostOptions
                         {
-                            TrustedPageWorld = true
+                            TrustedPageWorld = true,
+                            IsIncognito = context => context != null && context.IsGlobal ? (bool?)false : null
                         })
                         .LogTo(entry => Console.WriteLine("GM.log: " + entry.JsonValue))
                         .Build())
@@ -81,12 +111,13 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                                 code = diagnostic.Code,
                                 severity = diagnostic.Severity.ToString(),
                                 message = diagnostic.Message,
+                                exception = diagnostic.Exception?.ToString(),
                                 documentId = diagnostic.DocumentId,
                                 frameId = diagnostic.FrameId,
                                 requestId = diagnostic.RequestId
                             }));
 
-                        using (var form = new SmokeForm(host, startUri, fixture, downloads))
+                        using (var form = new SmokeForm(host, startUri, fixture, downloads, otherFixture, permissions, repository))
                             Application.Run(form);
                     }
                 }
@@ -110,7 +141,9 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             "// @grant GM_xmlhttpRequest\n" +
             "// @grant GM.notification\n" +
             "// @grant GM.openInTab\n" +
+            "// @grant GM_openInTab\n" +
             "// @grant GM.download\n" +
+            "// @grant GM_download\n" +
             "// @grant GM.cookie\n" +
             "// @grant GM.webRequest\n" +
             "// @connect 127.0.0.1\n" +
@@ -123,13 +156,12 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             "if (mainFrame && location.pathname.indexOf('/initial') >= 0) {\n" +
             "  (async function () {\n" +
             "    smoke.apis = {};\n" +
-            "    smoke.cookie = await GM.cookie.set({ url: location.href, name: 'smoke-cookie', value: 'ready' });\n" +
+            "    await GM.cookie.set({ url: location.href, name: 'smoke-cookie', value: 'ready' });\n" +
             "    smoke.cookieList = (await GM.cookie.list({ url: location.href })).length;\n" +
-            "    GM.cookie.addListener({ url: location.href }, function (cookie) { smoke.cookieChanged = cookie && cookie.value === 'changed'; });\n" +
             "    await GM.cookie.list({ url: location.href });\n" +
             "    await GM.cookie.set({ url: location.href, name: 'smoke-cookie', value: 'changed' });\n" +
-            "    while (!smoke.cookieChanged) { await GM.cookie.set({ url: location.href, name: 'smoke-cookie', value: 'changed' }); await new Promise(function (resolve) { setTimeout(resolve, 25); }); }\n" +
-            "    smoke.webRule = GM.webRequest([{ selector: location.origin + '/__monkeysharp_block__', action: 'cancel' }], function (info, message, details) { smoke.webRequestEvents = (smoke.webRequestEvents || 0) + (message === 'cancel' ? 1 : 0); });\n" +
+            "    await GM.cookie.set({ url: location.href, name: 'smoke-cookie', value: 'changed' }); smoke.cookieReadback = (await GM.cookie.list({url:location.href,name:'smoke-cookie'}))[0].value === 'changed';\n" +
+            "    smoke.webRule = GM.webRequest([{ selector: location.origin + '/__monkeysharp_block__', action: 'cancel' }], function (info, message, details) { smoke.webRequestEvents = (smoke.webRequestEvents || 0) + (info === 'cancel' && message === 'ok' ? 1 : 0); });\n" +
             "    var beacon = document.createElement('img'); beacon.src = location.origin + '/webrequest-beacon'; document.body.appendChild(beacon);\n" +
             "    await GM.notification({ title: 'MonkeySharp smoke', text: 'notification', onclick: function () { smoke.notificationClicked = true; }, ondone: function () { smoke.notificationDone = true; } });\n" +
             "    smoke.tab = await GM.openInTab(location.href, { active: false });\n" +
@@ -151,12 +183,12 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             "    try { await GM.xmlHttpRequest({ url: location.origin + '/slow', timeout: 50, ontimeout: function () { smoke.extended.timeout = true; } }); } catch (ignore) {}\n" +
             "    await new Promise(function (resolve) { var pending = GM.xmlHttpRequest({ url: location.origin + '/slow', onabort: function () { smoke.extended.abort = true; resolve(); }, onerror: resolve }); pending.catch(function () {}); setTimeout(function () { pending.abort(); }, 20); });\n" +
             "    smoke.apis.xmlhttpExtended = Object.keys(smoke.extended).length === 10 && Object.keys(smoke.extended).every(function (key) { return smoke.extended[key] === true; });\n" +
-            "    while (!smoke.notificationDone || !smoke.downloadProgress || !smoke.downloadCompleted || !smoke.cookieChanged || !smoke.tab.id) await new Promise(function (resolve) { setTimeout(resolve, 25); });\n" +
+            "    while (!smoke.notificationDone || !smoke.downloadProgress || !smoke.downloadCompleted || !smoke.cookieReadback || !smoke.tab.closed) await new Promise(function (resolve) { setTimeout(resolve, 25); });\n" +
             "    smoke.apis.notification = smoke.notificationDone === true;\n" +
-            "    smoke.apis.tab = Boolean(smoke.tab && smoke.tab.id);\n" +
+            "    smoke.apis.tab = Boolean(smoke.tab && typeof smoke.tab.close === 'function' && smoke.tab.closed);\n" +
             "    smoke.apis.download = smoke.downloadProgress === true && smoke.downloadCompleted === true;\n" +
-            "    smoke.apis.cookie = smoke.cookieList === 1 && smoke.cookieChanged === true;\n" +
-            "    smoke.apis.webRequest = Boolean(smoke.webRule) && typeof smoke.webRule.remove === 'function';\n" +
+            "    smoke.apis.cookie = smoke.cookieList === 1 && smoke.cookieReadback === true;\n" +
+            "    smoke.apis.webRequest = smoke.webRule === undefined;\n" +
             "    smoke.done = true;\n" +
             "    window.__monkeySharpSmokeResult = smoke; document.documentElement.dataset.monkeySharpSmoke = JSON.stringify(smoke);\n" +
             "  })().catch(function (error) { smoke.error = String(error && error.message || error); window.__monkeySharpSmokeResult = smoke; });\n" +
@@ -191,8 +223,9 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
         private readonly CompatibilitySuite _compatibility;
         private Dictionary<string, bool> _compatibilityResults;
         private readonly System.Windows.Forms.Timer _timeoutTimer;
+        private readonly CancellationTokenSource _fixtureCancellation = new CancellationTokenSource();
 
-        public SmokeForm(CefSharpUserScriptHost host, Uri startUri, LocalHttpFixture fixture, SmokeHttpDownloadService downloads)
+        public SmokeForm(CefSharpUserScriptHost host, Uri startUri, LocalHttpFixture fixture, SmokeHttpDownloadService downloads, LocalHttpFixture otherFixture, SmokePermissionPolicy permissions, InMemoryUserScriptRepository repository)
         {
             _host = host ?? throw new ArgumentNullException(nameof(host));
             _startUri = startUri ?? throw new ArgumentNullException(nameof(startUri));
@@ -209,13 +242,13 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             // uninitialized browser and can register its bridge first.
             _host.Attach(_browser);
             _host.DocumentLifecycle += HostDocumentLifecycle;
-            _compatibility = new CompatibilitySuite(host, _browser, fixture, downloads);
+            _compatibility = new CompatibilitySuite(host, _browser, fixture, downloads, otherFixture, permissions, repository);
             _browser.FrameLoadEnd += BrowserFrameLoadEnd;
             _browser.ConsoleMessage += (_, message) => Console.WriteLine(JsonSerializer.Serialize(new
             { type = "console", level = message.Level.ToString(), message = message.Message, source = message.Source, line = message.Line }));
             Controls.Add(_browser);
             FormClosing += FormOnClosing;
-            FormClosed += (_, __) => { _compatibility.Dispose(); _browser.Dispose(); };
+            FormClosed += (_, __) => { _compatibility.Dispose(); _browser.Dispose(); _fixtureCancellation.Dispose(); };
             _timeoutTimer = new System.Windows.Forms.Timer { Interval = 90000 };
             _timeoutTimer.Tick += SmokeTimeout;
             _timeoutTimer.Start();
@@ -269,28 +302,37 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                 return;
             }
             JavascriptResponse response;
+            var cancellationToken = _fixtureCancellation.Token;
             try
             {
                 var timer = Stopwatch.StartNew();
                 while (true)
                 {
-                    response = await frame.EvaluateScriptAsync(
-                        "JSON.stringify(window.__monkeySharpSmokeResult || null)", timeout: TimeSpan.FromSeconds(2));
-                    if (response.Success && response.Result is string json && json != "null")
+                    response = await ReadOnlyScriptEvaluator.EvaluateAsync(timeout =>
+                    {
+                        if (frame.IsDisposed || !frame.IsValid)
+                            throw new InvalidOperationException("The fixture main frame is no longer available.");
+                        return frame.EvaluateScriptAsync("JSON.stringify(window.__monkeySharpSmokeResult || null)", timeout: timeout);
+                    }, TimeSpan.FromSeconds(15) - timer.Elapsed, cancellationToken);
+                    if (!response.Success)
+                        throw new InvalidOperationException("The legacy fixture result could not be read: " + response.Message);
+                    if (response.Result is string json && json != "null")
                     {
                         using (var document = JsonDocument.Parse(json))
                             if (document.RootElement.TryGetProperty("done", out _) || document.RootElement.TryGetProperty("error", out _)) break;
                     }
                     if (timer.Elapsed > TimeSpan.FromSeconds(15))
                         throw new TimeoutException("Legacy fixture did not finish: " + response.Result);
-                    await Task.Delay(50);
+                    await Task.Delay(50, cancellationToken);
                 }
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { return; }
             catch (Exception exception)
             {
-                FailSmoke(phase, exception.Message);
+                FailSmoke(phase, exception.ToString());
                 return;
             }
+            finally { frame.Dispose(); }
 
             var passed = ValidateFixtureResult(response, phase);
             if (phase == "initial" && response.Success && response.Result is string initialJson)
@@ -304,7 +346,6 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                 message = response.Message
             }));
 
-            frame.Dispose();
             if (!passed)
             {
                 Environment.ExitCode = 1;
@@ -398,7 +439,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             _timeoutTimer.Stop();
             await _host.DetachAsync(CancellationToken.None).ConfigureAwait(true);
             var success = _initialFixturePassed && _mainFrameLoads >= 2 && _childFrameLoads >= 1 && _contextReleased >= 1 &&
-                !_host.IsAttached && _compatibilityResults != null && _compatibilityResults.Count == 5 && _compatibilityResults.Values.All(value => value);
+                !_host.IsAttached && _compatibilityResults != null && _compatibilityResults.Count == 15 && _compatibilityResults.Values.All(value => value);
             object fixture = null;
             if (!string.IsNullOrEmpty(_initialFixtureJson))
             {
@@ -433,6 +474,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
 
         private void FormOnClosing(object sender, FormClosingEventArgs args)
         {
+            _fixtureCancellation.Cancel();
             if (_closing)
                 return;
             _closing = true;
@@ -455,6 +497,18 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
 
     internal sealed class LocalHttpFixture : IDisposable
     {
+        private readonly System.Security.Cryptography.X509Certificates.X509Certificate2 _certificate;
+        public LocalHttpFixture(bool tls = false)
+        {
+            if (!tls) return;
+            var assembly = typeof(LocalHttpFixture).Assembly;
+            using (var input = assembly.GetManifestResourceStream(assembly.GetManifestResourceNames().Single(name => name.EndsWith("loopback.pfx"))))
+            using (var bytes = new MemoryStream())
+            {
+                input.CopyTo(bytes);
+                _certificate = new System.Security.Cryptography.X509Certificates.X509Certificate2(bytes.ToArray(), "fixture");
+            }
+        }
         private readonly TcpListener _listener = new TcpListener(IPAddress.Loopback, 0);
         private CancellationTokenSource _cancellation;
         private Task _acceptLoop;
@@ -473,7 +527,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             Port = ((IPEndPoint)_listener.LocalEndpoint).Port;
             _cancellation = new CancellationTokenSource();
             _acceptLoop = AcceptLoopAsync();
-            return new Uri("http://127.0.0.1:" + Port + "/initial");
+            return new Uri((_certificate == null ? "http" : "https") + "://127.0.0.1:" + Port + "/initial");
         }
 
         public void Dispose()
@@ -493,6 +547,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             foreach (var client in _clients.Keys) client.Dispose();
             Task.WhenAll(_serving).GetAwaiter().GetResult();
             _cancellation?.Dispose();
+            _certificate?.Dispose();
         }
 
         private async Task AcceptLoopAsync()
@@ -520,7 +575,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
         private async Task ServeAsync(TcpClient client)
         {
             using (client)
-            using (var stream = client.GetStream())
+            using (var stream = await OpenStreamAsync(client).ConfigureAwait(false))
             {
                 try
                 {
@@ -532,10 +587,101 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                         await WriteDownloadAsync(stream, request.Path.EndsWith("slow"), _cancellation.Token).ConfigureAwait(false);
                         return;
                     }
+                    if (request.Path == "/compat/replay-image") await Task.Delay(3000, _cancellation.Token).ConfigureAwait(false);
+                    if (request.Path == "/compat/replay-defer") await Task.Delay(200, _cancellation.Token).ConfigureAwait(false);
                     if (request.Path == "/compat/files/stalled") await Task.Delay(1500, _cancellation.Token).ConfigureAwait(false);
+                    if (request.Path == "/compat/truncated")
+                    {
+                        var partial = Encoding.ASCII.GetBytes("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: 100000\r\nConnection: close\r\n\r\nfirst");
+                        await stream.WriteAsync(partial, 0, partial.Length).ConfigureAwait(false);
+                        await Task.Delay(200, _cancellation.Token).ConfigureAwait(false);
+                        return;
+                    }
                     if (request.Path == "/stream")
                     {
                         await WriteChunkedAsync(stream).ConfigureAwait(false);
+                        return;
+                    }
+                    if (request.Path == "/probe/start-frame-parent" || request.Path == "/probe/csp-frame-parent")
+                    {
+                        var child = request.Path == "/probe/start-frame-parent" ? "/probe/start-full" : "/probe/csp-effects";
+                        var html = Encoding.UTF8.GetBytes("<!doctype html><body><script>var f=document.createElement('iframe');f.src='http://b.monkeysharp-other.test:" + Port + child + "'+location.search;document.body.appendChild(f);</script></body>");
+                        await WriteResponseAsync(stream, 200, "OK", "text/html", new Dictionary<string, string>(), html).ConfigureAwait(false);
+                        return;
+                    }
+                    if (request.Path == "/probe/start-full")
+                    {
+                        var html = Encoding.UTF8.GetBytes("<!doctype html><html><head><script>var key=new URL(location.href).searchParams.get('probe');window.__startCanary={nonce:key,time:performance.now(),raw:JSON.parse(document.documentElement.getAttribute('data-start-raw')||localStorage.getItem(key+'raw')||'null'),isolated:JSON.parse(document.documentElement.getAttribute('data-start-isolated')||localStorage.getItem(key+'isolated')||'null')};document.documentElement.setAttribute('data-first-inline',JSON.stringify(__startCanary));</script></head><body>Full GM first inline</body></html>");
+                        await WriteResponseAsync(stream, 200, "OK", "text/html", new Dictionary<string, string>(), html).ConfigureAwait(false);
+                        return;
+                    }
+                    if (request.Path == "/probe/csp-effects")
+                    {
+                        var html = Encoding.UTF8.GetBytes("<!doctype html><html><head><script>document.documentElement.dataset.cspPageInline='ran';</script></head><body>CSP effects</body></html>");
+                        await WriteResponseAsync(stream, 200, "OK", "text/html", new Dictionary<string, string> { ["Content-Security-Policy"] = "default-src 'none';script-src 'self';style-src 'none';connect-src 'none';img-src 'none'" }, html).ConfigureAwait(false);
+                        return;
+                    }
+                    if (request.Path == "/probe/csp-external.js" || request.Path == "/probe/csp.css")
+                    {
+                        var script = request.Path.EndsWith(".js");
+                        var bytes = Encoding.UTF8.GetBytes(script ? "document.documentElement.dataset.cspExternal='ran';" : "body{outline:19px solid red}");
+                        await WriteResponseAsync(stream, 200, "OK", script ? "application/javascript" : "text/css", new Dictionary<string, string>(), bytes).ConfigureAwait(false);
+                        return;
+                    }
+                    if (request.Path == "/probe/oopif")
+                    {
+                        var html = Encoding.UTF8.GetBytes("<!doctype html><title>OOPIF parent</title><iframe src='http://b.monkeysharp-other.test:" + Port + "/probe/oopif-child'></iframe>");
+                        await WriteResponseAsync(stream, 200, "OK", "text/html", new Dictionary<string, string>(), html).ConfigureAwait(false);
+                        return;
+                    }
+                    if (request.Path == "/probe/bfcache-a" || request.Path == "/probe/bfcache-b")
+                    {
+                        var page = "<!doctype html><title>" + (request.Path.EndsWith("-a") ? "cache-a" : "cache-b") + "</title><script>" +
+                            "window.__cacheProbe={nonce:Math.random().toString(36),events:[]};addEventListener('pageshow',function(e){__cacheProbe.events.push({type:'show',persisted:e.persisted});});" +
+                            "addEventListener('pagehide',function(e){__cacheProbe.events.push({type:'hide',persisted:e.persisted});});</script><body>cache probe</body>";
+                        var pageBytes = Encoding.UTF8.GetBytes(page);
+                        var headerBytes = Encoding.ASCII.GetBytes("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nCache-Control: public,max-age=600\r\nContent-Length: " + pageBytes.Length + "\r\nConnection: close\r\n\r\n");
+                        await stream.WriteAsync(headerBytes, 0, headerBytes.Length).ConfigureAwait(false);
+                        await stream.WriteAsync(pageBytes, 0, pageBytes.Length).ConfigureAwait(false);
+                        return;
+                    }
+                    if (request.Path == "/compat/body-redirect")
+                    {
+                        await WriteResponseAsync(stream, 307, "Temporary Redirect", "text/plain",
+                            new Dictionary<string, string> { ["Location"] = "/echo" }, new byte[0]).ConfigureAwait(false);
+                        return;
+                    }
+                    if (request.Path == "/compat/progress-gzip")
+                    {
+                        byte[] compressed;
+                        using (var memory = new MemoryStream())
+                        {
+                            using (var gzip = new System.IO.Compression.GZipStream(memory, System.IO.Compression.CompressionMode.Compress, true))
+                            {
+                                var text = Encoding.UTF8.GetBytes("a你好");
+                                gzip.Write(text, 0, text.Length);
+                            }
+                            compressed = memory.ToArray();
+                        }
+                        await WriteResponseAsync(stream, 200, "OK", "text/plain; charset=utf-8",
+                            new Dictionary<string, string> { ["Content-Encoding"] = "gzip" }, compressed).ConfigureAwait(false);
+                        return;
+                    }
+                    if (request.Path == "/compat/progress")
+                    {
+                        var header = Encoding.ASCII.GetBytes("HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n");
+                        await stream.WriteAsync(header, 0, header.Length).ConfigureAwait(false);
+                        foreach (var segment in new[] { new byte[] { 97, 228, 189 }, new byte[] { 160, 229, 165, 189 } })
+                        {
+                            var prefix = Encoding.ASCII.GetBytes(segment.Length.ToString("X") + "\r\n");
+                            await stream.WriteAsync(prefix, 0, prefix.Length).ConfigureAwait(false);
+                            await stream.WriteAsync(segment, 0, segment.Length).ConfigureAwait(false);
+                            await stream.WriteAsync(new byte[] { 13, 10 }, 0, 2).ConfigureAwait(false);
+                            await stream.FlushAsync().ConfigureAwait(false);
+                            await Task.Delay(350).ConfigureAwait(false);
+                        }
+                        var end = Encoding.ASCII.GetBytes("0\r\n\r\n");
+                        await stream.WriteAsync(end, 0, end.Length).ConfigureAwait(false);
                         return;
                     }
                     if (request.Path == "/slow") await Task.Delay(500).ConfigureAwait(false);
@@ -547,14 +693,82 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                     byte[] body;
                     switch (request.Path)
                     {
+                        case "/compat/files/auth":
+                            request.Headers.TryGetValue("Cookie", out var downloadCookie);
+                            if (downloadCookie != null && downloadCookie.Contains("download-login=ready")) body = DownloadBytes;
+                            else { status = 401; statusText = "Unauthorized"; body = Encoding.UTF8.GetBytes("Login required"); }
+                            break;
+                        case "/compat/files/auth-redirect":
+                            status = 302; statusText = "Found";
+                            headers.Add(new KeyValuePair<string, string>("Location", "/compat/files/auth"));
+                            body = new byte[0];
+                            break;
+                        case "/compat/files/empty":
+                            body = new byte[0];
+                            break;
+                        case "/probe/start":
+                            contentType = "text/html; charset=utf-8";
+                            body = Encoding.UTF8.GetBytes("<!doctype html><html><head><script>" +
+                                "document.dispatchEvent(new Event('probe-first-inline'));" +
+                                "window.__firstInline = {page:window.__pagePrepared === true, isolatedA:document.documentElement.dataset.isolatedA || null, isolatedB:document.documentElement.dataset.isolatedB || null, gm:document.documentElement.dataset.gmStart || null};" +
+                                "</script></head><body>First inline timing probe</body></html>");
+                            break;
                         case "/compat/frames":
                             contentType = "text/html; charset=utf-8";
                             body = Encoding.UTF8.GetBytes("<!doctype html><html><body><iframe id='same' src='/compat/frames/same'></iframe>" +
                                 "<iframe src='http://127.0.0.1:" + OtherPort + "/compat/frames/cross'></iframe></body></html>");
                             break;
+                        case "/compat/replay":
+                            contentType = "text/html; charset=utf-8";
+                            body = Encoding.UTF8.GetBytes("<!doctype html><html><head><script defer src='/compat/replay-defer'></script></head><body><img src='/compat/replay-image'></body></html>");
+                            break;
+                        case "/compat/permission-ok":
+                            body = Encoding.UTF8.GetBytes("permission-ok");
+                            break;
+                        case "/compat/permission-redirect":
+                            status = 302; statusText = "Found";
+                            headers.Add(new KeyValuePair<string, string>("Location", "http://127.0.0.1:" + OtherPort + "/compat/permission-denied"));
+                            body = new byte[0];
+                            break;
+                        case "/compat/csp":
+                            contentType = "text/html; charset=utf-8";
+                            headers.Add(new KeyValuePair<string, string>("Content-Security-Policy", "default-src 'none';script-src 'none';style-src 'none'"));
+                            body = Encoding.UTF8.GetBytes("<!doctype html><html><head><script>window.pageCspBypassed=true;</script></head><body>CSP fixture</body></html>");
+                            break;
+                        case "/compat/replay-defer":
+                            contentType = "text/javascript";
+                            body = Encoding.UTF8.GetBytes("window.replayDeferred=true;");
+                            break;
+                        case "/compat/replay-image":
+                            contentType = "image/png";
+                            body = new byte[] { 0, 1, 2 };
+                            break;
+                        case "/compat/isolated":
+                        case "/compat/isolated-child":
+                            contentType = "text/html; charset=utf-8";
+                            body = Encoding.UTF8.GetBytes("<!doctype html><html><head><script>window.pageOnlyCanary='page';window.isolatedAtFirstInline=document.documentElement.getAttribute('data-isolated-a');</script></head><body>Isolated execution fixture</body></html>");
+                            break;
                         case "/compat/cookie-echo":
                             request.Headers.TryGetValue("Cookie", out var compatCookie);
                             body = Encoding.UTF8.GetBytes(compatCookie ?? string.Empty);
+                            break;
+                        case "/compat/audio":
+                            contentType = "text/html; charset=utf-8";
+                            body = Encoding.UTF8.GetBytes("<!doctype html><html><body><iframe src='/compat/audio-child'></iframe></body></html>");
+                            break;
+                        case "/compat/webrequest":
+                            contentType = "text/html; charset=utf-8";
+                            body = Encoding.UTF8.GetBytes("<!doctype html><html><head><script src='/compat/net/static-blocked.js'></script>" +
+                                "<script src='/compat/net/static-old.js'></script></head><body>Static rule first-request fixture</body></html>");
+                            break;
+                        case "/compat/net/static-blocked.js":
+                            contentType = "text/javascript"; body = Encoding.UTF8.GetBytes("globalThis.staticBlocked=true;"); break;
+                        case "/compat/net/static-target.js":
+                            contentType = "text/javascript"; body = Encoding.UTF8.GetBytes("globalThis.staticTarget=true;"); break;
+                        case "/partition-receive":
+                            request.Headers.TryGetValue("Cookie", out var partitionCookie);
+                            body = Encoding.UTF8.GetBytes(partitionCookie ?? string.Empty);
+                            headers.Add(new KeyValuePair<string, string>("Set-Cookie", "partition-received=done; Path=/; Secure; SameSite=None; Partitioned"));
                             break;
                         case "/compat/net/blocked":
                         case "/compat/net/original":
@@ -567,6 +781,12 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                             statusText = "Not Found";
                             body = Encoding.UTF8.GetBytes("missing fixture file");
                             break;
+                        case "/compat/latin":
+                            contentType = "text/plain; charset=windows-1252";
+                            body = new byte[] { 99, 97, 102, 233 }; break;
+                        case "/compat/html":
+                            contentType = "text/html; charset=utf-8";
+                            body = Encoding.UTF8.GetBytes("<!doctype html><title>parsed html</title><p>body"); break;
                         case "/xhr":
                             body = Encoding.UTF8.GetBytes("legacy xhr ok");
                             break;
@@ -626,6 +846,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                 catch (IOException)
                 {
                 }
+                catch (System.Security.Authentication.AuthenticationException) { }
                 catch (SocketException)
                 {
                 }
@@ -635,7 +856,20 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             }
         }
 
-        private static async Task<HttpRequestData> ReadRequestAsync(NetworkStream stream)
+        private async Task<Stream> OpenStreamAsync(TcpClient client)
+        {
+            if (_certificate == null) return client.GetStream();
+            var stream = new System.Net.Security.SslStream(client.GetStream(), false);
+            try
+            {
+                await stream.AuthenticateAsServerAsync(_certificate, false, System.Security.Authentication.SslProtocols.Tls12, false).ConfigureAwait(false);
+                return stream;
+            }
+            catch (Exception error) when (error is IOException || error is System.Security.Authentication.AuthenticationException)
+            { stream.Dispose(); return Stream.Null; }
+        }
+
+        private static async Task<HttpRequestData> ReadRequestAsync(Stream stream)
         {
             var buffer = new byte[4096];
             using (var received = new MemoryStream())
@@ -688,7 +922,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
         }
 
         private static async Task WriteResponseAsync(
-            NetworkStream stream,
+            Stream stream,
             int status,
             string statusText,
             string contentType,
@@ -707,7 +941,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             await stream.WriteAsync(body, 0, body.Length).ConfigureAwait(false);
         }
 
-        private static async Task WriteChunkedAsync(NetworkStream stream)
+        private static async Task WriteChunkedAsync(Stream stream)
         {
             var header = Encoding.ASCII.GetBytes(
                 "HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\n" +
@@ -726,7 +960,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             await stream.WriteAsync(end, 0, end.Length).ConfigureAwait(false);
         }
 
-        private static async Task WriteDownloadAsync(NetworkStream stream, bool slow, CancellationToken token)
+        private static async Task WriteDownloadAsync(Stream stream, bool slow, CancellationToken token)
         {
             var header = Encoding.ASCII.GetBytes("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: " +
                 DownloadBytes.Length + "\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n");
@@ -757,7 +991,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
 
     internal sealed class SmokeNotificationService : INotificationService
     {
-        public INotificationHandle ShowAsync(UserScriptNotificationRequest request, CancellationToken cancellationToken)
+        public INotificationHandle Create(UserScriptNotificationRequest request, CancellationToken cancellationToken)
         {
             return new SmokeNotificationHandle();
         }
@@ -765,13 +999,11 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
 
     internal sealed class SmokeNotificationHandle : INotificationHandle
     {
+        public void Start() { _ = CompleteAsync(); }
+        public void ResolveClick(bool preventDefault) { }
         private readonly TaskCompletionSource<bool> _completion = new TaskCompletionSource<bool>();
         private int _disposed;
 
-        public SmokeNotificationHandle()
-        {
-            _ = CompleteAsync();
-        }
 
         public Task Completion => _completion.Task;
         public event EventHandler Clicked;
@@ -799,6 +1031,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
 
     internal sealed class SmokeTabService : ITabService
     {
+        public bool SupportsIncognito => false;
         private int _nextId;
 
         public Task<ITabHandle> OpenAsync(OpenTabRequest request, CancellationToken cancellationToken)

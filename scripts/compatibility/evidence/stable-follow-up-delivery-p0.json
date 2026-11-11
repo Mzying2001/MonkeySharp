@@ -1,0 +1,3030 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-11T00:25:32.950027+08:00",
+  "step": 27,
+  "implementationCommit": "fe3c8dfd5d505eeadb1cf90f0fbade5a0f118245",
+  "sourcePatchSha256": "6a638eed56cd72a8eac2b12ef6a1ee32485ae49629fa30b53cde0cbd8dd804e7",
+  "status": "limited-scope-delivery-passed",
+  "m1Accepted": false,
+  "originalStep15Complete": false,
+  "artifacts": [
+    {
+      "path": "artifacts/p2-delivery/e9c8dbd16171",
+      "rawDeliverySha256": "5e0c1b248c3565bd82104cdfe73f0d41d0245cf2ab1c9a1993abaf95ab3da6d1"
+    }
+  ],
+  "referenceEvidence": [
+    "corpus-reference-stable-p0.json",
+    "tampermonkey-5.5.1-p0-download-errors.json",
+    "tampermonkey-5.5.1-p0-notification.json"
+  ],
+  "remainingAcceptance": [
+    "Reference browser downloads permission absent; saved-file/archive/cancellation parity blocked.",
+    "Reference SiteAssetDL history wrapper installed, changed-resource refresh assertion failed.",
+    "Native fixed-reference notification click/default prevention/navigation and download failure interactions need evidence."
+  ],
+  "declaredLimits": [
+    "best-effort full-GM document-start",
+    "page style CSP",
+    "Chromium 84 replaceAll language limitation in the unmodified Find Scripts settings UI",
+    "explicit Cookie rejected by default CEF transport",
+    "request cookiePartition unavailable",
+    "OOPIF/transparent BFCache/isolated child manual menus unavailable",
+    "audible unavailable",
+    "clickedFrame/preview input streams/progress text unavailable",
+    "historical MV2 parity pending"
+  ],
+  "preservedEarlierAttempts": [
+    "download-docs-follow-up-p0.json",
+    "corpus-follow-up-p0.json",
+    "corpus-native-84-initial-p0.json",
+    "tampermonkey-5.5.1-p0-urlchange-initial-failed.json",
+    "wpf-polling-follow-up-p0.json",
+    "corpus-host-readiness-p0.json"
+  ],
+  "snapshotNote": "The runtime/test implementation is the recorded commit. Its source patch contains reporting-document changes only; all corpus sources, licenses and runner inputs are committed.",
+  "supersededMatrices": [
+    {
+      "artifactPath": "artifacts\\p2-delivery\\e86962fb34b4",
+      "sha256": "bb9b38b5043f160fdd7c912d24a6789f4adbdf197f7a9bc66cb12e203d5cf38c"
+    },
+    {
+      "artifactPath": "D:\\m2-e86962fb34\\4\\artifacts\\p2-delivery\\ee6d61907bae",
+      "sha256": "97285cc43c3e98c9a20854293bf1e17cdaa6c63b1f397d57fd1d2d6f1158a289"
+    },
+    {
+      "artifactPath": "artifacts\\p2-delivery\\1f6cba20edcf",
+      "sha256": "4d2ff6c4c403057312258dba5a847fd3a2471e8ee4c1969f91ba8a0a06a9c232"
+    },
+    {
+      "artifactPath": "artifacts\\p2-delivery\\578f9303a308",
+      "sha256": "c9e26b9ced26af149722116e3ccc871bd5a7b22768b995e321d0d1b198ec09c1"
+    }
+  ],
+  "matrix": [
+    {
+      "cefSharpVersion": "151.3.240",
+      "platform": "x64",
+      "status": "passed",
+      "dotnet": {
+        "Core.Tests": {
+          "passed": 303,
+          "failed": 0,
+          "skipped": 0
+        },
+        "CefSharp.IntegrationTests": {
+          "passed": 61,
+          "failed": 0,
+          "skipped": 0
+        },
+        "Demo.Tests": {
+          "passed": 49,
+          "failed": 0,
+          "skipped": 0
+        }
+      },
+      "javascriptTestsPassed": 120,
+      "smokeCompatibility": {
+        "prepared": true,
+        "conditions": true,
+        "isolated": true,
+        "replay": true,
+        "csp": true,
+        "pageHelpers": true,
+        "binary": true,
+        "permissions": true,
+        "frames": true,
+        "spaUrl": true,
+        "download": true,
+        "cookie": true,
+        "webRequest": true,
+        "audio": true,
+        "partitions": true
+      },
+      "smokeSummary": {
+        "type": "smoke-summary",
+        "success": true,
+        "compatibility": {
+          "prepared": true,
+          "conditions": true,
+          "isolated": true,
+          "replay": true,
+          "csp": true,
+          "pageHelpers": true,
+          "binary": true,
+          "permissions": true,
+          "frames": true,
+          "spaUrl": true,
+          "download": true,
+          "cookie": true,
+          "webRequest": true,
+          "audio": true,
+          "partitions": true
+        },
+        "fixtureResult": {
+          "mainFrame": true,
+          "storageBefore": 0,
+          "storageAfter": 1,
+          "xhr": [
+            "progress",
+            "progress",
+            "load"
+          ],
+          "apis": {
+            "xmlhttpExtended": true,
+            "notification": true,
+            "tab": true,
+            "download": true,
+            "cookie": true,
+            "webRequest": true
+          },
+          "cookieList": 1,
+          "cookieReadback": true,
+          "notificationClicked": true,
+          "notificationDone": true,
+          "tab": {
+            "closed": true,
+            "onclose": null
+          },
+          "extended": {
+            "echo": true,
+            "cookies": true,
+            "auth": true,
+            "redirect": true,
+            "binary": true,
+            "large": true,
+            "headers": true,
+            "stream": true,
+            "timeout": true,
+            "abort": true
+          },
+          "downloadProgress": true,
+          "downloadCompleted": true,
+          "responseText": "legacy xhr ok",
+          "done": true
+        },
+        "storageMirror": true,
+        "xhr": true,
+        "xhrExtended": true,
+        "notification": true,
+        "tab": true,
+        "download": true,
+        "cookie": true,
+        "webRequest": true,
+        "mainFrameLoads": 24,
+        "childFrameLoads": 10,
+        "navigation": true,
+        "contextCreated": 42,
+        "contextReleased": 42,
+        "hostAttachedAfterDetach": false
+      },
+      "smokeSha256": "16b3e0baae5456f7ea4bfd40092022408b2519ab307f5a9aa30a8921ffd83d61",
+      "cdp": "passed",
+      "cdpSha256": "59a45bd16aa9d4c52d9f44b928e00e7725fdaa2eae58a6cb0df2aad76c892c40",
+      "wpf": {
+        "success": true,
+        "checks": {
+          "permissionPrompt": true,
+          "permissionRemembered": true,
+          "storageResourcesXhrCookieWebRequest": true,
+          "audioMuteOnly": true,
+          "cookiePartitionCapability": true,
+          "tabStateScriptIsolation": true,
+          "domAndInfo": true,
+          "iframe": true,
+          "menu": true,
+          "menuOptions": true,
+          "menuUpdate": true,
+          "multiFrameMenu": true,
+          "backgroundTab": true,
+          "tabSwitchPreservesDocument": true,
+          "crossTabValues": true,
+          "undefinedSnapshot": true,
+          "windowFocus": true,
+          "tabStateNavigation": true,
+          "undefinedNavigation": true,
+          "sharedCookies": true,
+          "openInTab": true,
+          "tabRelativeUrlAndPosition": true,
+          "tabCloseOnce": true,
+          "download": true,
+          "downloadSaveCanceled": true,
+          "notificationWaits": true,
+          "notification": true,
+          "notificationTag": true,
+          "notificationPreventDefault": true,
+          "notificationUrl": true,
+          "notificationHighlight": true,
+          "clipboardHtml": true,
+          "clipboardText": true,
+          "tabState": true,
+          "tabFavicon": true,
+          "selectedTabColors": true,
+          "inactiveSelectedTabColors": true,
+          "scriptManagerDetails": true,
+          "scriptManagerInlineToggle": true,
+          "scriptManagerCtrlS": true,
+          "navigationCleanup": true,
+          "disableAndReload": true,
+          "enableAndReload": true,
+          "privateNativeContext": true,
+          "privateInfoRunIn": true,
+          "normalInfoRunIn": true,
+          "privateCookieNetworkIsolation": true,
+          "privatePermissionIsolation": true,
+          "privateCacheIsolation": true,
+          "privateSessionShared": true,
+          "privateCacheShared": true,
+          "privateTabDataIsolation": true,
+          "privateWritesNotPersistent": true,
+          "privateLivesUntilLastTab": true,
+          "privateContextReleased": true,
+          "privateFreshSession": true,
+          "privatePermissionCleared": true,
+          "privateCacheCleared": true,
+          "privateLogsNotPersisted": true,
+          "windowClose": true,
+          "closeTab": true,
+          "closeTabSelectsPrevious": true,
+          "lastTabPolicy": true,
+          "closeTabsDuringRequests": true,
+          "finalDisposal": true
+        },
+        "profile": "D:\\m2-e9c8dbd161\\0\\Mzying2001.MonkeySharp.Demo\\bin\\x64\\Release\\net462\\SmokeRuns\\c17bedd3692e45d2949d77385e34c8ee",
+        "environment": {
+          "cefSharpVersion": "151.3.240.0",
+          "platform": "x64"
+        }
+      },
+      "packageContents": "passed",
+      "publicConsumer": {
+        "type": "package-consumer",
+        "success": true,
+        "checks": {
+          "cefVersion": true,
+          "coreAnyCpu": true,
+          "privateContextFactory": true,
+          "storage": true,
+          "cookie": true,
+          "audio": true,
+          "partition": true,
+          "detached": true
+        },
+        "error": null,
+        "cefSharpVersion": "151.3.240.0",
+        "platform": "x64",
+        "corpusSha256": null
+      },
+      "sourceCorpus": [
+        {
+          "caseId": "dom-decoration",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "91f1635c82891a0c874e5bd1cd5b8d77c0f764f2a366763d28a077be2d96245e",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "computedStyle": true,
+            "singleDecoration": true
+          }
+        },
+        {
+          "caseId": "dom-decoration-csp",
+          "status": "expected-engine-limitation",
+          "reason": "Source created its live DOM toolbar, but page style-src blocked its inline styles.",
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "f9e685c32f11fc1516ac59ddec801c3982b295b3e5947e7977efd2f4ebc1778d",
+          "files": [],
+          "checks": {
+            "nodeCreatedUnderCsp": true,
+            "singleCspDecoration": true
+          }
+        },
+        {
+          "caseId": "page-hook",
+          "status": "expected-engine-limitation",
+          "reason": "History hook works after startup but was not installed before first inline.",
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "d220558ba984b1ef292952eff05fb46c231cb0a281bbff55176f74e10324d309",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "historyHookInstalled": true,
+            "hookRefreshesResources": true
+          }
+        },
+        {
+          "caseId": "authenticated-xhr",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "ed1c2373ed5786cb578f29d05e6762111b1f2e679cb494d80563839090db3557",
+          "files": [
+            {
+              "name": "Corpus fixture_2026-11-10-16-12-10.zip",
+              "bytes": 192,
+              "sha256": "f4abfc29198175511f7195f37e22aa690407c91d11ed043630ceec406736e95f",
+              "entries": [
+                {
+                  "name": "redirect.png",
+                  "bytes": 70,
+                  "sha256": "2640059609118b695c139804676372eca75c30d30e5906775902d13e44f5356c"
+                }
+              ]
+            }
+          ],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "authenticatedBytesPacked": true
+          }
+        },
+        {
+          "caseId": "download",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "622b0040f5c2f093b10b204dd3995ae189dfe90cda34a4f7d1fa933637bd8ea3",
+          "files": [
+            {
+              "name": "redirect.png",
+              "bytes": 70,
+              "sha256": "2640059609118b695c139804676372eca75c30d30e5906775902d13e44f5356c"
+            }
+          ],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "fileSaved": true
+          }
+        },
+        {
+          "caseId": "download-cancel",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "23a199e8b06fe015c684593dc8f5e79529c49bf610652fcfafae76274e4ec3f0",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "cancellationLeavesNoFile": true
+          }
+        },
+        {
+          "caseId": "authenticated-xhr-denied",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "26ffba6dc824664a646817e25d9f8e0cb39493f2b9f2b7ef855fc3e893142d12",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "deniedRequestShowsFailure": true,
+            "denialLeavesNoFile": true
+          }
+        },
+        {
+          "caseId": "storage-listener",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "476400193285d5ed26a0e92a8173919feaa5748141600c955da44e146eceed4f",
+          "actionHash": "70f36c2d86f6de8b1c2c8f1e13847d754626f63ec6cf4dae3bd769852b5db8cf",
+          "files": [],
+          "checks": {
+            "settingsPanel": true,
+            "localMenuRemoved": true,
+            "remoteMenuRemoved": true,
+            "persistedAfterNavigation": true
+          }
+        },
+        {
+          "caseId": "menu-configuration",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "476400193285d5ed26a0e92a8173919feaa5748141600c955da44e146eceed4f",
+          "actionHash": "cbe2528f96ea088c668a8cdceddc4a146424fbd5f7c5c558c959d5c92aafea95",
+          "files": [],
+          "checks": {
+            "initialDomainMenu": true,
+            "settingsPanel": true,
+            "updatedDomainMenu": true,
+            "configurationReadback": true
+          }
+        },
+        {
+          "caseId": "iframe-spa",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "685c585eb836d3e9605ad51f697ba7a29f2b42f3b39036dc671bcdd4dc84e635",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "sameProcessFrameDecoration": true,
+            "spaNoDuplicate": true
+          }
+        }
+      ],
+      "packageCorpus": [
+        {
+          "caseId": "dom-decoration",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "e01a5121437cc6cca14bf9983a7ce1180869375a49d02257eca4905e78dfb1dd",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "computedStyle": true,
+            "singleDecoration": true
+          }
+        },
+        {
+          "caseId": "dom-decoration-csp",
+          "status": "expected-engine-limitation",
+          "reason": "Source created its live DOM toolbar, but page style-src blocked its inline styles.",
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "f234f9592468dd40d198b4ffc78b590ac2620b423d4fe9e57c2ad8ae62a6290b",
+          "files": [],
+          "checks": {
+            "nodeCreatedUnderCsp": true,
+            "singleCspDecoration": true
+          }
+        },
+        {
+          "caseId": "page-hook",
+          "status": "expected-engine-limitation",
+          "reason": "History hook works after startup but was not installed before first inline.",
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "496117c4fe4c51183ccba58351729adf918eed800f654417644cb824278877d4",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "historyHookInstalled": true,
+            "hookRefreshesResources": true
+          }
+        },
+        {
+          "caseId": "authenticated-xhr",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "6fa61b6eac9c6754bef1bb6221513f628bdf4a7c9f3f67693ba612175fa71652",
+          "files": [
+            {
+              "name": "Corpus fixture_2026-11-10-16-13-15.zip",
+              "bytes": 192,
+              "sha256": "d5277cb6c73d33b841e21f9eefac5335d7f017e658e631ebed78ab44cedb05c6",
+              "entries": [
+                {
+                  "name": "redirect.png",
+                  "bytes": 70,
+                  "sha256": "2640059609118b695c139804676372eca75c30d30e5906775902d13e44f5356c"
+                }
+              ]
+            }
+          ],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "authenticatedBytesPacked": true
+          }
+        },
+        {
+          "caseId": "download",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "aa186778d8bae2de04b20070b94dae148a12ecb8eccdf7815f739aea8590d333",
+          "files": [
+            {
+              "name": "redirect.png",
+              "bytes": 70,
+              "sha256": "2640059609118b695c139804676372eca75c30d30e5906775902d13e44f5356c"
+            }
+          ],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "fileSaved": true
+          }
+        },
+        {
+          "caseId": "download-cancel",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "d1d4428c832b9e9995be6878fc56f097fd4ad2f58b08f7fbac48b4f0d884aec0",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "cancellationLeavesNoFile": true
+          }
+        },
+        {
+          "caseId": "authenticated-xhr-denied",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "6c3e4c08cb5310e7f27d6df9a3104c5281f83b5e5776423bed05b9a2173f13c0",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "deniedRequestShowsFailure": true,
+            "denialLeavesNoFile": true
+          }
+        },
+        {
+          "caseId": "storage-listener",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "476400193285d5ed26a0e92a8173919feaa5748141600c955da44e146eceed4f",
+          "actionHash": "ad350c4c16cec4ae1491868eabee98aa728b6c09e58d7ab6ea545ded90ade0cf",
+          "files": [],
+          "checks": {
+            "settingsPanel": true,
+            "localMenuRemoved": true,
+            "remoteMenuRemoved": true,
+            "persistedAfterNavigation": true
+          }
+        },
+        {
+          "caseId": "menu-configuration",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "476400193285d5ed26a0e92a8173919feaa5748141600c955da44e146eceed4f",
+          "actionHash": "aba788ea8bef482a3279a60a564c46e98d8e58bf15b9704b2adfcd9ba16f6c88",
+          "files": [],
+          "checks": {
+            "initialDomainMenu": true,
+            "settingsPanel": true,
+            "updatedDomainMenu": true,
+            "configurationReadback": true
+          }
+        },
+        {
+          "caseId": "iframe-spa",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "2b349d2acb9be5f125ad62d526c1d41fda15f0a399d8410e229786292877ccd0",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "sameProcessFrameDecoration": true,
+            "spaNoDuplicate": true
+          }
+        }
+      ],
+      "baselineLogSha256": "3c884dff8ea42d2a9a531f70ec8ee8affbe6a734d95bc6e83c18c53fb8dc6c79",
+      "packages": [
+        {
+          "name": "Mzying2001.MonkeySharp.CefSharp.x64.3.0.0-validation.e9c8dbd16171.151.3.240.x64.nupkg",
+          "bytes": 430034,
+          "sha256": "9a8bc271716f2ffc6f1c98fe23b04df4df906346d5ca5dd6d73ae351a1506c34"
+        },
+        {
+          "name": "Mzying2001.MonkeySharp.Core.3.0.0-validation.e9c8dbd16171.151.3.240.x64.nupkg",
+          "bytes": 590614,
+          "sha256": "1d55a1212600fd552038188ec821e6550f335eee33b1131e98b53ca776b37f40"
+        }
+      ]
+    },
+    {
+      "cefSharpVersion": "151.3.240",
+      "platform": "x86",
+      "status": "passed",
+      "dotnet": {
+        "Core.Tests": {
+          "passed": 303,
+          "failed": 0,
+          "skipped": 0
+        },
+        "CefSharp.IntegrationTests": {
+          "passed": 61,
+          "failed": 0,
+          "skipped": 0
+        }
+      },
+      "javascriptTestsPassed": 120,
+      "smokeCompatibility": {
+        "prepared": true,
+        "conditions": true,
+        "isolated": true,
+        "replay": true,
+        "csp": true,
+        "pageHelpers": true,
+        "binary": true,
+        "permissions": true,
+        "frames": true,
+        "spaUrl": true,
+        "download": true,
+        "cookie": true,
+        "webRequest": true,
+        "audio": true,
+        "partitions": true
+      },
+      "smokeSummary": {
+        "type": "smoke-summary",
+        "success": true,
+        "compatibility": {
+          "prepared": true,
+          "conditions": true,
+          "isolated": true,
+          "replay": true,
+          "csp": true,
+          "pageHelpers": true,
+          "binary": true,
+          "permissions": true,
+          "frames": true,
+          "spaUrl": true,
+          "download": true,
+          "cookie": true,
+          "webRequest": true,
+          "audio": true,
+          "partitions": true
+        },
+        "fixtureResult": {
+          "mainFrame": true,
+          "storageBefore": 0,
+          "storageAfter": 1,
+          "xhr": [
+            "progress",
+            "progress",
+            "load"
+          ],
+          "apis": {
+            "xmlhttpExtended": true,
+            "notification": true,
+            "tab": true,
+            "download": true,
+            "cookie": true,
+            "webRequest": true
+          },
+          "cookieList": 1,
+          "cookieReadback": true,
+          "notificationClicked": true,
+          "notificationDone": true,
+          "tab": {
+            "closed": true,
+            "onclose": null
+          },
+          "extended": {
+            "echo": true,
+            "cookies": true,
+            "auth": true,
+            "redirect": true,
+            "binary": true,
+            "large": true,
+            "headers": true,
+            "stream": true,
+            "timeout": true,
+            "abort": true
+          },
+          "downloadProgress": true,
+          "downloadCompleted": true,
+          "responseText": "legacy xhr ok",
+          "done": true
+        },
+        "storageMirror": true,
+        "xhr": true,
+        "xhrExtended": true,
+        "notification": true,
+        "tab": true,
+        "download": true,
+        "cookie": true,
+        "webRequest": true,
+        "mainFrameLoads": 24,
+        "childFrameLoads": 10,
+        "navigation": true,
+        "contextCreated": 42,
+        "contextReleased": 42,
+        "hostAttachedAfterDetach": false
+      },
+      "smokeSha256": "13f9280211cde912db2c5b986ea812c08b95dbca26765b8f204c19ee35ac269d",
+      "cdp": "passed",
+      "cdpSha256": "983a9edc0f2ae996f9c58dec84db4c52e6066b274677d3f7876b02ad0d7b258f",
+      "wpf": null,
+      "packageContents": "passed",
+      "publicConsumer": {
+        "type": "package-consumer",
+        "success": true,
+        "checks": {
+          "cefVersion": true,
+          "coreAnyCpu": true,
+          "privateContextFactory": true,
+          "storage": true,
+          "cookie": true,
+          "audio": true,
+          "partition": true,
+          "detached": true
+        },
+        "error": null,
+        "cefSharpVersion": "151.3.240.0",
+        "platform": "x86",
+        "corpusSha256": null
+      },
+      "sourceCorpus": [
+        {
+          "caseId": "dom-decoration",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "91a61bc57125803215e19d57dafb7ecf38aadc54aba583ba415a3f661693a6b2",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "computedStyle": true,
+            "singleDecoration": true
+          }
+        },
+        {
+          "caseId": "dom-decoration-csp",
+          "status": "expected-engine-limitation",
+          "reason": "Source created its live DOM toolbar, but page style-src blocked its inline styles.",
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "d4c64f98d1a5460a2f48dcedcaf8e35ef130d968d63a3338fe655465a5df1335",
+          "files": [],
+          "checks": {
+            "nodeCreatedUnderCsp": true,
+            "singleCspDecoration": true
+          }
+        },
+        {
+          "caseId": "page-hook",
+          "status": "expected-engine-limitation",
+          "reason": "History hook works after startup but was not installed before first inline.",
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "cf0b09441142693b87eca2af85ef6f7c0b61e4fd446b9291f6d7520b3101c0af",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "historyHookInstalled": true,
+            "hookRefreshesResources": true
+          }
+        },
+        {
+          "caseId": "authenticated-xhr",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "8634e5cf514298e2fe7ac86d4d3af854c59baa7d7120e92514ca3793a1754dd8",
+          "files": [
+            {
+              "name": "Corpus fixture_2026-11-10-16-14-29.zip",
+              "bytes": 192,
+              "sha256": "525d8a4399e58fea33454f6b0a99b9cb599c03321400ff9863deda13afa3d788",
+              "entries": [
+                {
+                  "name": "redirect.png",
+                  "bytes": 70,
+                  "sha256": "2640059609118b695c139804676372eca75c30d30e5906775902d13e44f5356c"
+                }
+              ]
+            }
+          ],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "authenticatedBytesPacked": true
+          }
+        },
+        {
+          "caseId": "download",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "02ab6ba2f7a41311e759e2ee4448206cd7f86220aed56fe2d8a4c205ddd2aa6d",
+          "files": [
+            {
+              "name": "redirect.png",
+              "bytes": 70,
+              "sha256": "2640059609118b695c139804676372eca75c30d30e5906775902d13e44f5356c"
+            }
+          ],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "fileSaved": true
+          }
+        },
+        {
+          "caseId": "download-cancel",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "1418caa9f3a1a64d261c80cff3add664eb7580d43e2a32b0a03d836f3f219585",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "cancellationLeavesNoFile": true
+          }
+        },
+        {
+          "caseId": "authenticated-xhr-denied",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "3272ed6d08a9ab7afadce095814b7c18e94373d34c1020b1fdf512cce9527e8e",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "deniedRequestShowsFailure": true,
+            "denialLeavesNoFile": true
+          }
+        },
+        {
+          "caseId": "storage-listener",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "476400193285d5ed26a0e92a8173919feaa5748141600c955da44e146eceed4f",
+          "actionHash": "2d58d1f553ec14661836dc5ef485f590365bf9e54ef067c9cc4f0caeb62ee805",
+          "files": [],
+          "checks": {
+            "settingsPanel": true,
+            "localMenuRemoved": true,
+            "remoteMenuRemoved": true,
+            "persistedAfterNavigation": true
+          }
+        },
+        {
+          "caseId": "menu-configuration",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "476400193285d5ed26a0e92a8173919feaa5748141600c955da44e146eceed4f",
+          "actionHash": "e418734ffc208df53c6d8f42ed55a754e6c3cd7e5b08918c3545c91f88e694bc",
+          "files": [],
+          "checks": {
+            "initialDomainMenu": true,
+            "settingsPanel": true,
+            "updatedDomainMenu": true,
+            "configurationReadback": true
+          }
+        },
+        {
+          "caseId": "iframe-spa",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "0cdc71d17134aeb32b86ed99a190447f860afc3167e59185beefd60008ed0cc3",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "sameProcessFrameDecoration": true,
+            "spaNoDuplicate": true
+          }
+        }
+      ],
+      "packageCorpus": [
+        {
+          "caseId": "dom-decoration",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "c1eca92964984510f4b59ccad18829ca62d14675d64755a059eb244bcdbbad87",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "computedStyle": true,
+            "singleDecoration": true
+          }
+        },
+        {
+          "caseId": "dom-decoration-csp",
+          "status": "expected-engine-limitation",
+          "reason": "Source created its live DOM toolbar, but page style-src blocked its inline styles.",
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "6a5f02e9a3b858cc1ead71fb2beaacb03592bae7ef4de8fa82c27e41b44836b6",
+          "files": [],
+          "checks": {
+            "nodeCreatedUnderCsp": true,
+            "singleCspDecoration": true
+          }
+        },
+        {
+          "caseId": "page-hook",
+          "status": "expected-engine-limitation",
+          "reason": "History hook works after startup but was not installed before first inline.",
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "16b86a31d71fcc615d4f4b73009d1989f36f2f399c362a2dc809949905eaed4a",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "historyHookInstalled": true,
+            "hookRefreshesResources": true
+          }
+        },
+        {
+          "caseId": "authenticated-xhr",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "8614477c1deef06ee80e3d87fe3620256271e369af14b11c5fa5a044a3497f86",
+          "files": [
+            {
+              "name": "Corpus fixture_2026-11-10-16-15-16.zip",
+              "bytes": 192,
+              "sha256": "c2e12a635abe397d0c793cbb8587d34732150b98bf798d6723ef25b0836f2d87",
+              "entries": [
+                {
+                  "name": "redirect.png",
+                  "bytes": 70,
+                  "sha256": "2640059609118b695c139804676372eca75c30d30e5906775902d13e44f5356c"
+                }
+              ]
+            }
+          ],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "authenticatedBytesPacked": true
+          }
+        },
+        {
+          "caseId": "download",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "ad66ca5343af53100364b7a7b1c476e7962ddbc09802e38cfbc4c340ff968e2f",
+          "files": [
+            {
+              "name": "redirect.png",
+              "bytes": 70,
+              "sha256": "2640059609118b695c139804676372eca75c30d30e5906775902d13e44f5356c"
+            }
+          ],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "fileSaved": true
+          }
+        },
+        {
+          "caseId": "download-cancel",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "fd7ca99aa11b5f68842a2db1a5f1882e9b98d715df89bbdd6f83b76665422489",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "cancellationLeavesNoFile": true
+          }
+        },
+        {
+          "caseId": "authenticated-xhr-denied",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "153356418389b690c6473988706bcbcf17b04235f159ca9aed2ecb26654e7851",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "deniedRequestShowsFailure": true,
+            "denialLeavesNoFile": true
+          }
+        },
+        {
+          "caseId": "storage-listener",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "476400193285d5ed26a0e92a8173919feaa5748141600c955da44e146eceed4f",
+          "actionHash": "3d58243d0c48886112528f57543bfb066ecb97f9bc55a144addcea71fe1e4e32",
+          "files": [],
+          "checks": {
+            "settingsPanel": true,
+            "localMenuRemoved": true,
+            "remoteMenuRemoved": true,
+            "persistedAfterNavigation": true
+          }
+        },
+        {
+          "caseId": "menu-configuration",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "476400193285d5ed26a0e92a8173919feaa5748141600c955da44e146eceed4f",
+          "actionHash": "04d0518f911cae5b047934e2aa4cfe3e0b4cc8b27242a7b904fb11c97ea90a1b",
+          "files": [],
+          "checks": {
+            "initialDomainMenu": true,
+            "settingsPanel": true,
+            "updatedDomainMenu": true,
+            "configurationReadback": true
+          }
+        },
+        {
+          "caseId": "iframe-spa",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "7f308afa4f061da3e9c5f7dd45cbf610e58ed239b2966906f75b526da4781ac0",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "sameProcessFrameDecoration": true,
+            "spaNoDuplicate": true
+          }
+        }
+      ],
+      "baselineLogSha256": "5f4b00644933203c4e60929568ae213657079190046ac271402fc19fbf5d8dc3",
+      "packages": [
+        {
+          "name": "Mzying2001.MonkeySharp.CefSharp.x86.3.0.0-validation.e9c8dbd16171.151.3.240.x86.nupkg",
+          "bytes": 430119,
+          "sha256": "c71cdeeaa83c51af31645aa636a8ad5e4e838a9fe9dd2c09de1d43dc64d1af27"
+        },
+        {
+          "name": "Mzying2001.MonkeySharp.Core.3.0.0-validation.e9c8dbd16171.151.3.240.x86.nupkg",
+          "bytes": 590615,
+          "sha256": "03cd39b5899adc76c9aeb929701ba140a57ca9d4235f76508cb76d59558125e6"
+        }
+      ]
+    },
+    {
+      "cefSharpVersion": "84.4.10",
+      "platform": "x64",
+      "status": "passed",
+      "dotnet": {
+        "Core.Tests": {
+          "passed": 303,
+          "failed": 0,
+          "skipped": 0
+        },
+        "CefSharp.IntegrationTests": {
+          "passed": 61,
+          "failed": 0,
+          "skipped": 0
+        },
+        "Demo.Tests": {
+          "passed": 49,
+          "failed": 0,
+          "skipped": 0
+        }
+      },
+      "javascriptTestsPassed": 120,
+      "smokeCompatibility": {
+        "prepared": true,
+        "conditions": true,
+        "isolated": true,
+        "replay": true,
+        "csp": true,
+        "pageHelpers": true,
+        "binary": true,
+        "permissions": true,
+        "frames": true,
+        "spaUrl": true,
+        "download": true,
+        "cookie": true,
+        "webRequest": true,
+        "audio": true,
+        "partitions": true
+      },
+      "smokeSummary": {
+        "type": "smoke-summary",
+        "success": true,
+        "compatibility": {
+          "prepared": true,
+          "conditions": true,
+          "isolated": true,
+          "replay": true,
+          "csp": true,
+          "pageHelpers": true,
+          "binary": true,
+          "permissions": true,
+          "frames": true,
+          "spaUrl": true,
+          "download": true,
+          "cookie": true,
+          "webRequest": true,
+          "audio": true,
+          "partitions": true
+        },
+        "fixtureResult": {
+          "mainFrame": true,
+          "storageBefore": 0,
+          "storageAfter": 1,
+          "xhr": [
+            "progress",
+            "load"
+          ],
+          "apis": {
+            "xmlhttpExtended": true,
+            "notification": true,
+            "tab": true,
+            "download": true,
+            "cookie": true,
+            "webRequest": true
+          },
+          "cookieList": 1,
+          "cookieReadback": true,
+          "notificationClicked": true,
+          "notificationDone": true,
+          "tab": {
+            "closed": true,
+            "onclose": null
+          },
+          "extended": {
+            "echo": true,
+            "cookies": true,
+            "auth": true,
+            "redirect": true,
+            "binary": true,
+            "large": true,
+            "headers": true,
+            "stream": true,
+            "timeout": true,
+            "abort": true
+          },
+          "downloadProgress": true,
+          "downloadCompleted": true,
+          "responseText": "legacy xhr ok",
+          "done": true
+        },
+        "storageMirror": true,
+        "xhr": true,
+        "xhrExtended": true,
+        "notification": true,
+        "tab": true,
+        "download": true,
+        "cookie": true,
+        "webRequest": true,
+        "mainFrameLoads": 24,
+        "childFrameLoads": 10,
+        "navigation": true,
+        "contextCreated": 42,
+        "contextReleased": 42,
+        "hostAttachedAfterDetach": false
+      },
+      "smokeSha256": "6caba68c6564bdd78ee5cc558fbd684c4217e04a3116a927527e97f82e2d52fb",
+      "cdp": "passed",
+      "cdpSha256": "8e8e84252597877127434a81dc05402366452af2ab44fa0d94e833beace81051",
+      "wpf": {
+        "success": true,
+        "checks": {
+          "permissionPrompt": true,
+          "permissionRemembered": true,
+          "storageResourcesXhrCookieWebRequest": true,
+          "audioMuteOnly": true,
+          "cookiePartitionCapability": true,
+          "tabStateScriptIsolation": true,
+          "domAndInfo": true,
+          "iframe": true,
+          "menu": true,
+          "menuOptions": true,
+          "menuUpdate": true,
+          "multiFrameMenu": true,
+          "backgroundTab": true,
+          "tabSwitchPreservesDocument": true,
+          "crossTabValues": true,
+          "undefinedSnapshot": true,
+          "windowFocus": true,
+          "tabStateNavigation": true,
+          "undefinedNavigation": true,
+          "sharedCookies": true,
+          "openInTab": true,
+          "tabRelativeUrlAndPosition": true,
+          "tabCloseOnce": true,
+          "download": true,
+          "downloadSaveCanceled": true,
+          "notificationWaits": true,
+          "notification": true,
+          "notificationTag": true,
+          "notificationPreventDefault": true,
+          "notificationUrl": true,
+          "notificationHighlight": true,
+          "clipboardHtml": true,
+          "clipboardText": true,
+          "tabState": true,
+          "tabFavicon": true,
+          "selectedTabColors": true,
+          "inactiveSelectedTabColors": true,
+          "scriptManagerDetails": true,
+          "scriptManagerInlineToggle": true,
+          "scriptManagerCtrlS": true,
+          "navigationCleanup": true,
+          "disableAndReload": true,
+          "enableAndReload": true,
+          "privateNativeContext": true,
+          "privateInfoRunIn": true,
+          "normalInfoRunIn": true,
+          "privateCookieNetworkIsolation": true,
+          "privatePermissionIsolation": true,
+          "privateCacheIsolation": true,
+          "privateSessionShared": true,
+          "privateCacheShared": true,
+          "privateTabDataIsolation": true,
+          "privateWritesNotPersistent": true,
+          "privateLivesUntilLastTab": true,
+          "privateContextReleased": true,
+          "privateFreshSession": true,
+          "privatePermissionCleared": true,
+          "privateCacheCleared": true,
+          "privateLogsNotPersisted": true,
+          "windowClose": true,
+          "closeTab": true,
+          "closeTabSelectsPrevious": true,
+          "lastTabPolicy": true,
+          "closeTabsDuringRequests": true,
+          "finalDisposal": true
+        },
+        "profile": "D:\\m2-e9c8dbd161\\2\\Mzying2001.MonkeySharp.Demo\\bin\\x64\\Release\\net462\\SmokeRuns\\321f7cf94a0f4bf0808b2254300beb71",
+        "environment": {
+          "cefSharpVersion": "84.4.10.0",
+          "platform": "x64"
+        }
+      },
+      "packageContents": "passed",
+      "publicConsumer": {
+        "type": "package-consumer",
+        "success": true,
+        "checks": {
+          "cefVersion": true,
+          "coreAnyCpu": true,
+          "privateContextFactory": true,
+          "storage": true,
+          "cookie": true,
+          "audio": true,
+          "partition": true,
+          "detached": true
+        },
+        "error": null,
+        "cefSharpVersion": "84.4.10.0",
+        "platform": "x64",
+        "corpusSha256": null
+      },
+      "sourceCorpus": [
+        {
+          "caseId": "dom-decoration",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "2154c63d7b94df2a18538d3a06bf385b1b86f4a96625ee75c87c2f564fd7c22e",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "computedStyle": true,
+            "singleDecoration": true
+          }
+        },
+        {
+          "caseId": "dom-decoration-csp",
+          "status": "expected-engine-limitation",
+          "reason": "Source created its live DOM toolbar, but page style-src blocked its inline styles.",
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "aa3329eb8e0239be07b4a2a7c2d838f200c174b9c9251e54b814092c09d6230a",
+          "files": [],
+          "checks": {
+            "nodeCreatedUnderCsp": true,
+            "singleCspDecoration": true
+          }
+        },
+        {
+          "caseId": "page-hook",
+          "status": "expected-engine-limitation",
+          "reason": "History hook works after startup but was not installed before first inline.",
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "a5785e74dd58e79317a983bc52eeb448fb81d8c40aa0eb0c29e9aa3e1677a178",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "historyHookInstalled": true,
+            "hookRefreshesResources": true
+          }
+        },
+        {
+          "caseId": "authenticated-xhr",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "7b4c648900644214b5ec50d0c8cf2ea59e0ddff37d7310277a67a498858d24c0",
+          "files": [
+            {
+              "name": "Corpus fixture_2026-11-10-16-16-28.zip",
+              "bytes": 192,
+              "sha256": "bab8d36c6bbd35bd008954dc2ae89bfd5652efb6947bced73c06a34e92d2f42b",
+              "entries": [
+                {
+                  "name": "redirect.png",
+                  "bytes": 70,
+                  "sha256": "2640059609118b695c139804676372eca75c30d30e5906775902d13e44f5356c"
+                }
+              ]
+            }
+          ],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "authenticatedBytesPacked": true
+          }
+        },
+        {
+          "caseId": "download",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "b4305df97e0813f9e3536a4307eca981e4067119912672ab67f49bf9d35fb685",
+          "files": [
+            {
+              "name": "redirect.png",
+              "bytes": 70,
+              "sha256": "2640059609118b695c139804676372eca75c30d30e5906775902d13e44f5356c"
+            }
+          ],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "fileSaved": true
+          }
+        },
+        {
+          "caseId": "download-cancel",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "d4755745afdc0223607b48cca8616722ca951214efb767cef2cf626569070a61",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "cancellationLeavesNoFile": true
+          }
+        },
+        {
+          "caseId": "authenticated-xhr-denied",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "82427c3cd829374b5cb4f425a7db7b25d6b0237e69e5952242da7b9b90ad5f92",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "deniedRequestShowsFailure": true,
+            "denialLeavesNoFile": true
+          }
+        },
+        {
+          "caseId": "storage-listener",
+          "status": "expected-engine-limitation",
+          "reason": "The unchanged upstream settings UI requires String.prototype.replaceAll, which this Chromium 84 engine does not provide. System.TimeoutException: Corpus action did not meet its functional assertion.\r\n   在 MonkeySharp.Compatibility.CorpusHost.<Until>d__2.MoveNext()\r\n--- 引发异常的上一位置中堆栈跟踪的末尾 ---\r\n   在 System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\n   在 MonkeySharp.Compatibility.CorpusHost.<>c__DisplayClass0_1.<<Run>b__1>d.MoveNext()",
+          "fixtureHash": "476400193285d5ed26a0e92a8173919feaa5748141600c955da44e146eceed4f",
+          "actionHash": "d77478f4e0627ab57764d5da0e711f338a4e32edda86b2263ffd8f0d22110735",
+          "files": [],
+          "checks": {}
+        },
+        {
+          "caseId": "menu-configuration",
+          "status": "expected-engine-limitation",
+          "reason": "The unchanged upstream settings UI requires String.prototype.replaceAll, which this Chromium 84 engine does not provide. System.TimeoutException: Corpus action did not meet its functional assertion.\r\n   在 MonkeySharp.Compatibility.CorpusHost.<Until>d__2.MoveNext()\r\n--- 引发异常的上一位置中堆栈跟踪的末尾 ---\r\n   在 System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\n   在 MonkeySharp.Compatibility.CorpusHost.<>c__DisplayClass0_1.<<Run>b__1>d.MoveNext()",
+          "fixtureHash": "476400193285d5ed26a0e92a8173919feaa5748141600c955da44e146eceed4f",
+          "actionHash": "a280aef99e4b0511acadb08f44ee0f06385d5186b5df32714fd70f7497bc53b5",
+          "files": [],
+          "checks": {
+            "initialDomainMenu": true
+          }
+        },
+        {
+          "caseId": "iframe-spa",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "9f6613bd723100432ca80d6a48ee3682208ef3dd0c3ea9e2b2d2eba1558366cc",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "sameProcessFrameDecoration": true,
+            "spaNoDuplicate": true
+          }
+        }
+      ],
+      "packageCorpus": [
+        {
+          "caseId": "dom-decoration",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "32a1f1d6eb7764a8047dc67299b3c8e0290fe9458c94317f21ea452ab10af566",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "computedStyle": true,
+            "singleDecoration": true
+          }
+        },
+        {
+          "caseId": "dom-decoration-csp",
+          "status": "expected-engine-limitation",
+          "reason": "Source created its live DOM toolbar, but page style-src blocked its inline styles.",
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "89033c465c13a8b54541dc711a287fdbe02ef2cbf7d005d4427c50a6ed217adb",
+          "files": [],
+          "checks": {
+            "nodeCreatedUnderCsp": true,
+            "singleCspDecoration": true
+          }
+        },
+        {
+          "caseId": "page-hook",
+          "status": "expected-engine-limitation",
+          "reason": "History hook works after startup but was not installed before first inline.",
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "d45ed8c1862d8e3f04b61d4b93b602e564c15006f32b7b51a0bd05d544b50c43",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "historyHookInstalled": true,
+            "hookRefreshesResources": true
+          }
+        },
+        {
+          "caseId": "authenticated-xhr",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "589c1ee7ffc4a951e7782be7cd4e8d05447e06c18e665e52e9739dc4a069bc5a",
+          "files": [
+            {
+              "name": "Corpus fixture_2026-11-10-16-17-49.zip",
+              "bytes": 192,
+              "sha256": "b0641ca89b79fc58b3193694c823b53e9f74939ded22cabb405875ef0e17b13e",
+              "entries": [
+                {
+                  "name": "redirect.png",
+                  "bytes": 70,
+                  "sha256": "2640059609118b695c139804676372eca75c30d30e5906775902d13e44f5356c"
+                }
+              ]
+            }
+          ],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "authenticatedBytesPacked": true
+          }
+        },
+        {
+          "caseId": "download",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "de167f430d1ab86dcd84be0c1bbeaa2a3b61df49e6c39e153790d127491d5ec3",
+          "files": [
+            {
+              "name": "redirect.png",
+              "bytes": 70,
+              "sha256": "2640059609118b695c139804676372eca75c30d30e5906775902d13e44f5356c"
+            }
+          ],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "fileSaved": true
+          }
+        },
+        {
+          "caseId": "download-cancel",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "9d0c63f67f3a41ed44d27d72870ddf424ee4ee4b2224c0b16bbd21579fdad5f7",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "cancellationLeavesNoFile": true
+          }
+        },
+        {
+          "caseId": "authenticated-xhr-denied",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "ded8da7f50c521c205ea2ffb0e6febe56c8bde07517aee539df617a7cf10f47b",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "deniedRequestShowsFailure": true,
+            "denialLeavesNoFile": true
+          }
+        },
+        {
+          "caseId": "storage-listener",
+          "status": "expected-engine-limitation",
+          "reason": "The unchanged upstream settings UI requires String.prototype.replaceAll, which this Chromium 84 engine does not provide. System.TimeoutException: Corpus action did not meet its functional assertion.\r\n   在 MonkeySharp.Compatibility.CorpusHost.<Until>d__2.MoveNext()\r\n--- 引发异常的上一位置中堆栈跟踪的末尾 ---\r\n   在 System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\n   在 MonkeySharp.Compatibility.CorpusHost.<>c__DisplayClass0_1.<<Run>b__1>d.MoveNext()",
+          "fixtureHash": "476400193285d5ed26a0e92a8173919feaa5748141600c955da44e146eceed4f",
+          "actionHash": "1415ef020e2715ff30da25dbc7f0a0e1d7d1e3be97e75805a54c194a29ef6b92",
+          "files": [],
+          "checks": {}
+        },
+        {
+          "caseId": "menu-configuration",
+          "status": "expected-engine-limitation",
+          "reason": "The unchanged upstream settings UI requires String.prototype.replaceAll, which this Chromium 84 engine does not provide. System.TimeoutException: Corpus action did not meet its functional assertion.\r\n   在 MonkeySharp.Compatibility.CorpusHost.<Until>d__2.MoveNext()\r\n--- 引发异常的上一位置中堆栈跟踪的末尾 ---\r\n   在 System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\n   在 MonkeySharp.Compatibility.CorpusHost.<>c__DisplayClass0_1.<<Run>b__1>d.MoveNext()",
+          "fixtureHash": "476400193285d5ed26a0e92a8173919feaa5748141600c955da44e146eceed4f",
+          "actionHash": "5c90ad65264bb1acb8e5aad12188d49fade56460add237832314fe915fe18456",
+          "files": [],
+          "checks": {
+            "initialDomainMenu": true
+          }
+        },
+        {
+          "caseId": "iframe-spa",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "646b95ce843253205d6e8122d0886651acac13d05eaa8ababe75a983689aa8b2",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "sameProcessFrameDecoration": true,
+            "spaNoDuplicate": true
+          }
+        }
+      ],
+      "baselineLogSha256": "eb5e6433674be50b46616b419caad891b514ea566ec7e56e67ec050511db8737",
+      "packages": [
+        {
+          "name": "Mzying2001.MonkeySharp.CefSharp.x64.3.0.0-validation.e9c8dbd16171.84.4.10.x64.nupkg",
+          "bytes": 429979,
+          "sha256": "3d33c27e680af793e6376676a1467fdde5db5a692ad31e8ad642374e7afb8f7a"
+        },
+        {
+          "name": "Mzying2001.MonkeySharp.Core.3.0.0-validation.e9c8dbd16171.84.4.10.x64.nupkg",
+          "bytes": 590616,
+          "sha256": "91e314a6119ed6c46fbc48c5f4afbdcdd7a3e8f2ad49f52cffdeb0d66c109d9c"
+        }
+      ]
+    },
+    {
+      "cefSharpVersion": "84.4.10",
+      "platform": "x86",
+      "status": "passed",
+      "dotnet": {
+        "Core.Tests": {
+          "passed": 303,
+          "failed": 0,
+          "skipped": 0
+        },
+        "CefSharp.IntegrationTests": {
+          "passed": 61,
+          "failed": 0,
+          "skipped": 0
+        }
+      },
+      "javascriptTestsPassed": 120,
+      "smokeCompatibility": {
+        "prepared": true,
+        "conditions": true,
+        "isolated": true,
+        "replay": true,
+        "csp": true,
+        "pageHelpers": true,
+        "binary": true,
+        "permissions": true,
+        "frames": true,
+        "spaUrl": true,
+        "download": true,
+        "cookie": true,
+        "webRequest": true,
+        "audio": true,
+        "partitions": true
+      },
+      "smokeSummary": {
+        "type": "smoke-summary",
+        "success": true,
+        "compatibility": {
+          "prepared": true,
+          "conditions": true,
+          "isolated": true,
+          "replay": true,
+          "csp": true,
+          "pageHelpers": true,
+          "binary": true,
+          "permissions": true,
+          "frames": true,
+          "spaUrl": true,
+          "download": true,
+          "cookie": true,
+          "webRequest": true,
+          "audio": true,
+          "partitions": true
+        },
+        "fixtureResult": {
+          "mainFrame": true,
+          "storageBefore": 0,
+          "storageAfter": 1,
+          "xhr": [
+            "progress",
+            "load"
+          ],
+          "apis": {
+            "xmlhttpExtended": true,
+            "notification": true,
+            "tab": true,
+            "download": true,
+            "cookie": true,
+            "webRequest": true
+          },
+          "cookieList": 1,
+          "cookieReadback": true,
+          "notificationClicked": true,
+          "notificationDone": true,
+          "tab": {
+            "closed": true,
+            "onclose": null
+          },
+          "extended": {
+            "echo": true,
+            "cookies": true,
+            "auth": true,
+            "redirect": true,
+            "binary": true,
+            "large": true,
+            "headers": true,
+            "stream": true,
+            "timeout": true,
+            "abort": true
+          },
+          "downloadProgress": true,
+          "downloadCompleted": true,
+          "responseText": "legacy xhr ok",
+          "done": true
+        },
+        "storageMirror": true,
+        "xhr": true,
+        "xhrExtended": true,
+        "notification": true,
+        "tab": true,
+        "download": true,
+        "cookie": true,
+        "webRequest": true,
+        "mainFrameLoads": 24,
+        "childFrameLoads": 10,
+        "navigation": true,
+        "contextCreated": 42,
+        "contextReleased": 42,
+        "hostAttachedAfterDetach": false
+      },
+      "smokeSha256": "d3b4dd5a419d66d44926e192047ef77e99f04ec19cf90e828666ec4530c05017",
+      "cdp": "passed",
+      "cdpSha256": "cefc47ec4593e6462d0c88feef601ac5c40e3dbf7035bd943ca2d673fbe5cb79",
+      "wpf": null,
+      "packageContents": "passed",
+      "publicConsumer": {
+        "type": "package-consumer",
+        "success": true,
+        "checks": {
+          "cefVersion": true,
+          "coreAnyCpu": true,
+          "privateContextFactory": true,
+          "storage": true,
+          "cookie": true,
+          "audio": true,
+          "partition": true,
+          "detached": true
+        },
+        "error": null,
+        "cefSharpVersion": "84.4.10.0",
+        "platform": "x86",
+        "corpusSha256": null
+      },
+      "sourceCorpus": [
+        {
+          "caseId": "dom-decoration",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "ddaa19acbec2fef598b87a0a1933294370daa1ea8603e13efbb8435164e44b58",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "computedStyle": true,
+            "singleDecoration": true
+          }
+        },
+        {
+          "caseId": "dom-decoration-csp",
+          "status": "expected-engine-limitation",
+          "reason": "Source created its live DOM toolbar, but page style-src blocked its inline styles.",
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "6b626e8ed8ac4fe8df96dcde24cfe45fdddb93dd0cd9769ddcd179c15078680e",
+          "files": [],
+          "checks": {
+            "nodeCreatedUnderCsp": true,
+            "singleCspDecoration": true
+          }
+        },
+        {
+          "caseId": "page-hook",
+          "status": "expected-engine-limitation",
+          "reason": "History hook works after startup but was not installed before first inline.",
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "860e3a1e4a306a9321c2c7003cfc98e10f293bf2a262afcb031ba77bf8bc2154",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "historyHookInstalled": true,
+            "hookRefreshesResources": true
+          }
+        },
+        {
+          "caseId": "authenticated-xhr",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "fd3dc8ccda764f269fefdbf9db8fe7f20199fbcae53522cc7eb44c8b43cc3156",
+          "files": [
+            {
+              "name": "Corpus fixture_2026-11-10-16-19-16.zip",
+              "bytes": 192,
+              "sha256": "3c1db5b954efff271bfa5b7f353abd2c52914e85f8aea120f795c8b7699530cb",
+              "entries": [
+                {
+                  "name": "redirect.png",
+                  "bytes": 70,
+                  "sha256": "2640059609118b695c139804676372eca75c30d30e5906775902d13e44f5356c"
+                }
+              ]
+            }
+          ],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "authenticatedBytesPacked": true
+          }
+        },
+        {
+          "caseId": "download",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "dcdb8c37200880a97be4d15271de9a065a711a0ef0439baaec51e3b76286f7d9",
+          "files": [
+            {
+              "name": "redirect.png",
+              "bytes": 70,
+              "sha256": "2640059609118b695c139804676372eca75c30d30e5906775902d13e44f5356c"
+            }
+          ],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "fileSaved": true
+          }
+        },
+        {
+          "caseId": "download-cancel",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "3e246f14365a387f3cc1e121c7bf2c2a3202b235620d84afffa6af7960d7dd48",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "cancellationLeavesNoFile": true
+          }
+        },
+        {
+          "caseId": "authenticated-xhr-denied",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "e782e6cfe25ecd0d6f711116e2fe16efc2001ca06c83cc713fc67c2f4308d598",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "deniedRequestShowsFailure": true,
+            "denialLeavesNoFile": true
+          }
+        },
+        {
+          "caseId": "storage-listener",
+          "status": "expected-engine-limitation",
+          "reason": "The unchanged upstream settings UI requires String.prototype.replaceAll, which this Chromium 84 engine does not provide. System.TimeoutException: Corpus action did not meet its functional assertion.\r\n   在 MonkeySharp.Compatibility.CorpusHost.<Until>d__2.MoveNext()\r\n--- 引发异常的上一位置中堆栈跟踪的末尾 ---\r\n   在 System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)\r\n   在 System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task)\r\n   在 System.Runtime.CompilerServices.TaskAwaiter.ValidateEnd(Task task)\r\n   在 MonkeySharp.Compatibility.CorpusHost.<>c__DisplayClass0_1.<<Run>b__1>d.MoveNext()",
+          "fixtureHash": "476400193285d5ed26a0e92a8173919feaa5748141600c955da44e146eceed4f",
+          "actionHash": "4db5fcf36879f553ec422664b64b46a2e4eaa1afe396b0dc3af92f14f83d19e6",
+          "files": [],
+          "checks": {}
+        },
+        {
+          "caseId": "menu-configuration",
+          "status": "expected-engine-limitation",
+          "reason": "The unchanged upstream settings UI requires String.prototype.replaceAll, which this Chromium 84 engine does not provide. System.TimeoutException: Corpus action did not meet its functional assertion.\r\n   在 MonkeySharp.Compatibility.CorpusHost.<Until>d__2.MoveNext()\r\n--- 引发异常的上一位置中堆栈跟踪的末尾 ---\r\n   在 System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)\r\n   在 System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task)\r\n   在 System.Runtime.CompilerServices.TaskAwaiter.ValidateEnd(Task task)\r\n   在 MonkeySharp.Compatibility.CorpusHost.<>c__DisplayClass0_1.<<Run>b__1>d.MoveNext()",
+          "fixtureHash": "476400193285d5ed26a0e92a8173919feaa5748141600c955da44e146eceed4f",
+          "actionHash": "581f0f6dd562bda74b9b53c68202dc36d22944f86c5c9555337f4931e84867fc",
+          "files": [],
+          "checks": {
+            "initialDomainMenu": true
+          }
+        },
+        {
+          "caseId": "iframe-spa",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "a9338d7809172c9dbfe93dc816f5a65b061b2cf8efd4e77bcb05428cb22a3a9a",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "sameProcessFrameDecoration": true,
+            "spaNoDuplicate": true
+          }
+        }
+      ],
+      "packageCorpus": [
+        {
+          "caseId": "dom-decoration",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "f9f9a709746528f674bdb66f4a2a793991bcea18d40ca67798c3ee94998cc06e",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "computedStyle": true,
+            "singleDecoration": true
+          }
+        },
+        {
+          "caseId": "dom-decoration-csp",
+          "status": "expected-engine-limitation",
+          "reason": "Source created its live DOM toolbar, but page style-src blocked its inline styles.",
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "2bda09aee7e45287960da2fad6525a7bb3193675ffcbb6d8d7ea205201f28509",
+          "files": [],
+          "checks": {
+            "nodeCreatedUnderCsp": true,
+            "singleCspDecoration": true
+          }
+        },
+        {
+          "caseId": "page-hook",
+          "status": "expected-engine-limitation",
+          "reason": "History hook works after startup but was not installed before first inline.",
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "38bfcbfbc9690a6ab035bf15d16545b15e0de07e546bc4036cf93c5c800fc0ec",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "historyHookInstalled": true,
+            "hookRefreshesResources": true
+          }
+        },
+        {
+          "caseId": "authenticated-xhr",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "3183957e7f3dd7c3dd7d6cd39eebe327406fa55fc01a33f9ccd6f4a58e1d56cf",
+          "files": [
+            {
+              "name": "Corpus fixture_2026-11-10-16-20-20.zip",
+              "bytes": 192,
+              "sha256": "fb254d2cba9f81e38d45a911b9716116cffe7d08effdab5acda10ca108b676e1",
+              "entries": [
+                {
+                  "name": "redirect.png",
+                  "bytes": 70,
+                  "sha256": "2640059609118b695c139804676372eca75c30d30e5906775902d13e44f5356c"
+                }
+              ]
+            }
+          ],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "authenticatedBytesPacked": true
+          }
+        },
+        {
+          "caseId": "download",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "0f4058f931c9b61e04832e94696b66fcb7fe95f0c9097aff794e46bd3336ef34",
+          "files": [
+            {
+              "name": "redirect.png",
+              "bytes": 70,
+              "sha256": "2640059609118b695c139804676372eca75c30d30e5906775902d13e44f5356c"
+            }
+          ],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "fileSaved": true
+          }
+        },
+        {
+          "caseId": "download-cancel",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "e4a0032710f2c115dac2319316843e653316e582667f908f8109d2a68924fa4a",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "cancellationLeavesNoFile": true
+          }
+        },
+        {
+          "caseId": "authenticated-xhr-denied",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "fdd4713c180bcbd50d695a01b12d4b8008e5ab8a0dffcaa674c662e5352e1755",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "deniedRequestShowsFailure": true,
+            "denialLeavesNoFile": true
+          }
+        },
+        {
+          "caseId": "storage-listener",
+          "status": "expected-engine-limitation",
+          "reason": "The unchanged upstream settings UI requires String.prototype.replaceAll, which this Chromium 84 engine does not provide. System.TimeoutException: Corpus action did not meet its functional assertion.\r\n   在 MonkeySharp.Compatibility.CorpusHost.<Until>d__2.MoveNext()\r\n--- 引发异常的上一位置中堆栈跟踪的末尾 ---\r\n   在 System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)\r\n   在 System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task)\r\n   在 System.Runtime.CompilerServices.TaskAwaiter.ValidateEnd(Task task)\r\n   在 MonkeySharp.Compatibility.CorpusHost.<>c__DisplayClass0_1.<<Run>b__1>d.MoveNext()",
+          "fixtureHash": "476400193285d5ed26a0e92a8173919feaa5748141600c955da44e146eceed4f",
+          "actionHash": "a0393dc9381355ef07a3b2b79ddc64c0b5dd41ad853f455b947abe9257be73fd",
+          "files": [],
+          "checks": {}
+        },
+        {
+          "caseId": "menu-configuration",
+          "status": "expected-engine-limitation",
+          "reason": "The unchanged upstream settings UI requires String.prototype.replaceAll, which this Chromium 84 engine does not provide. System.TimeoutException: Corpus action did not meet its functional assertion.\r\n   在 MonkeySharp.Compatibility.CorpusHost.<Until>d__2.MoveNext()\r\n--- 引发异常的上一位置中堆栈跟踪的末尾 ---\r\n   在 System.Runtime.CompilerServices.TaskAwaiter.ThrowForNonSuccess(Task task)\r\n   在 System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task)\r\n   在 System.Runtime.CompilerServices.TaskAwaiter.ValidateEnd(Task task)\r\n   在 MonkeySharp.Compatibility.CorpusHost.<>c__DisplayClass0_1.<<Run>b__1>d.MoveNext()",
+          "fixtureHash": "476400193285d5ed26a0e92a8173919feaa5748141600c955da44e146eceed4f",
+          "actionHash": "93d462dad9d905cda5119e90ae7285edd49bfd14d0cb2049b46829359422bde3",
+          "files": [],
+          "checks": {
+            "initialDomainMenu": true
+          }
+        },
+        {
+          "caseId": "iframe-spa",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "90a1f415be384097cd60644513cbddfb711a09f2f3476e00af33f651ed43b751",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "sameProcessFrameDecoration": true,
+            "spaNoDuplicate": true
+          }
+        }
+      ],
+      "baselineLogSha256": "62e5daee3cbc094e640c8bb247cb6d557af1303761077b0495d31b253a0b2aa6",
+      "packages": [
+        {
+          "name": "Mzying2001.MonkeySharp.CefSharp.x86.3.0.0-validation.e9c8dbd16171.84.4.10.x86.nupkg",
+          "bytes": 430084,
+          "sha256": "8c3155288b58632aaf8a0b1366e671626f254dc7238da541449a6b8a9341d043"
+        },
+        {
+          "name": "Mzying2001.MonkeySharp.Core.3.0.0-validation.e9c8dbd16171.84.4.10.x86.nupkg",
+          "bytes": 590619,
+          "sha256": "55a804ee3142283b2fa51d6a058e5ceb5d98a330a76d9977f1df8bcac2987105"
+        }
+      ]
+    },
+    {
+      "cefSharpVersion": "121.3.70",
+      "platform": "x64",
+      "status": "passed",
+      "dotnet": {
+        "Core.Tests": {
+          "passed": 303,
+          "failed": 0,
+          "skipped": 0
+        },
+        "CefSharp.IntegrationTests": {
+          "passed": 61,
+          "failed": 0,
+          "skipped": 0
+        },
+        "Demo.Tests": {
+          "passed": 49,
+          "failed": 0,
+          "skipped": 0
+        }
+      },
+      "javascriptTestsPassed": 120,
+      "smokeCompatibility": {
+        "prepared": true,
+        "conditions": true,
+        "isolated": true,
+        "replay": true,
+        "csp": true,
+        "pageHelpers": true,
+        "binary": true,
+        "permissions": true,
+        "frames": true,
+        "spaUrl": true,
+        "download": true,
+        "cookie": true,
+        "webRequest": true,
+        "audio": true,
+        "partitions": true
+      },
+      "smokeSummary": {
+        "type": "smoke-summary",
+        "success": true,
+        "compatibility": {
+          "prepared": true,
+          "conditions": true,
+          "isolated": true,
+          "replay": true,
+          "csp": true,
+          "pageHelpers": true,
+          "binary": true,
+          "permissions": true,
+          "frames": true,
+          "spaUrl": true,
+          "download": true,
+          "cookie": true,
+          "webRequest": true,
+          "audio": true,
+          "partitions": true
+        },
+        "fixtureResult": {
+          "mainFrame": true,
+          "storageBefore": 0,
+          "storageAfter": 1,
+          "xhr": [
+            "progress",
+            "progress",
+            "load"
+          ],
+          "apis": {
+            "xmlhttpExtended": true,
+            "notification": true,
+            "tab": true,
+            "download": true,
+            "cookie": true,
+            "webRequest": true
+          },
+          "cookieList": 1,
+          "cookieReadback": true,
+          "notificationClicked": true,
+          "notificationDone": true,
+          "tab": {
+            "closed": true,
+            "onclose": null
+          },
+          "extended": {
+            "echo": true,
+            "cookies": true,
+            "auth": true,
+            "redirect": true,
+            "binary": true,
+            "large": true,
+            "headers": true,
+            "stream": true,
+            "timeout": true,
+            "abort": true
+          },
+          "downloadProgress": true,
+          "downloadCompleted": true,
+          "responseText": "legacy xhr ok",
+          "done": true
+        },
+        "storageMirror": true,
+        "xhr": true,
+        "xhrExtended": true,
+        "notification": true,
+        "tab": true,
+        "download": true,
+        "cookie": true,
+        "webRequest": true,
+        "mainFrameLoads": 24,
+        "childFrameLoads": 10,
+        "navigation": true,
+        "contextCreated": 42,
+        "contextReleased": 42,
+        "hostAttachedAfterDetach": false
+      },
+      "smokeSha256": "38979832e37da72b2e70dec627cb7ba25a620a59e452728a9747e03156ac7701",
+      "cdp": "passed",
+      "cdpSha256": "dbc65f0be62de06c2b9c1005b1a51854bd018634fbe68c6d0cf74f551261289e",
+      "wpf": {
+        "success": true,
+        "checks": {
+          "permissionPrompt": true,
+          "permissionRemembered": true,
+          "storageResourcesXhrCookieWebRequest": true,
+          "audioMuteOnly": true,
+          "cookiePartitionCapability": true,
+          "tabStateScriptIsolation": true,
+          "domAndInfo": true,
+          "iframe": true,
+          "menu": true,
+          "menuOptions": true,
+          "menuUpdate": true,
+          "multiFrameMenu": true,
+          "backgroundTab": true,
+          "tabSwitchPreservesDocument": true,
+          "crossTabValues": true,
+          "undefinedSnapshot": true,
+          "windowFocus": true,
+          "tabStateNavigation": true,
+          "undefinedNavigation": true,
+          "sharedCookies": true,
+          "openInTab": true,
+          "tabRelativeUrlAndPosition": true,
+          "tabCloseOnce": true,
+          "download": true,
+          "downloadSaveCanceled": true,
+          "notificationWaits": true,
+          "notification": true,
+          "notificationTag": true,
+          "notificationPreventDefault": true,
+          "notificationUrl": true,
+          "notificationHighlight": true,
+          "clipboardHtml": true,
+          "clipboardText": true,
+          "tabState": true,
+          "tabFavicon": true,
+          "selectedTabColors": true,
+          "inactiveSelectedTabColors": true,
+          "scriptManagerDetails": true,
+          "scriptManagerInlineToggle": true,
+          "scriptManagerCtrlS": true,
+          "navigationCleanup": true,
+          "disableAndReload": true,
+          "enableAndReload": true,
+          "privateNativeContext": true,
+          "privateInfoRunIn": true,
+          "normalInfoRunIn": true,
+          "privateCookieNetworkIsolation": true,
+          "privatePermissionIsolation": true,
+          "privateCacheIsolation": true,
+          "privateSessionShared": true,
+          "privateCacheShared": true,
+          "privateTabDataIsolation": true,
+          "privateWritesNotPersistent": true,
+          "privateLivesUntilLastTab": true,
+          "privateContextReleased": true,
+          "privateFreshSession": true,
+          "privatePermissionCleared": true,
+          "privateCacheCleared": true,
+          "privateLogsNotPersisted": true,
+          "windowClose": true,
+          "closeTab": true,
+          "closeTabSelectsPrevious": true,
+          "lastTabPolicy": true,
+          "closeTabsDuringRequests": true,
+          "finalDisposal": true
+        },
+        "profile": "D:\\m2-e9c8dbd161\\4\\Mzying2001.MonkeySharp.Demo\\bin\\x64\\Release\\net462\\SmokeRuns\\c9919f0b90074a19a6abc36be773ba77",
+        "environment": {
+          "cefSharpVersion": "121.3.70.0",
+          "platform": "x64"
+        }
+      },
+      "packageContents": "passed",
+      "publicConsumer": {
+        "type": "package-consumer",
+        "success": true,
+        "checks": {
+          "cefVersion": true,
+          "coreAnyCpu": true,
+          "privateContextFactory": true,
+          "storage": true,
+          "cookie": true,
+          "audio": true,
+          "partition": true,
+          "detached": true
+        },
+        "error": null,
+        "cefSharpVersion": "121.3.70.0",
+        "platform": "x64",
+        "corpusSha256": null
+      },
+      "sourceCorpus": [
+        {
+          "caseId": "dom-decoration",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "290b2ceb1b2109f3394421ec1e35615c98531f6db86d76db394818a90877efb5",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "computedStyle": true,
+            "singleDecoration": true
+          }
+        },
+        {
+          "caseId": "dom-decoration-csp",
+          "status": "expected-engine-limitation",
+          "reason": "Source created its live DOM toolbar, but page style-src blocked its inline styles.",
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "732ec5b141947679b6af45e1022d014148d241d5917a63dcd3605c44eed7a059",
+          "files": [],
+          "checks": {
+            "nodeCreatedUnderCsp": true,
+            "singleCspDecoration": true
+          }
+        },
+        {
+          "caseId": "page-hook",
+          "status": "expected-engine-limitation",
+          "reason": "History hook works after startup but was not installed before first inline.",
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "e72b38d4a1cdbc4a1b785615b5fc075ee2ab5f39b9f2c07c2d518e1120005d12",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "historyHookInstalled": true,
+            "hookRefreshesResources": true
+          }
+        },
+        {
+          "caseId": "authenticated-xhr",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "b80027eeac4ae02fe6399dcc569679fb5967860744acfc6b3761a096537d36ef",
+          "files": [
+            {
+              "name": "Corpus fixture_2026-11-10-16-21-52.zip",
+              "bytes": 192,
+              "sha256": "a129b91097926a74c1b6b0aab0fd2587d08f805c801fc4c00c5d63df7746cb4b",
+              "entries": [
+                {
+                  "name": "redirect.png",
+                  "bytes": 70,
+                  "sha256": "2640059609118b695c139804676372eca75c30d30e5906775902d13e44f5356c"
+                }
+              ]
+            }
+          ],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "authenticatedBytesPacked": true
+          }
+        },
+        {
+          "caseId": "download",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "fb777acf94e4ae97acd1520111f075c5992265ac332bc6fd6837bde07d7c8dea",
+          "files": [
+            {
+              "name": "redirect.png",
+              "bytes": 70,
+              "sha256": "2640059609118b695c139804676372eca75c30d30e5906775902d13e44f5356c"
+            }
+          ],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "fileSaved": true
+          }
+        },
+        {
+          "caseId": "download-cancel",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "8cfea32c1beda5b314d1e291a6ed95c60343213aeb720954ee37bf4ca541b8a6",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "cancellationLeavesNoFile": true
+          }
+        },
+        {
+          "caseId": "authenticated-xhr-denied",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "166b88ae433308c4c961efee092ec289505c18c05cd7c9afb896c8147675f5ae",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "deniedRequestShowsFailure": true,
+            "denialLeavesNoFile": true
+          }
+        },
+        {
+          "caseId": "storage-listener",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "476400193285d5ed26a0e92a8173919feaa5748141600c955da44e146eceed4f",
+          "actionHash": "2a51e184da77732e38ee7e67d3a40924bd1e7bfd8851a381e2b9e7c21723fb55",
+          "files": [],
+          "checks": {
+            "settingsPanel": true,
+            "localMenuRemoved": true,
+            "remoteMenuRemoved": true,
+            "persistedAfterNavigation": true
+          }
+        },
+        {
+          "caseId": "menu-configuration",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "476400193285d5ed26a0e92a8173919feaa5748141600c955da44e146eceed4f",
+          "actionHash": "e5a68f31bf4bf74bc73fb965d1d453b71eeb0a988369c66fc6d5542e52116896",
+          "files": [],
+          "checks": {
+            "initialDomainMenu": true,
+            "settingsPanel": true,
+            "updatedDomainMenu": true,
+            "configurationReadback": true
+          }
+        },
+        {
+          "caseId": "iframe-spa",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "bedc662cf87db72ff6b4c12e0c3317beafd7c34216ece1067a1bcfb50ab36916",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "sameProcessFrameDecoration": true,
+            "spaNoDuplicate": true
+          }
+        }
+      ],
+      "packageCorpus": [
+        {
+          "caseId": "dom-decoration",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "5bff9a13979379199749dd1c5e57f431ebf03c4bf517629136f77ec14fe67234",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "computedStyle": true,
+            "singleDecoration": true
+          }
+        },
+        {
+          "caseId": "dom-decoration-csp",
+          "status": "expected-engine-limitation",
+          "reason": "Source created its live DOM toolbar, but page style-src blocked its inline styles.",
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "308c952c68254ea5400468c9c150a8422c791d53eed1f937ae8a4f31f9804d4c",
+          "files": [],
+          "checks": {
+            "nodeCreatedUnderCsp": true,
+            "singleCspDecoration": true
+          }
+        },
+        {
+          "caseId": "page-hook",
+          "status": "expected-engine-limitation",
+          "reason": "History hook works after startup but was not installed before first inline.",
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "807acb3815e8a3000f70faba7f6feaf6a66493a05f05036e5bfd3bc701f7da61",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "historyHookInstalled": true,
+            "hookRefreshesResources": true
+          }
+        },
+        {
+          "caseId": "authenticated-xhr",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "723ac93e912be948fc26481d837b43e506cbc1a77fb4c52da1028ba5f2550dd8",
+          "files": [
+            {
+              "name": "Corpus fixture_2026-11-10-16-22-52.zip",
+              "bytes": 192,
+              "sha256": "d880680f9388a52efd9b3046a0432f8b2867b37f23ed8ad1c00324cbd7fb17ed",
+              "entries": [
+                {
+                  "name": "redirect.png",
+                  "bytes": 70,
+                  "sha256": "2640059609118b695c139804676372eca75c30d30e5906775902d13e44f5356c"
+                }
+              ]
+            }
+          ],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "authenticatedBytesPacked": true
+          }
+        },
+        {
+          "caseId": "download",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "500ae8fd58033ff034d76212128450e2549dfaa46305878a098ea80246201cd8",
+          "files": [
+            {
+              "name": "redirect.png",
+              "bytes": 70,
+              "sha256": "2640059609118b695c139804676372eca75c30d30e5906775902d13e44f5356c"
+            }
+          ],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "fileSaved": true
+          }
+        },
+        {
+          "caseId": "download-cancel",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "ab714a284cc35e160693a3f1cecc41c1d07c25727d2b85a345b4d87bd672bb15",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "cancellationLeavesNoFile": true
+          }
+        },
+        {
+          "caseId": "authenticated-xhr-denied",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "ab85da172c072e3921b157dd1c1eb73d894ee50d44708509be428183902103be",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "deniedRequestShowsFailure": true,
+            "denialLeavesNoFile": true
+          }
+        },
+        {
+          "caseId": "storage-listener",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "476400193285d5ed26a0e92a8173919feaa5748141600c955da44e146eceed4f",
+          "actionHash": "cb19d0dc07997b985df5cdde2e1d3ddbc8dff0fd8b13bf996e4d4392c8c4c2d3",
+          "files": [],
+          "checks": {
+            "settingsPanel": true,
+            "localMenuRemoved": true,
+            "remoteMenuRemoved": true,
+            "persistedAfterNavigation": true
+          }
+        },
+        {
+          "caseId": "menu-configuration",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "476400193285d5ed26a0e92a8173919feaa5748141600c955da44e146eceed4f",
+          "actionHash": "778b3c30c03da5875524cc3259c7c4c31cd8bceea827a891e836c249410b3a90",
+          "files": [],
+          "checks": {
+            "initialDomainMenu": true,
+            "settingsPanel": true,
+            "updatedDomainMenu": true,
+            "configurationReadback": true
+          }
+        },
+        {
+          "caseId": "iframe-spa",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "11d797380be68d01a0c1c7b54edfbb97f84b9e1de1aebd22078107577455c782",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "sameProcessFrameDecoration": true,
+            "spaNoDuplicate": true
+          }
+        }
+      ],
+      "baselineLogSha256": "7199743ebdf75634d7cb62a7ed909c63c1e47053c6f1b58a7b76f3a6ce47b2f0",
+      "packages": [
+        {
+          "name": "Mzying2001.MonkeySharp.CefSharp.x64.3.0.0-validation.e9c8dbd16171.121.3.70.x64.nupkg",
+          "bytes": 430008,
+          "sha256": "0ba0bb46f0a5c48e86a7db3bc771f023086653903f58a3790c3b4b347d5cf670"
+        },
+        {
+          "name": "Mzying2001.MonkeySharp.Core.3.0.0-validation.e9c8dbd16171.121.3.70.x64.nupkg",
+          "bytes": 590604,
+          "sha256": "4e792b19ac4d3aeaa96b08129d8ad38103dbff709821d880760c1b8f57efa906"
+        }
+      ]
+    },
+    {
+      "cefSharpVersion": "121.3.70",
+      "platform": "x86",
+      "status": "passed",
+      "dotnet": {
+        "Core.Tests": {
+          "passed": 303,
+          "failed": 0,
+          "skipped": 0
+        },
+        "CefSharp.IntegrationTests": {
+          "passed": 61,
+          "failed": 0,
+          "skipped": 0
+        }
+      },
+      "javascriptTestsPassed": 120,
+      "smokeCompatibility": {
+        "prepared": true,
+        "conditions": true,
+        "isolated": true,
+        "replay": true,
+        "csp": true,
+        "pageHelpers": true,
+        "binary": true,
+        "permissions": true,
+        "frames": true,
+        "spaUrl": true,
+        "download": true,
+        "cookie": true,
+        "webRequest": true,
+        "audio": true,
+        "partitions": true
+      },
+      "smokeSummary": {
+        "type": "smoke-summary",
+        "success": true,
+        "compatibility": {
+          "prepared": true,
+          "conditions": true,
+          "isolated": true,
+          "replay": true,
+          "csp": true,
+          "pageHelpers": true,
+          "binary": true,
+          "permissions": true,
+          "frames": true,
+          "spaUrl": true,
+          "download": true,
+          "cookie": true,
+          "webRequest": true,
+          "audio": true,
+          "partitions": true
+        },
+        "fixtureResult": {
+          "mainFrame": true,
+          "storageBefore": 0,
+          "storageAfter": 1,
+          "xhr": [
+            "progress",
+            "progress",
+            "load"
+          ],
+          "apis": {
+            "xmlhttpExtended": true,
+            "notification": true,
+            "tab": true,
+            "download": true,
+            "cookie": true,
+            "webRequest": true
+          },
+          "cookieList": 1,
+          "cookieReadback": true,
+          "notificationClicked": true,
+          "notificationDone": true,
+          "tab": {
+            "closed": true,
+            "onclose": null
+          },
+          "extended": {
+            "echo": true,
+            "cookies": true,
+            "auth": true,
+            "redirect": true,
+            "binary": true,
+            "large": true,
+            "headers": true,
+            "stream": true,
+            "timeout": true,
+            "abort": true
+          },
+          "downloadProgress": true,
+          "downloadCompleted": true,
+          "responseText": "legacy xhr ok",
+          "done": true
+        },
+        "storageMirror": true,
+        "xhr": true,
+        "xhrExtended": true,
+        "notification": true,
+        "tab": true,
+        "download": true,
+        "cookie": true,
+        "webRequest": true,
+        "mainFrameLoads": 24,
+        "childFrameLoads": 10,
+        "navigation": true,
+        "contextCreated": 42,
+        "contextReleased": 42,
+        "hostAttachedAfterDetach": false
+      },
+      "smokeSha256": "c3360f3e9143b290356a677be519908f6861c6188634005c5e75a48f28ff9fa5",
+      "cdp": "passed",
+      "cdpSha256": "ade95ef590d906df5b095a6f3adf8be6b35914d90c6f364a99ffecfae98f6f12",
+      "wpf": null,
+      "packageContents": "passed",
+      "publicConsumer": {
+        "type": "package-consumer",
+        "success": true,
+        "checks": {
+          "cefVersion": true,
+          "coreAnyCpu": true,
+          "privateContextFactory": true,
+          "storage": true,
+          "cookie": true,
+          "audio": true,
+          "partition": true,
+          "detached": true
+        },
+        "error": null,
+        "cefSharpVersion": "121.3.70.0",
+        "platform": "x86",
+        "corpusSha256": null
+      },
+      "sourceCorpus": [
+        {
+          "caseId": "dom-decoration",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "e848fddce3156c7f806214f0e3959b7da1d6361008f9ec73be35ae58f4e059c4",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "computedStyle": true,
+            "singleDecoration": true
+          }
+        },
+        {
+          "caseId": "dom-decoration-csp",
+          "status": "expected-engine-limitation",
+          "reason": "Source created its live DOM toolbar, but page style-src blocked its inline styles.",
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "83ec8702467a60e4e14fefa685d9d670eaa41aed1d1d40223020b8ad0ab0742a",
+          "files": [],
+          "checks": {
+            "nodeCreatedUnderCsp": true,
+            "singleCspDecoration": true
+          }
+        },
+        {
+          "caseId": "page-hook",
+          "status": "expected-engine-limitation",
+          "reason": "History hook works after startup but was not installed before first inline.",
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "360cd6e198efa0c604e716d48fb37c859921e615e185efec37e0208fa7c297ff",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "historyHookInstalled": true,
+            "hookRefreshesResources": true
+          }
+        },
+        {
+          "caseId": "authenticated-xhr",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "71680dda2c550f1d0ea4339b2e866c01e55f1de843e3afe06cda829c8b365a7a",
+          "files": [
+            {
+              "name": "Corpus fixture_2026-11-10-16-23-59.zip",
+              "bytes": 192,
+              "sha256": "1772f7f387df7f739ba3e73e73e36870f663230d6574d107752215bf4dc72018",
+              "entries": [
+                {
+                  "name": "redirect.png",
+                  "bytes": 70,
+                  "sha256": "2640059609118b695c139804676372eca75c30d30e5906775902d13e44f5356c"
+                }
+              ]
+            }
+          ],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "authenticatedBytesPacked": true
+          }
+        },
+        {
+          "caseId": "download",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "7109fdc86eda959329acd53ea4f152b49d792694ba3d7cf460c3c20dd357edb0",
+          "files": [
+            {
+              "name": "redirect.png",
+              "bytes": 70,
+              "sha256": "2640059609118b695c139804676372eca75c30d30e5906775902d13e44f5356c"
+            }
+          ],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "fileSaved": true
+          }
+        },
+        {
+          "caseId": "download-cancel",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "acc7debc9f84f29e6c255e65a61d7352ed7dbd6dee7c3a774163dee8aeeecfe7",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "cancellationLeavesNoFile": true
+          }
+        },
+        {
+          "caseId": "authenticated-xhr-denied",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "4a88385ef809f8f39017168ffac18bffe23b6dbbea61b77d54d7f0705d1fe780",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "deniedRequestShowsFailure": true,
+            "denialLeavesNoFile": true
+          }
+        },
+        {
+          "caseId": "storage-listener",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "476400193285d5ed26a0e92a8173919feaa5748141600c955da44e146eceed4f",
+          "actionHash": "6d7479291e9d6a4c460852bfc510149431acc6827f90f1e744440922f66836e2",
+          "files": [],
+          "checks": {
+            "settingsPanel": true,
+            "localMenuRemoved": true,
+            "remoteMenuRemoved": true,
+            "persistedAfterNavigation": true
+          }
+        },
+        {
+          "caseId": "menu-configuration",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "476400193285d5ed26a0e92a8173919feaa5748141600c955da44e146eceed4f",
+          "actionHash": "00d9ba13c01d54e8c003354efb1c7906929da3f20c296092a3fb387c98c3b686",
+          "files": [],
+          "checks": {
+            "initialDomainMenu": true,
+            "settingsPanel": true,
+            "updatedDomainMenu": true,
+            "configurationReadback": true
+          }
+        },
+        {
+          "caseId": "iframe-spa",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "ebbca4daf92503fb46b41073bb2eb15cf0d7f4972edecbd7059778460e2495b7",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "sameProcessFrameDecoration": true,
+            "spaNoDuplicate": true
+          }
+        }
+      ],
+      "packageCorpus": [
+        {
+          "caseId": "dom-decoration",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "30b97c0cc3c3700eddba10d8007925edeb09f593420dc819edcfdf3f2f12d05f",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "computedStyle": true,
+            "singleDecoration": true
+          }
+        },
+        {
+          "caseId": "dom-decoration-csp",
+          "status": "expected-engine-limitation",
+          "reason": "Source created its live DOM toolbar, but page style-src blocked its inline styles.",
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "f118e66e2360e6c34f32a20305703925e4163845eb179bffe2c9bd1beabb2c5d",
+          "files": [],
+          "checks": {
+            "nodeCreatedUnderCsp": true,
+            "singleCspDecoration": true
+          }
+        },
+        {
+          "caseId": "page-hook",
+          "status": "expected-engine-limitation",
+          "reason": "History hook works after startup but was not installed before first inline.",
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "ffc261cb0662a6aaafb3b8d8e8a880209853d6b2267c964a185f7181fe8754b7",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "historyHookInstalled": true,
+            "hookRefreshesResources": true
+          }
+        },
+        {
+          "caseId": "authenticated-xhr",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "f776358549cf9d828f1b934897e867437e838a98cdf2e1bfacd87d572e12d2c9",
+          "files": [
+            {
+              "name": "Corpus fixture_2026-11-10-16-24-43.zip",
+              "bytes": 192,
+              "sha256": "a2e618dca90514075c22436c3834f7647932a48c3895e5124e8ffa1d957bdc36",
+              "entries": [
+                {
+                  "name": "redirect.png",
+                  "bytes": 70,
+                  "sha256": "2640059609118b695c139804676372eca75c30d30e5906775902d13e44f5356c"
+                }
+              ]
+            }
+          ],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "authenticatedBytesPacked": true
+          }
+        },
+        {
+          "caseId": "download",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "ea6119b6aff19799bbb71d85cb4b69bc987f99267ca70d0e88a819945701b444",
+          "files": [
+            {
+              "name": "redirect.png",
+              "bytes": 70,
+              "sha256": "2640059609118b695c139804676372eca75c30d30e5906775902d13e44f5356c"
+            }
+          ],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "fileSaved": true
+          }
+        },
+        {
+          "caseId": "download-cancel",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "35fe356171ee702203200f4486141dffe06994d5faa4e1982a419ccbd29343e1",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "cancellationLeavesNoFile": true
+          }
+        },
+        {
+          "caseId": "authenticated-xhr-denied",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "6d4ac18fe47c7582fd7a0335aa30b5f154d3747bdd3ba793a107dd10c312ff52",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "deniedRequestShowsFailure": true,
+            "denialLeavesNoFile": true
+          }
+        },
+        {
+          "caseId": "storage-listener",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "476400193285d5ed26a0e92a8173919feaa5748141600c955da44e146eceed4f",
+          "actionHash": "e197320a4d2f6cac6190e41654a372d76a679a9e647ca40659bfcdf1e3236b36",
+          "files": [],
+          "checks": {
+            "settingsPanel": true,
+            "localMenuRemoved": true,
+            "remoteMenuRemoved": true,
+            "persistedAfterNavigation": true
+          }
+        },
+        {
+          "caseId": "menu-configuration",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "476400193285d5ed26a0e92a8173919feaa5748141600c955da44e146eceed4f",
+          "actionHash": "09e51b15b098988e21fa608eb07f84a1c095d4c4953163f85a42b44214dc43f5",
+          "files": [],
+          "checks": {
+            "initialDomainMenu": true,
+            "settingsPanel": true,
+            "updatedDomainMenu": true,
+            "configurationReadback": true
+          }
+        },
+        {
+          "caseId": "iframe-spa",
+          "status": "passed",
+          "reason": null,
+          "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+          "actionHash": "1bab8f628fb81b2d8220789e29509a8a12310c235662e1801e3e5f02caec312a",
+          "files": [],
+          "checks": {
+            "assetToolbar": true,
+            "resourceCollected": true,
+            "sameProcessFrameDecoration": true,
+            "spaNoDuplicate": true
+          }
+        }
+      ],
+      "baselineLogSha256": "47177e329e69a4efb60e977b8d248650918ef27ac65da221a1e40ae76b290f1a",
+      "packages": [
+        {
+          "name": "Mzying2001.MonkeySharp.CefSharp.x86.3.0.0-validation.e9c8dbd16171.121.3.70.x86.nupkg",
+          "bytes": 430108,
+          "sha256": "8e82ecf1a2758bcabcfcf09042aa0f4fe4dd85318dabf19117c9d56d4dcf419a"
+        },
+        {
+          "name": "Mzying2001.MonkeySharp.Core.3.0.0-validation.e9c8dbd16171.121.3.70.x86.nupkg",
+          "bytes": 590616,
+          "sha256": "d876c374d0918975e010643c59f06714def817bca16df81eb8a86e1b1be597ca"
+        }
+      ]
+    }
+  ],
+  "failedAttempts": []
+}

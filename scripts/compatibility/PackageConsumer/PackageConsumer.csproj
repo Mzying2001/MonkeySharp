@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net462</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Platforms>x64;x86</Platforms>
+    <PlatformTarget>$(Platform)</PlatformTarget>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <CefSharpVersion Condition="'$(CefSharpVersion)' == ''">121.3.70</CefSharpVersion>
+    <DefineConstants Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(CefSharpVersion)', '130.0.0'))">$(DefineConstants);CEF_CORPUS_NEW_DOWNLOAD_RETURN</DefineConstants>
+    <AssemblyName>MonkeySharp.PackageConsumer</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Mzying2001.MonkeySharp.Core" Version="$(MonkeySharpPackageVersion)" />
+    <PackageReference Include="Mzying2001.MonkeySharp.CefSharp.$(Platform)" Version="$(MonkeySharpPackageVersion)" />
+    <PackageReference Include="CefSharp.WinForms" Version="$(CefSharpVersion)" />
+  </ItemGroup>
+</Project>

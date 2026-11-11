@@ -1,0 +1,201 @@
+{
+  "schemaVersion": 1,
+  "caseId": "matching-conditions",
+  "events": [
+    {
+      "name": "source",
+      "url": "http://127.0.0.1:54499/allowed"
+    },
+    {
+      "name": "source",
+      "url": "http://127.0.0.1:54499/ALLOWED"
+    },
+    {
+      "name": "source",
+      "url": "http://127.0.0.1:54499/regex/Mixed"
+    },
+    {
+      "name": "source",
+      "url": "http://127.0.0.1:54499/regex/mixed"
+    },
+    {
+      "name": "source",
+      "url": "http://127.0.0.1:54499/regex/Mixed#hash"
+    },
+    {
+      "name": "source",
+      "url": "http://127.0.0.1:54499/literal?query=one"
+    },
+    {
+      "name": "source",
+      "url": "http://127.0.0.1:54499/match?value=one#hash"
+    },
+    {
+      "name": "source",
+      "url": "http://127.0.0.1:54499/Scheme"
+    },
+    {
+      "name": "source",
+      "url": "http://[::1]:54500/ipv6"
+    },
+    {
+      "name": "source",
+      "url": "http://127.0.0.1:54499/encoded/%41?%61=one"
+    },
+    {
+      "name": "source",
+      "url": "http://127.0.0.1:54499/wild-port"
+    },
+    {
+      "name": "source",
+      "url": "http://xn--fsqu00a.xn--0zwm56d:54499/puny"
+    },
+    {
+      "name": "source",
+      "url": "http://xn--fsqu00a.xn--0zwm56d:54499/puny"
+    }
+  ],
+  "promise": {},
+  "immediateReturn": {
+    "probe": "completed"
+  },
+  "effects": {
+    "cases": [
+      {
+        "id": "include",
+        "url": "http://127.0.0.1:54499/allowed",
+        "matched": true
+      },
+      {
+        "id": "include-case",
+        "url": "http://127.0.0.1:54499/ALLOWED",
+        "matched": true
+      },
+      {
+        "id": "exclude",
+        "url": "http://127.0.0.1:54499/allowed/excluded",
+        "matched": false
+      },
+      {
+        "id": "regex-case",
+        "url": "http://127.0.0.1:54499/regex/Mixed",
+        "matched": true
+      },
+      {
+        "id": "regex-case-lower",
+        "url": "http://127.0.0.1:54499/regex/mixed",
+        "matched": true
+      },
+      {
+        "id": "regex-hash",
+        "url": "http://127.0.0.1:54499/regex/Mixed#hash",
+        "matched": true
+      },
+      {
+        "id": "question-query",
+        "url": "http://127.0.0.1:54499/literal?query=one",
+        "matched": true
+      },
+      {
+        "id": "question-literal",
+        "url": "http://127.0.0.1:54499/literalXquery=one",
+        "matched": false
+      },
+      {
+        "id": "match-query",
+        "url": "http://127.0.0.1:54499/match?value=one#hash",
+        "matched": true
+      },
+      {
+        "id": "match-query-case",
+        "url": "http://127.0.0.1:54499/MATCH?value=one",
+        "matched": false
+      },
+      {
+        "id": "http-star",
+        "url": "http://127.0.0.1:54499/Scheme",
+        "matched": true
+      },
+      {
+        "id": "host-escape",
+        "url": "http://127.0.0.1:54499/?http://sub.example.test/host",
+        "matched": false
+      },
+      {
+        "id": "authority-escape",
+        "url": "http://127.0.0.1:54499/?http://127.0.0.1:54499/allowed",
+        "matched": false
+      },
+      {
+        "id": "ipv6",
+        "url": "http://[::1]:54500/ipv6",
+        "matched": true
+      },
+      {
+        "id": "encoded-path-query",
+        "url": "http://127.0.0.1:54499/encoded/%41?%61=one",
+        "matched": true
+      },
+      {
+        "id": "unescaped-path-query",
+        "url": "http://127.0.0.1:54499/encoded/A?a=one",
+        "matched": false
+      },
+      {
+        "id": "idn-host",
+        "url": "http://xn--fsqu00a.xn--0zwm56d:54499/idn",
+        "matched": false
+      },
+      {
+        "id": "host-case",
+        "url": "http://XN--FSQU00A.XN--0ZWM56D:54499/idn",
+        "matched": false
+      },
+      {
+        "id": "wildcard-port",
+        "url": "http://127.0.0.1:54499/wild-port",
+        "matched": true
+      },
+      {
+        "id": "punycode-host",
+        "url": "http://xn--fsqu00a.xn--0zwm56d:54499/puny",
+        "matched": true
+      },
+      {
+        "id": "punycode-host-case",
+        "url": "http://XN--FSQU00A.XN--0ZWM56D:54499/puny",
+        "matched": true
+      }
+    ],
+    "tabsBefore": 4,
+    "tabsAfter": 4
+  },
+  "fixtureHash": "2c3cbb3b2f66a58770109f7fe185d8ee73017ad2c973c3f5af442c9a583408cd",
+  "contractSource": [
+    "https://www.tampermonkey.net/documentation.php?locale=en",
+    "Tampermonkey 5.5.1/MV3 runtime"
+  ],
+  "environment": {
+    "manager": "Tampermonkey",
+    "managerVersion": "5.5.1",
+    "chromiumVersion": "Edg/156.0.4314.58",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36 Edg/156.0.0.0",
+    "manifestVersion": 3,
+    "settings": {
+      "headless": true,
+      "userScriptsAccess": true,
+      "freshProfile": true
+    },
+    "commit": "152e0a33884c6f9b89ac5207cbc8527bd05711db",
+    "platform": "x64",
+    "capabilities": {
+      "referenceReturnProbe": true
+    },
+    "world": "manager-selected"
+  },
+  "checks": {
+    "allCasesRecorded": true,
+    "expectedMatches": true
+  },
+  "status": "passed"
+}

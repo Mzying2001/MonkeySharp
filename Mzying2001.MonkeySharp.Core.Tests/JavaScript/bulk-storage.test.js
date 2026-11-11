@@ -1,9 +1,9 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const { install, waitFor, fixtureValue } = require("./storage-harness");
-for (const mirror of [true, false]) {
-    test(`bulk JSON values cannot be confused with the bridge sentinel (mirror=${mirror})`, async () => {
-        const { api } = await install({ mirror });
+for (const chunked of [false, true]) {
+    test(`bulk JSON values cannot be confused with the bridge sentinel (chunked=${chunked})`, async () => {
+        const { api } = await install({ chunked });
         const changes = [];
         await api.addValueChangeListener("key", (...args) => changes.push(args));
         await api.setValues({ key: { $monkeySharpType: "undefined" } });
@@ -13,9 +13,9 @@ for (const mirror of [true, false]) {
             ["key", { $monkeySharpType: "undefined" }, undefined, false]]);
     });
 
-    test(`bulk reads select keys, defaults, or all JSON values (mirror=${mirror})`, async () => {
+    test(`bulk reads select keys, defaults, or all JSON values (chunked=${chunked})`, async () => {
         const initial = JSON.parse('{"nullable":null,"nested":{"items":[1,true]},"__proto__":{"safe":true},"constructor":42}');
-        const { api } = await install({ values: initial, mirror });
+        const { api } = await install({ values: initial, chunked });
         assert.deepEqual({ ...await api.getValues(["nullable", "missing", "nested", "nested"]) },
             { nullable: null, nested: { items: [1, true] } });
         assert.deepEqual({ ...await api.getValues({ nullable: "unused", missing: { enabled: false }, constructor: undefined }) },
@@ -34,11 +34,11 @@ for (const mirror of [true, false]) {
         assert.deepEqual({ ...await api.getValues(["$monkeySharpType"]) }, { $monkeySharpType: "undefined" });
     });
 
-    test(`modern bulk mutations use their own grants and one request per batch (mirror=${mirror})`, async () => {
-        const { api, requests, values } = await install({ mirror,
+    test(`modern bulk mutations share the storage family and use one request per batch (chunked=${chunked})`, async () => {
+        const { api, requests, values } = await install({ chunked,
             grants: ["GM.getValues", "GM.setValues", "GM.deleteValues"] });
-        assert.equal(api.getValue, undefined);
-        assert.equal(api.setValue, undefined);
+        assert.equal(typeof api.getValue, "function");
+        assert.equal(typeof api.setValue, "function");
         const input = JSON.parse('{"first":{"count":1},"__proto__":"ordinary","constructor":null}');
         const writing = api.setValues(input);
         assert.equal(typeof writing.then, "function");
@@ -92,7 +92,7 @@ test("invalid bulk inputs fail before any optimistic or durable mutation", async
 });
 
 for (const operation of ["set", "delete"]) {
-    test(`partial bulk ${operation} failure keeps committed events and replays queued mutations`, async () => {
+    test(`atomic bulk ${operation} failure rejects the whole batch and replays queued mutations`, async () => {
         const harness = await install({ values: { first: 1, fail: 2, last: 3 }, failOnKey: "fail" });
         const { api, get, values, requests } = harness;
         const changes = [];
@@ -108,7 +108,8 @@ for (const operation of ["set", "delete"]) {
         assert.deepEqual({ ...get() }, { first: 9, fail: 2, last: 3 });
         assert.deepEqual({ ...values }, { first: "n9", fail: "n2", last: "n3" });
         const intermediate = operation === "set" ? 10 : undefined;
-        assert.deepEqual(changes, [["first", 1, intermediate, false], ["first", intermediate, 9, false]]);
+        assert.deepEqual(changes, [["first", 1, intermediate, false], ["fail", 2, operation === "set" ? 20 : undefined, false],
+            ["last", 3, operation === "set" ? 30 : undefined, false], ["first", intermediate, 9, false]]);
         assert.equal(requests.filter(request => request.method === "runtime.getStorageSnapshot").length, 1);
     });
 }
@@ -118,15 +119,15 @@ test("legacy failures report diagnostics and recover without returning a Promise
     assert.equal(set({ first: 10, fail: 20 }), undefined);
     assert.deepEqual({ ...get() }, { first: 10, fail: 20 });
     await waitFor(() => requests.some(request => request.method === "runtime.reportError"));
-    assert.deepEqual({ ...get() }, { first: 10, fail: 2 });
+    assert.deepEqual({ ...get() }, { first: 1, fail: 2 });
 });
 
-test("bulk commit notifications work without a mirror and tolerate delivery after the response", async () => {
-    const { api, notifications, deliver } = await install({ mirror: false, deferNotifications: true });
+test("bulk commit notifications work with a chunked snapshot and tolerate delivery after the response", async () => {
+    const { api, notifications, deliver } = await install({ chunked: true, deferNotifications: true });
     const changes = [];
     await api.addValueChangeListener("key", (...args) => changes.push(args));
     await api.setValues({ key: 1 });
-    assert.deepEqual(changes, []);
+    assert.deepEqual(changes, [["key", undefined, 1, false]]);
     notifications.forEach(deliver);
     notifications.forEach(deliver);
     assert.deepEqual(changes, [["key", undefined, 1, false]]);
@@ -136,7 +137,7 @@ test("remote bulk changes update the mirror and notify each listener once", asyn
     const { api, get, deliver, executionId } = await install();
     const changes = [];
     const listenerId = await api.addValueChangeListener("key", (...args) => changes.push(args));
-    const notification = { type: "notification", protocol: 1, executionId, deliveryToken: executionId,
+    const notification = { type: "notification", protocol: 2, executionId, deliveryToken: executionId,
         event: "storage-sync", data: { key: "key", oldValue: null, oldValueExists: false, newValue: fixtureValue({ enabled: true }), newValueExists: true,
             sequence: 1, originExecutionId: "another-execution", mutationMethod: "GM.setValues" } };
     deliver(notification);
@@ -145,18 +146,18 @@ test("remote bulk changes update the mirror and notify each listener once", asyn
     assert.deepEqual(changes, [["key", undefined, { enabled: true }, true]]);
 });
 
-test("bulk aliases follow grant, profile, legacy-global, and snapshot switches", async () => {
+test("bulk legacy aliases require explicit names and a ready snapshot", async () => {
     globalThis.GM_getValues = () => "page";
     globalThis.GM_setValues = () => "page";
     globalThis.GM_deleteValues = () => "page";
-    for (const options of [{ strict: true, mirror: false }, { mirror: false }, { legacyGlobals: false },
+    for (const options of [{ declaredGrants: ["GM.getValue"] },
         { grants: ["GM.getValue", "GM.setValue", "GM.deleteValue"] }]) {
         const harness = await install(options);
         assert.equal(harness.get, undefined);
         assert.equal(harness.set, undefined);
         assert.equal(harness.delete, undefined);
     }
-    const { api } = await install({ strict: true, mirror: false });
+    const { api } = await install({ chunked: true });
     assert.equal(await api.setValues({ key: 1 }), undefined);
     assert.deepEqual({ ...await api.getValues(["key"]) }, { key: 1 });
 });

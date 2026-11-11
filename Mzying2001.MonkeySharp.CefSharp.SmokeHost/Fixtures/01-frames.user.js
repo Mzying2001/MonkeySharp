@@ -47,7 +47,9 @@
         });
         storageChecks.push(typeof registration.then === 'function');
         const listenerId = await registration;
-        await GM.setValue(undefinedKey, undefined);
+        const firstWrite = GM.setValue(undefinedKey, undefined);
+        storageChecks.push(changes.length === 1 && changes[0].oldUndefined && changes[0].newUndefined && !changes[0].remote);
+        await firstWrite;
         await GM.setValue(undefinedKey, undefined);
         storageChecks.push(await GM.getValue(undefinedKey, 'fallback') === undefined &&
             GM_getValue(undefinedKey, 'fallback') === undefined && (await GM.listValues()).includes(undefinedKey));

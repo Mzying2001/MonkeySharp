@@ -88,8 +88,8 @@ jobs:
           path: artifacts/smoke/${{ matrix.cefSharpVersion }}-${{ matrix.platform }}/
           if-no-files-found: error
 
-      - name: Run default WPF Demo Chromium smoke
-        if: matrix.platform == 'x64' && matrix.cefSharpVersion == '121.3.70'
+      - name: Run WPF Demo Chromium baseline
+        if: matrix.platform == 'x64'
         shell: pwsh
         run: >-
           pwsh -NoProfile -ExecutionPolicy Bypass -File

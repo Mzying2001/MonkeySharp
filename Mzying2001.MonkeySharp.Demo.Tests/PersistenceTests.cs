@@ -15,6 +15,68 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
 {
     public sealed class PersistenceTests
     {
+        [Fact]
+        public async Task RememberedPermissionDecisionsPreserveExactScopesAndCanBeRevoked()
+        {
+            using (var fixture = await Fixture.Create())
+            {
+                var store = new SqlitePermissionDecisionStore(fixture.Database);
+                var first = new Mzying2001.MonkeySharp.Core.Permissions.UserScriptPermissionScope("installation-one", "GM.xmlHttpRequest", "https://example.com");
+                var other = new Mzying2001.MonkeySharp.Core.Permissions.UserScriptPermissionScope("installation-two", "GM.xmlHttpRequest", "https://example.com");
+                await store.SetAsync(first, Mzying2001.MonkeySharp.Core.Permissions.PermissionDecision.Allow, CancellationToken.None);
+                await store.SetAsync(other, Mzying2001.MonkeySharp.Core.Permissions.PermissionDecision.Deny, CancellationToken.None);
+                var reopened = new SqlitePermissionDecisionStore(fixture.Database);
+                Assert.Equal(Mzying2001.MonkeySharp.Core.Permissions.PermissionDecision.Allow, await reopened.GetAsync(first, CancellationToken.None));
+                Assert.Null(await reopened.GetAsync(new Mzying2001.MonkeySharp.Core.Permissions.UserScriptPermissionScope(first.ScriptKey, "GM.cookie", first.Target), CancellationToken.None));
+                Assert.Null(await reopened.GetAsync(new Mzying2001.MonkeySharp.Core.Permissions.UserScriptPermissionScope(first.ScriptKey, first.Kind, "https://example.com:8443"), CancellationToken.None));
+                await reopened.RevokeAsync(first.ScriptKey, CancellationToken.None);
+                Assert.Null(await store.GetAsync(first, CancellationToken.None));
+                Assert.Equal(Mzying2001.MonkeySharp.Core.Permissions.PermissionDecision.Deny, await store.GetAsync(other, CancellationToken.None));
+                await reopened.RevokeAsync(null, CancellationToken.None);
+                Assert.Empty(await reopened.ListAsync(CancellationToken.None));
+            }
+        }
+
+        [Fact]
+        public async Task AtomicValueBatchRollsBackAllKeysAndSequenceOnSqliteFailure()
+        {
+            using (var fixture = await Fixture.Create())
+            using (var store = new SqliteUserScriptValueStore(fixture.Database))
+            {
+                using (var connection = fixture.Database.OpenReady())
+                using (var command = connection.CreateCommand())
+                {
+                    command.CommandText = "CREATE TRIGGER reject_batch BEFORE INSERT ON script_values WHEN NEW.value_key='fail' BEGIN SELECT RAISE(ABORT, 'batch failure'); END;";
+                    command.ExecuteNonQuery();
+                }
+                var events = new List<UserScriptValueChangedEventArgs>();
+                store.ValueChanged += (_, change) => events.Add(change);
+                var batch = new[] { new UserScriptValueMutation("first", Undefined), new UserScriptValueMutation("fail", FromEncoded("n2")), new UserScriptValueMutation("last", FromEncoded("n3")) };
+                var origin = new UserScriptValueMutationOrigin("request", "execution", "GM.setValues");
+                await Assert.ThrowsAsync<SqliteException>(() => store.ApplyAsync("script", batch, origin, CancellationToken.None));
+                var snapshot = await store.GetSnapshotAsync("script", CancellationToken.None);
+                Assert.Empty(snapshot);
+                Assert.Equal(0, snapshot.Sequence);
+                Assert.Empty(events);
+                using (var connection = fixture.Database.OpenReady())
+                using (var command = connection.CreateCommand())
+                { command.CommandText = "DROP TRIGGER reject_batch"; command.ExecuteNonQuery(); }
+                await store.SetAsync("other", "unrelated", Undefined, CancellationToken.None);
+                await store.ApplyAsync("script", batch, origin, CancellationToken.None);
+                snapshot = await store.GetSnapshotAsync("script", CancellationToken.None);
+                Assert.Equal(new[] { "first", "fail", "last" }, snapshot.Select(item => item.Key));
+                Assert.Equal(3, snapshot.Sequence);
+                var replay = await store.GetChangesAsync("script", 0, CancellationToken.None);
+                Assert.True(replay.Complete);
+                Assert.Equal(new long[] { 1, 2, 3 }, replay.Changes.Select(change => change.Sequence));
+                Assert.All(replay.Changes, change => { Assert.Equal("request", change.MutationId); Assert.Equal("execution", change.OriginExecutionId); Assert.Equal("GM.setValues", change.MutationMethod); });
+                Assert.False((await store.GetChangesAsync("script", 4, CancellationToken.None)).Complete);
+                await store.SetAsync("script", "first", Undefined, CancellationToken.None);
+                await store.DeleteAsync("script", "absent", CancellationToken.None);
+                Assert.Equal(3, (await store.GetSnapshotAsync("script", CancellationToken.None)).Sequence);
+            }
+        }
+
         internal const string Source = "// ==UserScript==\n// @name sqlite\n// @match https://example.com/*\n// @grant none\n// ==/UserScript==\n";
         [Fact]
         public async Task RepositoryRestoresFilesKeysAndOrderAndDeletesSource()
@@ -136,6 +198,11 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
                 await first.SaveAsync(script.ScriptKey, null, "{\"test\":1}", CancellationToken.None);
                 Assert.Equal("{}", await second.GetAsync(script.ScriptKey, null, CancellationToken.None));
                 Assert.Contains("first", (await second.GetAllAsync(script.ScriptKey, CancellationToken.None)).Keys);
+                var navigated = states.ForTab("first");
+                Assert.Equal("{\"test\":1}", await navigated.GetAsync(script.ScriptKey, null, CancellationToken.None));
+                var otherScript = Mzying2001.MonkeySharp.Core.Domain.ScriptKey.Parse(Guid.NewGuid().ToString());
+                Assert.Equal("{}", await navigated.GetAsync(otherScript, null, CancellationToken.None));
+                Assert.Empty(await navigated.GetAllAsync(otherScript, CancellationToken.None));
                 await Assert.ThrowsAsync<ArgumentException>(() => first.SaveAsync(script.ScriptKey, null, "[]", CancellationToken.None));
                 states.CloseTab("first");
                 Assert.Empty(await second.GetAllAsync(script.ScriptKey, CancellationToken.None));

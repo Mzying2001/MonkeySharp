@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "caseId": "p1-stream-body",
+  "immediateReturn": {
+    "promise": "function"
+  },
+  "promise": {},
+  "events": [
+    {
+      "name": "returned"
+    },
+    {
+      "name": "pull"
+    },
+    {
+      "name": "pull"
+    }
+  ],
+  "effects": {
+    "expectedHash": "184721a480231afe16a8f242c1415c0f1bee49585f96f715b43139a4f35f7ee3",
+    "error": {
+      "text": "[object Object]"
+    },
+    "tabsBefore": 4,
+    "tabsAfter": 4
+  },
+  "fixtureHash": "66dd1d51049fe5bd0c058426d0a96c6bb2a2d5de2706c606b5743a10dc981cd7",
+  "contractSource": [
+    "https://www.tampermonkey.net/documentation.php?locale=en",
+    "Tampermonkey 5.6.6242/beta/MV3 runtime"
+  ],
+  "environment": {
+    "manager": "Tampermonkey",
+    "managerVersion": "5.6.6242",
+    "chromiumVersion": "Edg/157.0.4341.42",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/157.0.0.0 Safari/537.36 Edg/157.0.0.0",
+    "manifestVersion": 3,
+    "channel": "beta",
+    "extensionId": "gcalenpjmijncebpfijmoaglllgpjagf",
+    "contentSha256": "6936ae52a79fa581044553cf8dbd7a54c18ea03efcad10070fefa31b810fce15",
+    "minimumChromeVersion": "120",
+    "settings": {
+      "downloadMode": "fresh-profile-default",
+      "privateStorage": "split; no incognito access unless private-tabs fixture",
+      "headless": true,
+      "userScriptsAccess": true,
+      "freshProfile": true,
+      "ignoreLoopbackCertificateErrors": false,
+      "legacyPfxProvider": false
+    },
+    "commit": "e2b8351d31827e351a4eb9e1ba9b286e46e5d860",
+    "sourcePatchSha256": "275fded709d0aecd33b21af79811d169b5d988f1a1c63140e26aaaa42cae76f4",
+    "runnerSha256": "8ce68639c7161066b4f92b21459885c7025cf379df58173fe1c88800987b684a",
+    "platform": "x64",
+    "capabilities": {
+      "referenceReturnProbe": true
+    },
+    "world": "manager-selected"
+  },
+  "checks": {
+    "noError": false,
+    "exactBytes": false,
+    "replay": false,
+    "readerReleased": false,
+    "emptyBody": false
+  },
+  "status": "failed"
+}

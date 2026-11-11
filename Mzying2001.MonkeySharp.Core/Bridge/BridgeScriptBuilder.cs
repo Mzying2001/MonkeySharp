@@ -16,7 +16,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
     {
         private const string PayloadPlaceholder = "__MONKEYSHARP_PAYLOAD_BASE64__";
         private static readonly Lazy<string> BootstrapTemplate =
-            new Lazy<string>(() => LoadResource("Mzying2001.MonkeySharp.Core.Js.Init.js"));
+            new Lazy<string>(LoadBootstrap);
         private static readonly Lazy<string> NotificationTemplate =
             new Lazy<string>(() => LoadResource("Mzying2001.MonkeySharp.Core.Js.Inject.js"));
 
@@ -32,6 +32,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                 ["protocol"] = plan.ProtocolVersion,
                 ["documentId"] = plan.Frame.DocumentId,
                 ["frameId"] = plan.Frame.FrameId,
+                ["executionWorld"] = plan.Frame.ExecutionWorld,
                 ["runAt"] = plan.RunAt.ToString(),
                 ["invocations"] = plan.Invocations.Select(invocation => new Dictionary<string, object>
                 {
@@ -43,15 +44,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                     ["grantDeclarationState"] = invocation.GrantDeclarationState.ToString(),
                     ["info"] = ParseElement(invocation.SerializedInfo),
                     ["capability"] = invocation.Capability,
-                    ["deliveryToken"] = invocation.DeliveryToken,
-                    ["compatibility"] = new Dictionary<string, object>
-                    {
-                        ["profile"] = invocation.Compatibility.Profile.ToString(),
-                        ["strict"] = invocation.Compatibility.Strict,
-                        ["legacyGlobals"] = invocation.Compatibility.LegacyGlobals,
-                        ["synchronousStorageMirror"] = invocation.Compatibility.SynchronousStorageMirror,
-                        ["synchronousResourceSnapshot"] = invocation.Compatibility.SynchronousResourceSnapshot
-                    }
+                    ["deliveryToken"] = invocation.DeliveryToken
                 }).ToArray()
             };
             return InsertPayload(BootstrapTemplate.Value, JsonSerializer.Serialize(payload));
@@ -101,6 +94,15 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                 using (var reader = new StreamReader(stream, Encoding.UTF8, true))
                     return reader.ReadToEnd();
             }
+        }
+
+        private static string LoadBootstrap()
+        {
+            var source = LoadResource("Mzying2001.MonkeySharp.Core.Js.Init.js");
+            foreach (var module in new[] { "Storage", "Network", "HostInteraction", "Page" })
+                source = source.Replace("/*__MONKEYSHARP_" + module.ToUpperInvariant() + "_MODULE__*/",
+                    LoadResource("Mzying2001.MonkeySharp.Core.Js." + module + ".js"));
+            return source.Replace("__MONKEYSHARP_API_CATALOG__", LoadResource("Mzying2001.MonkeySharp.Core.Js.ApiCatalog.json"));
         }
     }
 }

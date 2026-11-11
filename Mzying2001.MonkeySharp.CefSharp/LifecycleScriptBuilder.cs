@@ -10,12 +10,14 @@ namespace Mzying2001.MonkeySharp.CefSharp
     {
         private const string Placeholder = "__MONKEYSHARP_LIFECYCLE_BASE64__";
         private static readonly Lazy<string> Template = new Lazy<string>(LoadTemplate);
+        private static readonly Lazy<string> EventsTemplate = new Lazy<string>(() => LoadResource("LifecycleEvents.js"));
+        internal static string EventsSource => EventsTemplate.Value;
 
         public static string Build(string documentId, string frameId, string token)
         {
             var json = JsonSerializer.Serialize(new
             {
-                protocol = 1,
+                protocol = Core.Runtime.InjectionPlan.CurrentProtocolVersion,
                 documentId,
                 frameId,
                 token
@@ -24,10 +26,13 @@ namespace Mzying2001.MonkeySharp.CefSharp
         }
 
         private static string LoadTemplate()
+            => LoadResource("Lifecycle.js").Replace("/*__MONKEYSHARP_LIFECYCLE_EVENTS__*/", EventsSource);
+
+        private static string LoadResource(string name)
         {
             var assembly = typeof(LifecycleScriptBuilder).GetTypeInfo().Assembly;
             using (var stream = assembly.GetManifestResourceStream(
-                "Mzying2001.MonkeySharp.CefSharp.Js.Lifecycle.js"))
+                "Mzying2001.MonkeySharp.CefSharp.Js." + name))
             {
                 if (stream == null)
                     throw new InvalidOperationException("The lifecycle JavaScript resource was not found.");

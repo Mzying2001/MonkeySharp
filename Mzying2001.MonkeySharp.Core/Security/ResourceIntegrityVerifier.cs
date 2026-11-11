@@ -58,7 +58,8 @@ namespace Mzying2001.MonkeySharp.Core.Security
             if (string.IsNullOrWhiteSpace(algorithm) || string.IsNullOrWhiteSpace(encoded))
                 return false;
             var normalized = algorithm.Trim().ToLowerInvariant();
-            var expectedLength = normalized == "md5" ? 16 : normalized == "sha256" ? 32 : 0;
+            var expectedLength = normalized == "md5" ? 16 : normalized == "sha1" ? 20 :
+                normalized == "sha256" ? 32 : normalized == "sha384" ? 48 : normalized == "sha512" ? 64 : 0;
             if (expectedLength == 0)
                 return false;
 
@@ -83,9 +84,15 @@ namespace Mzying2001.MonkeySharp.Core.Security
 
         private static HashAlgorithm CreateAlgorithm(string algorithm)
         {
-            return string.Equals(algorithm, "md5", StringComparison.OrdinalIgnoreCase)
-                ? (HashAlgorithm)MD5.Create()
-                : SHA256.Create();
+            switch (algorithm.ToLowerInvariant())
+            {
+                case "md5": return MD5.Create();
+                case "sha1": return SHA1.Create();
+                case "sha256": return SHA256.Create();
+                case "sha384": return SHA384.Create();
+                case "sha512": return SHA512.Create();
+                default: throw new ArgumentException("Unsupported integrity algorithm.", nameof(algorithm));
+            }
         }
 
         private static bool TryDecodeHex(string text, out byte[] bytes)

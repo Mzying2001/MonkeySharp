@@ -1,104 +1,66 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
+using System.Text.Json;
 
 namespace Mzying2001.MonkeySharp.Core.Compatibility
 {
-    /// <summary>Provides the single mapping between declared grants and runtime capabilities.</summary>
+    /// <summary>Maps declared names to operations and reference-tested modern families.</summary>
     public static class UserScriptGrantCatalog
     {
+        private static readonly IReadOnlyList<UserScriptApiDescriptor> Descriptors = Load();
         private static readonly IReadOnlyDictionary<string, string> Aliases =
-            new ReadOnlyDictionary<string, string>(new Dictionary<string, string>(StringComparer.Ordinal)
-            {
-                ["GM_info"] = "GM.info",
-                ["GM_log"] = "GM.log",
-                ["GM_getValue"] = "GM.getValue",
-                ["GM_setValue"] = "GM.setValue",
-                ["GM_deleteValue"] = "GM.deleteValue",
-                ["GM_getValues"] = "GM.getValues",
-                ["GM_setValues"] = "GM.setValues",
-                ["GM_deleteValues"] = "GM.deleteValues",
-                ["GM_listValues"] = "GM.listValues",
-                ["GM_addValueChangeListener"] = "GM.addValueChangeListener",
-                ["GM_removeValueChangeListener"] = "GM.removeValueChangeListener",
-                ["GM_addStyle"] = "GM.addStyle",
-                ["GM_addElement"] = "GM.addElement",
-                ["GM_getResourceText"] = "GM.getResourceText",
-                ["GM_getResourceURL"] = "GM.getResourceURL",
-                ["GM_xmlhttpRequest"] = "GM.xmlHttpRequest",
-                ["GM_registerMenuCommand"] = "GM.registerMenuCommand",
-                ["GM_unregisterMenuCommand"] = "GM.unregisterMenuCommand",
-                ["GM_notification"] = "GM.notification",
-                ["GM_setClipboard"] = "GM.setClipboard",
-                ["GM_openInTab"] = "GM.openInTab",
-                ["GM_download"] = "GM.download",
-                ["GM_getTab"] = "GM.getTab",
-                ["GM_saveTab"] = "GM.saveTab",
-                ["GM_getTabs"] = "GM.getTabs",
-                ["GM_cookie"] = "GM.cookie",
-                ["GM_webRequest"] = "GM.webRequest",
-                ["window.close"] = "window.close",
-                ["window.focus"] = "window.focus",
-                ["window.onurlchange"] = "window.onurlchange"
-            });
-
+            new ReadOnlyDictionary<string, string>(Descriptors.Where(item => item.LegacyName != null)
+                .ToDictionary(item => item.LegacyName, item => item.Capability, StringComparer.Ordinal));
         private static readonly IReadOnlyCollection<string> CanonicalGrants =
-            new ReadOnlyCollection<string>(new[]
-            {
-                "none", "unsafeWindow", "GM.info", "GM.log", "GM.getValue", "GM.setValue",
-                "GM.deleteValue", "GM.getValues", "GM.setValues", "GM.deleteValues",
-                "GM.listValues", "GM.addValueChangeListener",
-                "GM.removeValueChangeListener", "GM.addStyle", "GM.addElement", "GM.getResourceText",
-                "GM.getResourceURL", "GM.xmlHttpRequest", "GM.registerMenuCommand",
-                "GM.unregisterMenuCommand", "GM.notification", "GM.setClipboard", "GM.openInTab",
-                "GM.download", "GM.getTab", "GM.saveTab", "GM.getTabs", "GM.cookie", "GM.webRequest",
-                "window.close", "window.focus", "window.onurlchange"
-            });
+            new ReadOnlyCollection<string>(new[] { "none", "unsafeWindow" }.Concat(Descriptors.Select(item => item.Capability)).ToArray());
 
-        /// <summary>Gets all canonical grant names understood by MonkeySharp.</summary>
+        /// <summary>Gets the shared API description table embedded in the renderer bootstrap.</summary>
+        public static IReadOnlyList<UserScriptApiDescriptor> Apis => Descriptors;
+        /// <summary>Gets recognized canonical grants.</summary>
         public static IReadOnlyCollection<string> KnownCanonicalGrants => CanonicalGrants;
-
-        /// <summary>Gets all legacy grant aliases understood by MonkeySharp.</summary>
+        /// <summary>Gets recognized official legacy names.</summary>
         public static IReadOnlyCollection<string> LegacyAliases => Aliases.Keys.ToList().AsReadOnly();
 
-        /// <summary>Attempts to normalize a declared grant to a canonical capability.</summary>
-        /// <param name="declaredGrant">The exact metadata grant value.</param>
-        /// <param name="acceptLegacyAliases">Whether legacy aliases are accepted.</param>
-        /// <param name="canonicalGrant">Receives the canonical capability.</param>
-        /// <returns><see langword="true"/> when the grant is known.</returns>
-        public static bool TryNormalize(
-            string declaredGrant,
-            bool acceptLegacyAliases,
-            out string canonicalGrant)
+        /// <summary>Normalizes a declaration without changing its preserved spelling.</summary>
+        public static bool TryNormalize(string declaredGrant, out string canonicalGrant)
         {
-            if (declaredGrant == null)
-                throw new ArgumentNullException(nameof(declaredGrant));
-            if (declaredGrant == "GM.getResourceUrl")
-            {
-                canonicalGrant = "GM.getResourceURL";
-                return true;
-            }
-            if (declaredGrant == "none" || declaredGrant == "unsafeWindow" ||
-                CanonicalGrants.Contains(declaredGrant))
-            {
-                canonicalGrant = declaredGrant;
-                return true;
-            }
-            if (acceptLegacyAliases && Aliases.TryGetValue(declaredGrant, out canonicalGrant))
-                return true;
+            if (declaredGrant == null) throw new ArgumentNullException(nameof(declaredGrant));
+            if (CanonicalGrants.Contains(declaredGrant)) { canonicalGrant = declaredGrant; return true; }
+            if (Aliases.TryGetValue(declaredGrant, out canonicalGrant)) return true;
             canonicalGrant = null;
             return false;
         }
 
-        /// <summary>Gets the legacy alias for a canonical capability, if one exists.</summary>
-        /// <param name="canonicalGrant">The canonical capability name.</param>
-        /// <returns>The exact legacy alias or <see langword="null"/>.</returns>
+        /// <summary>Gets the official legacy spelling for an operation, if one exists.</summary>
         public static string GetLegacyAlias(string canonicalGrant)
         {
-            if (canonicalGrant == null)
-                throw new ArgumentNullException(nameof(canonicalGrant));
-            return Aliases.FirstOrDefault(item => item.Value == canonicalGrant).Key;
+            if (canonicalGrant == null) throw new ArgumentNullException(nameof(canonicalGrant));
+            return Descriptors.FirstOrDefault(item => item.Capability == canonicalGrant)?.LegacyName;
+        }
+
+        /// <summary>Expands the modern families observed in the pinned reference runtime.</summary>
+        public static IReadOnlyList<string> GetCapabilities(IEnumerable<string> grants)
+        {
+            if (grants == null) throw new ArgumentNullException(nameof(grants));
+            var result = grants.Distinct(StringComparer.Ordinal).ToList();
+            foreach (var family in Descriptors.GroupBy(item => item.Family))
+                if (family.Any(item => result.Contains(item.Capability)))
+                    foreach (var descriptor in family)
+                        if (!result.Contains(descriptor.Capability)) result.Add(descriptor.Capability);
+            return new ReadOnlyCollection<string>(result);
+        }
+
+        private static IReadOnlyList<UserScriptApiDescriptor> Load()
+        {
+            using (var stream = typeof(UserScriptGrantCatalog).Assembly.GetManifestResourceStream("Mzying2001.MonkeySharp.Core.Js.ApiCatalog.json"))
+            using (var reader = new StreamReader(stream ?? throw new InvalidOperationException("API catalog resource is missing.")))
+            using (var json = JsonDocument.Parse(reader.ReadToEnd()))
+                return new ReadOnlyCollection<UserScriptApiDescriptor>(json.RootElement.EnumerateArray().Select(item =>
+                    new UserScriptApiDescriptor(item.GetProperty("capability").GetString(), item.GetProperty("legacy").GetString(),
+                        item.GetProperty("modernReturn").GetString(), item.GetProperty("legacyReturn").GetString(), item.GetProperty("family").GetString())).ToArray());
         }
     }
 }

@@ -1,0 +1,280 @@
+{
+  "schemaVersion": 1,
+  "caseId": "partition-cookies",
+  "immediateReturn": {
+    "list": "Promise"
+  },
+  "promise": {},
+  "events": [],
+  "effects": {
+    "defaults": [
+      {
+        "domain": "127.0.0.1",
+        "httpOnly": false,
+        "secure": true,
+        "path": "/",
+        "sameSite": "no_restriction",
+        "value": "plain",
+        "name": "partition-proof",
+        "session": true,
+        "hostOnly": true
+      }
+    ],
+    "a": [
+      {
+        "domain": "127.0.0.1",
+        "httpOnly": false,
+        "secure": true,
+        "path": "/",
+        "sameSite": "no_restriction",
+        "partitionKey": {
+          "hasCrossSiteAncestor": true,
+          "topLevelSite": "https://top-a.test"
+        },
+        "value": "a",
+        "name": "partition-proof",
+        "session": true,
+        "hostOnly": true
+      }
+    ],
+    "b": [
+      {
+        "domain": "127.0.0.1",
+        "httpOnly": false,
+        "secure": true,
+        "path": "/",
+        "sameSite": "no_restriction",
+        "partitionKey": {
+          "hasCrossSiteAncestor": true,
+          "topLevelSite": "https://top-b.test"
+        },
+        "value": "b",
+        "name": "partition-proof",
+        "session": true,
+        "hostOnly": true
+      }
+    ],
+    "all": [
+      {
+        "domain": "127.0.0.1",
+        "httpOnly": false,
+        "secure": true,
+        "path": "/",
+        "sameSite": "no_restriction",
+        "value": "plain",
+        "name": "partition-proof",
+        "session": true,
+        "hostOnly": true
+      },
+      {
+        "domain": "127.0.0.1",
+        "httpOnly": false,
+        "secure": true,
+        "path": "/",
+        "sameSite": "no_restriction",
+        "partitionKey": {
+          "hasCrossSiteAncestor": true,
+          "topLevelSite": "https://top-a.test"
+        },
+        "value": "a",
+        "name": "partition-proof",
+        "session": true,
+        "hostOnly": true
+      },
+      {
+        "domain": "127.0.0.1",
+        "httpOnly": false,
+        "secure": true,
+        "path": "/",
+        "sameSite": "no_restriction",
+        "partitionKey": {
+          "hasCrossSiteAncestor": true,
+          "topLevelSite": "https://top-b.test"
+        },
+        "value": "b",
+        "name": "partition-proof",
+        "session": true,
+        "hostOnly": true
+      }
+    ],
+    "afterDeleteA": [
+      {
+        "domain": "127.0.0.1",
+        "httpOnly": false,
+        "secure": true,
+        "path": "/",
+        "sameSite": "no_restriction",
+        "partitionKey": {
+          "hasCrossSiteAncestor": true,
+          "topLevelSite": "https://top-b.test"
+        },
+        "value": "b",
+        "name": "partition-proof",
+        "session": true,
+        "hostOnly": true
+      }
+    ],
+    "afterDeletePlain": [
+      {
+        "domain": "127.0.0.1",
+        "httpOnly": false,
+        "secure": true,
+        "path": "/",
+        "sameSite": "no_restriction",
+        "partitionKey": {
+          "hasCrossSiteAncestor": true,
+          "topLevelSite": "https://top-b.test"
+        },
+        "value": "b",
+        "name": "partition-proof",
+        "session": true,
+        "hostOnly": true
+      }
+    ],
+    "requestA": "partition-proof=a",
+    "receivedA": [
+      {
+        "domain": "127.0.0.1",
+        "httpOnly": false,
+        "secure": true,
+        "path": "/",
+        "sameSite": "no_restriction",
+        "partitionKey": {
+          "hasCrossSiteAncestor": true,
+          "topLevelSite": "https://top-a.test"
+        },
+        "value": "done",
+        "name": "partition-received",
+        "session": true,
+        "hostOnly": true
+      }
+    ],
+    "afterRequest": [
+      {
+        "domain": "127.0.0.1",
+        "httpOnly": false,
+        "secure": true,
+        "path": "/",
+        "sameSite": "no_restriction",
+        "partitionKey": {
+          "hasCrossSiteAncestor": true,
+          "topLevelSite": "https://top-b.test"
+        },
+        "value": "b",
+        "name": "partition-proof",
+        "session": true,
+        "hostOnly": true
+      },
+      {
+        "domain": "127.0.0.1",
+        "httpOnly": false,
+        "secure": true,
+        "path": "/",
+        "sameSite": "no_restriction",
+        "partitionKey": {
+          "hasCrossSiteAncestor": true,
+          "topLevelSite": "https://top-a.test"
+        },
+        "value": "a",
+        "name": "partition-proof",
+        "session": true,
+        "hostOnly": true
+      },
+      {
+        "domain": "127.0.0.1",
+        "httpOnly": false,
+        "secure": true,
+        "path": "/",
+        "sameSite": "no_restriction",
+        "value": "plain",
+        "name": "partition-proof",
+        "session": true,
+        "hostOnly": true
+      }
+    ],
+    "selfBefore": [
+      {
+        "domain": "127.0.0.1",
+        "httpOnly": false,
+        "secure": true,
+        "path": "/",
+        "sameSite": "no_restriction",
+        "partitionKey": {
+          "hasCrossSiteAncestor": false,
+          "topLevelSite": "https://127.0.0.1"
+        },
+        "value": "same-site",
+        "name": "partition-proof",
+        "session": true,
+        "hostOnly": true
+      },
+      {
+        "domain": "127.0.0.1",
+        "httpOnly": false,
+        "secure": true,
+        "path": "/",
+        "sameSite": "no_restriction",
+        "partitionKey": {
+          "hasCrossSiteAncestor": true,
+          "topLevelSite": "https://127.0.0.1"
+        },
+        "value": "cross-ancestor",
+        "name": "partition-proof",
+        "session": true,
+        "hostOnly": true
+      }
+    ],
+    "selfAfter": [
+      {
+        "domain": "127.0.0.1",
+        "httpOnly": false,
+        "secure": true,
+        "path": "/",
+        "sameSite": "no_restriction",
+        "partitionKey": {
+          "hasCrossSiteAncestor": false,
+          "topLevelSite": "https://127.0.0.1"
+        },
+        "value": "same-site",
+        "name": "partition-proof",
+        "session": true,
+        "hostOnly": true
+      }
+    ],
+    "tabsBefore": 4,
+    "tabsAfter": 4
+  },
+  "fixtureHash": "5a36a2af4a702f054eaa66a03dac3b225e9ec49c0373d16331f47a81976bb5d2",
+  "contractSource": [
+    "https://www.tampermonkey.net/documentation.php?locale=en",
+    "Tampermonkey 5.5.1/MV3 runtime"
+  ],
+  "environment": {
+    "manager": "Tampermonkey",
+    "managerVersion": "5.5.1",
+    "chromiumVersion": "Edg/157.0.4341.42",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/157.0.0.0 Safari/537.36 Edg/157.0.0.0",
+    "manifestVersion": 3,
+    "settings": {
+      "headless": true,
+      "userScriptsAccess": true,
+      "freshProfile": true,
+      "ignoreLoopbackCertificateErrors": true,
+      "legacyPfxProvider": true
+    },
+    "commit": "780b61541dcd098a9e6ed8a641bada8f48908dff",
+    "platform": "x64",
+    "capabilities": {
+      "referenceReturnProbe": true
+    },
+    "world": "manager-selected"
+  },
+  "checks": {
+    "noError": true,
+    "partitionSelection": true,
+    "requestSelection": true,
+    "responsePartition": true,
+    "preciseDelete": false
+  },
+  "status": "failed"
+}

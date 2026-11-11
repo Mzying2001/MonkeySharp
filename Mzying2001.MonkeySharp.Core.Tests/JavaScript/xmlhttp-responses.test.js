@@ -1,11 +1,11 @@
+const completePlan = require("./test-plan");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 
-const template = fs.readFileSync(
-    path.resolve(__dirname, "../../Mzying2001.MonkeySharp.Core/Js/Init.js"), "utf8");
+const template = require("./bootstrap-template");
 
 test("XHR exposes response types, ordered lifecycle events, context, and streams", async t => {
     const callbackErrors = [];
@@ -16,14 +16,14 @@ test("XHR exposes response types, ordered lifecycle events, context, and streams
     const responseTypes = [];
     let nextSession = 0;
     const notify = (event, data) => globalThis.__MonkeySharpRuntime.receive({
-        type: "notification", protocol: 1, executionId: "responses-execution",
+        type: "notification", protocol: 2, executionId: "responses-execution",
         deliveryToken: "responses-delivery", event, data
     });
     globalThis.__MonkeySharpBridge = {
         dispatch: async requestJson => {
             const request = JSON.parse(requestJson);
             if (request.type === "hello") return JSON.stringify({
-                type: "hello-result", protocol: 1, ok: true, limits: {}, apis: ["GM.xmlHttpRequest"]
+                type: "hello-result", protocol: 2, ok: true, limits: {}, apis: ["GM.xmlHttpRequest"]
             });
             const params = request.params;
             let result = true;
@@ -54,8 +54,6 @@ test("XHR exposes response types, ordered lifecycle events, context, and streams
                         xhrId: session.xhrId, readyState: 3, status: 200, statusText: "OK",
                         finalUrl: "https://api.example.com/stream", responseHeaders: headers
                     });
-                    notify("xhr-chunk", { xhrId: session.xhrId, chunk: Buffer.from("stream ").toString("base64") });
-                    notify("xhr-chunk", { xhrId: session.xhrId, chunk: Buffer.from("body").toString("base64") });
                     notify("xhr-state", {
                         xhrId: session.xhrId, readyState: 4, status: 200, statusText: "OK",
                         finalUrl: "https://api.example.com/stream", responseHeaders: headers
@@ -75,7 +73,7 @@ test("XHR exposes response types, ordered lifecycle events, context, and streams
                         xhrId: session.xhrId, readyState: 4, status: 200, statusText: "OK",
                         finalUrl: "https://api.example.com/" + session.kind, responseHeaders: headers
                     });
-                    const bodies = { text: "text", json: '{"answer":42}', arraybuffer: "bytes", blob: "blob" };
+                    const bodies = { stream: "stream body", text: "text", json: '{"answer":42}', arraybuffer: "bytes", blob: "blob" };
                     result = {
                         status: 200, statusText: "OK", finalUrl: "https://api.example.com/" + session.kind,
                         responseHeaders: headers, mimeType: session.kind === "blob" ? "text/custom" : "application/json",
@@ -84,16 +82,16 @@ test("XHR exposes response types, ordered lifecycle events, context, and streams
                 }
             } else if (params.operation === "readBody") {
                 const session = sessions.get(params.sessionId);
-                const bodies = { text: "text", json: '{"answer":42}', arraybuffer: "bytes", blob: "blob" };
+                const bodies = { stream: "stream body", text: "text", json: '{"answer":42}', arraybuffer: "bytes", blob: "blob" };
                 result = { chunk: Buffer.from(bodies[session.kind]).toString("base64"), done: true };
             }
             return JSON.stringify({
-                type: "response", protocol: 1, requestId: request.requestId, ok: true, result
+                type: "response", protocol: 2, requestId: request.requestId, ok: true, result
             });
         }
     };
     const payload = {
-        protocol: 1, documentId: "responses-document", frameId: "main", runAt: "DocumentEnd",
+        protocol: 2, documentId: "responses-document", frameId: "main", runAt: "DocumentEnd",
         invocations: [{
             executionId: "responses-execution", scriptKey: "88888888-8888-8888-8888-888888888888",
             source: [
@@ -122,7 +120,7 @@ test("XHR exposes response types, ordered lifecycle events, context, and streams
         }]
     };
     vm.runInThisContext(template.replace(
-        "__MONKEYSHARP_PAYLOAD_BASE64__", Buffer.from(JSON.stringify(payload)).toString("base64")));
+        "__MONKEYSHARP_PAYLOAD_BASE64__", Buffer.from(JSON.stringify(completePlan(payload))).toString("base64")));
     while (!globalThis.__responsesPromise) await new Promise(resolve => setTimeout(resolve, 5));
     await globalThis.__responsesPromise;
 

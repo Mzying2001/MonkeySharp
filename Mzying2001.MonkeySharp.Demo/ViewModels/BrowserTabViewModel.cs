@@ -38,15 +38,18 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
         private string _error;
 
         public string TabId { get; } = Guid.NewGuid().ToString("N");
+        public bool IsIncognito { get; }
+        public string PrivacyLabel => IsIncognito ? "私密 " : string.Empty;
         public string ParentTabId { get; set; }
         public IBrowserCommands Browser { get; set; }
         public ObservableCollection<Services.ScriptMenuCommand> MenuCommands { get; } = new ObservableCollection<Services.ScriptMenuCommand>();
         public bool IsClosed { get; private set; }
         public event EventHandler Closed;
 
-        public BrowserTabViewModel(string address)
+        public BrowserTabViewModel(string address, bool isIncognito = false)
         {
             Address = address;
+            IsIncognito = isIncognito;
         }
 
         internal void Close()

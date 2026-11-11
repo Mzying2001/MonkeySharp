@@ -8,11 +8,11 @@ using System.Threading.Tasks;
 
 namespace Mzying2001.MonkeySharp.Demo.Persistence
 {
-    public sealed class SqliteUserScriptValueStore : IUserScriptValueStore, IUserScriptValueSnapshotProvider, IDisposable
+    public sealed class SqliteUserScriptValueStore : IUserScriptValueStore, IDisposable
     {
         private readonly SqliteDatabase _database;
         private readonly SemaphoreSlim _gate = new SemaphoreSlim(1, 1);
-        private long _sequence;
+        private readonly UserScriptValueChangeJournal _journal = new UserScriptValueChangeJournal();
         private bool _disposed;
         public SqliteUserScriptValueStore(SqliteDatabase database) { _database = database; }
         public event EventHandler<UserScriptValueChangedEventArgs> ValueChanged;
@@ -25,53 +25,56 @@ namespace Mzying2001.MonkeySharp.Demo.Persistence
 
         public Task SetAsync(string scriptKey, string key, UserScriptValue value, CancellationToken cancellationToken)
         {
-            Validate(key);
             if (value == null) throw new ArgumentNullException(nameof(value));
-            return RunAsync(scriptKey, connection =>
+            return ApplyAsync(scriptKey, new[] { new UserScriptValueMutation(key, value) }, null, cancellationToken);
+        }
+
+        public async Task<bool> DeleteAsync(string scriptKey, string key, CancellationToken cancellationToken)
+            => (await ApplyAsync(scriptKey, new[] { new UserScriptValueMutation(key, null) }, null, cancellationToken).ConfigureAwait(false)).Count != 0;
+
+        public Task<UserScriptValueCommit> ApplyAsync(string scriptKey,
+            IEnumerable<UserScriptValueMutation> mutations, UserScriptValueMutationOrigin origin, CancellationToken cancellationToken)
+        {
+            var batch = UserScriptValueMutation.Validate(mutations);
+            return RunAsync<UserScriptValueCommit>(scriptKey, connection =>
             {
-                var old = Read(connection, key, scriptKey);
-                if (old.Exists && old.Value.Equals(value)) return false;
+                var pending = new List<Tuple<string, StoredValue, StoredValue>>();
                 using (var transaction = connection.BeginTransaction())
-                using (var command = connection.CreateCommand())
                 {
-                    command.Transaction = transaction;
-                    command.CommandText = @"INSERT INTO script_values(script_key,value_key,encoded_value,updated_at) VALUES($script,$key,$value,$updated)
+                    foreach (var mutation in batch)
+                    {
+                        var old = Read(connection, mutation.Key, scriptKey, transaction);
+                        var value = mutation.Value;
+                        if (value == null && !old.Exists || value != null && old.Exists && old.Value.Equals(value)) continue;
+                        using (var command = connection.CreateCommand())
+                        {
+                            command.Transaction = transaction;
+                            command.CommandText = value == null
+                                ? "DELETE FROM script_values WHERE script_key=$script AND value_key=$key"
+                                : @"INSERT INTO script_values(script_key,value_key,encoded_value,updated_at) VALUES($script,$key,$value,$updated)
 ON CONFLICT(script_key,value_key) DO UPDATE SET encoded_value=excluded.encoded_value,updated_at=excluded.updated_at";
-                    command.Parameters.AddWithValue("$script", scriptKey);
-                    command.Parameters.AddWithValue("$key", key);
-                    command.Parameters.AddWithValue("$value", value.EncodedValue);
-                    command.Parameters.AddWithValue("$updated", DateTimeOffset.UtcNow.ToString("O"));
-                    command.ExecuteNonQuery();
+                            command.Parameters.AddWithValue("$script", scriptKey);
+                            command.Parameters.AddWithValue("$key", mutation.Key);
+                            if (value != null)
+                            {
+                                command.Parameters.AddWithValue("$value", value.EncodedValue);
+                                command.Parameters.AddWithValue("$updated", DateTimeOffset.UtcNow.ToString("O"));
+                            }
+                            command.ExecuteNonQuery();
+                        }
+                        pending.Add(Tuple.Create(mutation.Key, old, value == null ? StoredValue.Missing : new StoredValue(true, value)));
+                    }
                     cancellationToken.ThrowIfCancellationRequested();
                     transaction.Commit();
                 }
-                Publish(new UserScriptValueChangedEventArgs(++_sequence, scriptKey, key, old, new StoredValue(true, value), ValueChangeKind.Set));
-                return true;
+                var changes = pending.Select(item => _journal.Append(scriptKey, item.Item1, item.Item2, item.Item3, origin)).ToList().AsReadOnly();
+                foreach (var change in changes) Publish(change);
+                return new UserScriptValueCommit(changes, _journal.Sequence(scriptKey));
             }, cancellationToken);
         }
 
-        public Task<bool> DeleteAsync(string scriptKey, string key, CancellationToken cancellationToken)
-        {
-            Validate(key);
-            return RunAsync(scriptKey, connection =>
-            {
-                var old = Read(connection, key, scriptKey);
-                if (!old.Exists) return false;
-                using (var transaction = connection.BeginTransaction())
-                using (var command = connection.CreateCommand())
-                {
-                    command.Transaction = transaction;
-                    command.CommandText = "DELETE FROM script_values WHERE script_key=$script AND value_key=$key";
-                    command.Parameters.AddWithValue("$script", scriptKey);
-                    command.Parameters.AddWithValue("$key", key);
-                    command.ExecuteNonQuery();
-                    cancellationToken.ThrowIfCancellationRequested();
-                    transaction.Commit();
-                }
-                Publish(new UserScriptValueChangedEventArgs(++_sequence, scriptKey, key, old, StoredValue.Missing, ValueChangeKind.Deleted));
-                return true;
-            }, cancellationToken);
-        }
+        public Task<UserScriptValueChangeBatch> GetChangesAsync(string scriptKey, long afterSequence, CancellationToken cancellationToken)
+            => RunAsync(scriptKey, connection => _journal.Read(scriptKey, afterSequence), cancellationToken);
 
         public async Task<IReadOnlyList<string>> ListKeysAsync(string scriptKey, CancellationToken cancellationToken)
         {
@@ -79,9 +82,9 @@ ON CONFLICT(script_key,value_key) DO UPDATE SET encoded_value=excluded.encoded_v
             return values.Select(item => item.Key).ToList().AsReadOnly();
         }
 
-        public Task<IReadOnlyList<KeyValuePair<string, UserScriptValue>>> GetSnapshotAsync(string scriptKey, CancellationToken cancellationToken)
+        public Task<UserScriptValueSnapshot> GetSnapshotAsync(string scriptKey, CancellationToken cancellationToken)
         {
-            return RunAsync<IReadOnlyList<KeyValuePair<string, UserScriptValue>>>(scriptKey, connection =>
+            return RunAsync<UserScriptValueSnapshot>(scriptKey, connection =>
             {
                 var values = new List<KeyValuePair<string, UserScriptValue>>();
                 using (var command = connection.CreateCommand())
@@ -91,7 +94,7 @@ ON CONFLICT(script_key,value_key) DO UPDATE SET encoded_value=excluded.encoded_v
                     using (var reader = command.ExecuteReader())
                         while (reader.Read()) values.Add(new KeyValuePair<string, UserScriptValue>(reader.GetString(0), UserScriptValue.FromEncoded(reader.GetString(1))));
                 }
-                return values.AsReadOnly();
+                return new UserScriptValueSnapshot(values, _journal.Sequence(scriptKey));
             }, cancellationToken);
         }
 
@@ -107,10 +110,11 @@ ON CONFLICT(script_key,value_key) DO UPDATE SET encoded_value=excluded.encoded_v
             finally { _gate.Release(); }
         }
 
-        private static StoredValue Read(SqliteConnection connection, string key, string scriptKey)
+        private static StoredValue Read(SqliteConnection connection, string key, string scriptKey, SqliteTransaction transaction = null)
         {
             using (var command = connection.CreateCommand())
             {
+                command.Transaction = transaction;
                 command.CommandText = "SELECT encoded_value FROM script_values WHERE script_key=$script AND value_key=$key";
                 command.Parameters.AddWithValue("$script", scriptKey);
                 command.Parameters.AddWithValue("$key", key);

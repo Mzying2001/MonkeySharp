@@ -106,9 +106,9 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
 
             var hostCapabilities = new[]
             {
-                "GM.getResourceText", "GM.getResourceURL", "GM.xmlHttpRequest", "GM.registerMenuCommand",
+                "GM.getResourceText", "GM.getResourceUrl", "GM.xmlHttpRequest", "GM.registerMenuCommand",
                 "GM.unregisterMenuCommand", "GM.notification", "GM.setClipboard", "GM.openInTab", "GM.download",
-                "GM.getTab", "GM.saveTab", "GM.getTabs", "GM.cookie", "GM.webRequest", "window.close", "window.focus"
+                "GM.getTab", "GM.saveTab", "GM.getTabs", "GM.cookie", "GM.webRequest", "GM.audio", "window.close", "window.focus"
             };
             var requestedHostCapabilities = metadata.Grants.Where(item => hostCapabilities.Contains(item, StringComparer.Ordinal)).ToList();
             if (metadata.Requires.Count != 0 || metadata.Resources.Count != 0 || requestedHostCapabilities.Count != 0)
@@ -120,14 +120,12 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
             }
 
             var unsupported = new List<string>();
-            if (!string.IsNullOrWhiteSpace(metadata.Sandbox) &&
-                !string.Equals(metadata.Sandbox, "raw", StringComparison.OrdinalIgnoreCase))
-                unsupported.Add("@sandbox 非 raw 不创建隔离世界");
-            if (metadata.Unwrap) unsupported.Add("@unwrap 不移除 MonkeySharp wrapper");
-            if (!string.IsNullOrWhiteSpace(metadata.InjectInto) &&
-                !string.Equals(metadata.InjectInto, "page", StringComparison.OrdinalIgnoreCase))
-                unsupported.Add("@inject-into 非 page 不可用");
-            if (!string.IsNullOrWhiteSpace(metadata.RunIn)) unsupported.Add("@run-in 未实现");
+            if (!string.IsNullOrWhiteSpace(metadata.Sandbox) && !new[] { "raw", "JavaScript", "DOM" }.Contains(metadata.Sandbox, StringComparer.OrdinalIgnoreCase))
+                unsupported.Add("@sandbox 执行环境不支持");
+            if (metadata.Unwrap) unsupported.Add("@unwrap 当前拒绝执行");
+            if (!string.IsNullOrWhiteSpace(metadata.InjectInto) && !new[] { "page", "content", "auto" }.Contains(metadata.InjectInto, StringComparer.Ordinal))
+                unsupported.Add("@inject-into 执行环境不支持");
+            if (metadata.RunIn.Any(value => value.StartsWith("container-id-", StringComparison.Ordinal))) unsupported.Add("@run-in 容器选择不可用");
             if (!string.IsNullOrWhiteSpace(source))
             {
                 var sourceLower = source.ToLowerInvariant();
@@ -148,7 +146,7 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
                 statuses.Remove(difference);
                 statuses.Add(new CompatibilityStatusViewModel(
                     difference.Category,
-                    difference.Message + "静态 @webRequest 仅写入 GM.info，不会自动安装网络规则。",
+                    difference.Message + "静态 @webRequest 在导航前安装；仅拦截 sub_frame/script/xhr/websocket，受宿主授权及版本边界限制。",
                     difference.Brush));
             }
             return statuses;

@@ -53,3 +53,4 @@ try {
 } finally { $process.Dispose() }
 
 Write-Host "SmokeHost E2E passed ($Platform, CefSharp $CefSharpVersion). Results: $OutputDirectory"
+& (Join-Path $PSScriptRoot 'Run-CdpProbe.ps1') -Platform $Platform -CefSharpVersion $CefSharpVersion -NoBuild -OutputDirectory $OutputDirectory

@@ -1,0 +1,254 @@
+{
+  "date": "2026-11-06",
+  "fixture": "Mzying2001.MonkeySharp.CefSharp.SmokeHost/Fixtures/05-cookie.user.js",
+  "fixtureSha256": "c1ef9d65220917501903a0cd220548e97640c4b5679283b6b2f668ef5bdb917f",
+  "publicTestCertificateSha256": "246d6b09848b11ac136ba81553eaf03876644079a2f71402b680bec3e1b1b77e",
+  "runs": [
+    {
+      "cefSharpVersion": "84.4.10.0",
+      "platform": "x64",
+      "browser": {
+        "protocolVersion": "1.3",
+        "product": "Chrome/84.0.4147.105",
+        "revision": "@a6b12dfad6663f13a7e16e9a42a6a4975374096b",
+        "userAgent": "Mozilla/5.0 (Windows NT 6.2; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/84.0.4147.105 Safari/537.36",
+        "jsVersion": "8.4.371.22"
+      },
+      "case": {
+        "type": "compatibility-case",
+        "caseId": "cookie",
+        "success": true,
+        "checks": {
+          "setList": true,
+          "legacy": true,
+          "context": true,
+          "noListeners": true,
+          "preciseDelete": true,
+          "deleted": true,
+          "setUndefined": true,
+          "partitionRejected": true,
+          "httpsState": true,
+          "httpsSend": true,
+          "expirySameSite": true,
+          "httpsDeleted": true,
+          "engineRejected": true,
+          "domainCookie": true,
+          "realTlsRequest": true,
+          "contextInitiallyIsolated": true,
+          "contextWritesIsolated": true,
+          "contextHttpEffect": true
+        },
+        "error": null,
+        "frameId": "17179869185",
+        "documentId": "b7f9b298-f533-47aa-86cd-2c5aaa979939",
+        "url": "http://127.0.0.1:64399/compat/cookie",
+        "state": "{\"checks\":{\"setUndefined\":true,\"setList\":true,\"legacy\":true,\"context\":true,\"noListeners\":true,\"preciseDelete\":true,\"deleted\":true,\"partitionRejected\":true,\"httpsState\":true,\"httpsSend\":true,\"expirySameSite\":true,\"domainCookie\":true,\"httpsDeleted\":true,\"engineRejected\":true},\"done\":true,\"observations\":{\"tlsStatus\":200,\"tlsCookies\":\"secure-cookie=https-only\",\"plainCookies\":\"\"},\"httpsDone\":true}"
+      }
+    },
+    {
+      "cefSharpVersion": "84.4.10.0",
+      "platform": "x86",
+      "browser": {
+        "protocolVersion": "1.3",
+        "product": "Chrome/84.0.4147.105",
+        "revision": "@a6b12dfad6663f13a7e16e9a42a6a4975374096b",
+        "userAgent": "Mozilla/5.0 (Windows NT 6.2; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/84.0.4147.105 Safari/537.36",
+        "jsVersion": "8.4.371.22"
+      },
+      "case": {
+        "type": "compatibility-case",
+        "caseId": "cookie",
+        "success": true,
+        "checks": {
+          "setList": true,
+          "legacy": true,
+          "context": true,
+          "noListeners": true,
+          "preciseDelete": true,
+          "deleted": true,
+          "setUndefined": true,
+          "partitionRejected": true,
+          "httpsState": true,
+          "httpsSend": true,
+          "expirySameSite": true,
+          "httpsDeleted": true,
+          "engineRejected": true,
+          "domainCookie": true,
+          "realTlsRequest": true,
+          "contextInitiallyIsolated": true,
+          "contextWritesIsolated": true,
+          "contextHttpEffect": true
+        },
+        "error": null,
+        "frameId": "17179869185",
+        "documentId": "60f11b14-e1e7-44c9-8e7e-70021838f8ca",
+        "url": "http://127.0.0.1:64640/compat/cookie",
+        "state": "{\"checks\":{\"setUndefined\":true,\"setList\":true,\"legacy\":true,\"context\":true,\"noListeners\":true,\"preciseDelete\":true,\"deleted\":true,\"partitionRejected\":true,\"httpsState\":true,\"httpsSend\":true,\"expirySameSite\":true,\"domainCookie\":true,\"httpsDeleted\":true,\"engineRejected\":true},\"done\":true,\"observations\":{\"tlsStatus\":200,\"tlsCookies\":\"secure-cookie=https-only\",\"plainCookies\":\"\"},\"httpsDone\":true}"
+      }
+    },
+    {
+      "cefSharpVersion": "121.3.70.0",
+      "platform": "x64",
+      "browser": {
+        "protocolVersion": "1.3",
+        "product": "Chrome/121.0.6167.160",
+        "revision": "@8e23a63b5dead78825bec5ef48f4aeb5698ce21a",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+        "jsVersion": "12.1.285.28"
+      },
+      "case": {
+        "type": "compatibility-case",
+        "caseId": "cookie",
+        "success": true,
+        "checks": {
+          "setList": true,
+          "legacy": true,
+          "context": true,
+          "noListeners": true,
+          "preciseDelete": true,
+          "deleted": true,
+          "setUndefined": true,
+          "partitionRejected": true,
+          "httpsState": true,
+          "httpsSend": true,
+          "expirySameSite": true,
+          "httpsDeleted": true,
+          "engineRejected": true,
+          "domainCookie": true,
+          "realTlsRequest": true,
+          "contextInitiallyIsolated": true,
+          "contextWritesIsolated": true,
+          "contextHttpEffect": true
+        },
+        "error": null,
+        "frameId": "21474836481",
+        "documentId": "4bb10ff4-651c-447e-ae41-791b2a0bc4ec",
+        "url": "http://127.0.0.1:65370/compat/cookie",
+        "state": "{\"checks\":{\"setUndefined\":true,\"setList\":true,\"legacy\":true,\"context\":true,\"noListeners\":true,\"preciseDelete\":true,\"deleted\":true,\"partitionRejected\":true,\"httpsState\":true,\"httpsSend\":true,\"expirySameSite\":true,\"domainCookie\":true,\"httpsDeleted\":true,\"engineRejected\":true},\"done\":true,\"observations\":{\"tlsStatus\":200,\"tlsCookies\":\"secure-cookie=https-only\",\"plainCookies\":\"\"},\"httpsDone\":true}"
+      }
+    },
+    {
+      "cefSharpVersion": "121.3.70.0",
+      "platform": "x86",
+      "browser": {
+        "protocolVersion": "1.3",
+        "product": "Chrome/121.0.6167.160",
+        "revision": "@8e23a63b5dead78825bec5ef48f4aeb5698ce21a",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+        "jsVersion": "12.1.285.28"
+      },
+      "case": {
+        "type": "compatibility-case",
+        "caseId": "cookie",
+        "success": true,
+        "checks": {
+          "setList": true,
+          "legacy": true,
+          "context": true,
+          "noListeners": true,
+          "preciseDelete": true,
+          "deleted": true,
+          "setUndefined": true,
+          "partitionRejected": true,
+          "httpsState": true,
+          "httpsSend": true,
+          "expirySameSite": true,
+          "httpsDeleted": true,
+          "engineRejected": true,
+          "domainCookie": true,
+          "realTlsRequest": true,
+          "contextInitiallyIsolated": true,
+          "contextWritesIsolated": true,
+          "contextHttpEffect": true
+        },
+        "error": null,
+        "frameId": "21474836481",
+        "documentId": "a7da7a52-1ca1-4578-9bb4-f1d29abe35b1",
+        "url": "http://127.0.0.1:64748/compat/cookie",
+        "state": "{\"checks\":{\"setUndefined\":true,\"setList\":true,\"legacy\":true,\"context\":true,\"noListeners\":true,\"preciseDelete\":true,\"deleted\":true,\"partitionRejected\":true,\"httpsState\":true,\"httpsSend\":true,\"expirySameSite\":true,\"domainCookie\":true,\"httpsDeleted\":true,\"engineRejected\":true},\"done\":true,\"observations\":{\"tlsStatus\":200,\"tlsCookies\":\"secure-cookie=https-only\",\"plainCookies\":\"\"},\"httpsDone\":true}"
+      }
+    },
+    {
+      "cefSharpVersion": "151.3.240.0",
+      "platform": "x64",
+      "browser": {
+        "protocolVersion": "1.3",
+        "product": "Chrome/151.0.7922.174",
+        "revision": "@39c51c70dd5feca6b6aba5bb7997b595011c553d",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+        "jsVersion": "15.1.206.23"
+      },
+      "case": {
+        "type": "compatibility-case",
+        "caseId": "cookie",
+        "success": true,
+        "checks": {
+          "setList": true,
+          "legacy": true,
+          "context": true,
+          "noListeners": true,
+          "preciseDelete": true,
+          "deleted": true,
+          "setUndefined": true,
+          "partitionRejected": true,
+          "httpsState": true,
+          "httpsSend": true,
+          "expirySameSite": true,
+          "httpsDeleted": true,
+          "engineRejected": true,
+          "domainCookie": true,
+          "realTlsRequest": true,
+          "contextInitiallyIsolated": true,
+          "contextWritesIsolated": true,
+          "contextHttpEffect": true
+        },
+        "error": null,
+        "frameId": "8-F6E9BB81E791781B055EAD6CB92A4798",
+        "documentId": "3d0745bf-1f07-47ae-8e21-4e2e205d241a",
+        "url": "http://127.0.0.1:64864/compat/cookie",
+        "state": "{\"checks\":{\"setUndefined\":true,\"setList\":true,\"legacy\":true,\"context\":true,\"noListeners\":true,\"preciseDelete\":true,\"deleted\":true,\"partitionRejected\":true,\"httpsState\":true,\"httpsSend\":true,\"expirySameSite\":true,\"domainCookie\":true,\"httpsDeleted\":true,\"engineRejected\":true},\"done\":true,\"observations\":{\"tlsStatus\":200,\"tlsCookies\":\"secure-cookie=https-only\",\"plainCookies\":\"\"},\"httpsDone\":true}"
+      }
+    },
+    {
+      "cefSharpVersion": "151.3.240.0",
+      "platform": "x86",
+      "browser": {
+        "protocolVersion": "1.3",
+        "product": "Chrome/151.0.7922.174",
+        "revision": "@39c51c70dd5feca6b6aba5bb7997b595011c553d",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+        "jsVersion": "15.1.206.23"
+      },
+      "case": {
+        "type": "compatibility-case",
+        "caseId": "cookie",
+        "success": true,
+        "checks": {
+          "setList": true,
+          "legacy": true,
+          "context": true,
+          "noListeners": true,
+          "preciseDelete": true,
+          "deleted": true,
+          "setUndefined": true,
+          "partitionRejected": true,
+          "httpsState": true,
+          "httpsSend": true,
+          "expirySameSite": true,
+          "httpsDeleted": true,
+          "engineRejected": true,
+          "domainCookie": true,
+          "realTlsRequest": true,
+          "contextInitiallyIsolated": true,
+          "contextWritesIsolated": true,
+          "contextHttpEffect": true
+        },
+        "error": null,
+        "frameId": "8-58DD9BDB2304D64090A376FAEA17AAD3",
+        "documentId": "78660f22-3cce-413e-b07f-997a4874db74",
+        "url": "http://127.0.0.1:65017/compat/cookie",
+        "state": "{\"checks\":{\"setUndefined\":true,\"setList\":true,\"legacy\":true,\"context\":true,\"noListeners\":true,\"preciseDelete\":true,\"deleted\":true,\"partitionRejected\":true,\"httpsState\":true,\"httpsSend\":true,\"expirySameSite\":true,\"domainCookie\":true,\"httpsDeleted\":true,\"engineRejected\":true},\"done\":true,\"observations\":{\"tlsStatus\":200,\"tlsCookies\":\"secure-cookie=https-only\",\"plainCookies\":\"\"},\"httpsDone\":true}"
+      }
+    }
+  ]
+}

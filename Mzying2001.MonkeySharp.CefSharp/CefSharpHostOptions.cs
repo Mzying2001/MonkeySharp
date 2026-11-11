@@ -1,5 +1,5 @@
-using Mzying2001.MonkeySharp.Core.Bridge;
-using Mzying2001.MonkeySharp.Core.Compatibility;
+﻿using Mzying2001.MonkeySharp.Core.Bridge;
+using System;
 
 namespace Mzying2001.MonkeySharp.CefSharp
 {
@@ -19,14 +19,19 @@ namespace Mzying2001.MonkeySharp.CefSharp
         /// </summary>
         public bool EnableDefaultNetworkServices { get; set; } = true;
 
+        /// <summary>Gets or sets whether the adapter supplies its native mute-only audio service.</summary>
+        public bool EnableDefaultAudioService { get; set; } = true;
+
         /// <summary>Gets or sets whether document-start userscripts require guaranteed pre-page execution.</summary>
         public bool RequireGuaranteedDocumentStart { get; set; }
 
         /// <summary>Gets or sets bridge payload, resource, concurrency, and timeout limits.</summary>
         public BridgeOptions Bridge { get; set; } = new BridgeOptions();
 
-        /// <summary>Gets or sets userscript compatibility behavior.</summary>
-        public UserScriptCompatibilityOptions Compatibility { get; set; } =
-            new UserScriptCompatibilityOptions();
+        /// <summary>Gets or sets a resolver for actual private-context state; null leaves it unknown.</summary>
+        public Func<global::CefSharp.IRequestContext, bool?> IsIncognito { get; set; }
+
+        /// <summary>Gets or sets whether scripts update automatically; null leaves policy unknown.</summary>
+        public bool? AutomaticallyUpdatesScripts { get; set; }
     }
 }

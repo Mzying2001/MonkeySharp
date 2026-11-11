@@ -1,7 +1,9 @@
 using Mzying2001.MonkeySharp.Demo.Runtime;
 using Mzying2001.MonkeySharp.Demo.ViewModels;
 using Mzying2001.MonkeySharp.Demo.Views;
+using Mzying2001.MonkeySharp.Core.Apis;
 using System;
+using System.Threading;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.ComponentModel;
@@ -36,8 +38,39 @@ namespace Mzying2001.MonkeySharp.Demo
                 if (Keyboard.Modifiers != ModifierKeys.Alt) return;
                 var key = (args.Key == Key.System ? args.SystemKey : args.Key).ToString();
                 var command = runtime.MainWindow.SelectedTab?.MenuCommands.FirstOrDefault(item => string.Equals(item.AccessKey, key, StringComparison.OrdinalIgnoreCase));
-                if (command != null) { command.InvokeCommand.Execute(null); args.Handled = true; }
+                if (command != null) { command.InvokeCommand.Execute(MenuKeyboardInput(args)); args.Handled = true; }
             };
+        }
+
+        private static MenuCommandInvocation MenuModifiers(string kind)
+        {
+            var modifiers = Keyboard.Modifiers;
+            return new MenuCommandInvocation { Kind = kind, CtrlKey = modifiers.HasFlag(ModifierKeys.Control),
+                ShiftKey = modifiers.HasFlag(ModifierKeys.Shift), AltKey = modifiers.HasFlag(ModifierKeys.Alt), MetaKey = modifiers.HasFlag(ModifierKeys.Windows) };
+        }
+        private static MenuCommandInvocation MenuKeyboardInput(KeyEventArgs args)
+        {
+            var input = MenuModifiers("keyboard");
+            var key = args.Key == Key.System ? args.SystemKey : args.Key;
+            if (key >= Key.A && key <= Key.Z)
+            {
+                input.Code = "Key" + key;
+                input.Key = (input.ShiftKey == true ^ Keyboard.IsKeyToggled(Key.CapsLock)) ? key.ToString() : key.ToString().ToLowerInvariant();
+            }
+            else if (key == Key.Return) { input.Key = "Enter"; input.Code = "Enter"; }
+            else if (key == Key.Space) { input.Key = " "; input.Code = "Space"; }
+            return input;
+        }
+        private void ScriptMenuKeyDown(object sender, KeyEventArgs args)
+        {
+            if (sender is MenuItem item) item.Tag = MenuKeyboardInput(args);
+        }
+        private void ScriptMenuMouseUp(object sender, MouseButtonEventArgs args)
+        {
+            if (!(sender is MenuItem item)) return;
+            var input = MenuModifiers("mouse");
+            input.Button = args.ChangedButton == MouseButton.Left ? 0 : args.ChangedButton == MouseButton.Middle ? 1 : args.ChangedButton == MouseButton.Right ? 2 : (int?)null;
+            item.Tag = input;
         }
 
         private async void TabsChanged(object sender, NotifyCollectionChangedEventArgs args)
@@ -73,6 +106,30 @@ namespace Mzying2001.MonkeySharp.Demo
                 _manager.Show();
             }
             else _manager.Activate();
+        }
+
+        private async void OpenPermissions(object sender, RoutedEventArgs args)
+        {
+            var entries = await _runtime.PermissionDecisions.ListAsync(CancellationToken.None);
+            var panel = new StackPanel { Margin = new Thickness(18) };
+            panel.Children.Add(new TextBlock { Text = "已记忆的脚本权限", FontSize = 18, FontWeight = FontWeights.SemiBold });
+            var window = new Window { Title = "MonkeySharp 权限", Owner = this, Width = 650, Height = 450,
+                Content = new ScrollViewer { Content = panel }, WindowStartupLocation = WindowStartupLocation.CenterOwner };
+            foreach (var group in entries.GroupBy(entry => entry.ScriptKey))
+            {
+                var key = group.Key;
+                panel.Children.Add(new TextBlock { Text = key, Margin = new Thickness(0, 16, 0, 4) });
+                foreach (var entry in group)
+                {
+                    var decision = await _runtime.PermissionDecisions.GetAsync(entry, CancellationToken.None);
+                    panel.Children.Add(new TextBlock { Text = entry.Kind + " · " + entry.Target + " · " + decision, TextWrapping = TextWrapping.Wrap });
+                }
+                var revoke = new Button { Content = "撤销此脚本的记忆决定", HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 6, 0, 0) };
+                revoke.Click += async (_, __) => { await _runtime.RevokePermissionsAsync(key); window.Close(); };
+                panel.Children.Add(revoke);
+            }
+            if (entries.Count == 0) panel.Children.Add(new TextBlock { Text = "没有已记忆的决定。", Margin = new Thickness(0, 15, 0, 0) });
+            window.Show();
         }
         private void AddressKeyDown(object sender, KeyEventArgs args)
         { if (args.Key == Key.Enter) { _runtime.MainWindow.NavigateCommand.Execute(null); args.Handled = true; } }
