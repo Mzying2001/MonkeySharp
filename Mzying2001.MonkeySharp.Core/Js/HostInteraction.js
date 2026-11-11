@@ -153,16 +153,18 @@
                 if (!options || typeof options !== "object" || Array.isArray(options)) throw new TypeError("menu options must be an object or access key.");
                 for (const field of ["accessKey", "title"]) if (typeof options[field] !== "undefined" && typeof options[field] !== "string") throw new TypeError(field + " must be a string.");
                 if (typeof options.autoClose !== "undefined" && typeof options.autoClose !== "boolean") throw new TypeError("autoClose must be a boolean.");
-                if (typeof options.clickedFrame !== "undefined") throw notSupported("clickedFrame requires a newer reference contract.");
+                if (typeof options.clickedFrame !== "undefined" && typeof options.clickedFrame !== "boolean") throw new TypeError("clickedFrame must be a boolean.");
                 if (typeof options.id === "undefined") while (record.menuHandlers.has(nextListenerId)) nextListenerId++;
                 const id = typeof options.id === "undefined" ? nextListenerId++ : options.id;
                 if (!((Number.isInteger(id) && id > 0) || (typeof id === "string" && id))) throw new TypeError("id must be a positive integer or nonempty string.");
                 const previous = record.menuHandlers.get(id);
-                record.menuHandlers.set(id, callback);
+                const entry = { callback, generation: uuid() };
+                record.menuHandlers.set(id, entry);
                 const ready = queueMenu(record, () => call(record, "GM.registerMenuCommand", {
-                    commandId: id, name, accessKey: options.accessKey || null, title: options.title || null, autoClose: options.autoClose !== false
+                    commandId: id, generation: entry.generation, clickedFrame: options.clickedFrame === true,
+                    name, accessKey: options.accessKey || null, title: options.title || null, autoClose: options.autoClose !== false
                 })).then(() => id, error => {
-                    if (record.menuHandlers.get(id) === callback) {
+                    if (record.menuHandlers.get(id) === entry) {
                         if (previous) record.menuHandlers.set(id, previous); else record.menuHandlers.delete(id);
                     }
                     throw error;

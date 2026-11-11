@@ -171,7 +171,7 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
             var menu = new WpfMenuService(tab, Dispatcher.CurrentDispatcher);
             var invoked = 0;
             var key = ScriptKey.Parse(Guid.NewGuid().ToString());
-            var registration = await menu.RegisterAsync(new MenuCommandRequest(key, "Test command", "t"), () => invoked++, CancellationToken.None);
+            var registration = await menu.RegisterAsync(new MenuCommandRequest(key, "Test command", "t"), _ => invoked++, CancellationToken.None);
             Assert.Contains("Test command", Assert.Single(tab.MenuCommands).Label);
             tab.MenuCommands[0].InvokeCommand.Execute(null);
             Assert.Equal(1, invoked);

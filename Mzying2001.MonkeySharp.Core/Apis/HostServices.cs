@@ -319,7 +319,10 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         /// <param name="accessKey">The optional keyboard access key.</param>
         /// <param name="title">The tooltip.</param>
         /// <param name="autoClose">Whether the popup closes on selection.</param>
-        public MenuCommandRequest(ScriptKey scriptKey, string name, string accessKey, string title = null, bool autoClose = true)
+        /// <param name="originFrame">The authenticated subscribing document/frame.</param>
+        /// <param name="clickedFrame">Whether invocation requires the host-attested subscribing frame.</param>
+        public MenuCommandRequest(ScriptKey scriptKey, string name, string accessKey, string title = null, bool autoClose = true,
+            DocumentFrame originFrame = null, bool clickedFrame = false)
         {
             ScriptKey = scriptKey;
             Name = !string.IsNullOrWhiteSpace(name)
@@ -327,6 +330,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 : throw new ArgumentException("The menu command name is required.", nameof(name));
             AccessKey = accessKey;
             Title = title; AutoClose = autoClose;
+            OriginFrame = originFrame; ClickedFrame = clickedFrame;
         }
 
         /// <summary>Gets the script installation that owns the command.</summary>
@@ -341,6 +345,33 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         public string Title { get; }
         /// <summary>Gets whether the popup closes after invocation.</summary>
         public bool AutoClose { get; }
+        /// <summary>Gets the authenticated subscribing document/frame.</summary>
+        public DocumentFrame OriginFrame { get; }
+        /// <summary>Gets whether an invocation requires host-attested frame identity.</summary>
+        public bool ClickedFrame { get; }
+    }
+
+    /// <summary>Contains facts observed by the native menu host. Omit unavailable fields; never use page-supplied frame identity.</summary>
+    public sealed class MenuCommandInvocation
+    {
+        /// <summary>Gets or sets mouse, keyboard, or unknown input provenance.</summary>
+        public string Kind { get; set; } = "unknown";
+        /// <summary>Gets or sets the host-attested current document/frame, or null when the entry point cannot identify it.</summary>
+        public DocumentFrame Frame { get; set; }
+        /// <summary>Gets or sets the observed Control modifier.</summary>
+        public bool? CtrlKey { get; set; }
+        /// <summary>Gets or sets the observed Shift modifier.</summary>
+        public bool? ShiftKey { get; set; }
+        /// <summary>Gets or sets the observed Alt modifier.</summary>
+        public bool? AltKey { get; set; }
+        /// <summary>Gets or sets the observed system modifier.</summary>
+        public bool? MetaKey { get; set; }
+        /// <summary>Gets or sets the DOM mouse button number, if known.</summary>
+        public int? Button { get; set; }
+        /// <summary>Gets or sets the observed DOM keyboard key, if known.</summary>
+        public string Key { get; set; }
+        /// <summary>Gets or sets the observed DOM keyboard code, if known.</summary>
+        public string Code { get; set; }
     }
 
     /// <summary>
@@ -362,7 +393,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         /// <returns>A registration whose disposal removes the command.</returns>
         Task<IMenuRegistration> RegisterAsync(
             MenuCommandRequest request,
-            Action invoked,
+            Action<MenuCommandInvocation> invoked,
             CancellationToken cancellationToken);
     }
 

@@ -11,8 +11,8 @@ using System.Threading.Tasks;
 
 namespace Mzying2001.MonkeySharp.CefSharp
 {
-    // Isolated execution uses native CDP frame/context identities throughout. CEF
-    // frame IDs are deliberately absent from this transport and never cast to CDP IDs.
+    // CDP frame/context identities authenticate isolated execution. CEF frame IDs
+    // enter only through the one-shot native menu proof; they are never cast to CDP IDs.
     internal sealed class CefSharpIsolatedExecutor
     {
         private readonly CefSharpCdpSession _session;
@@ -30,6 +30,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
         private readonly Dictionary<string, World> _requested = new Dictionary<string, World>();
         private readonly Dictionary<int, World> _contexts = new Dictionary<int, World>();
         private readonly Dictionary<string, World> _documents = new Dictionary<string, World>();
+        private readonly Dictionary<string, World> _menuProofs = new Dictionary<string, World>();
         private readonly HashSet<Task> _tasks = new HashSet<Task>();
         private readonly string _binding = "__MonkeySharpIsolated_" + Guid.NewGuid().ToString("N");
         private volatile bool _disposed;
@@ -212,6 +213,14 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 await CallAsync(world, IsolatedScriptBuilder.Build(world.Generation, _binding, world.Frame.DocumentId,
                     _options.MaxPendingRequestsPerDocument, _options.RequestTimeout), false).ConfigureAwait(false);
                 await _session.ExecuteAsync("Runtime.addBinding", new { name = _binding, executionContextId = id }, world.Token).ConfigureAwait(false);
+                // The one-shot nonce is sent before user source, solely through this private context.
+                // JavascriptMessageReceived supplies the CEF frame; the payload supplies no frame identity.
+                if (typeof(global::CefSharp.Cef).Assembly.GetName().Version.Major == 84)
+                {
+                    lock (_sync) _menuProofs[world.MenuProof] = world;
+                    await CallAsync(world, "if(typeof CefSharp==='object'&&typeof CefSharp.PostMessage==='function')CefSharp.PostMessage(" +
+                        JsonSerializer.Serialize(world.MenuProof) + ");").ConfigureAwait(false);
+                }
                 await LifecycleAsync(world, DocumentLifecycleKind.ContextCreated).ConfigureAwait(false);
                 await LifecycleAsync(world, DocumentLifecycleKind.DocumentStart).ConfigureAwait(false);
                 await CallAsync(world, "globalThis.__MonkeySharpIsolatedTransport.ready();").ConfigureAwait(false);
@@ -308,20 +317,41 @@ namespace Mzying2001.MonkeySharp.CefSharp
 
         internal bool Owns(string documentId) { lock (_sync) return _documents.ContainsKey(documentId); }
 
-        internal async Task<IReadOnlyList<ContextMenuEntry>> MainMenuAsync()
+        internal bool ConfirmNativeMenuFrame(string proof, string nativeFrameId, bool main)
+        {
+            lock (_sync)
+            {
+                if (!_menuProofs.TryGetValue(proof, out var world) || !Alive(world)) return false;
+                if (world.Native.Main != main) { Report("MSC235_MENU_FRAME_MISMATCH", "Native menu frame kind disagreed with the CDP frame.", world.Script, world.Native); return false; }
+                _menuProofs.Remove(proof);
+                if (world.Native.CefFrameId != null && world.Native.CefFrameId != nativeFrameId) return false;
+                world.Native.CefFrameId = nativeFrameId;
+                return true;
+            }
+        }
+
+        internal bool OwnsNativeMenuFrame(DocumentFrame frame, string nativeFrameId, bool main)
+        {
+            lock (_sync) return _documents.TryGetValue(frame.DocumentId, out var world) && ReferenceEquals(world.Frame, frame) &&
+                (main && world.Native.Main || !main && world.Native.CefFrameId == nativeFrameId) && world.Ready && Alive(world);
+        }
+
+        internal async Task<IReadOnlyList<CefSharpMenuTarget>> MenuAsync(string nativeFrameId, bool main)
         {
             World[] worlds;
-            lock (_sync) worlds = _documents.Values.Where(world => world.Native.Main && world.Ready && Alive(world)).ToArray();
-            var entries = new List<ContextMenuEntry>();
-            foreach (var world in worlds) entries.AddRange(await _engine.GetContextMenuEntriesAsync(world.Frame, world.Token).ConfigureAwait(false));
+            lock (_sync) worlds = _documents.Values.Where(world => (main && world.Native.Main || !main && world.Native.CefFrameId == nativeFrameId) && world.Ready && Alive(world)).ToArray();
+            var entries = new List<CefSharpMenuTarget>();
+            foreach (var world in worlds)
+                entries.AddRange((await _engine.GetContextMenuEntriesAsync(world.Frame, world.Token).ConfigureAwait(false))
+                    .Select(entry => new CefSharpMenuTarget(entry, world.Frame, nativeFrameId)));
             return entries;
         }
 
-        internal async Task<bool> ExecuteMainMenuAsync(ScriptKey key)
+        internal async Task<bool> ExecuteMenuAsync(string documentId, string nativeFrameId, ScriptKey key)
         {
             World world;
-            lock (_sync) world = _documents.Values.FirstOrDefault(value => value.Native.Main && value.Script.ScriptKey == key && value.Ready && Alive(value));
-            if (world == null) return false;
+            lock (_sync) _documents.TryGetValue(documentId, out world);
+            if (world == null || !world.Native.Main && world.Native.CefFrameId != nativeFrameId || world.Script.ScriptKey != key || !world.Ready || !Alive(world)) return false;
             var plan = await _engine.ProcessContextMenuAsync(world.Frame, key, world.Token).ConfigureAwait(false);
             if (plan.Invocations.Count != 0) await CallAsync(world, BridgeScriptBuilder.BuildInjection(plan)).ConfigureAwait(false);
             return true;
@@ -361,6 +391,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 if (_requested.TryGetValue(key, out var request) && ReferenceEquals(request, world)) _requested.Remove(key);
                 if (_contexts.TryGetValue(world.ContextId, out var current) && ReferenceEquals(current, world)) _contexts.Remove(world.ContextId);
                 _documents.Remove(world.Frame.DocumentId);
+                _menuProofs.Remove(world.MenuProof);
             }
             _lifecycle(new DocumentLifecycleEventArgs(DocumentLifecycleKind.ContextReleased, world.Frame));
             Track(_engine.InvalidateDocumentAsync(world.Frame.DocumentId, CancellationToken.None));
@@ -426,6 +457,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             internal NativeFrame(string id, string loader, Uri url, bool main, CancellationToken token)
             { Id = id; Loader = loader; Url = url; Main = main; Cancellation = CancellationTokenSource.CreateLinkedTokenSource(token); }
             internal readonly string Id, Loader;
+            internal string CefFrameId;
             internal Uri Url;
             internal readonly bool Main;
             internal readonly CancellationTokenSource Cancellation;
@@ -446,6 +478,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             internal readonly UserScriptInstallation Script;
             internal readonly string Name;
             internal readonly string Generation = Guid.NewGuid().ToString("N");
+            internal readonly string MenuProof = "monkey-menu:" + Guid.NewGuid().ToString("N");
             internal readonly CancellationTokenSource Cancellation;
             internal readonly CancellationToken Token;
             internal readonly SemaphoreSlim Gate = new SemaphoreSlim(1, 1);

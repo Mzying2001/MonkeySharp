@@ -1062,7 +1062,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
 
             public Task<IMenuRegistration> RegisterAsync(
                 MenuCommandRequest request,
-                Action invoked,
+                Action<MenuCommandInvocation> invoked,
                 CancellationToken cancellationToken)
                 => Task.FromResult<IMenuRegistration>(new NoopMenuRegistration());
 

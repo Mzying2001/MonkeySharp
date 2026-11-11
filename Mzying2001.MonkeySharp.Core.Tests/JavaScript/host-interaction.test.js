@@ -6,7 +6,9 @@ const template = require('./bootstrap-template');
 async function install(dispatch = () => undefined) {
     let api;
     const requests = [];
-    const context = vm.createContext({ crypto, atob, TextDecoder, Event, console: { error() {} }, capture: value => { api = value; } });
+    class InputEvent extends Event { constructor(type, init) { super(type); Object.assign(this, init); } }
+    const context = vm.createContext({ crypto, atob, TextDecoder, Event, MouseEvent: InputEvent, KeyboardEvent: InputEvent,
+        console: { error() {} }, capture: value => { api = value; } });
     const notify = (event, data) => context.__MonkeySharpRuntime.receive({ type: 'notification', protocol: 2,
         executionId: 'ui', deliveryToken: 'delivery', event, data });
     const grants = ['notification', 'registerMenuCommand', 'unregisterMenuCommand', 'setClipboard'];
@@ -114,4 +116,23 @@ test('clipboard normalizes text HTML info and completes callbacks after host wri
     assert.equal(calls, 2);
     await assert.rejects(h.GM.setClipboard('invalid', { mimetype: 'image/png' }));
     assert.equal(h.requests.filter(request => request.method === 'GM.setClipboard').length, 2);
+});
+
+test('menu generations reject late callbacks and unknown input does not fabricate mouse provenance', async () => {
+    const h = await install();
+    const events = [];
+    await h.GM.registerMenuCommand('first', event => events.push(event), { id: 'same', clickedFrame: true });
+    const old = h.requests.at(-1).params.generation;
+    await h.GM.registerMenuCommand('new', event => events.push(event), { id: 'same', clickedFrame: false });
+    const current = h.requests.at(-1).params.generation;
+    assert.equal(h.notify('menu-command', { commandId: 'same', generation: old }), false);
+    h.notify('menu-command', { commandId: 'same', generation: current, input: { kind: 'unknown' } });
+    assert.equal(events[0].type, 'menucommand');
+    assert.equal(events[0].isTrusted, false);
+    h.notify('menu-command', { commandId: 'same', generation: current, input: { kind: 'keyboard', key: 's', code: 'KeyS', ctrlKey: true } });
+    assert.equal(events[1].type, 'keydown'); assert.equal(events[1].key, 's'); assert.equal(events[1].ctrlKey, true);
+    h.notify('menu-command', { commandId: 'same', generation: current, input: { kind: 'mouse', button: 2, shiftKey: true } });
+    assert.equal(events[2].type, 'click'); assert.equal(events[2].button, 2); assert.equal(events[2].shiftKey, true);
+    assert.equal(h.requests[0].params.clickedFrame, true);
+    assert.equal(h.requests[1].params.clickedFrame, false);
 });

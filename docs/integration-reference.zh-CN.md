@@ -398,3 +398,5 @@ SmokeHost 从 `Fixtures` 目录内嵌原创 `.user.js`，通过正常仓库安�
 日志保存到 `artifacts/smoke/<version>-<platform>/`（构建步骤有输出时的 `restore.log`、`clean.log`、`build.log`，以及 `stdout.log`、`stderr.log`、`results.jsonl`）；可通过 `-OutputDirectory` 覆盖路径。CI 在失败时也将该目录上传为 `chromium-<version>-<platform>`。定位问题时先查看失败的 `compatibility-case`，再检查相邻的生命周期、console 和 diagnostic 记录。
 
 HTTP ReadableStream 输入仅在 session create 授权后消费，通过 appendBody 暂存完毕再 execute。可重放 IUserScriptHttpBody 沿用 CEF bytes/file 后端处理重定向，不承诺原生源背压或边读边发。
+
+IMenuService.RegisterAsync 现在接收 Action<MenuCommandInvocation>。MenuCommandRequest 携带已认证的 OriginFrame 和 ClickedFrame，仅填入实际观测的输入字段。CefSharp 宿主可使用 ResolveMenuFrame(nativeFrame, request) 解析原生事件 frame；null 表示未知或已过期，不派发定向调用。Demo 弹出菜单没有 frame 身份。GM 回调路由与 @run-at context-menu 的用户源码启动分别验收。

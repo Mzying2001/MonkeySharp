@@ -676,9 +676,8 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         {
             cancellationToken.ThrowIfCancellationRequested();
             var commandId = ReadMenuId(context.Parameters);
-            string invocationJson;
-            using (var idDocument = JsonDocument.Parse(commandId))
-                invocationJson = JsonSerializer.Serialize(new { commandId = idDocument.RootElement });
+            var generation = ProviderParameters.OptionalString(context.Parameters, "generation");
+            var clickedFrame = ProviderParameters.OptionalBoolean(context.Parameters, "clickedFrame");
             var registrationKey = context.ExecutionId + ":" + commandId;
             lock (_sync)
             {
@@ -693,12 +692,23 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                     ProviderParameters.RequiredString(context.Parameters, "name"),
                     ProviderParameters.OptionalString(context.Parameters, "accessKey"),
                     ProviderParameters.OptionalString(context.Parameters, "title"),
-                    ProviderParameters.OptionalBoolean(context.Parameters, "autoClose", true)),
-                    () => Notification?.Invoke(this, new ApiNotificationEventArgs(
-                        context.Installation.ScriptKey,
-                        context.ExecutionId,
-                        "menu-command",
-                        invocationJson)),
+                    ProviderParameters.OptionalBoolean(context.Parameters, "autoClose", true), context.Frame, clickedFrame),
+                    input =>
+                    {
+                        lock (_sync)
+                            if (_disposed || registration == null || !_menuRegistrations.TryGetValue(registrationKey, out var current) ||
+                                !ReferenceEquals(current, registration)) return;
+                        if (clickedFrame && (input?.Frame == null || input.Frame.BrowserSessionId != context.Frame.BrowserSessionId ||
+                            input.Frame.DocumentId != context.Frame.DocumentId || input.Frame.FrameId != context.Frame.FrameId)) return;
+                        using (var idDocument = JsonDocument.Parse(commandId))
+                            Notification?.Invoke(this, new ApiNotificationEventArgs(context.Installation.ScriptKey,
+                                context.ExecutionId, "menu-command", JsonSerializer.Serialize(new
+                                {
+                                    commandId = idDocument.RootElement, generation,
+                                    input = new { kind = input?.Kind ?? "unknown", ctrlKey = input?.CtrlKey, shiftKey = input?.ShiftKey,
+                                        altKey = input?.AltKey, metaKey = input?.MetaKey, button = input?.Button, key = input?.Key, code = input?.Code }
+                                })));
+                    },
                     cancellationToken).ConfigureAwait(false);
                 if (registration == null)
                     throw new InvalidOperationException("The menu service returned no registration.");

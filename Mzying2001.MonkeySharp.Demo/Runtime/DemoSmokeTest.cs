@@ -1,6 +1,7 @@
 using Mzying2001.MonkeySharp.Demo.ViewModels;
 using Mzying2001.MonkeySharp.Demo.Views;
 using Mzying2001.MonkeySharp.Demo.Services;
+using Mzying2001.MonkeySharp.Core.Apis;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -62,9 +63,11 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                     "document.querySelector('iframe').contentWindow.__demoFrame === true"));
                 checks["iframe"] = true;
                 await WaitAsync(() => Task.FromResult(primary.MenuCommands.Count == 2));
-                primary.MenuCommands.Single(item => item.Label.StartsWith("Demo smoke menu")).InvokeCommand.Execute(null);
+                primary.MenuCommands.Single(item => item.Label.StartsWith("Demo smoke menu")).InvokeCommand.Execute(
+                    new MenuCommandInvocation { Kind = "keyboard", Key = "s", Code = "KeyS", AltKey = true });
                 await WaitAsync(async () => await EvaluateBoolean(primary, "window.__demo.menu === true"));
                 checks["menu"] = true;
+                checks["menuKeyboardFields"] = await EvaluateBoolean(primary, "window.__demo.menuInput.type === 'keydown' && window.__demo.menuInput.key === 's' && window.__demo.menuInput.altKey && !window.__demo.menuInput.isTrusted");
                 var merged = primary.MenuCommands.Single(item => item.Label.StartsWith("Merged command"));
                 checks["menuOptions"] = merged.Title == "Merged tooltip" && merged.StaysOpenOnClick;
                 merged.InvokeCommand.Execute(null);
@@ -374,7 +377,7 @@ sessionStorage.setItem('runs', String(window.__demo.runs));
     await GM.addValueChangeListener('shared', function (key, oldValue, newValue, remote) { result.remote = remote && newValue === undefined; });
     window.__demoSetShared = function () { GM.setValue('shared', undefined); };
     if (location.search === '?primary') {
-        await GM.registerMenuCommand('Demo smoke menu', function () { result.menu = true; });
+        await GM.registerMenuCommand('Demo smoke menu', function (event) { result.menu = true; result.menuInput = {type:event.type,key:event.key,altKey:event.altKey,isTrusted:event.isTrusted}; });
         const notification = GM.notification({ silent: true, title: 'Demo smoke notification', text: 'Click to complete lifecycle test', onclick: function () { result.notificationClick = true; }, ondone: function () { result.notificationDone = true; } });
         notification.then(function (clicked) { result.notificationResolved = clicked; });
         const child = GM_openInTab('__BASE__/child', { active: false, insert: true, setParent: true });

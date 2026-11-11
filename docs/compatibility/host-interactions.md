@@ -12,7 +12,7 @@ Tags replace notifications belonging to the same installation in one host, not g
 
 Registration/removal share normalization and ordered submission. Numeric/string IDs update an execution's registration. Legacy registration returns an ID and modern registration resolves one; legacy removal returns undefined and modern removal resolves undefined. WPF merges same-installation name/title/access-key entries while retaining frame subscriptions, tooltips and autoClose behavior.
 
-The renderer creates a MouseEvent; native coordinates/modifiers and trusted browser activation are not transported. Callback failures do not prevent other subscribers. The later `clickedFrame` option is explicitly rejected. Frame navigation and unregister remove only their owned subscriptions.
+The renderer creates mouse/keyboard events from optional host-observed input fields, or a generic menucommand Event for unknown provenance. isTrusted stays false. clickedFrame:true requires the subscribing current document/frame; unknown frames are suppressed. Registration generations reject late clicks after an ID update; native manual menus capture a document target at open time. Frame navigation and unregister remove only their owned subscriptions. Fixed beta native click/overlap evidence is blocked by the unavailable computer-use native pipe; no click parity is claimed.
 
 ## Clipboard
 

@@ -322,6 +322,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                         _staticWebRequestPreparation = _staticWebRequests.InitializeAsync(_attachmentCancellation.Token);
                     }
                 }
+                browser.JavascriptMessageReceived += BrowserJavascriptMessageReceived;
                 Observe(InitializeIsolatedIfNeededAsync(), "MSC230_ISOLATED_PREPARATION_FAILED", null);
             }
             catch (Exception exception)
@@ -435,6 +436,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 session.Cancellation.Cancel();
 
             browser.FrameLoadEnd -= BrowserFrameLoadEnd;
+            browser.JavascriptMessageReceived -= BrowserJavascriptMessageReceived;
             var contextMenuProperty = GetContextMenuHandlerProperty(browser);
             if (contextMenuProperty != null && ReferenceEquals(contextMenuProperty.GetValue(browser, null), contextMenuHandler))
                 contextMenuProperty.SetValue(browser, contextMenuHandler.Previous, null);
@@ -541,7 +543,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
         // IBrowser.GetFrame(long) was renamed to GetFrameByIdentifier(string)
         // in newer CefSharp releases. Resolve either shape at runtime so the
         // adapter can be compiled against the host application's CefSharp.
-        private static IFrame GetFrameByIdentifier(IBrowser browser, string frameId)
+        internal static IFrame GetFrameByIdentifier(IBrowser browser, string frameId)
         {
             if (browser == null || frameId == null)
                 return null;
@@ -1173,38 +1175,62 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 browser.GetType().GetProperty("ContextMenuHandler", flags);
         }
 
-        private IReadOnlyList<ContextMenuEntry> GetContextMenuEntries(IFrame cefFrame)
+        private void BrowserJavascriptMessageReceived(object sender, JavascriptMessageReceivedEventArgs args)
+        {
+            if (args.Message is string proof && args.Frame != null && !args.Frame.IsDisposed)
+                _isolated?.ConfirmNativeMenuFrame(proof, GetFrameIdentifier(args.Frame), args.Frame.IsMain);
+        }
+
+        /// <summary>Resolves a menu subscriber against a native menu event frame, rejecting stale documents and unknown mappings.</summary>
+        /// <param name="nativeFrame">The native CEF event frame; never construct it from page-supplied IDs.</param>
+        /// <param name="request">The authenticated registration received by the menu service.</param>
+        /// <returns>The current subscribing frame to place in MenuCommandInvocation.Frame, or null if it cannot be attested.</returns>
+        public DocumentFrame ResolveMenuFrame(IFrame nativeFrame, MenuCommandRequest request)
+        {
+            var frame = request?.OriginFrame;
+            CefSharpIsolatedExecutor isolated;
+            string id;
+            bool main;
+            lock (_sync)
+            {
+                if (_browser == null || nativeFrame == null || nativeFrame.IsDisposed || frame == null ||
+                    frame.BrowserSessionId != _browserSessionId || nativeFrame.Browser.Identifier != _browser.GetBrowser().Identifier) return null;
+                id = GetFrameIdentifier(nativeFrame);
+                if (frame.ExecutionWorld != "isolated") return _sessions.TryGetValue(id, out var session) && session.Initialized && ReferenceEquals(session.Frame, frame) ? frame : null;
+                isolated = _isolated;
+                main = nativeFrame.IsMain;
+            }
+            return isolated?.OwnsNativeMenuFrame(frame, id, main) == true ? frame : null;
+        }
+
+        internal IReadOnlyList<CefSharpMenuTarget> GetContextMenuEntries(IFrame cefFrame)
         {
             FrameSession session;
             lock (_sync)
                 _sessions.TryGetValue(GetFrameIdentifier(cefFrame), out session);
-            if (session == null || !session.Initialized)
-                return new ContextMenuEntry[0];
-            var entries = _engine.GetContextMenuEntriesAsync(session.Frame, CancellationToken.None).GetAwaiter().GetResult().ToList();
-            if (cefFrame.IsMain && _isolated != null) entries.AddRange(_isolated.MainMenuAsync().GetAwaiter().GetResult());
+            var entries = new List<CefSharpMenuTarget>();
+            if (session != null && session.Initialized)
+                entries.AddRange(_engine.GetContextMenuEntriesAsync(session.Frame, CancellationToken.None).GetAwaiter().GetResult()
+                    .Select(entry => new CefSharpMenuTarget(entry, session.Frame, GetFrameIdentifier(cefFrame))));
+            if (_isolated != null) entries.AddRange(_isolated.MenuAsync(GetFrameIdentifier(cefFrame), cefFrame.IsMain).GetAwaiter().GetResult());
             return entries;
         }
 
-        private void ExecuteContextMenu(IFrame cefFrame, ScriptKey scriptKey)
+        internal void ExecuteContextMenu(IFrame cefFrame, CefSharpMenuTarget target)
         {
+            if (GetFrameIdentifier(cefFrame) != target.NativeFrameId) return;
+            if (target.Frame.ExecutionWorld == "isolated")
+            {
+                var executor = _isolated;
+                if (executor != null) Observe(executor.ExecuteMenuAsync(target.Frame.DocumentId, target.NativeFrameId, target.Entry.ScriptKey), "MSC104_CONTEXT_MENU_FAILED", null);
+                return;
+            }
             FrameSession session;
             lock (_sync)
                 _sessions.TryGetValue(GetFrameIdentifier(cefFrame), out session);
-            if (session == null)
+            if (session == null || session.Frame.DocumentId != target.Frame.DocumentId)
                 return;
-            if (cefFrame.IsMain && _isolated != null)
-            {
-                Observe(ExecuteMenuWithIsolatedAsync(session, scriptKey), "MSC104_CONTEXT_MENU_FAILED", session);
-                return;
-            }
-            Observe(ExecuteContextMenuAsync(session, scriptKey), "MSC104_CONTEXT_MENU_FAILED", session);
-        }
-
-        private async Task ExecuteMenuWithIsolatedAsync(FrameSession session, ScriptKey key)
-        {
-            var executor = _isolated;
-            if (executor != null && await executor.ExecuteMainMenuAsync(key).ConfigureAwait(false)) return;
-            await ExecuteContextMenuAsync(session, key).ConfigureAwait(false);
+            Observe(ExecuteContextMenuAsync(session, target.Entry.ScriptKey), "MSC104_CONTEXT_MENU_FAILED", session);
         }
 
         private async Task ExecuteContextMenuAsync(FrameSession session, ScriptKey scriptKey)
@@ -1332,8 +1358,8 @@ namespace Mzying2001.MonkeySharp.CefSharp
             private readonly CefSharpUserScriptHost _host;
             private readonly IContextMenuHandler _inner;
             private readonly object _sync = new object();
-            private readonly Dictionary<CefMenuCommand, ScriptKey> _commands =
-                new Dictionary<CefMenuCommand, ScriptKey>();
+            private readonly Dictionary<CefMenuCommand, CefSharpMenuTarget> _commands =
+                new Dictionary<CefMenuCommand, CefSharpMenuTarget>();
 
             public ContextMenuHandler(CefSharpUserScriptHost host, IContextMenuHandler inner)
             {
@@ -1355,8 +1381,8 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 for (var index = 0; index < entries.Count; index++)
                 {
                     var command = (CefMenuCommand)((int)CefMenuCommand.UserFirst + index);
-                    lock (_sync) _commands[command] = entries[index].ScriptKey;
-                    model.AddItem(command, entries[index].Title);
+                    lock (_sync) _commands[command] = entries[index];
+                    model.AddItem(command, entries[index].Entry.Title);
                 }
             }
 
@@ -1365,13 +1391,13 @@ namespace Mzying2001.MonkeySharp.CefSharp
             {
                 if (_inner != null && _inner.OnContextMenuCommand(browser, cefBrowser, frame, parameters, commandId, eventFlags))
                     return true;
-                ScriptKey scriptKey;
+                CefSharpMenuTarget target;
                 lock (_sync)
                 {
-                    if (!_commands.TryGetValue(commandId, out scriptKey))
+                    if (!_commands.TryGetValue(commandId, out target))
                         return false;
                 }
-                _host.ExecuteContextMenu(frame, scriptKey);
+                _host.ExecuteContextMenu(frame, target);
                 return true;
             }
 

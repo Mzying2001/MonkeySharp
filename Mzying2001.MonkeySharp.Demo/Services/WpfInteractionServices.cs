@@ -20,7 +20,7 @@ namespace Mzying2001.MonkeySharp.Demo.Services
 {
     public sealed partial class ScriptMenuCommand : ObservableObject
     {
-        internal readonly Dictionary<Action, bool> Subscribers = new Dictionary<Action, bool>();
+        internal readonly Dictionary<Action<MenuCommandInvocation>, bool> Subscribers = new Dictionary<Action<MenuCommandInvocation>, bool>();
         public string Label { get; }
         public string AccessKey { get; }
         public string Title { get; }
@@ -32,10 +32,10 @@ namespace Mzying2001.MonkeySharp.Demo.Services
         }
         internal void Changed() => OnPropertyChanged(nameof(StaysOpenOnClick));
         [RelayCommand]
-        private void Invoke()
+        private void Invoke(MenuCommandInvocation invocation)
         {
             foreach (var callback in Subscribers.Keys.ToArray())
-                try { callback(); } catch (Exception error) { System.Diagnostics.Trace.TraceError(error.ToString()); }
+                try { callback(invocation ?? new MenuCommandInvocation()); } catch (Exception error) { System.Diagnostics.Trace.TraceError(error.ToString()); }
         }
     }
 
@@ -45,7 +45,7 @@ namespace Mzying2001.MonkeySharp.Demo.Services
         private readonly Dispatcher _dispatcher;
         private readonly Dictionary<Tuple<string, string, string, string>, ScriptMenuCommand> _groups = new Dictionary<Tuple<string, string, string, string>, ScriptMenuCommand>();
         public WpfMenuService(BrowserTabViewModel tab, Dispatcher dispatcher) { _tab = tab; _dispatcher = dispatcher; }
-        public async Task<IMenuRegistration> RegisterAsync(MenuCommandRequest request, Action invoked, CancellationToken cancellationToken)
+        public async Task<IMenuRegistration> RegisterAsync(MenuCommandRequest request, Action<MenuCommandInvocation> invoked, CancellationToken cancellationToken)
         {
             return await _dispatcher.InvokeAsync(() =>
             {

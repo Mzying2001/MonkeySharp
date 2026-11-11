@@ -306,9 +306,15 @@
                         return true;
                     }
                     if (notification.event === "menu-command") {
-                        const handler = record.menuHandlers.get(data.commandId);
-                        if (!handler) return false;
-                        invokeHostCallback(record, handler, undefined, typeof MouseEvent === "function" ? new MouseEvent("click") : { type: "click" }, "menu");
+                        const entry = record.menuHandlers.get(data.commandId);
+                        if (!entry || data.generation && data.generation !== entry.generation) return false;
+                        const input = data.input || { kind: "unknown" };
+                        const init = {};
+                        for (const field of ["ctrlKey", "shiftKey", "altKey", "metaKey", "button", "key", "code"]) if (input[field] !== null && typeof input[field] !== "undefined") init[field] = input[field];
+                        const event = input.kind === "mouse" && typeof root.MouseEvent === "function" ? new root.MouseEvent("click", init) :
+                            input.kind === "keyboard" && typeof root.KeyboardEvent === "function" ? new root.KeyboardEvent("keydown", init) :
+                            typeof root.Event === "function" ? new root.Event("menucommand") : { type: "menucommand" };
+                        invokeHostCallback(record, entry.callback, undefined, event, "menu");
                         return true;
                     }
                     if (notification.event === "notification-click" || notification.event === "notification-done" || notification.event === "notification-error") {
@@ -412,6 +418,7 @@
                 record.tabHandlers.forEach(state => { state.onclose = null; });
                 record.tabHandlers.length = 0;
                 record.handlers.clear();
+                record.menuHandlers.clear();
                 record.valueListenerKeys.clear();
                 record.valueChangeSequences.clear();
                 record.pendingStorageMutations.length = 0;

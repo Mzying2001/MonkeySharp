@@ -428,6 +428,33 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Fact]
+        public async Task MenuClicksRequireCurrentHostFrameAndDiscardReleasedRegistrations()
+        {
+            var installation = await InstallAsync("// @grant GM.registerMenuCommand\n// @grant GM.unregisterMenuCommand");
+            var service = new FakeHostServices();
+            using (var provider = new HostInteractionApiProvider(menu: service))
+            {
+                var events = new List<ApiNotificationEventArgs>();
+                provider.Notification += (_, item) => events.Add(item);
+                var context = Context(installation, "GM.registerMenuCommand", new
+                { commandId = 31, name = "frame only", clickedFrame = true, generation = "first" });
+                await provider.InvokeAsync(context, CancellationToken.None);
+                service.InvokeMenu();
+                service.InvokeMenu(new MenuCommandInvocation { Frame = new DocumentFrame("browser", "next-document", "main",
+                    new Uri("https://example.com/"), true, TimingGuarantee.BestEffortDocumentStart) });
+                Assert.Empty(events);
+                service.InvokeMenu(new MenuCommandInvocation { Frame = context.Frame, Kind = "keyboard", Key = "s", CtrlKey = true });
+                var value = Json(Assert.Single(events).DataJson);
+                Assert.Equal("first", value.GetProperty("generation").GetString());
+                Assert.Equal("keyboard", value.GetProperty("input").GetProperty("kind").GetString());
+                Assert.True(value.GetProperty("input").GetProperty("ctrlKey").GetBoolean());
+                await provider.InvokeAsync(Context(installation, "GM.unregisterMenuCommand", new { commandId = 31 }), CancellationToken.None);
+                service.InvokeMenu(new MenuCommandInvocation { Frame = context.Frame });
+                Assert.Single(events);
+            }
+        }
+
+        [Fact]
         public async Task HostInteractionServicesReceiveValidatedRequestsAndMenuCallbacks()
         {
             var installation = await InstallAsync(
@@ -832,7 +859,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             public string DownloadMode => "browser";
             public bool CloseTabOnOpen;
             public OpenTabRequest OpenedTab;
-            private Action _menuCallback;
+            private Action<MenuCommandInvocation> _menuCallback;
             public FakeMenuRegistration MenuRegistration { get; } = new FakeMenuRegistration();
             public string ClipboardText { get; private set; }
             public OpenTabRequest OpenTab { get; private set; }
@@ -841,12 +868,12 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             public int CloseCalls { get; private set; }
             public int FocusCalls { get; private set; }
 
-            public Task<IMenuRegistration> RegisterAsync(MenuCommandRequest request, Action invoked, CancellationToken cancellationToken)
+            public Task<IMenuRegistration> RegisterAsync(MenuCommandRequest request, Action<MenuCommandInvocation> invoked, CancellationToken cancellationToken)
             {
                 _menuCallback = invoked;
                 return Task.FromResult<IMenuRegistration>(MenuRegistration);
             }
-            public void InvokeMenu() => _menuCallback();
+            public void InvokeMenu(MenuCommandInvocation input = null) => _menuCallback(input ?? new MenuCommandInvocation());
             public INotificationHandle Create(UserScriptNotificationRequest request, CancellationToken cancellationToken)
             {
                 Notification = request;

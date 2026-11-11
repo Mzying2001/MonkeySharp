@@ -304,9 +304,9 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 ["execution.documentStart"] = "best-effort",
                 ["execution.oopif"] = "unsupported",
                 ["execution.bfcache"] = "fresh-navigation-required",
-                ["execution.contextMenuFrame"] = "isolated-child-and-oopif-unsupported",
+                ["execution.contextMenuFrame"] = typeof(global::CefSharp.Cef).Assembly.GetName().Version.Major == 84 ? "same-process;oopif-unsupported" : "main-only;child-native-proof-unavailable",
                 ["GM.xmlHttpRequest.cookiePartition"] = "unsupported",
-                ["GM.registerMenuCommand.clickedFrame"] = "unsupported"
+                ["GM.registerMenuCommand.clickedFrame"] = "host-attested-document-required;unknown-frame-suppressed"
             };
             if (_http is CefSharpHttpRequestService || _http == null && _options.EnableDefaultNetworkServices)
                 status["GM.xmlHttpRequest.cookie"] = "unsupported:cef-urlrequest";

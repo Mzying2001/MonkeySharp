@@ -127,6 +127,9 @@
                                     <Style TargetType="MenuItem">
                                         <Setter Property="Header" Value="{Binding Label}" />
                                         <Setter Property="Command" Value="{Binding InvokeCommand}" />
+                                        <Setter Property="CommandParameter" Value="{Binding Tag, RelativeSource={RelativeSource Self}}" />
+                                        <EventSetter Event="PreviewMouseUp" Handler="ScriptMenuMouseUp" />
+                                        <EventSetter Event="PreviewKeyDown" Handler="ScriptMenuKeyDown" />
                                         <Setter Property="InputGestureText" Value="{Binding AccessKey}" />
                                         <Setter Property="ToolTip" Value="{Binding Title}" />
                                         <Setter Property="StaysOpenOnClick" Value="{Binding StaysOpenOnClick}" />

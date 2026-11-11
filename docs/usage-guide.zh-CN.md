@@ -216,7 +216,7 @@ document-idle 在 DOMContentLoaded 后调度，不等待缓慢资源的 load。�
 
 ## 信息与日志
 
-默认适配器在 GM.info.compatibility.capabilities 报告已知限制：execution.documentStart 为 best-effort，execution.oopif 不支持，execution.bfcache 要求新导航，execution.contextMenuFrame 的 isolated 子 frame/OOPIF 不支持；GM.xmlHttpRequest.cookie/.cookiePartition 不支持；GM.cookie.partitionKey 在 84 不支持、121 无 ancestor 维度、151 支持可序列化身份；没有可靠来源时 GM.audio.audible 不可用，GM.registerMenuCommand.clickedFrame 不支持。自定义后端的未知事实省略，不能将字段缺失或主 API 可用推断为细分能力已支持。
+默认适配器在 GM.info.compatibility.capabilities 报告已知限制：execution.documentStart 为 best-effort，execution.oopif 不支持，execution.bfcache 要求新导航，execution.contextMenuFrame 在 84 支持同进程 frame，121/151 仅主 frame，OOPIF 不支持；GM.xmlHttpRequest.cookie/.cookiePartition 不支持；GM.cookie.partitionKey 在 84 不支持、121 无 ancestor 维度、151 支持可序列化身份；没有可靠来源时 GM.audio.audible 不可用，GM.registerMenuCommand.clickedFrame 要求宿主证明当前文档/frame，未知 frame 时不派发。自定义后端的未知事实省略，不能将字段缺失或主 API 可用推断为细分能力已支持。
 
 ### GM.info / GM_info
 
@@ -474,9 +474,9 @@ XHR 主体分块传输；默认每个请求/响应体限制为 256 MiB，前 256
 
 ### GM.registerMenuCommand(name, callback, options_or_accessKey?)
 
-需要菜单授权及服务。第三参数可以是访问键字符串，或 `{id, accessKey, title, autoClose}`。id 是正整数或非空字符串，用于更新当前执行的已有注册，不存在则创建；省略时分配数字 ID。现代返回注册后的 `Promise<number|string>`，旧版立即返回 ID。更新和注销按调用顺序排队。回调收到渲染器创建的 MouseEvent（type 为 click），不包含原生鼠标坐标或键盘修饰键；回调异常单独报告。
+需要菜单授权及服务。第三参数可以是访问键字符串，或 `{id, accessKey, title, autoClose, clickedFrame}`。id 是正整数或非空字符串，用于更新当前执行的已有注册，不存在则创建；省略时分配数字 ID。现代返回注册后的 `Promise<number|string>`，旧版立即返回 ID。更新和注销按调用顺序排队。渲染器按原生输入事实创建 MouseEvent 或 KeyboardEvent，携带可取得的修饰键、鼠标键和 key/code；未知来源使用普通 menucommand Event。isTrusted 始终为 false，回调异常单独报告。
 
-Demo 将同一安装、同一标签页中 name/title/accessKey 相同的条目合并，点击时调用所有已订阅 frame 的回调。title 显示为提示，autoClose:false 保持菜单打开；合并项有任一订阅要求保持时即保持。注销或结束一个 frame 仅移除该 frame 的订阅，执行结束清理其命令。固定的 5.5.1 契约不支持后续版本的 clickedFrame 选项，会明确拒绝。
+Demo 将同一安装、同一标签页中 name/title/accessKey 相同的条目合并，点击时调用所有已订阅 frame 的回调。title 显示为提示，autoClose:false 保持菜单打开；合并项有任一订阅要求保持时即保持。注销或结束一个 frame 仅移除该 frame 的订阅，执行结束清理其命令。5.6.6242 的 clickedFrame 按每个订阅的可信当前文档/frame 过滤；false/省略保持广播。无法确定 frame 的入口（含 Demo 标签页弹出菜单）不派发 clickedFrame:true。合并条目分别保留各订阅的选项，固定 beta 重叠/点击一致性仍待原生证据。
 
 ### GM.unregisterMenuCommand(commandId)
 

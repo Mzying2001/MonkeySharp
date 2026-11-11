@@ -147,6 +147,7 @@ async function main() {
                 promise: {}, immediateReturn: { probe: "completed" }, effects: { automaticExecutions: received.length } };
         } else {
             await target.goto(`http://127.0.0.1:${server.address().port}/`);
+            if (path.basename(fixture) === 'p1-menus.user.js') await target.bringToFront();
             if (path.basename(fixture) === 'p0-urlchange.user.js') {
                 await target.waitForFunction(() => document.documentElement.dataset.urlProbeReady === 'true');
                 await target.waitForTimeout(500);
@@ -160,7 +161,7 @@ async function main() {
                     await target.waitForTimeout(1100);
                 }
             }
-            result = await Promise.race([evidence, new Promise((_, reject) => { deadline = setTimeout(() => reject(new Error("No userscript evidence within 20 seconds.")), 20000); })]).finally(() => clearTimeout(deadline));
+            result = await Promise.race([evidence, new Promise((_, reject) => { deadline = setTimeout(() => reject(new Error("No userscript evidence within fixture deadline.")), path.basename(fixture) === 'p1-menus.user.js' ? 600000 : 20000); })]).finally(() => clearTimeout(deadline));
         }
         result.effects.tabsBefore = tabsBefore;
         if (result.caseId === "private-tabs") {

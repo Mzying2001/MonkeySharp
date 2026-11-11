@@ -169,8 +169,9 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             Check("nativeProofScope", a.GetProperty("forgeryDenied").GetBoolean());
             Check("rawRunsOnce", (await ReadAsync("window.__rawControlCount === 1")).Value.GetBoolean());
             DocumentFrame[] main;
+            await WaitAsync(() => { lock (_sync) return Task.FromResult(_isolatedFrames.Values.Count(frame => frame.IsMainFrame && frame.Url.AbsolutePath == "/compat/isolated") == 3); });
             lock (_sync) main = _isolatedFrames.Values.Where(frame => frame.IsMainFrame && frame.Url.AbsolutePath == "/compat/isolated").ToArray();
-            Check("nativeIdentity", main.Length == 2 && main.All(frame => frame.FrameId.StartsWith("cdp:") && frame.ScriptScope.HasValue) && main.Select(frame => frame.DocumentId).Distinct().Count() == 2);
+            Check("nativeIdentity", main.Length == 3 && main.All(frame => frame.FrameId.StartsWith("cdp:") && frame.ScriptScope.HasValue) && main.Select(frame => frame.DocumentId).Distinct().Count() == 3);
             await ReadAsync("(history.pushState({},'', '/compat/isolated-spa'), true)");
             await WaitAsync(async () => (await ReadAsync(readA + ".changes.length === 1"))?.GetBoolean() == true);
             Check("urlchange", true);
@@ -183,6 +184,40 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             var child = await WaitResultAsync(readA, FindFrame("/compat/isolated-child"));
             Check("childFrame", child.GetProperty("privateValue").GetString() == "A" && child.GetProperty("committedValue").GetInt32() == 42);
             Check("childRawRunsOnce", (await ReadAsync("window.__rawControlCount === 1", FindFrame("/compat/isolated-child"))).Value.GetBoolean());
+            CefSharpMenuTarget capturedMenu = null;
+            foreach (var identifier in _browser.GetBrowser().GetFrameIdentifiers())
+                using (var native = CefSharpUserScriptHost.GetFrameByIdentifier(_browser.GetBrowser(), identifier.ToString()))
+                    if (native != null && native.Url.Contains("/compat/isolated-child"))
+                    {
+                        if (typeof(Cef).Assembly.GetName().Version.Major != 84)
+                        {
+                            Check("childMenuNativeProofUnavailable", !_host.GetContextMenuEntries(native).Any(item => item.Entry.Title == "Isolated manual frame"));
+                            continue;
+                        }
+                        await WaitAsync(() => Task.FromResult(_host.GetContextMenuEntries(native).Any(item => item.Entry.Title == "Isolated manual frame")));
+                        capturedMenu = _host.GetContextMenuEntries(native).Single(item => item.Entry.Title == "Isolated manual frame");
+                        Check("clickedFrameAttestation", ReferenceEquals(capturedMenu.Frame, _host.ResolveMenuFrame(native,
+                            new MenuCommandRequest(capturedMenu.Entry.ScriptKey, "frame", null, originFrame: capturedMenu.Frame, clickedFrame: true))));
+                        _host.ExecuteContextMenu(native, capturedMenu);
+                    }
+            if (capturedMenu != null)
+            {
+                Check("nativeChildMenuMapping", true);
+                await WaitAsync(async () => (await ReadAsync("document.documentElement.dataset.manualFrameCount === '1' && document.documentElement.dataset.manualFrameValue === 'ready'", FindFrame("/compat/isolated-child")))?.GetBoolean() == true);
+                Check("isolatedChildManualExecution", true);
+                await ReadAsync("(document.querySelector('iframe').src='/compat/isolated-child?replacement', true)");
+                await WaitAsync(async () => (await ReadAsync("location.search === '?replacement' && !document.documentElement.dataset.manualFrameCount", FindFrame("/compat/isolated-child")))?.GetBoolean() == true);
+                foreach (var identifier in _browser.GetBrowser().GetFrameIdentifiers())
+                    using (var native = CefSharpUserScriptHost.GetFrameByIdentifier(_browser.GetBrowser(), identifier.ToString()))
+                        if (native != null && native.Url.Contains("/compat/isolated-child"))
+                        {
+                            Check("staleClickedFrameRejected", _host.ResolveMenuFrame(native,
+                                new MenuCommandRequest(capturedMenu.Entry.ScriptKey, "frame", null, originFrame: capturedMenu.Frame, clickedFrame: true)) == null);
+                            _host.ExecuteContextMenu(native, capturedMenu);
+                        }
+                await Task.Delay(100);
+                Check("staleChildMenuRejected", (await ReadAsync("!document.documentElement.dataset.manualFrameCount", FindFrame("/compat/isolated-child"))).Value.GetBoolean());
+            }
             await ReadAsync("(function(){var f=document.createElement('iframe');f.id='isolated-blank';document.body.appendChild(f);var s=document.createElement('iframe');s.srcdoc='<html><body>srcdoc</body></html>';document.body.appendChild(s);return true;})()");
             await WaitAsync(() => Task.FromResult(FindFrame("blank") != null && FindFrame("srcdoc") != null));
             foreach (var path in new[] { "blank", "srcdoc" })

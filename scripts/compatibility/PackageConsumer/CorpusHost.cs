@@ -218,10 +218,10 @@ namespace MonkeySharp.Compatibility
             private void Ui(Action action) { if (_form.InvokeRequired) _form.Invoke(action); else action(); }
             public bool Has(string caption) => _items.Values.Any(value => value.EndsWith(caption, StringComparison.OrdinalIgnoreCase));
             public void Click(string caption) => _items.First(item => item.Value.IndexOf(caption, StringComparison.OrdinalIgnoreCase) >= 0).Key.PerformClick();
-            public Task<IMenuRegistration> RegisterAsync(MenuCommandRequest request, Action invoked, CancellationToken cancellationToken)
+            public Task<IMenuRegistration> RegisterAsync(MenuCommandRequest request, Action<MenuCommandInvocation> invoked, CancellationToken cancellationToken)
             {
                 ToolStripMenuItem item = null;
-                Ui(() => { item = new ToolStripMenuItem(request.Name); item.Click += (_, __) => invoked(); _items.Add(item, request.Name); _strip.Items.Add(item); });
+                Ui(() => { item = new ToolStripMenuItem(request.Name); item.Click += (_, __) => invoked(new MenuCommandInvocation()); _items.Add(item, request.Name); _strip.Items.Add(item); });
                 return Task.FromResult<IMenuRegistration>(new Registration(() => Ui(() => { _items.Remove(item); _strip.Items.Remove(item); item.Dispose(); })));
             }
             public void Dispose() { foreach (var item in _items.Keys.ToArray()) item.Dispose(); _items.Clear(); _strip.Dispose(); }

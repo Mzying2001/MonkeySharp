@@ -1,6 +1,7 @@
 using Mzying2001.MonkeySharp.Demo.Runtime;
 using Mzying2001.MonkeySharp.Demo.ViewModels;
 using Mzying2001.MonkeySharp.Demo.Views;
+using Mzying2001.MonkeySharp.Core.Apis;
 using System;
 using System.Threading;
 using System.Collections.Generic;
@@ -37,8 +38,39 @@ namespace Mzying2001.MonkeySharp.Demo
                 if (Keyboard.Modifiers != ModifierKeys.Alt) return;
                 var key = (args.Key == Key.System ? args.SystemKey : args.Key).ToString();
                 var command = runtime.MainWindow.SelectedTab?.MenuCommands.FirstOrDefault(item => string.Equals(item.AccessKey, key, StringComparison.OrdinalIgnoreCase));
-                if (command != null) { command.InvokeCommand.Execute(null); args.Handled = true; }
+                if (command != null) { command.InvokeCommand.Execute(MenuKeyboardInput(args)); args.Handled = true; }
             };
+        }
+
+        private static MenuCommandInvocation MenuModifiers(string kind)
+        {
+            var modifiers = Keyboard.Modifiers;
+            return new MenuCommandInvocation { Kind = kind, CtrlKey = modifiers.HasFlag(ModifierKeys.Control),
+                ShiftKey = modifiers.HasFlag(ModifierKeys.Shift), AltKey = modifiers.HasFlag(ModifierKeys.Alt), MetaKey = modifiers.HasFlag(ModifierKeys.Windows) };
+        }
+        private static MenuCommandInvocation MenuKeyboardInput(KeyEventArgs args)
+        {
+            var input = MenuModifiers("keyboard");
+            var key = args.Key == Key.System ? args.SystemKey : args.Key;
+            if (key >= Key.A && key <= Key.Z)
+            {
+                input.Code = "Key" + key;
+                input.Key = (input.ShiftKey == true ^ Keyboard.IsKeyToggled(Key.CapsLock)) ? key.ToString() : key.ToString().ToLowerInvariant();
+            }
+            else if (key == Key.Return) { input.Key = "Enter"; input.Code = "Enter"; }
+            else if (key == Key.Space) { input.Key = " "; input.Code = "Space"; }
+            return input;
+        }
+        private void ScriptMenuKeyDown(object sender, KeyEventArgs args)
+        {
+            if (sender is MenuItem item) item.Tag = MenuKeyboardInput(args);
+        }
+        private void ScriptMenuMouseUp(object sender, MouseButtonEventArgs args)
+        {
+            if (!(sender is MenuItem item)) return;
+            var input = MenuModifiers("mouse");
+            input.Button = args.ChangedButton == MouseButton.Left ? 0 : args.ChangedButton == MouseButton.Middle ? 1 : args.ChangedButton == MouseButton.Right ? 2 : (int?)null;
+            item.Tag = input;
         }
 
         private async void TabsChanged(object sender, NotifyCollectionChangedEventArgs args)

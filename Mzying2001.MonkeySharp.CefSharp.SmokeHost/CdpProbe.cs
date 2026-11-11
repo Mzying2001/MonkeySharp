@@ -52,11 +52,24 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             private readonly System.Windows.Forms.Timer _watchdog = new System.Windows.Forms.Timer { Interval = 60000 };
             private int _bindingContext;
             private int _cleared;
+            private readonly string _nativeMenuProof = "monkey-menu-proof:" + Guid.NewGuid().ToString("N");
+            private string _nativeMenuFrame;
+            private bool _nativeMenuMain;
+            private readonly TaskCompletionSource<bool> _menuMessage = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            private bool _menuFrameDisposed;
 
             internal ProbeForm(CefSharpUserScriptHost host, Uri url)
             {
                 _host = host; _url = url;
                 _browser = new ChromiumWebBrowser("about:blank") { Dock = DockStyle.Fill };
+                _browser.JavascriptMessageReceived += (_, args) =>
+                {
+                    if (args.Message as string != _nativeMenuProof) return;
+                    if (args.Frame == null || args.Frame.IsDisposed) { _menuFrameDisposed = true; _menuMessage.TrySetResult(true); return; }
+                    _nativeMenuMain = args.Frame.IsMain;
+                    _nativeMenuFrame = args.Frame.Identifier.ToString();
+                    _menuMessage.TrySetResult(true);
+                };
                 _host.Attach(_browser);
                 // Start waiting before control initialization, to identify prepared navigation.
                 var prepared = _host.PrepareAsync();
@@ -94,10 +107,29 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                     checks["realGmEventuallyReady"] = (await EvaluateAsync(session, "document.documentElement.dataset.gmStart")).GetString() == "value:resource";
                     var a = FindContext("monkeysharp-probe-A");
                     var b = FindContext("monkeysharp-probe-B");
+                    var nativeMenuMapping = await EvaluateAsync(session,
+                        "({cef:typeof CefSharp,post:typeof CefSharp==='object'?typeof CefSharp.PostMessage:'missing'})", a.Key);
                     checks["nativeFrameIdentity"] = a.Value.GetProperty("auxData").GetProperty("frameId").GetString() == b.Value.GetProperty("auxData").GetProperty("frameId").GetString();
                     checks["perScriptWorld"] = (await EvaluateAsync(session, "__privateProbe", a.Key)).GetString() == "A" &&
                         (await EvaluateAsync(session, "__privateProbe", b.Key)).GetString() == "B" &&
                         (await EvaluateAsync(session, "typeof __privateProbe")).GetString() == "undefined";
+                    await EvaluateAsync(session, "(function(){var f=document.createElement('iframe'); f.src='/probe/child';document.body.appendChild(f);return true;})()");
+                    await WaitAsync(async () => {
+                        foreach (var item in _contexts.ToArray())
+                            if (item.Value.GetProperty("name").GetString() == "monkeysharp-probe-A" && item.Value.GetProperty("auxData").GetProperty("frameId").GetString() != a.Value.GetProperty("auxData").GetProperty("frameId").GetString())
+                                try { if ((await EvaluateAsync(session, "location.pathname === '/probe/child'", item.Key)).GetBoolean()) return true; } catch (Exception) { }
+                        return false;
+                    });
+                    var child = _contexts.First(item => item.Value.GetProperty("name").GetString() == "monkeysharp-probe-A" &&
+                        item.Value.GetProperty("auxData").GetProperty("frameId").GetString() != a.Value.GetProperty("auxData").GetProperty("frameId").GetString());
+                    var childPostAvailable = (await EvaluateAsync(session, "typeof CefSharp==='object'&&typeof CefSharp.PostMessage==='function'", child.Key)).GetBoolean();
+                    if (childPostAvailable)
+                    {
+                        await EvaluateAsync(session, "CefSharp.PostMessage(" + JsonSerializer.Serialize(_nativeMenuProof) + ");true", child.Key);
+                        await WaitAsync(() => Task.FromResult(_menuMessage.Task.IsCompleted));
+                        checks["nativeMenuProofObserved"] = _menuMessage.Task.IsCompleted;
+                    }
+                    checks["nativeMenuFrameFailsClosed"] = !childPostAvailable || (_menuFrameDisposed ? _nativeMenuFrame == null : !_nativeMenuMain);
                     await session.ExecuteAsync("Runtime.addBinding", new { name = "__monkeysharpProbeBinding", executionContextId = a.Key });
                     await EvaluateAsync(session, "__monkeysharpProbeBinding('context-proof')", a.Key);
                     await WaitAsync(() => Task.FromResult(_bindingContext == a.Key));
@@ -134,7 +166,8 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                         type = "cdp-probe", status = checks.Values.All(value => value) ? "passed" : "failed",
                         cefSharpVersion = typeof(Cef).Assembly.GetName().Version.ToString(),
                         platform = Environment.Is64BitProcess ? "x64" : "x86", browser = version,
-                        checks, firstInline = first,
+                        checks, firstInline = first, nativeMenuMapping,
+                        nativeMenuFrame = new { cef = _nativeMenuFrame, cdp = child.Value.GetProperty("auxData").GetProperty("frameId").GetString(), main = _nativeMenuMain, disposed = _menuFrameDisposed, proven = _nativeMenuFrame != null, childPostAvailable },
                         strictGm = strictGm ? "observed-in-this-run-only" : "blocked",
                         timingReason = "current-host-bootstrap-asynchronous",
                         limitation = "Preinjection works; the current asynchronous GM bootstrap does not guarantee readiness before the first inline. No isolated privileged executor is enabled.",
