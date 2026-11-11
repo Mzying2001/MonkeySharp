@@ -204,7 +204,8 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                         ResponseType = ReadResponseType(context.Parameters)
                     }, context.Frame),
                 RaiseHttpNotification,
-                ReportHttpNotificationFailure, _options.MaxBinaryTransferBytes);
+                ReportHttpNotificationFailure, _options.MaxBinaryTransferBytes,
+                OptionalBoolean(context.Parameters, "incremental"));
             lock (_sessionLock)
             {
                 ThrowIfDisposed();
@@ -238,7 +239,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 throw new BridgeProtocolException(BridgeErrorCodes.Internal, "The HTTP service returned no operation.");
             session.Start(operation);
             var completion = CompleteHttpSessionAsync(context, session, operation);
-            if (session.Request.Options.ResponseType == UserScriptHttpResponseType.Stream)
+            if (session.Streaming)
             {
                 var winner = await Task.WhenAny(session.ResponseStarted, completion).ConfigureAwait(false);
                 if (winner == completion)
@@ -307,7 +308,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             if (!context.Parameters.TryGetProperty("offset", out var value) || value.ValueKind != JsonValueKind.Number || !value.TryGetInt64(out var offset) || offset < 0)
                 throw ProviderParameters.Invalid("offset must be a non-negative integer.");
             var chunk = await session.ReadResponseBodyAsync(offset, token).ConfigureAwait(false);
-            return ApiResult.FromValue(new { chunk = Convert.ToBase64String(chunk), offset,
+            return ApiResult.FromValue(new { chunk = Convert.ToBase64String(chunk), offset, total = session.ResponseTotal,
                 done = session.NetworkCompleted && offset + chunk.Length >= session.ResponseBodyLength });
         }
 
@@ -454,6 +455,10 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             private readonly int _maxBinaryBytes;
             private bool _networkCompleted;
             private Exception _networkError;
+            private long _readOffset;
+            public bool Incremental { get; }
+            public bool Streaming => Incremental || Request.Options.ResponseType == UserScriptHttpResponseType.Stream;
+            public long? ResponseTotal { get; private set; }
             private TaskCompletionSource<bool> _dataAvailable = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             public bool NetworkCompleted { get { lock (_sync) return _networkCompleted; } }
             private void SignalData() { var old = _dataAvailable; _dataAvailable = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously); old.TrySetResult(true); }
@@ -467,7 +472,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 int xhrId,
                 UserScriptHttpRequest request,
                 Action<HttpSession, string, object> notify,
-                Action<HttpSession, string, Exception> reportNotificationFailure, int maxBinaryBytes)
+                Action<HttpSession, string, Exception> reportNotificationFailure, int maxBinaryBytes, bool incremental)
             {
                 SessionId = sessionId;
                 ScriptKey = scriptKey;
@@ -479,6 +484,10 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 _notify = notify;
                 _reportNotificationFailure = reportNotificationFailure;
                 _maxBinaryBytes = maxBinaryBytes;
+                Incremental = incremental && !request.Options.Fetch &&
+                    (request.Options.ResponseType == UserScriptHttpResponseType.Text ||
+                     request.Options.ResponseType == UserScriptHttpResponseType.Json ||
+                     request.Options.ResponseType == UserScriptHttpResponseType.Document);
             }
 
             public string SessionId { get; }
@@ -555,6 +564,8 @@ namespace Mzying2001.MonkeySharp.Core.Apis
 
             public void OnDownloadProgress(long loaded, long? total)
             {
+                ResponseTotal = total;
+                if (Incremental) return; // Text progress is pulled with the body; no unbounded notification queue.
                 if (Request.Options.Fetch) return;
                 Notify("xhr-progress", new { xhrId = XhrId, loaded, total });
             }
@@ -583,8 +594,14 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                     {
                         ThrowIfDisposed();
                         if (_networkError != null) throw _networkError;
-                        if (_responseBody.Length > offset || _networkCompleted || Request.Options.ResponseType != UserScriptHttpResponseType.Stream)
-                            return _responseBody.Read(offset, HttpSpoolingBuffer.BridgeChunkSize);
+                        if (Incremental && offset != _readOffset)
+                            throw ProviderParameters.Invalid("The incremental HTTP body offset is out of sequence.");
+                        if (_responseBody.Length > offset || _networkCompleted || !Streaming)
+                        {
+                            var chunk = _responseBody.Read(offset, HttpSpoolingBuffer.BridgeChunkSize);
+                            if (Incremental) _readOffset += chunk.Length;
+                            return chunk;
+                        }
                         available = _dataAvailable.Task;
                     }
                     var canceled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);

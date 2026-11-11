@@ -422,7 +422,7 @@ attributes 是可选对象：textContent/innerHTML 设置内容，字符串 styl
 | `status`、`statusText` | HTTP 状态及描述，初始为 0/空字符串。 |
 | `responseHeaders` | 原始头字符串，保留重复响应头。 |
 | `response` | 文本；解析后的 JSON（空或非法 JSON 为 null）；ArrayBuffer；Blob；document 对应 XML Document；xml 对应文本；stream 对应 Uint8Array 数据块的 ReadableStream。 |
-| `responseText` | text/JSON/document/xml 的解码文本；arraybuffer/blob/stream 为 undefined。进度回调不保证提供逐步接收的文本主体。 |
+| `responseText` | text/JSON/document/xml 的解码文本；arraybuffer/blob/stream 为 undefined。非 fetch 的 text/JSON/document/xml 进度提供累计解码文本；text 的 response 同步提供该文本。 |
 | `responseXML` | document/xml 类型下 DOMParser 可用时的 XML Document，否则为 null。HTML MIME 使用 HTML 解析器，无效 XML 返回 null。 |
 | `context` | 原始 JavaScript context 值。 |
 
@@ -439,7 +439,7 @@ attributes 是可选对象：textContent/innerHTML 设置内容，字符串 styl
 
 XHR 主体分块传输；默认每个请求/响应体限制为 256 MiB，前 256 KiB 保存在内存，之后暂存到临时文件。这独立于普通桥接消息限制。JavaScript 侧仍会在内存中组装非流式响应，大响应优先使用 stream。
 
-**与 Tampermonkey 的差异：** 传输由 CefSharp/宿主实现；不支持代理和分区 Cookie 控制；DOMParser 的 XML/document 类型及 upload/signal 控制遵循 MonkeySharp 行为。显式 redirect 及 anonymous 会启用 fetch；进度回调不保证逐步解码的 responseText。两者当前文档都不支持同步请求，不应将这一共同限制写成 MonkeySharp 特有差异。参见[官方 XHR 参考](https://www.tampermonkey.net/documentation.php?q=GM_xmlhttpRequest)。
+**与 Tampermonkey 的差异：** 传输由 CefSharp/宿主实现；不支持代理和分区 Cookie 控制；DOMParser 的 XML/document 类型及 upload/signal 控制遵循 MonkeySharp 行为。显式 redirect 及 anonymous 会启用 fetch；文本进度采用 5.6.6242 预览契约，固定 beta 一致性另行记录。两者当前文档都不支持同步请求，不应将这一共同限制写成 MonkeySharp 特有差异。参见[官方 XHR 参考](https://www.tampermonkey.net/documentation.php?q=GM_xmlhttpRequest)。
 
 ```javascript
 // @grant GM.xmlHttpRequest
@@ -466,7 +466,7 @@ XHR 主体分块传输；默认每个请求/响应体限制为 256 MiB，前 256
 
 ### 二进制传输与流完成
 
-文本按声明字符集增量解码，保留跨分块的多字节字符；HTML MIME 使用 HTML 解析器，无效 XML 返回 null。显式 redirect 或 anonymous 会启用 fetch 语义，忽略传输 timeout/进度且只报告 readyState 4。HTTP stream 的 Promise 在响应头和流可用时兑现，后续失败通过流传播；onload/onloadend 随网络完成触发。renderer 每次按需拉取最多 64 KiB，宿主在 256 KiB 后转存磁盘，并受总预算约束。这限制桥接队列，但 CEF URLRequest 本身不能暂停网络源。暂存流在 EOF、取消或执行结束时释放；非流响应仍在 renderer 内组装。进度回调不保证逐步 responseText。
+文本按声明字符集增量解码，保留跨分块的多字节字符；HTML MIME 使用 HTML 解析器，无效 XML 返回 null。显式 redirect 或 anonymous 会启用 fetch 语义，忽略传输 timeout/进度且只报告 readyState 4。HTTP stream 的 Promise 在响应头和流可用时兑现，后续失败通过流传播；onload/onloadend 随网络完成触发。renderer 每次按需拉取最多 64 KiB，宿主在 256 KiB 后转存磁盘，并受总预算约束。这限制桥接队列，但 CEF URLRequest 本身不能暂停网络源。暂存流在 EOF、取消或执行结束时释放；非流响应仍在 renderer 内组装。文本进度在网络完成前通过同一个解码器拉取带 offset 的 64 KiB 增量，回调间隔至少 50 ms。JSON/document 仍在完成时解析；二进制/stream 不暴露部分文本。同一时刻只有一个主体读取，网络源仍受暂存总预算约束。无效字节采用 TextDecoder 替换语义。
 
 <a id="menus-notifications-and-clipboard"></a>
 

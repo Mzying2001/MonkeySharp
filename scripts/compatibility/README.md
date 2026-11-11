@@ -64,3 +64,7 @@ Baseline runs the source corpus. Delivery additionally runs it through every NuG
 Keep fixtures, corpus declarations and concise evidence in Git. Preserve hashed userscript LF bytes through `.gitattributes`; do not reformat binary or charset fixtures. Evidence names containing P0/P1/P2 identify historical runs and remain stable. Relocation does not change fixture hashes, recorded commits, statuses or historical artifact paths.
 
 The optional local corpus source is not redistributed or required by automated Core/JS tests. Temporary plans and full implementation diaries belong in ignored `local-notes/`; raw output belongs in `artifacts/`. Promote current behavior and limitations into the [maintained documentation](../../docs/README.md).
+
+## Pinned beta enhancements
+
+The [beta pin](reference-beta.json) selects 5.6.6242 separately from stable. Download the exact signed Chrome package from the official update service for gcalenpjmijncebpfijmoaglllgpjagf (package hash in the pin). Run `node scripts/compatibility/Unpack-Reference.cjs <signed.crx> <new-directory>` to verify the publisher signature and restore manifest.key for unpacked loading without changing executable source. Then pass reference-beta.json as the fifth Run-Reference.cjs argument. See [P1 progress and acquisition caveats](../../docs/compatibility/p1-follow-up.md); old failed results remain intact.

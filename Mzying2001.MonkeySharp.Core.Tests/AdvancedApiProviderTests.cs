@@ -350,6 +350,58 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Fact]
+        public async Task IncrementalTextPullWaitsForDataAndEnforcesOffsetsWithoutPushProgress()
+        {
+            var installation = await InstallAsync("// @grant GM.xmlHttpRequest\n// @connect api.example.com");
+            var response = new UserScriptHttpResponse(200, "OK", new Uri("https://api.example.com/"),
+                new Dictionary<string, string>(), "", "text/plain", "utf-8");
+            var service = new ControlledHttpService(response);
+            using (var provider = new ResourceAndNetworkApiProvider(http: service))
+            {
+                var events = new ConcurrentQueue<ApiNotificationEventArgs>();
+                provider.Notification += (_, item) => events.Enqueue(item);
+                var created = await provider.InvokeAsync(Context(installation, "GM.xmlHttpRequest", new
+                { operation = "create", xhrId = 19, url = "https://api.example.com/", incremental = true }), CancellationToken.None);
+                var sessionId = Json(created.Json).GetProperty("sessionId").GetString();
+                var headers = await provider.InvokeAsync(Context(installation, "GM.xmlHttpRequest", new
+                { operation = "execute", sessionId }), CancellationToken.None);
+                Assert.True(Json(headers.Json).GetProperty("streaming").GetBoolean());
+                Assert.False(service.Completed.Task.IsCompleted);
+                var read = provider.InvokeAsync(Context(installation, "GM.xmlHttpRequest", new
+                { operation = "readBody", sessionId, offset = 0 }), CancellationToken.None);
+                Assert.False(read.IsCompleted);
+                var bytes = new byte[70000];
+                service.Observer.OnResponseData(bytes, 0, bytes.Length);
+                service.Observer.OnDownloadProgress(bytes.Length, null);
+                var part = Json((await read).Json);
+                Assert.Equal(65536, Convert.FromBase64String(part.GetProperty("chunk").GetString()).Length);
+                Assert.False(part.GetProperty("done").GetBoolean());
+                await Assert.ThrowsAsync<BridgeProtocolException>(() => provider.InvokeAsync(Context(installation, "GM.xmlHttpRequest", new
+                { operation = "readBody", sessionId, offset = 0 }), CancellationToken.None));
+                Assert.DoesNotContain(events, item => item.EventName == "xhr-progress");
+                service.Completed.SetResult(response);
+                await provider.InvokeAsync(Context(installation, "GM.xmlHttpRequest", new
+                { operation = "readBody", sessionId, offset = 65536 }), CancellationToken.None);
+                var final = await provider.InvokeAsync(Context(installation, "GM.xmlHttpRequest", new
+                { operation = "readBody", sessionId, offset = 70000 }), CancellationToken.None);
+                Assert.True(Json(final.Json).GetProperty("done").GetBoolean());
+            }
+        }
+
+        private sealed class ControlledHttpService : IHttpRequestService, IHttpRequestOperation
+        {
+            private readonly UserScriptHttpResponse _response;
+            public ControlledHttpService(UserScriptHttpResponse response) { _response = response; }
+            public IUserScriptHttpObserver Observer { get; private set; }
+            public TaskCompletionSource<UserScriptHttpResponse> Completed { get; } =
+                new TaskCompletionSource<UserScriptHttpResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
+            public Task<UserScriptHttpResponse> Completion => Completed.Task;
+            public void Abort() => Completed.TrySetCanceled();
+            public IHttpRequestOperation SendAsync(UserScriptHttpRequest request, IUserScriptHttpObserver observer, CancellationToken token)
+            { Observer = observer; observer.OnResponseStarted(_response); return this; }
+        }
+
+        [Fact]
         public async Task HttpNotificationCallbackFailuresProduceDiagnostics()
         {
             var installation = await InstallAsync("// @grant GM.xmlHttpRequest\n// @connect api.example.com");

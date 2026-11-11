@@ -578,6 +578,39 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                         await WriteChunkedAsync(stream).ConfigureAwait(false);
                         return;
                     }
+                    if (request.Path == "/compat/progress-gzip")
+                    {
+                        byte[] compressed;
+                        using (var memory = new MemoryStream())
+                        {
+                            using (var gzip = new System.IO.Compression.GZipStream(memory, System.IO.Compression.CompressionMode.Compress, true))
+                            {
+                                var text = Encoding.UTF8.GetBytes("a你好");
+                                gzip.Write(text, 0, text.Length);
+                            }
+                            compressed = memory.ToArray();
+                        }
+                        await WriteResponseAsync(stream, 200, "OK", "text/plain; charset=utf-8",
+                            new Dictionary<string, string> { ["Content-Encoding"] = "gzip" }, compressed).ConfigureAwait(false);
+                        return;
+                    }
+                    if (request.Path == "/compat/progress")
+                    {
+                        var header = Encoding.ASCII.GetBytes("HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n");
+                        await stream.WriteAsync(header, 0, header.Length).ConfigureAwait(false);
+                        foreach (var segment in new[] { new byte[] { 97, 228, 189 }, new byte[] { 160, 229, 165, 189 } })
+                        {
+                            var prefix = Encoding.ASCII.GetBytes(segment.Length.ToString("X") + "\r\n");
+                            await stream.WriteAsync(prefix, 0, prefix.Length).ConfigureAwait(false);
+                            await stream.WriteAsync(segment, 0, segment.Length).ConfigureAwait(false);
+                            await stream.WriteAsync(new byte[] { 13, 10 }, 0, 2).ConfigureAwait(false);
+                            await stream.FlushAsync().ConfigureAwait(false);
+                            await Task.Delay(350).ConfigureAwait(false);
+                        }
+                        var end = Encoding.ASCII.GetBytes("0\r\n\r\n");
+                        await stream.WriteAsync(end, 0, end.Length).ConfigureAwait(false);
+                        return;
+                    }
                     if (request.Path == "/slow") await Task.Delay(500).ConfigureAwait(false);
 
                     var status = 200;

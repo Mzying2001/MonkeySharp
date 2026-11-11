@@ -401,7 +401,7 @@ Objects/arrays are sent as JSON, URLSearchParams as form encoding, and FormData 
 | `status`, `statusText` | HTTP status and text; initially 0/empty. |
 | `responseHeaders` | Raw header string, preserving repeated headers. |
 | `response` | Text string; parsed JSON (invalid/empty JSON gives `null`); ArrayBuffer; Blob; XML Document for `document`; text for `xml`; or ReadableStream of Uint8Array for `stream`. |
-| `responseText` | Decoded text for text/JSON/document/xml; `undefined` for arraybuffer/blob/stream. No incremental text-body guarantee in progress callbacks. |
+| `responseText` | Decoded text for text/JSON/document/xml; `undefined` for arraybuffer/blob/stream. Non-fetch text/JSON/document/xml progress exposes cumulative decoded text; text responses also expose it as response. |
 | `responseXML` | Parsed XML Document for document/xml when DOMParser is available; otherwise `null`. HTML MIME uses the HTML parser; invalid XML returns null. |
 | `context` | Original JavaScript context value. |
 
@@ -418,7 +418,7 @@ Callbacks run with `this` set to the response state. Modern preflight validation
 
 XHR bodies are transferred in chunks; the default total limit is 256 MiB per body, keeps the first 256 KiB in memory, then spools to temporary files. This is separate from ordinary bridge-message limits. The JavaScript side still assembles non-stream response bodies in memory. Prefer `stream` for large responses.
 
-**Tampermonkey differences:** transport is CefSharp/host-backed; proxy and partitioned-cookie controls are absent; DOMParser XML/document types and the upload/signal controls are MonkeySharp behavior. Explicit redirect mode and anonymous requests imply fetch mode. Progress does not promise progressively decoded responseText. Synchronous requests are unsupported in both current documented APIs; do not treat that shared restriction as a MonkeySharp-only difference. Compare the [official XHR reference](https://www.tampermonkey.net/documentation.php?q=GM_xmlhttpRequest).
+**Tampermonkey differences:** transport is CefSharp/host-backed; proxy and partitioned-cookie controls are absent; DOMParser XML/document types and the upload/signal controls are MonkeySharp behavior. Explicit redirect mode and anonymous requests imply fetch mode. Text progress follows the 5.6.6242 preview contract; pinned beta parity is recorded separately. Synchronous requests are unsupported in both current documented APIs; do not treat that shared restriction as a MonkeySharp-only difference. Compare the [official XHR reference](https://www.tampermonkey.net/documentation.php?q=GM_xmlhttpRequest).
 
 ```javascript
 // @grant GM.xmlHttpRequest
@@ -445,7 +445,7 @@ Permission prompts identify the installed script, capability and exact target or
 
 ### Binary transport and stream completion
 
-Text decoding preserves split multibyte sequences and declared charsets. HTML MIME uses DOMParser's HTML parser; invalid XML returns null. HTTP stream Promises resolve when headers and the stream are available. Subsequent failures error the stream; onload/onloadend follow network completion independently of consumer speed. The renderer pulls at most 64 KiB at a time; the host spools unread bytes (256 KiB in memory, then disk) within the total budget. This bounds bridge queues; CEF URLRequest cannot pause the network source itself. Stream spools live until EOF/cancel/execution end. Non-stream responses are assembled in renderer memory. Progress does not guarantee partial responseText.
+Text decoding preserves split multibyte sequences and declared charsets. HTML MIME uses DOMParser's HTML parser; invalid XML returns null. HTTP stream Promises resolve when headers and the stream are available. Subsequent failures error the stream; onload/onloadend follow network completion independently of consumer speed. The renderer pulls at most 64 KiB at a time; the host spools unread bytes (256 KiB in memory, then disk) within the total budget. This bounds bridge queues; CEF URLRequest cannot pause the network source itself. Stream spools live until EOF/cancel/execution end. Non-stream responses are assembled in renderer memory. Text progress pulls indexed 64 KiB increments through one decoder before network completion, with callbacks at most once per 50 ms plus the final data chunk. JSON/document parsing still occurs at completion; binary/stream data is never exposed as partial text. Only one body read is outstanding; the network source remains subject to the total spool budget. Invalid byte sequences use TextDecoder replacement semantics.
 
 ## Menus, notifications, and clipboard
 

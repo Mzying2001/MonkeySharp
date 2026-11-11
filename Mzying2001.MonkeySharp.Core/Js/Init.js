@@ -364,9 +364,8 @@
                         const handler = record.xhrHandlers.get(data.xhrId);
                         if (!handler) return false;
                         if (notification.event === "xhr-state") {
-                            updateHttpState(handler, data);
                             if (data.readyState === 4 && handler.deferState4) handler.pendingState4 = true;
-                            else invokeHttpCallback(handler, "onreadystatechange");
+                            else { updateHttpState(handler, data); invokeHttpCallback(handler, "onreadystatechange"); }
                             if (data.readyState === 1) invokeHttpCallback(handler, "onloadstart");
                         } else if (notification.event === "xhr-progress") {
                             invokeHttpCallback(handler, "onprogress", httpProgress(handler, data));

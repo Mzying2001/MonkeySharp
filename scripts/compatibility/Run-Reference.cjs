@@ -40,6 +40,10 @@ async function main() {
                 else { received.push(value); resolveEvidence(value); }
                 response.end("ok");
             });
+        } else if (request.url.startsWith('/p1-progress')) {
+            response.setHeader('Content-Type', 'text/plain; charset=utf-8');
+            response.write(Buffer.from([97, 228, 189]));
+            setTimeout(() => response.end(Buffer.from([160, 229, 165, 189])), 700);
         } else if (request.url.startsWith('/cookie-echo') || request.url.startsWith('/cookie-redirect')) {
             if (request.url.startsWith('/cookie-redirect')) { response.statusCode = 302; response.setHeader('Location', '/cookie-echo'); }
             response.setHeader('Content-Type', 'text/plain');
@@ -161,7 +165,13 @@ async function main() {
             result.effects.afterManagerReload = privateReloadEvidence;
         }
         result.effects.tabsAfter = await worker.evaluate(() => chrome.tabs.query({}).then(tabs => tabs.length));
-        const checks = result.caseId === 'p0-dom' ? {
+        const checks = result.caseId === 'p1-progress' ? {
+            noError: !result.effects.error,
+            partialText: result.events.some(event => event.name === 'progress' && event.text === 'a'),
+            finalText: result.effects.text === 'a你好',
+            decoderBoundary: result.events.filter(event => event.name === 'progress').every(event => !event.text?.includes('\ufffd')),
+            fetchProgressObserved: result.effects.fetchProgress > 0
+        } : result.caseId === 'p0-dom' ? {
             invalidCreation: ['invalidTag', 'invalidAttribute', 'invalidParent', 'emptyTag'].every(name =>
                 result.immediateReturn[name] === 'null' && result.promise[name]?.state === 'fulfilled' && result.promise[name]?.value === 'null'),
             invalidType: result.immediateReturn.invalidType === 'throws:TypeError' && result.promise.invalidType?.state === 'rejected',

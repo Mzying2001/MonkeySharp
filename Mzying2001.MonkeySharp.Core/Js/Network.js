@@ -209,7 +209,14 @@
                         state.readyState = 2; if (!fetchMode) invokeHttpCallback(handler, "onreadystatechange");
                         if (type === "stream") { state.responseText = undefined; resolve(state); return; }
                         let text = "";
-                        while (offset < blob.size) { const bytes = await next(); text += decoder.decode(bytes, { stream: true }); state.readyState = 3; if (!fetchMode) invokeHttpCallback(handler, "onprogress", httpProgress(handler, { loaded: offset, total: blob.size })); }
+                        while (offset < blob.size) {
+                            const bytes = await next(); text += decoder.decode(bytes, { stream: true }); state.readyState = 3;
+                            if (["text", "json", "document", "xml"].includes(type)) {
+                                state.responseText = text;
+                                if (type === "text") state.response = text;
+                            } else state.responseText = undefined;
+                            if (!fetchMode) invokeHttpCallback(handler, "onprogress", httpProgress(handler, { loaded: offset, total: blob.size }));
+                        }
                         text += decoder.decode(); state.responseText = text;
                         if (type === "arraybuffer") { state.responseText = undefined; state.response = await blob.arrayBuffer(); }
                         else if (type === "blob") { state.responseText = undefined; state.response = blob.slice(0, blob.size, mime); }
@@ -314,6 +321,7 @@
                             throw new TypeError("responseType is not supported.");
                         }
                         parameters.responseType = effectiveResponseType;
+                        parameters.incremental = !parameters.fetch && ["text", "json", "document", "xml"].includes(effectiveResponseType);
                         parameters.binary = binaryRequest;
                         if (details.signal && (typeof details.signal.addEventListener !== "function" ||
                             typeof details.signal.removeEventListener !== "function")) {
@@ -335,7 +343,7 @@
                             response: null,
                             responseXML: null,
                             responseHeaders: "",
-                            responseText: "",
+                            responseText: ["arraybuffer", "blob", "stream"].includes(effectiveResponseType) ? undefined : "",
                             status: 0,
                             statusText: ""
                         };
@@ -431,14 +439,26 @@
                                 try { decoder = new TextDecoder(response.charset || "utf-8"); } catch (_) { decoder = new TextDecoder(); }
                                 let responseText = "";
                                 let length = 0;
-                                while (length < response.bodyLength) {
+                                let lastProgress = 0;
+                                while (response.streaming || length < response.bodyLength) {
                                     const result = await call(record, "GM.xmlHttpRequest", {
                                         operation: "readBody", sessionId: sessionId, offset: length
                                     }, signal);
+                                    if (typeof result.offset === "number" && result.offset !== length) throw new Error("The HTTP body offset is out of sequence.");
                                     const chunk = decodeHttpChunk(result.chunk);
                                     if (binaryResponse) chunks.push(chunk); else responseText += decoder.decode(chunk, { stream: true });
                                     length += chunk.length;
+                                    if (parameters.incremental && response.streaming && chunk.length) {
+                                        state.readyState = 3;
+                                        state.responseText = responseText;
+                                        if (effectiveResponseType === "text") state.response = responseText;
+                                        if (Date.now() - lastProgress >= 50 || result.done) {
+                                            lastProgress = Date.now();
+                                            invokeHttpCallback(handler, "onprogress", httpProgress(handler, { loaded: length, total: result.total }));
+                                        }
+                                    }
                                     if (result.done) break;
+                                    if (!chunk.length && !response.streaming) throw new Error("The HTTP body ended before its declared length.");
                                 }
                                 const responseBytes = new Uint8Array(binaryResponse ? length : 0);
                                 let bodyOffset = 0;
@@ -474,7 +494,8 @@
                                     state.responseText = responseText;
                                     state.response = responseText;
                                 }
-                                if (handler.pendingState4) invokeHttpCallback(handler, "onreadystatechange");
+                                state.readyState = 4;
+                                invokeHttpCallback(handler, "onreadystatechange");
                                 invokeHttpCallback(handler, "onload");
                                 invokeHttpCallback(handler, "onloadend");
                                 handler.terminal = true;
@@ -482,6 +503,7 @@
                             } catch (error) {
                                 handler.failed = true;
                                 streamReady();
+                                if (handler.terminal) throw error;
                                 if (handler.streamController) try { handler.streamController.error(error); } catch (_) { }
                                 const callbackError = legacyError(error);
                                 callbackError.name = error && error.name === "AbortError" ||

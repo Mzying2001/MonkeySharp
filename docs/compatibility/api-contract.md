@@ -71,3 +71,5 @@ The grant and [storage-authority probes](../../scripts/compatibility/evidence/ta
 ## Real-script corpus intake
 
 The original probes are not third-party compatibility evidence. The [corpus manifest](../../scripts/compatibility/corpus.json) pins unmodified third-party source and licenses for seven executable categories and preserves optional historical local-script provenance. Intake ready status is separate from actual pass/limit/block/failure records. Classify failures as syntax, GM contract, matching, authorization or world/CSP. See [corpus scope](../../scripts/compatibility/corpus/README.md) and [current evidence gaps](p0-follow-up.md).
+
+The [P1 incremental text implementation](p1-follow-up.md) follows the 5.6.6242 non-fetch text progress observation. Fetch progress remains an explicitly recorded difference.

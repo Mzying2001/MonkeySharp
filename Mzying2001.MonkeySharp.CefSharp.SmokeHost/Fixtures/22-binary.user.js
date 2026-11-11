@@ -34,6 +34,20 @@
             const params = await GM.xmlHttpRequest({ url: '/echo', method: 'POST', data: new URLSearchParams({ key: 'a b' }) });
             r.searchParams = params.responseText === 'key=a+b';
             const latin = await GM.xmlHttpRequest({ url: '/compat/latin' }); r.charset = latin.responseText === 'caf\u00e9';
+            const prefixes = [];
+            const progressive = await GM.xmlHttpRequest({ url: '/compat/progress', onprogress(value) {
+                prefixes.push(value.responseText);
+                r.progressState = value.readyState === 3 && value.response === value.responseText;
+            } });
+            r.progress = prefixes.includes('a') && progressive.responseText === 'a\u4f60\u597d' && !prefixes.some(text => text.includes('\ufffd'));
+            r.progressGzip = (await GM.xmlHttpRequest({ url: '/compat/progress-gzip' })).responseText === 'a\u4f60\u597d';
+            let partialAborts = 0, partialLoads = 0;
+            const partial = GM.xmlHttpRequest({ url: '/compat/progress', onprogress() { partial.abort(); },
+                onabort() { partialAborts++; }, onload() { partialLoads++; } });
+            r.progressAbort = await partial.then(() => false, () => partialAborts === 1 && partialLoads === 0);
+            let partialTimeouts = 0;
+            r.progressTimeout = await GM.xmlHttpRequest({ url: '/compat/progress', timeout: 150,
+                ontimeout() { partialTimeouts++; } }).then(() => false, () => partialTimeouts === 1);
             const html = await GM.xmlHttpRequest({ url: '/compat/html', responseType: 'document' }); r.html = html.response.title === 'parsed html';
             const boundary = 'x'.repeat(65535) + '\u4f60\u597d';
             const utf8 = await GM.xmlHttpRequest({ url: '/echo', method: 'POST', data: boundary }); r.decoderBoundary = utf8.responseText === boundary;
