@@ -22,12 +22,14 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
 {
     internal static class Program
     {
+        internal static bool EnableBackForwardCacheProbe { get; private set; }
         [STAThread]
         private static void Main(string[] args)
         {
             if (args.Length == 3 && args[0] == "--corpus") { Environment.ExitCode = global::MonkeySharp.Compatibility.CorpusHost.Run(args[1], args[2]); return; }
             CefSharpSettings.WcfEnabled = false;
             CefSharpSettings.ConcurrentTaskExecution = true;
+            if (args.Contains("--bfcache-probe")) CefSharpSettings.ShutdownOnExit = false;
             var cachePath = Path.Combine(Path.GetTempPath(), "MonkeySharpSmoke", Guid.NewGuid().ToString("N"));
             var settings = new CefSettings
             {
@@ -37,12 +39,15 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             settings.CefCommandLineArgs.Add("ignore-certificate-errors", "1");
             settings.CefCommandLineArgs.Add("host-resolver-rules", "MAP cookie.monkeysharp.test 127.0.0.1");
             settings.CefCommandLineArgs.Add("autoplay-policy", "no-user-gesture-required");
+            EnableBackForwardCacheProbe = args.Contains("--enable-bfcache");
+            if (EnableBackForwardCacheProbe) settings.CefCommandLineArgs.Add("enable-features", "BackForwardCache");
             if (!Cef.Initialize(settings))
                 throw new InvalidOperationException("CefSharp initialization failed.");
 
             try
             {
                 if (args.Contains("--cdp-probe")) CdpProbe.RunAsync().GetAwaiter().GetResult();
+                else if (args.Contains("--bfcache-probe")) BfcacheProbe.RunAsync().GetAwaiter().GetResult();
                 else RunAsync().GetAwaiter().GetResult();
             }
             finally
@@ -576,6 +581,17 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                     if (request.Path == "/stream")
                     {
                         await WriteChunkedAsync(stream).ConfigureAwait(false);
+                        return;
+                    }
+                    if (request.Path == "/probe/bfcache-a" || request.Path == "/probe/bfcache-b")
+                    {
+                        var page = "<!doctype html><title>" + (request.Path.EndsWith("-a") ? "cache-a" : "cache-b") + "</title><script>" +
+                            "window.__cacheProbe={nonce:Math.random().toString(36),events:[]};addEventListener('pageshow',function(e){__cacheProbe.events.push({type:'show',persisted:e.persisted});});" +
+                            "addEventListener('pagehide',function(e){__cacheProbe.events.push({type:'hide',persisted:e.persisted});});</script><body>cache probe</body>";
+                        var pageBytes = Encoding.UTF8.GetBytes(page);
+                        var headerBytes = Encoding.ASCII.GetBytes("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nCache-Control: public,max-age=600\r\nContent-Length: " + pageBytes.Length + "\r\nConnection: close\r\n\r\n");
+                        await stream.WriteAsync(headerBytes, 0, headerBytes.Length).ConfigureAwait(false);
+                        await stream.WriteAsync(pageBytes, 0, pageBytes.Length).ConfigureAwait(false);
                         return;
                     }
                     if (request.Path == "/compat/body-redirect")

@@ -68,3 +68,7 @@ The optional local corpus source is not redistributed or required by automated C
 ## Pinned beta enhancements
 
 The [beta pin](reference-beta.json) selects 5.6.6242 separately from stable. Download the exact signed Chrome package from the official update service for gcalenpjmijncebpfijmoaglllgpjagf (package hash in the pin). Run `node scripts/compatibility/Unpack-Reference.cjs <signed.crx> <new-directory>` to verify the publisher signature and restore manifest.key for unpacked loading without changing executable source. Then pass reference-beta.json as the fifth Run-Reference.cjs argument. See [P1 progress and acquisition caveats](../../docs/compatibility/p1-follow-up.md); old failed results remain intact.
+
+## Native feasibility probes
+
+`./scripts/compatibility/Run-NativeProbe.ps1 -Probe bfcache -Platform x64 -CefSharpVersion 121.3.70` builds and launches isolated native experiments, records actual version/architecture and rejects missing records or failed process exits. `-EnableBackForwardCache` tests explicit enablement; `-NoBuild` reuses an already matching build. Choose a new OutputDirectory for each attempt. A completed assessment does not turn an unobserved capability into supported behavior.
