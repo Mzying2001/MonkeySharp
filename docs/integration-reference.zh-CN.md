@@ -210,13 +210,13 @@ profile 处理、保存文件/剪贴板例外及脚本行为见[私密浏览](us
 
 `PrepareAsync()` 准备当前附加会话的共享 CDP；`NavigateAsync(url)` 等待准备后导航。使用该顺序时，浏览器应以 `about:blank` 初始化。`IsLateAttach` 与 `IsLatePreparation` 分别标记附加、准备发生时初始化已完成。这些 API 不提高用户脚本的时序保证。参见[真实协议实验结论](compatibility/execution-worlds.md#protocol-session-and-preparation)。
 
-适配器为每个框架文档建立身份，并对每个 `(document, frame, script, run-at)` 组合执行一次。`@run-at context-menu` 脚本会按当前 frame 匹配规则出现在 CefSharp 原生上下文菜单中，只有用户选择菜单项后才创建一次新的执行。导航、上下文释放和分离使文档能力失效并取消待处理调用；已接受下载继续作为宿主任务运行，文档回调停止。宿主释放时取消这些任务。
+适配器为每个框架文档建立身份，并对每个 `(document, frame, script, run-at)` 组合执行一次。`@run-at context-menu` 脚本会按当前 frame 匹配规则出现在 CefSharp 原生上下文菜单中，只有用户选择菜单项后才创建一次新的执行。导航、上下文释放和分离使文档能力失效并取消待处理调用；`ContextReleased` 和 `NavigationSuperseded` 都会结束该文档的执行。已接受下载继续作为宿主任务运行，文档回调停止。宿主释放时取消这些任务。
 
 `GM.info` 是每次执行固定的信息快照，后续执行使用当前文档 URL 和环境事实。同文档 URL 变化不会重新注入脚本；SPA 更新请使用已授权的 [window.onurlchange API](usage-guide.zh-CN.md#window-extensions)。
 
 CefSharp 只能提供尽力而为的 document-start 钩子。相应执行产生 `MSR100_DOCUMENT_START_BEST_EFFORT`；设置 `RequireGuaranteedDocumentStart = true` 后会跳过并产生 `MSR101_DOCUMENT_START_UNAVAILABLE`。
 
-匹配前，适配器读取当前 renderer 的 `location.href`，因为旧版 CefSharp 的 context-created 回调可能仍携带上次导航 URL。读取失败时跳过该文档，包括 load fallback 及上下文菜单执行。document-start 仍为尽力执行。
+匹配前，适配器读取当前 renderer 的 `location.href`，因为旧版 CefSharp 的 context-created 回调可能仍携带上次导航 URL。只读求值取消后，在本次初始化的 15 秒总期限内重试；每次求值最多两秒，重试间隔为不超过剩余期限的 50 ms。调用方取消、分离、文档会话被替换或原生 frame 失效时停止初始化，不回退使用过期的回调 URL。耗尽求值期限会产生初始化诊断，其中包含 `TimeoutException` 和最后一次取消异常。读取失败时跳过该文档，包括 load fallback 及上下文菜单执行。document-start 仍为尽力执行。
 
 协议错误使用稳定代码 `MSP001` 至 `MSP010` 以及 `MSP999`。诊断不会包含能力令牌或存储值。将新建的 `BridgeOptions(...)` 赋给 `CefSharpHostOptions.Bridge` 即可配置限制：
 

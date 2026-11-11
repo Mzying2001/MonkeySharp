@@ -25,6 +25,7 @@
     </PackageReference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="..\Mzying2001.MonkeySharp.CefSharp.SmokeHost\SmokeLifecycleAssertions.cs" Link="SmokeLifecycleAssertions.cs" />
     <ProjectReference Include="..\Mzying2001.MonkeySharp.CefSharp\Mzying2001.MonkeySharp.CefSharp.csproj" />
   </ItemGroup>
 </Project>

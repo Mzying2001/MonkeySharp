@@ -799,32 +799,12 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 // Older CefSharp releases can report the previous navigation's URL
                 // in OnContextCreated. Resolve the renderer's current location before
                 // matching even document-start scripts against this new document.
-                IWebBrowser browser;
-                lock (_sync) browser = _browser;
-                var refreshedFrame = browser == null ? null : GetFrameByIdentifier(browser.GetBrowser(), session.Frame.FrameId);
-                try
-                {
-                    var nativeFrame = refreshedFrame ?? session.CefFrame;
-                    if (nativeFrame == null || nativeFrame.IsDisposed || !nativeFrame.IsValid) return;
-                    JavascriptResponse response;
-                    try
-                    {
-                        response = await nativeFrame.EvaluateScriptAsync(
-                            "location.href", timeout: TimeSpan.FromSeconds(2)).ConfigureAwait(false);
-                    }
-                    catch (ObjectDisposedException) when (nativeFrame.IsDisposed || !nativeFrame.IsValid)
-                    {
-                        // Native process migration can retire a borrowed frame after lookup.
-                        // Its document must not initialize or fall back into a replacement context.
-                        return;
-                    }
-                    session.Cancellation.Token.ThrowIfCancellationRequested();
-                    if (response == null || !response.Success || !(response.Result is string location) ||
-                        !Uri.TryCreate(location, UriKind.Absolute, out var currentUrl))
-                        throw new InvalidOperationException("The current CefSharp document URL could not be resolved: " + response?.Message);
-                    session.UpdateUrl(currentUrl);
-                }
-                finally { refreshedFrame?.Dispose(); }
+                var response = await ReadRendererLocationAsync(session).ConfigureAwait(false);
+                if (response == null) return;
+                if (!response.Success || !(response.Result is string location) ||
+                    !Uri.TryCreate(location, UriKind.Absolute, out var currentUrl))
+                    throw new InvalidOperationException("The current CefSharp document URL could not be resolved: " + response.Message);
+                session.UpdateUrl(currentUrl);
                 await ProcessLifecycleAsync(
                     DocumentLifecycleKind.ContextCreated,
                     session,
@@ -846,6 +826,43 @@ namespace Mzying2001.MonkeySharp.CefSharp
             {
                 session.OperationGate.Release();
             }
+        }
+
+        private Task<JavascriptResponse> ReadRendererLocationAsync(FrameSession session)
+        {
+            return ReadOnlyScriptEvaluator.EvaluateAsync(async timeout =>
+            {
+                IWebBrowser browser;
+                lock (_sync)
+                {
+                    if (!IsCurrentSession(session)) return null;
+                    browser = _browser;
+                }
+                var refreshedFrame = GetFrameByIdentifier(browser.GetBrowser(), session.Frame.FrameId);
+                var nativeFrame = refreshedFrame ?? session.CefFrame;
+                try
+                {
+                    if (nativeFrame == null || nativeFrame.IsDisposed || !nativeFrame.IsValid) return null;
+                    var response = await nativeFrame.EvaluateScriptAsync("location.href", timeout: timeout).ConfigureAwait(false);
+                    session.Cancellation.Token.ThrowIfCancellationRequested();
+                    lock (_sync) if (!IsCurrentSession(session)) return null;
+                    if (nativeFrame.IsDisposed || !nativeFrame.IsValid) return null;
+                    return response ?? throw new InvalidOperationException("The CefSharp document URL probe returned no response.");
+                }
+                catch (ObjectDisposedException) when (nativeFrame != null && (nativeFrame.IsDisposed || !nativeFrame.IsValid))
+                {
+                    // A retired native frame must not fall back into its replacement document.
+                    return null;
+                }
+                finally { refreshedFrame?.Dispose(); }
+            }, TimeSpan.FromSeconds(15), session.Cancellation.Token);
+        }
+
+        // Caller holds _sync while checking attachment and document ownership.
+        private bool IsCurrentSession(FrameSession session)
+        {
+            return _browser != null && session.AttachmentGeneration == _attachmentGeneration &&
+                _sessions.TryGetValue(session.Frame.FrameId, out var current) && ReferenceEquals(current, session);
         }
 
         private async Task ReleaseSessionAsync(

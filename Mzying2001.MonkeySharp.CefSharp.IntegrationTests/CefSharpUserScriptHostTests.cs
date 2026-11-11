@@ -346,6 +346,87 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
         }
 
         [Fact]
+        public async Task CanceledLocationProbeRetriesBeforeInitializingTheSameDocument()
+        {
+            using (var host = await CreateHostAsync(Script("none", "document-start")))
+            {
+                var browser = new BrowserFixture();
+                var attempts = 0;
+                browser.SetRendererLocation(() => Interlocked.Increment(ref attempts) == 1
+                    ? Task.FromCanceled<JavascriptResponse>(new CancellationToken(true))
+                    : Task.FromResult(new JavascriptResponse { Success = true, Result = "https://example.com/current" }));
+                var lifecycle = new ConcurrentQueue<DocumentLifecycleEventArgs>();
+                host.DocumentLifecycle += (_, item) => lifecycle.Enqueue(item);
+                host.Attach(browser.Browser.Object);
+                browser.CreateContext();
+                await browser.WaitForScriptCountAsync(1);
+
+                Assert.Equal(2, attempts);
+                Assert.Single(lifecycle, item => item.Kind == DocumentLifecycleKind.ContextCreated);
+                Assert.All(lifecycle, item => Assert.Equal("https://example.com/current", item.Frame.Url.AbsoluteUri));
+                Assert.Contains("runtime.install(payload)", Assert.Single(browser.Scripts));
+            }
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public async Task CanceledLocationProbeStopsWhenItsDocumentEnds(bool replaced)
+        {
+            using (var host = await CreateHostAsync(Script("none", "document-start")))
+            {
+                var browser = new BrowserFixture();
+                var firstProbe = new TaskCompletionSource<JavascriptResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
+                var replacementProbe = new TaskCompletionSource<JavascriptResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
+                var attempts = 0;
+                browser.SetRendererLocation(() => Interlocked.Increment(ref attempts) == 1 ? firstProbe.Task : replacementProbe.Task);
+                var lifecycle = new ConcurrentQueue<DocumentLifecycleEventArgs>();
+                host.DocumentLifecycle += (_, item) => lifecycle.Enqueue(item);
+                host.Attach(browser.Browser.Object);
+                browser.CreateContext();
+                if (replaced) browser.CreateContext();
+                else browser.ReleaseContext();
+                firstProbe.SetCanceled();
+                replacementProbe.SetResult(new JavascriptResponse { Success = true, Result = "https://example.com/next" });
+                if (replaced) await browser.WaitForScriptCountAsync(1);
+                await host.DetachAsync(CancellationToken.None);
+
+                Assert.Equal(replaced ? 2 : 1, attempts);
+                Assert.Equal(replaced ? 1 : 0, browser.Scripts.Count);
+                Assert.All(lifecycle.Where(item => item.Kind == DocumentLifecycleKind.ContextCreated),
+                    item => Assert.Equal("https://example.com/next", item.Frame.Url.AbsoluteUri));
+            }
+        }
+
+        [Fact]
+        public async Task CanceledLocationProbeDoesNotRetryARetiredNativeFrame()
+        {
+            using (var host = await CreateHostAsync(Script("none", "document-start")))
+            {
+                var browser = new BrowserFixture();
+                var attempts = 0;
+                var retirementObserved = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                browser.SetRendererLocation(() =>
+                {
+                    Interlocked.Increment(ref attempts);
+                    browser.Frame.SetupGet(item => item.IsDisposed).Returns(() =>
+                    {
+                        retirementObserved.TrySetResult(true);
+                        return true;
+                    });
+                    return Task.FromCanceled<JavascriptResponse>(new CancellationToken(true));
+                });
+                host.Attach(browser.Browser.Object);
+                browser.CreateContext();
+                Assert.Same(retirementObserved.Task, await Task.WhenAny(retirementObserved.Task, Task.Delay(5000)));
+                await host.DetachAsync(CancellationToken.None);
+
+                Assert.Equal(1, attempts);
+                Assert.Empty(browser.Scripts);
+            }
+        }
+
+        [Fact]
         public async Task ContextReleasedDuringLocationResolutionDoesNotInjectIntoTheNextDocument()
         {
             using (var host = await CreateHostAsync(Script("none", "document-start")))
@@ -1033,6 +1114,11 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
             private object BoundBridge { get; set; }
 
             public void SetRendererLocation(Task<JavascriptResponse> response)
+            {
+                SetRendererLocation(() => response);
+            }
+
+            public void SetRendererLocation(Func<Task<JavascriptResponse>> response)
             {
                 Frame.Setup(item => item.EvaluateScriptAsync(
                     "location.href", It.IsAny<string>(), It.IsAny<int>(), It.IsAny<TimeSpan?>()

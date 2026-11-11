@@ -111,6 +111,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                                 code = diagnostic.Code,
                                 severity = diagnostic.Severity.ToString(),
                                 message = diagnostic.Message,
+                                exception = diagnostic.Exception?.ToString(),
                                 documentId = diagnostic.DocumentId,
                                 frameId = diagnostic.FrameId,
                                 requestId = diagnostic.RequestId
@@ -222,6 +223,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
         private readonly CompatibilitySuite _compatibility;
         private Dictionary<string, bool> _compatibilityResults;
         private readonly System.Windows.Forms.Timer _timeoutTimer;
+        private readonly CancellationTokenSource _fixtureCancellation = new CancellationTokenSource();
 
         public SmokeForm(CefSharpUserScriptHost host, Uri startUri, LocalHttpFixture fixture, SmokeHttpDownloadService downloads, LocalHttpFixture otherFixture, SmokePermissionPolicy permissions, InMemoryUserScriptRepository repository)
         {
@@ -246,7 +248,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             { type = "console", level = message.Level.ToString(), message = message.Message, source = message.Source, line = message.Line }));
             Controls.Add(_browser);
             FormClosing += FormOnClosing;
-            FormClosed += (_, __) => { _compatibility.Dispose(); _browser.Dispose(); };
+            FormClosed += (_, __) => { _compatibility.Dispose(); _browser.Dispose(); _fixtureCancellation.Dispose(); };
             _timeoutTimer = new System.Windows.Forms.Timer { Interval = 90000 };
             _timeoutTimer.Tick += SmokeTimeout;
             _timeoutTimer.Start();
@@ -300,28 +302,37 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                 return;
             }
             JavascriptResponse response;
+            var cancellationToken = _fixtureCancellation.Token;
             try
             {
                 var timer = Stopwatch.StartNew();
                 while (true)
                 {
-                    response = await frame.EvaluateScriptAsync(
-                        "JSON.stringify(window.__monkeySharpSmokeResult || null)", timeout: TimeSpan.FromSeconds(2));
-                    if (response.Success && response.Result is string json && json != "null")
+                    response = await ReadOnlyScriptEvaluator.EvaluateAsync(timeout =>
+                    {
+                        if (frame.IsDisposed || !frame.IsValid)
+                            throw new InvalidOperationException("The fixture main frame is no longer available.");
+                        return frame.EvaluateScriptAsync("JSON.stringify(window.__monkeySharpSmokeResult || null)", timeout: timeout);
+                    }, TimeSpan.FromSeconds(15) - timer.Elapsed, cancellationToken);
+                    if (!response.Success)
+                        throw new InvalidOperationException("The legacy fixture result could not be read: " + response.Message);
+                    if (response.Result is string json && json != "null")
                     {
                         using (var document = JsonDocument.Parse(json))
                             if (document.RootElement.TryGetProperty("done", out _) || document.RootElement.TryGetProperty("error", out _)) break;
                     }
                     if (timer.Elapsed > TimeSpan.FromSeconds(15))
                         throw new TimeoutException("Legacy fixture did not finish: " + response.Result);
-                    await Task.Delay(50);
+                    await Task.Delay(50, cancellationToken);
                 }
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { return; }
             catch (Exception exception)
             {
-                FailSmoke(phase, exception.Message);
+                FailSmoke(phase, exception.ToString());
                 return;
             }
+            finally { frame.Dispose(); }
 
             var passed = ValidateFixtureResult(response, phase);
             if (phase == "initial" && response.Success && response.Result is string initialJson)
@@ -335,7 +346,6 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                 message = response.Message
             }));
 
-            frame.Dispose();
             if (!passed)
             {
                 Environment.ExitCode = 1;
@@ -464,6 +474,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
 
         private void FormOnClosing(object sender, FormClosingEventArgs args)
         {
+            _fixtureCancellation.Cancel();
             if (_closing)
                 return;
             _closing = true;

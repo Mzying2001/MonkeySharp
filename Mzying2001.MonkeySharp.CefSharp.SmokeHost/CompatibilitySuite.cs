@@ -297,6 +297,11 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             lock (_sync) return _events.Count(item => item.Kind == kind && item.Frame.DocumentId == documentId);
         }
 
+        private bool HasDocumentEnded(string documentId)
+        {
+            lock (_sync) return SmokeLifecycleAssertions.HasDocumentEnded(_events, documentId);
+        }
+
         private void Check(string name, bool passed)
         {
             _checks[name] = passed;
@@ -394,7 +399,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             }
             var old = FindFrame("/compat/frames/same");
             await ReadAsync("(document.getElementById('same').src = '/compat/frames/same-next', true)");
-            await WaitAsync(() => Task.FromResult(FindFrame("/compat/frames/same-next") != null && EventCount(DocumentLifecycleKind.ContextReleased, old.DocumentId) > 0));
+            await WaitAsync(() => Task.FromResult(FindFrame("/compat/frames/same-next") != null && HasDocumentEnded(old.DocumentId)));
             var next = FindFrame("/compat/frames/same-next");
             var nextResult = await WaitResultAsync("globalThis.__compatFrame || null", next);
             Check("childNavigation", next.DocumentId != old.DocumentId && nextResult.GetProperty("runs").GetInt32() == 1 && nextResult.GetProperty("value").GetString() == next.Url.AbsoluteUri);
