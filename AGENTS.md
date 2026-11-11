@@ -22,6 +22,7 @@ Use an explicit `x64` or `x86` platform for CefSharp builds. The Demo and its te
 
 - Update related documentation and tests alongside code changes so they reflect the current implementation and requirements.
 - Keep documentation paragraphs on single source lines, preserving Markdown structure.
+- Task notes and temporary documents that do not need to be committed to Git may be stored in `local-notes/`; create the directory if needed.
 
 ## Git Commit Conventions
 
