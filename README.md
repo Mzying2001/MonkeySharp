@@ -43,7 +43,7 @@ Private tabs use an independent in-memory context, temporary permissions and cop
 
 ```powershell
 dotnet build Mzying2001.MonkeySharp.Demo/Mzying2001.MonkeySharp.Demo.csproj -c Release -p:Platform=x64
-& .\Mzying2001.MonkeySharp.Demo\bin\x64\Release\net462\Mzying2001.MonkeySharp.Demo.exe
+& .\Mzying2001.MonkeySharp.Demo\bin\x64\Release\net462\MonkeySharpDemo.exe
 ```
 
 The executable directory must be writable because its portable profile is stored under `Data/`. The Demo explicitly enables `TrustedPageWorld`: it is an integration example for trusted pages and scripts, not a hardened browser or a complete Tampermonkey replacement. See the [Demo guide](Mzying2001.MonkeySharp.Demo/README.md) for usage, recovery, service boundaries, and verification.

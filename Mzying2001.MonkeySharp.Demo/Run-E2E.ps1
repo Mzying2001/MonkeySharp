@@ -11,7 +11,7 @@ if (!$NoBuild) {
     & dotnet build $project -c Release -p:Platform=x64 "-p:CefSharpVersion=$CefSharpVersion" --nologo
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
-$executable = Join-Path $PSScriptRoot 'bin/x64/Release/net462/Mzying2001.MonkeySharp.Demo.exe'
+$executable = Join-Path $PSScriptRoot 'bin/x64/Release/net462/MonkeySharpDemo.exe'
 $reports = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../artifacts/demo-smoke'))
 New-Item -ItemType Directory -Path $reports -Force | Out-Null
 $report = Join-Path $reports ('smoke-' + [Guid]::NewGuid().ToString('N') + '.json')

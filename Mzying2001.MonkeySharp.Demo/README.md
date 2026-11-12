@@ -6,7 +6,7 @@ The Demo targets .NET Framework 4.6.2 and an **x64 process**. It references the 
 
 ```powershell
 dotnet build Mzying2001.MonkeySharp.Demo/Mzying2001.MonkeySharp.Demo.csproj -c Release -p:Platform=x64
-& .\Mzying2001.MonkeySharp.Demo\bin\x64\Release\net462\Mzying2001.MonkeySharp.Demo.exe
+& .\Mzying2001.MonkeySharp.Demo\bin\x64\Release\net462\MonkeySharpDemo.exe
 ```
 
 `CefSharpVersion` can be overridden for source builds; all managed and native CefSharp components must use the same version. The Demo includes the download handler signature compatibility needed by the repository's `151.3.240` CI configuration; this does not promise compatibility with arbitrary versions. Clean build outputs before switching `CefSharpVersion`; otherwise NuGet's native copy rules can retain DLLs from the previously built version. `Run-E2E.ps1` performs this clean automatically unless `-NoBuild` is supplied. It does not delete the application profile.
