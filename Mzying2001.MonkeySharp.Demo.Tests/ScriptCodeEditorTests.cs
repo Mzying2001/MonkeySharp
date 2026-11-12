@@ -2,10 +2,13 @@ using ICSharpCode.AvalonEdit.Highlighting;
 using Mzying2001.MonkeySharp.Demo.ViewModels;
 using Mzying2001.MonkeySharp.Demo.Views;
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Documents;
+using System.Windows.Input;
 using System.Windows.Threading;
 using Xunit;
 
@@ -13,6 +16,55 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
 {
     public sealed class ScriptCodeEditorTests
     {
+        [Fact]
+        public Task EditorProvidesAnEditingContextMenu() => OnDispatcher(() =>
+        {
+            var editor = new ScriptCodeEditor();
+            Assert.NotNull(editor.ContextMenu);
+            var items = editor.ContextMenu.Items.OfType<MenuItem>().ToArray();
+            Assert.Equal(new[] { ApplicationCommands.Undo, ApplicationCommands.Redo, ApplicationCommands.Cut,
+                ApplicationCommands.Copy, ApplicationCommands.Paste, ApplicationCommands.Delete,
+                ApplicationCommands.SelectAll }, items.Select(item => item.Command));
+            Assert.All(items, item => Assert.Same(editor.TextArea, item.CommandTarget));
+            Assert.All(items, item => Assert.False(string.IsNullOrWhiteSpace((string)item.Header)));
+            return Task.CompletedTask;
+        });
+
+        [Fact]
+        public Task ContextMenuCommandsEditTheBoundDocument() => OnDispatcher(() =>
+        {
+            var model = new ScriptEditorViewModel();
+            model.Load("const value = 1;");
+            var editor = Bind(model);
+            var items = editor.ContextMenu.Items.OfType<MenuItem>().ToArray();
+            MenuItem Item(RoutedCommand command) => items.Single(item => item.Command == command);
+            bool CanExecute(RoutedCommand command) => command.CanExecute(null, Item(command).CommandTarget);
+            void Execute(RoutedCommand command)
+            {
+                Assert.True(CanExecute(command));
+                command.Execute(null, Item(command).CommandTarget);
+            }
+
+            Assert.False(CanExecute(ApplicationCommands.Undo));
+            Assert.False(CanExecute(ApplicationCommands.Redo));
+            // AvalonEdit also supports copying/cutting the current line without a selection.
+            Assert.True(CanExecute(ApplicationCommands.Copy));
+            Assert.True(CanExecute(ApplicationCommands.Cut));
+            Execute(ApplicationCommands.SelectAll);
+            Assert.Equal(model.Source, editor.SelectedText);
+            Assert.True(CanExecute(ApplicationCommands.Copy));
+            Assert.True(CanExecute(ApplicationCommands.Cut));
+            Execute(ApplicationCommands.Delete);
+            Assert.Equal(string.Empty, model.Source);
+            Assert.True(model.IsDirty);
+            Execute(ApplicationCommands.Undo);
+            Assert.Equal("const value = 1;", model.Source);
+            Assert.False(model.IsDirty);
+            Execute(ApplicationCommands.Redo);
+            Assert.Equal(string.Empty, model.Source);
+            return Task.CompletedTask;
+        });
+
         [Fact]
         public Task EditingAndUndoKeepTheBindingCaretAndDirtyState() => OnDispatcher(async () =>
         {

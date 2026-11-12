@@ -171,4 +171,10 @@ Connect: {8}
 Require: {9}
 Resource: {10}
 {11}</value></data>
+  <data name="EditorUndo" xml:space="preserve"><value>Undo</value></data>
+  <data name="EditorRedo" xml:space="preserve"><value>Redo</value></data>
+  <data name="EditorCut" xml:space="preserve"><value>Cut</value></data>
+  <data name="EditorCopy" xml:space="preserve"><value>Copy</value></data>
+  <data name="EditorPaste" xml:space="preserve"><value>Paste</value></data>
+  <data name="EditorSelectAll" xml:space="preserve"><value>Select all</value></data>
 </root>
