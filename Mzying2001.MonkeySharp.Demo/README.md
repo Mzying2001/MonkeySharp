@@ -11,6 +11,16 @@ dotnet build Mzying2001.MonkeySharp.Demo/Mzying2001.MonkeySharp.Demo.csproj -c R
 
 `CefSharpVersion` can be overridden for source builds; all managed and native CefSharp components must use the same version. The Demo includes the download handler signature compatibility needed by the repository's `151.3.240` CI configuration; this does not promise compatibility with arbitrary versions. Clean build outputs before switching `CefSharpVersion`; otherwise NuGet's native copy rules can retain DLLs from the previously built version. `Run-E2E.ps1` performs this clean automatically unless `-NoBuild` is supplied. It does not delete the application profile.
 
+## Code organization
+
+The Demo keeps its existing WPF/MVVM layers. `Runtime` assembles profile resources and hosts; `TabContextManager` owns live tab contexts and the shared temporary private session, while `TabRuntime` owns one host, download service and browser. Teardown stops the browser, cancels downloads, detaches the host, drains accepted downloads, disposes the browser and finally releases its context. Repeated disposal and shutdown await the same operation.
+
+`Views` contains windows and browser state binding. `Browser` contains the CefSharp navigation, popup, display and native download handlers plus tab-owned favicon discovery. The host must attach before the browser enters the visual tree. Favicon discovery is canceled when its tab view is disposed and never loads private-tab favicons outside CEF.
+
+`ViewModels` coordinates tab selection, editing and script-manager actions. Draft loading updates source, origin and details together, even when importing identical source from a different file. `Services` contains individual WPF host adapters, bounded UTF-8 source reading and content hashing. `Persistence` retains SQLite transactions, typed storage, source staging and crash recovery; the database format and portable directory layout are unchanged.
+
+`Automation` contains the executable's smoke scenarios, loopback fixture, userscript fixture, bounded browser polling and report writer. These internal types retain their existing runtime namespace. `App` selects normal or smoke startup; `Run-E2E.ps1`, `--smoke`, `--smoke-report`, report fields, check names and automation-facing control names remain stable.
+
 ## Browser and manager
 
 - New/close tab: Ctrl+T / Ctrl+W. Address bar: Ctrl+L. Reload: F5. DevTools: F12.
@@ -93,7 +103,7 @@ node --test Mzying2001.MonkeySharp.Core.Tests/JavaScript/*.test.js
 powershell -NoProfile -ExecutionPolicy Bypass -File Mzying2001.MonkeySharp.Demo/Run-E2E.ps1
 ```
 
-The E2E runner starts a real WPF application with loopback fixtures and a separate `SmokeRuns/<id>/Data` profile, never the normal browser profile. It leaves a JSON report under `artifacts/demo-smoke` and logs under the reported profile. It tests background tabs, tab switching, iframe injection, shared values/cookies, undefined persistence across tab creation/navigation, resources, XHR/webRequest, menus, notifications, real downloads, tab state, navigation, script enable/disable and final disposal. The test verifies Unicode text and HTML on the system clipboard, then restores its previous contents. Test-project shadow copying is disabled so SQLite's native library resolves from the deployed test output.
+The E2E runner starts a real WPF application with loopback fixtures and a separate `SmokeRuns/<id>/Data` profile, never the normal browser profile. It leaves a JSON report under `artifacts/demo-smoke` and logs under the reported profile. It tests background tabs, tab switching, iframe injection, shared values/cookies, undefined persistence across tab creation/navigation, resources, XHR/webRequest, menus, notifications, real downloads, tab state, navigation, script enable/disable and final disposal, including repeated tab disposal and application shutdown. The test verifies Unicode text and HTML on the system clipboard, then restores its previous contents. Test-project shadow copying is disabled so SQLite's native library resolves from the deployed test output.
 
 CI runs the SmokeHost real-Chromium gate for CefSharp `84.4.10`, `121.3.70`, and `151.3.240` on x64 and x86. The WPF Demo gates cover all three versions on x64.
 

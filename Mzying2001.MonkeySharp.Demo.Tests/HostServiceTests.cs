@@ -3,6 +3,9 @@ using Mzying2001.MonkeySharp.Core.Domain;
 using Mzying2001.MonkeySharp.Demo.Runtime;
 using Mzying2001.MonkeySharp.Demo.Services;
 using Mzying2001.MonkeySharp.Demo.ViewModels;
+using Mzying2001.MonkeySharp.Demo.Views;
+using Mzying2001.MonkeySharp.Demo.Persistence;
+using Mzying2001.MonkeySharp.Core.Permissions;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -50,6 +53,40 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
                 await Assert.ThrowsAnyAsync<OperationCanceledException>(() => second.PromptAsync(request, scope, canceled.Token));
                 await Dispatcher.CurrentDispatcher.InvokeAsync(() => { });
                 Assert.False(opened.IsVisible);
+            }
+        });
+
+        [Fact]
+        public Task PermissionManagementRevokesOnlyTheSelectedScriptAndCloses() => OnDispatcher(async () =>
+        {
+            using (var fixture = await PersistenceTests.Fixture.Create())
+            {
+                var decisions = new SqlitePermissionDecisionStore(fixture.Database);
+                var first = new UserScriptPermissionScope("first", "network", "example.com");
+                var second = new UserScriptPermissionScope("second", "network", "example.org");
+                await decisions.SetAsync(first, PermissionDecision.Allow, CancellationToken.None);
+                await decisions.SetAsync(second, PermissionDecision.Deny, CancellationToken.None);
+                var revoked = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+                var window = new PermissionsWindow(decisions, async key =>
+                {
+                    await decisions.RevokeAsync(key, CancellationToken.None);
+                    revoked.TrySetResult(key);
+                });
+                try
+                {
+                    await window.LoadAsync();
+                    window.Show();
+                    var panel = (StackPanel)((ScrollViewer)window.Content).Content;
+                    var button = panel.Children.OfType<Button>().Single(item => (string)item.Tag == "first");
+                    button.RaiseEvent(new System.Windows.RoutedEventArgs(Button.ClickEvent));
+                    Assert.Equal("first", await revoked.Task);
+                    await Dispatcher.CurrentDispatcher.InvokeAsync(() => { });
+
+                    Assert.Null(await decisions.GetAsync(first, CancellationToken.None));
+                    Assert.Equal(PermissionDecision.Deny, await decisions.GetAsync(second, CancellationToken.None));
+                    Assert.False(window.IsVisible);
+                }
+                finally { window.Close(); }
             }
         });
 
@@ -101,7 +138,8 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
             var selector = new ListBox { ItemsSource = main.Tabs };
             selector.SetBinding(Selector.SelectedItemProperty, new Binding(nameof(MainWindowViewModel.SelectedTab))
             {
-                Source = main, Mode = BindingMode.TwoWay
+                Source = main,
+                Mode = BindingMode.TwoWay
             });
             return selector;
         }
@@ -384,7 +422,8 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
                     finally { dispatcher.BeginInvokeShutdown(DispatcherPriority.Background); }
                 }));
                 Dispatcher.Run();
-            }) { IsBackground = true };
+            })
+            { IsBackground = true };
             thread.SetApartmentState(ApartmentState.STA); thread.Start();
             return completion.Task;
         }

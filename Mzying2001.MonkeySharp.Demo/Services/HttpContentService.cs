@@ -36,13 +36,13 @@ namespace Mzying2001.MonkeySharp.Demo.Services
                 using (var input = await response.Content.ReadAsStreamAsync().ConfigureAwait(false))
                 using (var output = new MemoryStream())
                 {
-                    if (response.Content.Headers.ContentLength > SqliteUserScriptRepositoryPersistence.MaximumSourceBytes)
+                    if (response.Content.Headers.ContentLength > UserScriptSourceFile.MaximumBytes)
                         throw new IOException("Content exceeds the 10 MiB limit.");
                     var buffer = new byte[65536];
                     int count;
                     while ((count = await input.ReadAsync(buffer, 0, buffer.Length, timeout.Token).ConfigureAwait(false)) != 0)
                     {
-                        if (output.Length + count > SqliteUserScriptRepositoryPersistence.MaximumSourceBytes)
+                        if (output.Length + count > UserScriptSourceFile.MaximumBytes)
                             throw new IOException("Content exceeds the 10 MiB limit.");
                         output.Write(buffer, 0, count);
                     }
@@ -71,7 +71,7 @@ namespace Mzying2001.MonkeySharp.Demo.Services
         {
             RequireHttp(url);
             var cacheKey = installation.ScriptKey + ":" + installation.RevisionId.ToString("N") + ":" + url;
-            var path = Path.Combine(_directory, SqliteUserScriptRepositoryPersistence.Hash(Encoding.UTF8.GetBytes(cacheKey)) + ".json");
+            var path = Path.Combine(_directory, ContentHash.Sha256(Encoding.UTF8.GetBytes(cacheKey)) + ".json");
             await _cacheGate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {

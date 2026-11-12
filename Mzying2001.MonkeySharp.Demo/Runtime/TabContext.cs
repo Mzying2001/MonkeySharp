@@ -10,7 +10,15 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
     {
         internal TabContext(string tabId, IRequestContext requestContext, bool isIncognito,
             IUserScriptPermissionPolicy permissions, ITabStateService tabState, IUserScriptValueStore values)
-        { TabId = tabId; RequestContext = requestContext; IsIncognito = isIncognito; Permissions = permissions; TabState = tabState; Values = values; }
+        {
+            TabId = tabId;
+            RequestContext = requestContext;
+            IsIncognito = isIncognito;
+            Permissions = permissions;
+            TabState = tabState;
+            Values = values;
+        }
+
         public string TabId { get; }
         public IRequestContext RequestContext { get; }
         public bool IsIncognito { get; }

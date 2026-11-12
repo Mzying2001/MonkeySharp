@@ -1,5 +1,3 @@
-using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.Input;
 using Mzying2001.MonkeySharp.Core.Apis;
 using Mzying2001.MonkeySharp.Demo.ViewModels;
 using System;
@@ -12,24 +10,6 @@ using System.Windows.Threading;
 
 namespace Mzying2001.MonkeySharp.Demo.Services
 {
-    public sealed partial class DownloadItemViewModel : ObservableObject
-    {
-        [ObservableProperty]
-        private string _status = "等待下载";
-
-        [ObservableProperty]
-        private long _loaded;
-
-        private readonly Action _cancel;
-
-        public DownloadItemViewModel(string name, Action cancel) { Name = name; _cancel = cancel; }
-
-        public string Name { get; }
-
-        [RelayCommand]
-        private void Cancel() => _cancel();
-    }
-
     public sealed class DownloadService : IDownloadService, IDisposable
     {
         private readonly FileDownloadService _pipeline;
@@ -44,7 +24,9 @@ namespace Mzying2001.MonkeySharp.Demo.Services
             IHttpRequestService http,
             Func<DownloadRequest, CancellationToken, Task<DownloadDestination>> destination = null, bool isPrivate = false)
         {
-            _directory = Path.GetFullPath(directory); _dispatcher = dispatcher; _main = main;
+            _directory = Path.GetFullPath(directory);
+            _dispatcher = dispatcher;
+            _main = main;
             _isPrivate = isPrivate;
             Directory.CreateDirectory(_directory);
             _pipeline = new FileDownloadService(http, destination ?? SelectDestinationAsync);
@@ -92,9 +74,17 @@ namespace Mzying2001.MonkeySharp.Demo.Services
         public void Dispose()
         {
             if (_disposed) return;
-            _disposed = true; _pipeline.Dispose();
-            if (_isPrivate) Post(() => { foreach (var item in _privateItems) _main.Downloads.Remove(item); _privateItems.Clear(); });
+            _disposed = true;
+            _pipeline.Dispose();
+            if (_isPrivate) Post(ClearPrivateHistory);
         }
+
+        private void ClearPrivateHistory()
+        {
+            foreach (var item in _privateItems) _main.Downloads.Remove(item);
+            _privateItems.Clear();
+        }
+
         public Task DrainAsync() => _pipeline.DrainAsync();
 
         public static string SafeFileName(string suggested)

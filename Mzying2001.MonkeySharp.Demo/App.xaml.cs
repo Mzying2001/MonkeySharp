@@ -1,8 +1,6 @@
 using System;
-using System.Collections.Generic;
-using System.IO;
+using Mzying2001.MonkeySharp.Demo.Runtime;
 using System.Linq;
-using System.Text.Json;
 using System.Windows;
 
 namespace Mzying2001.MonkeySharp.Demo
@@ -15,37 +13,25 @@ namespace Mzying2001.MonkeySharp.Demo
         {
             ShutdownMode = ShutdownMode.OnExplicitShutdown;
             var smoke = e.Args.Contains("--smoke");
-            var checks = new Dictionary<string, bool>();
             var report = e.Args.SkipWhile(argument => argument != "--smoke-report").Skip(1).FirstOrDefault();
+            var smokeRun = smoke ? new DemoSmokeRun(report) : null;
             try
             {
-                var directory = smoke ? Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "SmokeRuns", Guid.NewGuid().ToString("N")) : null;
-                Runtime = await Mzying2001.MonkeySharp.Demo.Runtime.DemoRuntime.CreateAsync(Dispatcher, directory);
+                Runtime = await DemoRuntime.CreateAsync(Dispatcher, smokeRun?.ProfileDirectory);
                 MainWindow = new MainWindow(Runtime);
                 MainWindow.Show();
                 if (smoke)
                 {
-                    await Mzying2001.MonkeySharp.Demo.Runtime.DemoSmokeTest.RunAsync(Runtime, checks);
-                    await Runtime.ShutdownAsync();
-                    checks["finalDisposal"] = true;
-                    if (report != null) File.WriteAllText(report, JsonSerializer.Serialize(new
-                    {
-                        success = true, checks, profile = directory,
-                        environment = new
-                        {
-                            cefSharpVersion = typeof(global::CefSharp.Cef).Assembly.GetName().Version.ToString(),
-                            platform = Environment.Is64BitProcess ? "x64" : "x86"
-                        }
-                    }));
+                    await smokeRun.RunAsync(Runtime);
                     await ((MainWindow)MainWindow).CloseForSmokeAsync(0);
                 }
                 else Runtime.MainWindow.NewTab();
             }
-            catch (System.Exception exception)
+            catch (Exception exception)
             {
                 if (smoke)
                 {
-                    if (report != null) File.WriteAllText(report, JsonSerializer.Serialize(new { success = false, error = exception.ToString(), checks, profile = Runtime?.Paths.BaseDirectory }));
+                    smokeRun.ReportFailure(exception, Runtime);
                     if (MainWindow is MainWindow window) await window.CloseForSmokeAsync(1);
                     else Shutdown(1);
                     return;
@@ -55,11 +41,6 @@ namespace Mzying2001.MonkeySharp.Demo
                     "MonkeySharp Demo", MessageBoxButton.OK, MessageBoxImage.Error);
                 Shutdown(1);
             }
-        }
-
-        protected override void OnExit(ExitEventArgs e)
-        {
-            base.OnExit(e);
         }
     }
 }

@@ -63,7 +63,9 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                         case "/page":
                             body = "<!doctype html><html><head><title>MonkeySharp E2E</title><link rel='icon' href='/favicon.ico'></head><body><h1>Local userscript fixture</h1><iframe src='/frame'></iframe></body></html>";
                             mime = "text/html; charset=utf-8"; break;
-                        case "/private-normal": case "/private-main": case "/private-second":
+                        case "/private-normal":
+                        case "/private-main":
+                        case "/private-second":
                             body = "<!doctype html><html><head><script src='/private-cache.js'></script></head><body>Private context fixture</body></html>";
                             mime = "text/html; charset=utf-8"; break;
                         case "/private-cache.js":

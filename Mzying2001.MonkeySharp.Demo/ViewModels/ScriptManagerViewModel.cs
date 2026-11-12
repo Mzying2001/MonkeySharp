@@ -2,7 +2,6 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Mzying2001.MonkeySharp.Core.Domain;
 using Mzying2001.MonkeySharp.Core.Repository;
-using Mzying2001.MonkeySharp.Demo.Persistence;
 using Mzying2001.MonkeySharp.Demo.Services;
 using Mzying2001.MonkeySharp.Core.Updates;
 using System;
@@ -55,7 +54,11 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
         public ScriptManagerViewModel(IUserScriptRepository repository, HttpContentService content, UserScriptUpdateService updates,
             Func<string, bool> confirm, DiagnosticsViewModel diagnostics)
         {
-            _repository = repository; _content = content; _updates = updates; _confirm = confirm; _diagnostics = diagnostics;
+            _repository = repository;
+            _content = content;
+            _updates = updates;
+            _confirm = confirm;
+            _diagnostics = diagnostics;
             Editor.PropertyChanged += EditorPropertyChanged;
             FilteredScripts = CollectionViewSource.GetDefaultView(Scripts);
             FilteredScripts.Filter = FilterScript;
@@ -101,7 +104,6 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
         private void ToggleSort()
         {
             SortAscending = !SortAscending;
-            ApplySort();
         }
 
         partial void OnSearchChanged(string value) => RefreshFilter();
@@ -145,28 +147,34 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
         private void NewScript()
         {
             if (!ConfirmDiscard()) return;
-            _origin = "application://editor/new.user.js";
-            SelectedScript = null; Editor.Load(ScriptEditorViewModel.Template);
-            Details.Update(Editor.Parse(), _origin, Editor.Source);
-            Status = "新脚本。保存前会显示权限确认。";
+            LoadDraft(ScriptEditorViewModel.Template, "application://editor/new.user.js", "新脚本。保存前会显示权限确认。");
         }
 
         public Task ImportFileAsync(string path) => RunAsync(async () =>
         {
             if (!ConfirmDiscard()) return;
-            var bytes = await Task.Run(() => SqliteUserScriptRepositoryPersistence.ReadBounded(path), _cancellation.Token);
-            SelectedScript = null; _origin = new Uri(path).AbsoluteUri;
-            Editor.Load(new UTF8Encoding(false, true).GetString(bytes).TrimStart('\uFEFF'));
-            Status = "已导入草稿；审核权限后点击安装 / 保存。";
+            var source = await Task.Run(() => UserScriptSourceFile.ReadText(path), _cancellation.Token);
+            LoadDraft(source, new Uri(path).AbsoluteUri, "已导入草稿；审核权限后点击安装 / 保存。");
         });
 
         private async Task LoadUrlAsync()
         {
             if (!ConfirmDiscard()) return;
             var content = await _content.FetchAsync(Url, _cancellation.Token);
-            SelectedScript = null; _origin = Url; Editor.Load(content.Text);
-            Status = "已下载草稿；尚未安装。请审核源码并点击安装 / 保存。";
+            LoadDraft(content.Text, Url, "已下载草稿；尚未安装。请审核源码并点击安装 / 保存。");
         }
+
+        private void LoadDraft(string source, string origin, string status)
+        {
+            SelectedScript = null;
+            _origin = origin;
+            Editor.Load(source);
+            // Source may equal the previous draft, so PropertyChanged alone cannot refresh its origin.
+            UpdateDetails();
+            Status = status;
+        }
+
+        private void UpdateDetails() => Details.Update(Editor.Parse(), _origin, Editor.Source);
 
         private async Task CheckUpdatesAsync()
         {
@@ -204,10 +212,15 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
 
         private async Task SaveAsync()
         {
-            if (Encoding.UTF8.GetByteCount(Editor.Source ?? string.Empty) > SqliteUserScriptRepositoryPersistence.MaximumSourceBytes)
+            if (Encoding.UTF8.GetByteCount(Editor.Source ?? string.Empty) > UserScriptSourceFile.MaximumBytes)
                 throw new InvalidOperationException("源码超过 10 MiB 限制。");
-            var parsed = Editor.Parse(); Details.Update(parsed, _origin, Editor.Source);
-            if (!parsed.CanEnable) { Status = "元数据无效；旧脚本未改变。"; return; }
+            var parsed = Editor.Parse();
+            Details.Update(parsed, _origin, Editor.Source);
+            if (!parsed.CanEnable)
+            {
+                Status = "元数据无效；旧脚本未改变。";
+                return;
+            }
             if (!_confirm("允许以下脚本在匹配的网站运行并使用所声明的权限？\n\n" + Details.ToConfirmationText())) return;
             var installation = SelectedScript == null
                 ? await _repository.InstallAsync(Editor.Source, _origin, true, _cancellation.Token)
@@ -231,7 +244,9 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
         {
             if (SelectedScript == null || !_confirm("删除该脚本、源码文件及其 GM 存储数据？")) return;
             await _repository.RemoveAsync(SelectedScript.Installation.ScriptKey, _cancellation.Token);
-            Editor.Load(ScriptEditorViewModel.Template); await RefreshAsync(); Status = "已删除脚本。";
+            Editor.Load(ScriptEditorViewModel.Template);
+            await RefreshAsync();
+            Status = "已删除脚本。";
         }
 
         private async Task RunAsync(Func<Task> action)
@@ -240,7 +255,11 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
             Busy = true;
             try { await action(); }
             catch (OperationCanceledException) { Status = "操作已取消。"; }
-            catch (Exception exception) { Status = exception.Message; _diagnostics.Report("脚本管理器：" + exception.Message); }
+            catch (Exception exception)
+            {
+                Status = exception.Message;
+                _diagnostics.Report("脚本管理器：" + exception.Message);
+            }
             finally { Busy = false; }
         }
 
@@ -250,7 +269,11 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
             item.IsBusy = true;
             try { await action(); }
             catch (OperationCanceledException) { Status = "操作已取消。"; }
-            catch (Exception exception) { Status = exception.Message; _diagnostics.Report("脚本管理器：" + exception.Message); }
+            catch (Exception exception)
+            {
+                Status = exception.Message;
+                _diagnostics.Report("脚本管理器：" + exception.Message);
+            }
             finally { item.IsBusy = false; }
         }
 
@@ -287,56 +310,13 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
 
         private void EditorPropertyChanged(object sender, PropertyChangedEventArgs args)
         {
-            if (args.PropertyName == nameof(Editor.Source)) Details.Update(Editor.Parse(), _origin, Editor.Source);
+            if (args.PropertyName == nameof(Editor.Source)) UpdateDetails();
         }
 
         public void Dispose()
         {
             Editor.PropertyChanged -= EditorPropertyChanged;
             _cancellation.Cancel();
-        }
-    }
-
-    public sealed class ScriptItemViewModel : ObservableObject
-    {
-        private UserScriptInstallation _installation;
-        private bool _isBusy;
-
-        public ScriptItemViewModel(UserScriptInstallation installation) { _installation = installation; }
-        public UserScriptInstallation Installation => _installation;
-        public bool IsBusy
-        {
-            get => _isBusy;
-            set
-            {
-                if (!SetProperty(ref _isBusy, value)) return;
-                OnPropertyChanged(nameof(CanToggle));
-            }
-        }
-        public bool CanToggle => !_isBusy && Installation.Definition.ParseResult.CanEnable;
-        public string Name => Installation.Definition.Metadata?.Name ?? Installation.ScriptKey.ToString();
-        public string Version => string.IsNullOrWhiteSpace(Installation.Definition.Metadata?.Version) ? "无版本" : "v" + Installation.Definition.Metadata.Version;
-        public string Description => string.IsNullOrWhiteSpace(Installation.Definition.Metadata?.Description) ? "未提供描述" : Installation.Definition.Metadata.Description;
-        public string ScriptKey => Installation.ScriptKey.ToString();
-        public string SearchText => string.Join("\n", Name, Description, Installation.Definition.Metadata?.Namespace, Installation.SourceOrigin);
-        public string IconUrl
-        {
-            get
-            {
-                var metadata = Installation.Definition.Metadata;
-                return !string.IsNullOrWhiteSpace(metadata?.Icon64Url) ? metadata.Icon64Url : metadata?.IconUrl;
-            }
-        }
-        public string IconFallbackText => string.IsNullOrWhiteSpace(Name) ? "?" : Name.Substring(0, 1).ToUpperInvariant();
-        public string StatusLabel => !Installation.Definition.ParseResult.CanEnable ? "不可用" : Installation.IsEnabled ? "已启用" : "已停用";
-        public string ToggleLabel => Installation.IsEnabled ? "停用" : "启用";
-        public string StatusBrush => !Installation.Definition.ParseResult.CanEnable ? "#B42318" : Installation.IsEnabled ? "#2F855A" : "#94A3B8";
-        public string DisplayName => StatusLabel + " " + Name + "  " + Version;
-
-        public void Update(UserScriptInstallation installation)
-        {
-            _installation = installation ?? throw new ArgumentNullException(nameof(installation));
-            OnPropertyChanged(string.Empty);
         }
     }
 }

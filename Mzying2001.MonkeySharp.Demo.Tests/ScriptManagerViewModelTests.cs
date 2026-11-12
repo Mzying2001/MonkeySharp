@@ -7,6 +7,8 @@ using Mzying2001.MonkeySharp.Demo.Persistence;
 using Mzying2001.MonkeySharp.Demo.Services;
 using Mzying2001.MonkeySharp.Demo.ViewModels;
 using System.Linq;
+using System.IO;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Threading;
@@ -268,6 +270,63 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
                     Assert.Equal(installation.ScriptKey, saved.ScriptKey);
                     Assert.False(saved.IsEnabled);
                     Assert.Equal(installation.ScriptKey.ToString(), Assert.Single(manager.Scripts).ScriptKey);
+                }
+            }
+        }
+
+        [Fact]
+        public async Task ImportingIdenticalDraftsRefreshesTheSourceOriginWithoutInstalling()
+        {
+            using (var fixture = await PersistenceTests.Fixture.Create())
+            using (var content = new HttpContentService(fixture.Paths))
+            {
+                var repository = new InMemoryUserScriptRepository();
+                using (var manager = CreateManager(repository, content, _ => true, fixture.Paths.LogsDirectory))
+                {
+                    var first = Path.Combine(fixture.Paths.BaseDirectory, "first.user.js");
+                    var second = Path.Combine(fixture.Paths.BaseDirectory, "second.user.js");
+                    File.WriteAllText(first, "\uFEFF" + Source, new UTF8Encoding(false));
+                    File.WriteAllText(second, Source, new UTF8Encoding(false));
+
+                    await manager.ImportFileAsync(first);
+                    Assert.Equal(new Uri(first).AbsoluteUri, manager.Details.SourceOrigin);
+                    await manager.ImportFileAsync(second);
+
+                    Assert.Equal(Source, manager.Editor.Source);
+                    Assert.Equal(new Uri(second).AbsoluteUri, manager.Details.SourceOrigin);
+                    Assert.Equal("Manager sample", manager.Details.Name);
+                    Assert.False(manager.Editor.IsDirty);
+                    Assert.Null(manager.SelectedScript);
+                    Assert.Empty(await repository.GetSnapshotAsync(CancellationToken.None));
+                }
+            }
+        }
+
+        [Fact]
+        public async Task RefusingToDiscardEditsPreservesTheSelectedInstallationAndDraft()
+        {
+            using (var fixture = await PersistenceTests.Fixture.Create())
+            using (var content = new HttpContentService(fixture.Paths))
+            {
+                var repository = new InMemoryUserScriptRepository();
+                await repository.InstallAsync(Source, "application://original", true, CancellationToken.None);
+                using (var manager = CreateManager(repository, content, _ => false, fixture.Paths.LogsDirectory))
+                {
+                    await manager.RefreshAsync();
+                    manager.SelectedScript = Assert.Single(manager.Scripts);
+                    var selected = manager.SelectedScript;
+                    var edited = Source + "// unsaved edit";
+                    manager.Editor.Source = edited;
+
+                    // A rejected import must not even try to read the supplied file.
+                    await manager.ImportFileAsync(Path.Combine(fixture.Paths.BaseDirectory, "missing.user.js"));
+                    manager.NewCommand.Execute(null);
+
+                    Assert.Same(selected, manager.SelectedScript);
+                    Assert.Equal(edited, manager.Editor.Source);
+                    Assert.Equal("application://original", manager.Details.SourceOrigin);
+                    Assert.True(manager.Editor.IsDirty);
+                    Assert.False(manager.ConfirmDiscard());
                 }
             }
         }

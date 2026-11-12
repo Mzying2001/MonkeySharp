@@ -23,18 +23,18 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
             var normalContext = runtime.GetTabContext(normal);
             var decisions = (await runtime.PermissionDecisions.ListAsync(CancellationToken.None)).Count(item => item.ScriptKey == script.ScriptKey.ToString());
             var beforePrompts = prompts();
-            await DemoSmokeTest.Evaluate(normal, "(window.__openPrivate(), true)");
-            await DemoSmokeTest.WaitAsync(() => Task.FromResult(runtime.MainWindow.Tabs.Any(tab => tab.IsIncognito)));
+            await SmokeBrowser.Evaluate(normal, "(window.__openPrivate(), true)");
+            await SmokeBrowser.WaitAsync(() => Task.FromResult(runtime.MainWindow.Tabs.Any(tab => tab.IsIncognito)));
             var first = runtime.MainWindow.Tabs.Single(tab => tab.IsIncognito);
             await Ready(first);
             var privateContext = runtime.GetTabContext(first);
             checks["privateNativeContext"] = privateContext.IsIncognito && !privateContext.RequestContext.IsGlobal &&
                 privateContext.RequestContext.CachePath == string.Empty && privateContext.RequestContext != normalContext.RequestContext;
-            checks["privateInfoRunIn"] = await DemoSmokeTest.EvaluateBoolean(first,
+            checks["privateInfoRunIn"] = await SmokeBrowser.EvaluateBoolean(first,
                 "__privateCase.incognito === true && document.documentElement.dataset.incognitoContext === 'ran' && !document.documentElement.dataset.normalContext");
-            checks["normalInfoRunIn"] = await DemoSmokeTest.EvaluateBoolean(normal,
+            checks["normalInfoRunIn"] = await SmokeBrowser.EvaluateBoolean(normal,
                 "__privateCase.incognito === false && document.documentElement.dataset.normalContext === 'ran' && !document.documentElement.dataset.incognitoContext");
-            checks["privateCookieNetworkIsolation"] = await DemoSmokeTest.EvaluateBoolean(first,
+            checks["privateCookieNetworkIsolation"] = await SmokeBrowser.EvaluateBoolean(first,
                 "__privateCase.cookieBefore === null && __privateCase.sentPrivate && __privateCase.baseline === 'normal'");
             checks["privatePermissionIsolation"] = prompts() > beforePrompts &&
                 (await runtime.PermissionDecisions.ListAsync(CancellationToken.None)).Count(item => item.ScriptKey == script.ScriptKey.ToString()) == decisions;
@@ -42,33 +42,33 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
             var second = runtime.MainWindow.NewTab(fixture.BaseUrl + "/private-second", false, first);
             await Ready(second);
             checks["privateSessionShared"] = second.IsIncognito && runtime.GetTabContext(second).RequestContext == privateContext.RequestContext &&
-                await DemoSmokeTest.EvaluateBoolean(second, "__privateCase.baseline === 'private' && __privateCase.previous === 'private-only-proof' && __privateCase.cookieBefore === 'private'");
+                await SmokeBrowser.EvaluateBoolean(second, "__privateCase.baseline === 'private' && __privateCase.previous === 'private-only-proof' && __privateCase.cookieBefore === 'private'");
             checks["privateCacheShared"] = fixture.RequestCount("/private-cache.js") == 2;
             checks["privateTabDataIsolation"] = (await privateContext.TabState.GetAllAsync(script.ScriptKey, CancellationToken.None)).Values.All(value => value.Contains("privateState")) &&
                 (await normalContext.TabState.GetAllAsync(script.ScriptKey, CancellationToken.None)).Values.All(value => !value.Contains("privateState"));
             checks["privateWritesNotPersistent"] = !(await normalContext.Values.GetAsync(script.ScriptKey.ToString(), "private-write", CancellationToken.None)).Exists &&
                 (await normalContext.Values.GetAsync(script.ScriptKey.ToString(), "baseline", CancellationToken.None)).Value.EncodedValue == "snormal";
             var firstView = (BrowserTabView)first.Browser;
-            await DemoSmokeTest.Evaluate(normal, "(window.__closePrivate(), true)");
-            await DemoSmokeTest.WaitAsync(() => Task.FromResult(first.IsClosed));
+            await SmokeBrowser.Evaluate(normal, "(window.__closePrivate(), true)");
+            await SmokeBrowser.WaitAsync(() => Task.FromResult(first.IsClosed));
             await firstView.DisposeAsync();
             checks["privateLivesUntilLastTab"] = runtime.HasPrivateContext;
             await Close(runtime, second);
             checks["privateContextReleased"] = !runtime.HasPrivateContext;
             beforePrompts = prompts();
-            await DemoSmokeTest.Evaluate(normal, "(window.__openPrivate(), true)");
-            await DemoSmokeTest.WaitAsync(() => Task.FromResult(runtime.MainWindow.Tabs.Any(tab => tab.IsIncognito)));
+            await SmokeBrowser.Evaluate(normal, "(window.__openPrivate(), true)");
+            await SmokeBrowser.WaitAsync(() => Task.FromResult(runtime.MainWindow.Tabs.Any(tab => tab.IsIncognito)));
             var fresh = runtime.MainWindow.Tabs.Single(tab => tab.IsIncognito);
             await Ready(fresh);
             checks["privateFreshSession"] = runtime.GetTabContext(fresh).RequestContext != privateContext.RequestContext &&
-                await DemoSmokeTest.EvaluateBoolean(fresh, "__privateCase.baseline === 'normal' && __privateCase.previous === null && __privateCase.cookieBefore === null");
+                await SmokeBrowser.EvaluateBoolean(fresh, "__privateCase.baseline === 'normal' && __privateCase.previous === null && __privateCase.cookieBefore === null");
             checks["privatePermissionCleared"] = prompts() > beforePrompts;
             checks["privateCacheCleared"] = fixture.RequestCount("/private-cache.js") == 3;
             await Close(runtime, fresh);
             checks["privateLogsNotPersisted"] = Directory.GetFiles(runtime.Paths.LogsDirectory).All(path => !ReadSharedLog(path).Contains("PRIVATE_LOG_PROOF_NOT_PERSISTED"));
             await Close(runtime, normal);
         }
-        private static Task Ready(BrowserTabViewModel tab) => DemoSmokeTest.WaitAsync(async () => await DemoSmokeTest.EvaluateBoolean(tab, "window.__privateCase && window.__privateCase.ready"));
+        private static Task Ready(BrowserTabViewModel tab) => SmokeBrowser.WaitAsync(async () => await SmokeBrowser.EvaluateBoolean(tab, "window.__privateCase && window.__privateCase.ready"));
         private static string ReadSharedLog(string path)
         {
             using (var input = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))

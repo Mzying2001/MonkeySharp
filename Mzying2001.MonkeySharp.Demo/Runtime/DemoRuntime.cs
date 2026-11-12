@@ -1,4 +1,4 @@
-﻿using CefSharp;
+using CefSharp;
 using Mzying2001.MonkeySharp.CefSharp;
 using Mzying2001.MonkeySharp.Core.Permissions;
 using Mzying2001.MonkeySharp.Core.Repository;
@@ -26,112 +26,95 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
         private SqliteUserScriptValueStore _values;
         private SqliteTabStateService _tabStates;
         private InteractiveUserScriptPermissionPolicy _permissions;
-        public SqlitePermissionDecisionStore PermissionDecisions { get; private set; }
-        public WpfPermissionPrompt PermissionPrompt { get; private set; }
-        private readonly Dictionary<string, TabContext> _tabContexts = new Dictionary<string, TabContext>();
-        private IRequestContext _privateRequestContext;
-        private InMemoryUserScriptPermissionDecisionStore _privateDecisions;
-        private InteractiveUserScriptPermissionPolicy _privatePermissions;
-        private PrivateUserScriptValueStore _privateValues;
-        private MemoryTabStateService _privateTabStates;
-        internal bool HasPrivateContext => _privateRequestContext != null;
+        private TabContextManager _tabContexts;
         private bool _cefInitialized;
         private bool _disposed;
-        private DemoRuntime(AppDataPaths paths, Dispatcher dispatcher) { Paths = paths; _dispatcher = dispatcher; }
+        private Task _shutdown;
+
+        private DemoRuntime(AppDataPaths paths, Dispatcher dispatcher)
+        {
+            Paths = paths;
+            _dispatcher = dispatcher;
+        }
+
         public AppDataPaths Paths { get; }
         public PersistentUserScriptRepository Repository { get; private set; }
         public HttpContentService Content { get; private set; }
         public UserScriptUpdateService Updates { get; private set; }
         public MainWindowViewModel MainWindow { get; private set; }
         public IRequestContext RequestContext { get; private set; }
+        public SqlitePermissionDecisionStore PermissionDecisions { get; private set; }
+        public WpfPermissionPrompt PermissionPrompt { get; private set; }
+        internal bool HasPrivateContext => _tabContexts?.HasPrivateContext == true;
 
         public static async Task<DemoRuntime> CreateAsync(Dispatcher dispatcher, string baseDirectory = null)
         {
             var runtime = new DemoRuntime(new AppDataPaths(baseDirectory ?? AppDomain.CurrentDomain.BaseDirectory), dispatcher);
             try
             {
-                runtime.Paths.EnsureCreated();
-                runtime._profileLock = new FileStream(Path.Combine(runtime.Paths.DataDirectory, ".profile.lock"),
-                    FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
-                runtime._database = new SqliteDatabase(runtime.Paths.DatabasePath);
-                await runtime._database.InitializeAsync(CancellationToken.None);
-                var diagnostics = new DiagnosticsViewModel(dispatcher, runtime.Paths.LogsDirectory);
-                runtime.Content = new HttpContentService(runtime.Paths);
-                runtime.Repository = new PersistentUserScriptRepository(new SqliteUserScriptRepositoryPersistence(runtime._database, runtime.Paths, diagnostics.Report),
-                    preparer: new UserScriptPreparer(runtime.Content, runtime.Content));
-                await runtime.Repository.InitializeAsync(CancellationToken.None);
-                runtime._values = new SqliteUserScriptValueStore(runtime._database);
-                runtime._tabStates = new SqliteTabStateService(runtime._database);
-                runtime.Updates = new UserScriptUpdateService(runtime.Repository, runtime.Content);
-                runtime.PermissionDecisions = new SqlitePermissionDecisionStore(runtime._database);
-                runtime.PermissionPrompt = new WpfPermissionPrompt(dispatcher);
-                runtime._permissions = new InteractiveUserScriptPermissionPolicy(new SensitiveUserScriptPermissionsPolicy(), runtime.PermissionDecisions, runtime.PermissionPrompt);
-                await dispatcher.InvokeAsync(() =>
-                {
-                    CefSharpSettings.WcfEnabled = false;
-                    CefSharpSettings.ConcurrentTaskExecution = true;
-                    CefSharpSettings.ShutdownOnExit = false;
-                    var cache = Path.Combine(runtime.Paths.BrowserCacheDirectory, "Default");
-                    using (var settings = new global::CefSharp.Wpf.CefSettings
-                    {
-                        RootCachePath = runtime.Paths.BrowserCacheDirectory, CachePath = cache,
-                        PersistSessionCookies = true, LogFile = Path.Combine(runtime.Paths.LogsDirectory, "cef.log"),
-                        LogSeverity = LogSeverity.Disable, UncaughtExceptionStackSize = 20
-                    })
-                    {
-                        if (!Cef.Initialize(settings)) throw new InvalidOperationException("CefSharp initialization failed.");
-                    }
-                    runtime._cefInitialized = true;
-                    runtime.RequestContext = new RequestContext(new RequestContextSettings { CachePath = cache, PersistSessionCookies = true });
-                    runtime.MainWindow = new MainWindowViewModel(diagnostics);
-                });
-                runtime.Repository.Changed += runtime.RepositoryChanged;
-                diagnostics.Report(TrustWarning);
+                await runtime.InitializeAsync();
                 return runtime;
             }
-            catch { await runtime.ShutdownAsync(); throw; }
+            catch
+            {
+                await runtime.ShutdownAsync();
+                throw;
+            }
+        }
+
+        private async Task InitializeAsync()
+        {
+            Paths.EnsureCreated();
+            _profileLock = new FileStream(Path.Combine(Paths.DataDirectory, ".profile.lock"),
+                FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+            _database = new SqliteDatabase(Paths.DatabasePath);
+            await _database.InitializeAsync(CancellationToken.None);
+            var diagnostics = new DiagnosticsViewModel(_dispatcher, Paths.LogsDirectory);
+            Content = new HttpContentService(Paths);
+            Repository = new PersistentUserScriptRepository(new SqliteUserScriptRepositoryPersistence(_database, Paths, diagnostics.Report),
+                preparer: new UserScriptPreparer(Content, Content));
+            await Repository.InitializeAsync(CancellationToken.None);
+            _values = new SqliteUserScriptValueStore(_database);
+            _tabStates = new SqliteTabStateService(_database);
+            Updates = new UserScriptUpdateService(Repository, Content);
+            PermissionDecisions = new SqlitePermissionDecisionStore(_database);
+            PermissionPrompt = new WpfPermissionPrompt(_dispatcher);
+            _permissions = new InteractiveUserScriptPermissionPolicy(new SensitiveUserScriptPermissionsPolicy(), PermissionDecisions, PermissionPrompt);
+            await _dispatcher.InvokeAsync(() => InitializeBrowser(diagnostics));
+            Repository.Changed += RepositoryChanged;
+            diagnostics.Report(TrustWarning);
+        }
+
+        private void InitializeBrowser(DiagnosticsViewModel diagnostics)
+        {
+            CefSharpSettings.WcfEnabled = false;
+            CefSharpSettings.ConcurrentTaskExecution = true;
+            CefSharpSettings.ShutdownOnExit = false;
+            var cache = Path.Combine(Paths.BrowserCacheDirectory, "Default");
+            using (var settings = new global::CefSharp.Wpf.CefSettings
+            {
+                RootCachePath = Paths.BrowserCacheDirectory,
+                CachePath = cache,
+                PersistSessionCookies = true,
+                LogFile = Path.Combine(Paths.LogsDirectory, "cef.log"),
+                LogSeverity = LogSeverity.Disable,
+                UncaughtExceptionStackSize = 20
+            })
+            {
+                if (!Cef.Initialize(settings)) throw new InvalidOperationException("CefSharp initialization failed.");
+            }
+            _cefInitialized = true;
+            RequestContext = new RequestContext(new RequestContextSettings { CachePath = cache, PersistSessionCookies = true });
+            MainWindow = new MainWindowViewModel(diagnostics);
+            _tabContexts = new TabContextManager(_dispatcher, RequestContext, _values,
+                _tabStates, _permissions, PermissionPrompt);
         }
 
         public TabContext GetTabContext(BrowserTabViewModel tab)
         {
             _dispatcher.VerifyAccess();
             if (_disposed) throw new ObjectDisposedException(nameof(DemoRuntime));
-            if (_tabContexts.TryGetValue(tab.TabId, out var existing)) return existing;
-            if (tab.IsIncognito && _privateRequestContext == null)
-            {
-                _privateRequestContext = CefSharpRequestContexts.CreatePrivate();
-                _privateDecisions = new InMemoryUserScriptPermissionDecisionStore();
-                _privatePermissions = new InteractiveUserScriptPermissionPolicy(new SensitiveUserScriptPermissionsPolicy(), _privateDecisions, PermissionPrompt.ForPrivateContext());
-                _privateValues = new PrivateUserScriptValueStore(_values);
-                _privateTabStates = new MemoryTabStateService();
-            }
-            var context = tab.IsIncognito
-                ? new TabContext(tab.TabId, _privateRequestContext, true, _privatePermissions, _privateTabStates.ForTab(tab.TabId), _privateValues)
-                : new TabContext(tab.TabId, RequestContext, false, _permissions, _tabStates.ForTab(tab.TabId), _values);
-            _tabContexts.Add(tab.TabId, context);
-            return context;
-        }
-
-        private void ReleaseTabContext(BrowserTabViewModel tab)
-        {
-            _dispatcher.VerifyAccess();
-            if (!_tabContexts.TryGetValue(tab.TabId, out var context)) return;
-            _tabContexts.Remove(tab.TabId);
-            if (!context.IsIncognito) _tabStates.CloseTab(tab.TabId);
-            else
-            {
-                _privateTabStates.CloseTab(tab.TabId);
-                if (!_tabContexts.Values.Any(item => item.IsIncognito)) DisposePrivateContext();
-            }
-        }
-
-        private void DisposePrivateContext()
-        {
-            _privatePermissions?.Dispose(); _privatePermissions = null;
-            _privateDecisions?.RevokeAsync(null, CancellationToken.None).GetAwaiter().GetResult(); _privateDecisions = null;
-            _privateValues?.Dispose(); _privateValues = null;
-            _privateTabStates?.Clear(); _privateTabStates = null;
-            _privateRequestContext?.Dispose(); _privateRequestContext = null;
+            return _tabContexts.GetOrCreate(tab);
         }
 
         public TabRuntime AttachTab(BrowserTabViewModel tab, global::CefSharp.Wpf.ChromiumWebBrowser browser)
@@ -141,7 +124,8 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
             var context = GetTabContext(tab);
             DownloadService downloads = null;
             var host = new CefSharpUserScriptHostBuilder(Repository)
-                .UseValueStore(context.Values).UsePermissionPolicy(context.Permissions)
+                .UseValueStore(context.Values)
+                .UsePermissionPolicy(context.Permissions)
                 .UseMenuService(new WpfMenuService(tab, _dispatcher))
                 .UseNotificationService(new WpfNotificationService(_dispatcher, Content, MainWindow, tab))
                 .UseClipboardService(new WpfClipboardService(_dispatcher))
@@ -155,14 +139,30 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                     IsIncognito = native => native == context.RequestContext ? (bool?)context.IsIncognito : null,
                     AutomaticallyUpdatesScripts = false
                 })
-                .LogTo(entry => { if (!context.IsIncognito) MainWindow.Diagnostics.Report("[" + tab.TabId.Substring(0, 8) + "/" + entry.ScriptKey + "] GM.log " + entry.JsonValue); })
+                .LogTo(entry =>
+                {
+                    if (!context.IsIncognito)
+                        MainWindow.Diagnostics.Report("[" + tab.TabId.Substring(0, 8) + "/" + entry.ScriptKey + "] GM.log " + entry.JsonValue);
+                })
                 .Build();
-            host.Diagnostic += (sender, diagnostic) => { if (!context.IsIncognito) MainWindow.Diagnostics.Report(
-                "[" + tab.TabId.Substring(0, 8) + "] " + diagnostic.Code + " " + diagnostic.Message); };
+            host.Diagnostic += (sender, diagnostic) =>
+            {
+                if (!context.IsIncognito)
+                    MainWindow.Diagnostics.Report("[" + tab.TabId.Substring(0, 8) + "] " + diagnostic.Code + " " + diagnostic.Message);
+            };
             try { host.Attach(browser); }
-            catch { host.Dispose(); downloads.Dispose(); throw; }
+            catch
+            {
+                host.Dispose();
+                downloads?.Dispose();
+                throw;
+            }
             TabRuntime scope = null;
-            scope = new TabRuntime(browser, host, downloads, context, () => { ReleaseTabContext(tab); _tabs.Remove(scope); });
+            scope = new TabRuntime(browser, host, downloads, context, () =>
+            {
+                _tabContexts.Release(tab);
+                _tabs.Remove(scope);
+            });
             _tabs.Add(scope);
             return scope;
         }
@@ -172,63 +172,48 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
             if (_disposed || _dispatcher.HasShutdownStarted) return;
             _dispatcher.BeginInvoke(new Action(() =>
             {
-                foreach (var tab in MainWindow.Tabs.ToArray()) tab.Browser?.Reload();
+                ReloadTabs();
                 MainWindow.Diagnostics.Report("脚本变更 " + args.Kind + "：已刷新打开的标签页。");
             }));
         }
 
         public async Task RevokePermissionsAsync(string scriptKey = null)
         {
-            _permissions.CancelPending();
-            _privatePermissions?.CancelPending();
-            if (_privateDecisions != null) await _privateDecisions.RevokeAsync(scriptKey, CancellationToken.None);
+            var revocation = await _dispatcher.InvokeAsync(() => _tabContexts.CancelPendingAndRevokePrivatePermissionsAsync(scriptKey));
+            await revocation;
             await PermissionDecisions.RevokeAsync(scriptKey, CancellationToken.None);
-            await _dispatcher.InvokeAsync(() => { foreach (var tab in MainWindow.Tabs.ToArray()) tab.Browser?.Reload(); });
+            await _dispatcher.InvokeAsync(ReloadTabs);
         }
 
-        public async Task ShutdownAsync()
+        private void ReloadTabs()
+        {
+            foreach (var tab in MainWindow.Tabs.ToArray()) tab.Browser?.Reload();
+        }
+
+        public Task ShutdownAsync() => _shutdown ?? (_shutdown = ShutdownCoreAsync());
+
+        private async Task ShutdownCoreAsync()
         {
             if (_disposed) return;
             _disposed = true;
             if (Repository != null) Repository.Changed -= RepositoryChanged;
             if (MainWindow != null) await _dispatcher.InvokeAsync(MainWindow.CloseAll);
             foreach (var scope in _tabs.ToArray()) await scope.DisposeAsync();
-            await _dispatcher.InvokeAsync(DisposePrivateContext);
+            await _dispatcher.InvokeAsync(() => _tabContexts?.Dispose());
             _permissions?.Dispose();
             Content?.Dispose();
             _values?.Dispose();
             _database?.Dispose();
             if (_cefInitialized)
             {
-                await _dispatcher.InvokeAsync(() => { RequestContext?.Dispose(); Cef.Shutdown(); });
+                await _dispatcher.InvokeAsync(() =>
+                {
+                    RequestContext?.Dispose();
+                    Cef.Shutdown();
+                });
                 _cefInitialized = false;
             }
             _profileLock?.Dispose();
-        }
-    }
-
-    public sealed class TabRuntime
-    {
-        private readonly global::CefSharp.Wpf.ChromiumWebBrowser _browser;
-        private readonly DownloadService _downloads;
-        private readonly Action _closed;
-        private Task _disposal;
-        public TabRuntime(global::CefSharp.Wpf.ChromiumWebBrowser browser, CefSharpUserScriptHost host, DownloadService downloads, TabContext context, Action closed)
-        { _browser = browser; Host = host; _downloads = downloads; Context = context; _closed = closed; }
-        public CefSharpUserScriptHost Host { get; }
-        public TabContext Context { get; }
-        public Task DisposeAsync() => _disposal ?? (_disposal = DisposeCoreAsync());
-        private async Task DisposeCoreAsync()
-        {
-            await _browser.Dispatcher.InvokeAsync(() =>
-            {
-                if (!_browser.IsDisposed && _browser.IsBrowserInitialized) _browser.Stop();
-            });
-            _downloads.Dispose();
-            await Host.DetachAsync(CancellationToken.None);
-            Host.Dispose();
-            await _downloads.DrainAsync();
-            await _browser.Dispatcher.InvokeAsync(() => { _browser.Dispose(); _closed(); });
         }
     }
 }

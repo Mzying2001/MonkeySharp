@@ -12,7 +12,7 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
         public async Task NavigationCanceledEvaluationIsRetriedUntilTheConditionIsTrue()
         {
             var attempts = 0;
-            await DemoSmokeTest.WaitAsync(() =>
+            await SmokeBrowser.WaitAsync(() =>
             {
                 attempts++;
                 if (attempts == 1) return Task.FromCanceled<bool>(new CancellationToken(true));
@@ -24,14 +24,14 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
         [Fact]
         public async Task PollingDoesNotSuppressAssertionOrProgrammingErrors()
         {
-            await Assert.ThrowsAsync<InvalidOperationException>(() => DemoSmokeTest.WaitAsync(() =>
+            await Assert.ThrowsAsync<InvalidOperationException>(() => SmokeBrowser.WaitAsync(() =>
                 throw new InvalidOperationException("Assertion failed")));
         }
 
         [Fact]
         public async Task RepeatedCancellationStillFailsTheBoundedWait()
         {
-            await Assert.ThrowsAsync<TimeoutException>(() => DemoSmokeTest.WaitAsync(() =>
+            await Assert.ThrowsAsync<TimeoutException>(() => SmokeBrowser.WaitAsync(() =>
                 Task.FromCanceled<bool>(new CancellationToken(true)), TimeSpan.FromMilliseconds(20)));
         }
     }
