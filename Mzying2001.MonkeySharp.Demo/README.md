@@ -19,7 +19,7 @@ The Demo keeps its existing WPF/MVVM layers. `Runtime` assembles profile resourc
 
 `ViewModels` coordinates tab selection, editing and script-manager actions. Draft loading updates source, origin and details together, even when importing identical source from a different file. `Services` contains individual WPF host adapters, bounded UTF-8 source reading and content hashing. `Persistence` retains SQLite transactions, typed storage, source staging and crash recovery; the database format and portable directory layout are unchanged.
 
-`Automation` contains the executable's smoke scenarios, loopback fixture, userscript fixture, bounded browser polling and report writer. These internal types retain their existing runtime namespace. `App` selects normal or smoke startup; `Run-E2E.ps1`, `--smoke`, `--smoke-report`, report fields, check names and automation-facing control names remain stable.
+`Automation` contains the executable's smoke scenarios, loopback fixture, userscript fixture, bounded browser polling and report writer. These internal types retain their existing runtime namespace. `App` selects normal or smoke startup; `Run-E2E.ps1`, `--smoke`, `--smoke-report`, report fields, check names and automation-facing control identifiers remain stable. Explicit automation names use English; visible labels and tooltips remain localized.
 
 ## Browser and manager
 

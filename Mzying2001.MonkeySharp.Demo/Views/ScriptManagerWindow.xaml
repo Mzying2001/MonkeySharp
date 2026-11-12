@@ -140,7 +140,7 @@
                                                TextTrimming="CharacterEllipsis" />
                                 </StackPanel>
                                 <ToggleButton Grid.Column="2" VerticalAlignment="Center" Style="{StaticResource ToggleSwitchStyle}"
-                                              AutomationProperties.Name="{Binding ToggleLabel}"
+                                              AutomationProperties.Name="{Binding ToggleAutomationName}"
                                               IsChecked="{Binding Installation.IsEnabled, Mode=OneWay}"
                                               IsEnabled="{Binding CanToggle}"
                                               Command="{Binding DataContext.ToggleScriptCommand, RelativeSource={RelativeSource AncestorType=Window}}"
@@ -165,7 +165,7 @@
                     <views:ScriptCodeEditor
                         x:Name="SourceEditor"
                         SourceText="{Binding Editor.Source, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                        AutomationProperties.Name="脚本源码"
+                        AutomationProperties.Name="Script source"
                         FontFamily="Consolas" FontSize="13" Background="#FBFDFF"
                         VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" />
                 </TabItem>

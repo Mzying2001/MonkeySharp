@@ -30,12 +30,14 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
             Assert.Equal("A script used by manager tests.", item.Description);
             Assert.Equal("已启用", item.StatusLabel);
             Assert.Equal("停用", item.ToggleLabel);
+            Assert.Equal("Disable script", item.ToggleAutomationName);
             Assert.True(item.CanToggle);
 
             item.Update(await repository.SetEnabledAsync(installation.ScriptKey, false, CancellationToken.None));
 
             Assert.Equal("已停用", item.StatusLabel);
             Assert.Equal("启用", item.ToggleLabel);
+            Assert.Equal("Enable script", item.ToggleAutomationName);
             Assert.True(item.CanToggle);
         }
 

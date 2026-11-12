@@ -37,6 +37,7 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
         public string IconFallbackText => string.IsNullOrWhiteSpace(Name) ? "?" : Name.Substring(0, 1).ToUpperInvariant();
         public string StatusLabel => !Installation.Definition.ParseResult.CanEnable ? "不可用" : Installation.IsEnabled ? "已启用" : "已停用";
         public string ToggleLabel => Installation.IsEnabled ? "停用" : "启用";
+        public string ToggleAutomationName => Installation.IsEnabled ? "Disable script" : "Enable script";
         public string StatusBrush => !Installation.Definition.ParseResult.CanEnable ? "#B42318" : Installation.IsEnabled ? "#2F855A" : "#94A3B8";
         public string DisplayName => StatusLabel + " " + Name + "  " + Version;
 
