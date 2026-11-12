@@ -1,6 +1,6 @@
 # MonkeySharp 用户脚本使用指南
 
-[English](usage-guide.md) | **简体中文**
+[English](usage-guide.md) | **中文**
 
 本文面向脚本作者，介绍 MonkeySharp 的 JavaScript 用户脚本功能，包括如何编写脚本、全部内置脚本 API，以及与 Tampermonkey 的行为差异。宿主应用可以调整服务、权限和限制。.NET 接入请参阅[集成参考](integration-reference.zh-CN.md)，安装和界面操作请参阅 [Demo 指南](../Mzying2001.MonkeySharp.Demo/README.zh-CN.md)。
 

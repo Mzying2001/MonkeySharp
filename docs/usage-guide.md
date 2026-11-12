@@ -1,6 +1,6 @@
 # MonkeySharp Userscript Guide
 
-**English** | [简体中文](usage-guide.zh-CN.md)
+**English** | [中文](usage-guide.zh-CN.md)
 
 This guide describes MonkeySharp's JavaScript userscript support. It covers writing scripts, every built-in script API, and differences from Tampermonkey. Applications can change services, permissions, and limits. For .NET integration, see the [integration reference](integration-reference.md); for installation and UI operations, see the [Demo guide](../Mzying2001.MonkeySharp.Demo/README.md).
 
