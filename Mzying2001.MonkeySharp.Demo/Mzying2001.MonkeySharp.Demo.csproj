@@ -16,6 +16,7 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="AvalonEdit" Version="6.3.1.120" />
     <PackageReference Include="CefSharp.Common" Version="$(CefSharpVersion)" />
     <PackageReference Include="CefSharp.Wpf" Version="$(CefSharpVersion)" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
@@ -24,5 +25,8 @@
   <ItemGroup>
     <ProjectReference Include="..\Mzying2001.MonkeySharp.Core\Mzying2001.MonkeySharp.Core.csproj" />
     <ProjectReference Include="..\Mzying2001.MonkeySharp.CefSharp\Mzying2001.MonkeySharp.CefSharp.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Views\UserscriptJavaScript.xshd" />
   </ItemGroup>
 </Project>

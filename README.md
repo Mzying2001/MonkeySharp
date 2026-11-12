@@ -39,8 +39,6 @@ The host must also reference the matching `CefSharp.WinForms`, `CefSharp.Wpf`, o
 
 `Mzying2001.MonkeySharp.Demo` is a runnable `net462`/`x64` WPF browser with persistent scripts, background tabs, a native manager, SQLite storage, and implementations of the supported host services.
 
-Private tabs use an independent in-memory context, temporary permissions and copied GM baselines with no private writes to normal storage. See [private browsing](docs/usage-guide.md#private-browsing).
-
 ```powershell
 dotnet build Mzying2001.MonkeySharp.Demo/Mzying2001.MonkeySharp.Demo.csproj -c Release -p:Platform=x64
 & .\Mzying2001.MonkeySharp.Demo\bin\x64\Release\net462\MonkeySharpDemo.exe

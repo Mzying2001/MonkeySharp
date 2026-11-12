@@ -162,9 +162,12 @@
             <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Center" Background="Transparent"/>
             <TabControl Grid.Column="2">
                 <TabItem Header="源码编辑器">
-                    <TextBox Text="{Binding Editor.Source, UpdateSourceTrigger=PropertyChanged}" AcceptsReturn="True" AcceptsTab="True"
-                             FontFamily="Consolas" FontSize="13" Padding="12" Background="#FBFDFF"
-                             VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" />
+                    <views:ScriptCodeEditor
+                        x:Name="SourceEditor"
+                        SourceText="{Binding Editor.Source, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                        AutomationProperties.Name="脚本源码"
+                        FontFamily="Consolas" FontSize="13" Background="#FBFDFF"
+                        VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" />
                 </TabItem>
                 <TabItem Header="元数据 / 权限 / 诊断">
                     <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="12">
