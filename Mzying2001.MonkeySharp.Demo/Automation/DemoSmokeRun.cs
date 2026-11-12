@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using Mzying2001.MonkeySharp.Demo.Localization;
 using System.Text.Json;
 using System.Threading.Tasks;
 
@@ -36,7 +37,8 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                 environment = new
                 {
                     cefSharpVersion = typeof(global::CefSharp.Cef).Assembly.GetName().Version.ToString(),
-                    platform = Environment.Is64BitProcess ? "x64" : "x86"
+                    platform = Environment.Is64BitProcess ? "x64" : "x86",
+                    uiLanguage = UiLanguage.CurrentCulture.Name
                 }
             });
         }

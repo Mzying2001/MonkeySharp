@@ -1,4 +1,5 @@
 using Mzying2001.MonkeySharp.Core.Apis;
+using Mzying2001.MonkeySharp.Demo.Localization;
 using Mzying2001.MonkeySharp.Demo.ViewModels;
 using System;
 using System.Collections.Generic;
@@ -45,11 +46,11 @@ namespace Mzying2001.MonkeySharp.Demo.Services
                 _main.Downloads.Add(item);
                 if (_isPrivate) _privateItems.Add(item);
             });
-            operation.Progress += (_, progress) => Post(() => { item.Loaded = progress.Loaded; item.Status = "\u4e0b\u8f7d\u4e2d"; });
-            operation.Completed += (_, __) => Post(() => item.Status = "\u5b8c\u6210");
-            operation.Aborted += (_, __) => Post(() => item.Status = "\u5df2\u53d6\u6d88");
-            operation.TimedOut += (_, __) => Post(() => item.Status = "\u8d85\u65f6");
-            operation.Failed += (_, failure) => Post(() => { item.Status = "\u5931\u8d25"; if (!_isPrivate) _main.Diagnostics.Report(failure.Error.Message); });
+            operation.Progress += (_, progress) => Post(() => { item.Loaded = progress.Loaded; item.Status = Strings.Get("Downloading"); });
+            operation.Completed += (_, __) => Post(() => item.Status = Strings.Get("DownloadComplete"));
+            operation.Aborted += (_, __) => Post(() => item.Status = Strings.Get("DownloadCanceled"));
+            operation.TimedOut += (_, __) => Post(() => item.Status = Strings.Get("DownloadTimeout"));
+            operation.Failed += (_, failure) => Post(() => { item.Status = Strings.Get("DownloadFailed"); if (!_isPrivate) _main.Diagnostics.Report(failure.Error.Message); });
             return operation;
         }
 

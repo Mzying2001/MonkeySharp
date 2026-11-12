@@ -55,7 +55,7 @@
 })();
 ```
 
-在 WPF Demo 中打开脚本管理器，新建脚本或导入该文件，检查源码后选择**安装 / 保存**。确认安装并启用脚本，访问或刷新 `https://example.com/`，页面上应出现提示文字。Demo 安装或编辑脚本后会刷新所有已打开的标签页。其他应用可以使用自己的安装界面；仅打开 `.user.js` 链接不一定会触发安装。
+在 WPF Demo 中打开 **Script manager（脚本管理器）**，新建脚本或导入该文件，检查源码后选择 **Install / Save（安装 / 保存）**。确认安装并启用脚本，访问或刷新 `https://example.com/`，页面上应出现提示文字。Demo 安装或编辑脚本后会刷新所有已打开的标签页。其他应用可以使用自己的安装界面；仅打开 `.user.js` 链接不一定会触发安装。
 
 `@match` 选择页面，`@run-at` 选择执行阶段；普通页面 DOM 操作使用 `@grant none` 即可。它不会授予存储、网络或宿主交互 API。
 
@@ -673,7 +673,7 @@ set/delete 接受同一 partitionKey 对象，修改中的空对象选择普通�
 
 ## 私密浏览
 
-`GM.openInTab(url, {incognito:true})` 及旧式调用请求真实私密上下文。Demo 提供 **私密＋** 按钮及私密标签标识。省略 incognito 时继承来源标签，false 显式打开普通标签。宿主通过 `ITabService.SupportsIncognito` 声明能力；不支持的服务在打开前拒绝私密请求。
+`GM.openInTab(url, {incognito:true})` 及旧式调用请求真实私密上下文。Demo 提供 **Private +（私密＋）** 按钮及私密标签标识。省略 incognito 时继承来源标签，false 显式打开普通标签。宿主通过 `ITabService.SupportsIncognito` 声明能力；不支持的服务在打开前拒绝私密请求。
 
 Demo 的私密标签共享独立内存 RequestContext，Cookie 和缓存与普通浏览隔离；权限记忆及标签数据只在内存中。最后私密标签关闭并排空任务后清除会话。`@run-in`、`GM.info.isIncognito` 及网络 API 使用同一实际上下文，宿主实现见[集成参考](integration-reference.zh-CN.md#私密浏览)。
 

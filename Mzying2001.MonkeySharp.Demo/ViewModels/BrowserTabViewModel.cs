@@ -1,3 +1,4 @@
+using Mzying2001.MonkeySharp.Demo.Localization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using System;
 using System.Collections.ObjectModel;
@@ -7,7 +8,7 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
     public sealed partial class BrowserTabViewModel : ObservableObject
     {
         [ObservableProperty]
-        private string _title = "新标签页";
+        private string _title = Strings.Get("NewTab");
 
         [ObservableProperty]
         private string _address;
@@ -29,7 +30,7 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
 
         public string TabId { get; } = Guid.NewGuid().ToString("N");
         public bool IsIncognito { get; }
-        public string PrivacyLabel => IsIncognito ? "私密 " : string.Empty;
+        public string PrivacyLabel => IsIncognito ? Strings.Get("PrivateLabel") : string.Empty;
         public string ParentTabId { get; set; }
         public IBrowserCommands Browser { get; set; }
         public ObservableCollection<Services.ScriptMenuCommand> MenuCommands { get; } = new ObservableCollection<Services.ScriptMenuCommand>();

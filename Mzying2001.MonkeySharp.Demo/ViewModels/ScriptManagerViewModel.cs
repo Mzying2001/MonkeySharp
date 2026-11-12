@@ -1,3 +1,4 @@
+using Mzying2001.MonkeySharp.Demo.Localization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Mzying2001.MonkeySharp.Core.Domain;
@@ -37,7 +38,7 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
         private string _search;
 
         [ObservableProperty]
-        private string _statusFilter = "全部";
+        private ScriptStatusFilter _statusFilter = ScriptStatusFilter.All;
 
         [ObservableProperty]
         private bool _sortAscending = true;
@@ -70,13 +71,15 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
         public ScriptDetailsViewModel Details { get; } = new ScriptDetailsViewModel();
         public ObservableCollection<ScriptItemViewModel> Scripts { get; } = new ObservableCollection<ScriptItemViewModel>();
         public ICollectionView FilteredScripts { get; }
-        public IReadOnlyList<string> StatusFilters { get; } = new[] { "全部", "已启用", "已停用", "不可用" };
+        public IReadOnlyList<ScriptStatusFilterOption> StatusFilters { get; } = Enum.GetValues(typeof(ScriptStatusFilter))
+            .Cast<ScriptStatusFilter>().Select(value => new ScriptStatusFilterOption(value)).ToArray();
         public int FilteredCount => FilteredScripts.Cast<object>().Count();
+        public string FilteredCountLabel => Strings.Format("MatchCount", FilteredCount);
         public bool HasScripts => Scripts.Count > 0;
         public bool HasFilteredScripts => FilteredCount > 0;
         public bool ShowNoScripts => !HasScripts;
         public bool ShowNoResults => HasScripts && !HasFilteredScripts;
-        public string SortLabel => SortAscending ? "名称升序" : "名称降序";
+        public string SortLabel => SortAscending ? Strings.Get("SortAscending") : Strings.Get("SortDescending");
         public bool CanEdit => !Busy;
 
         [RelayCommand]
@@ -107,7 +110,7 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
         }
 
         partial void OnSearchChanged(string value) => RefreshFilter();
-        partial void OnStatusFilterChanged(string value) => RefreshFilter();
+        partial void OnStatusFilterChanged(ScriptStatusFilter value) => RefreshFilter();
         partial void OnSortAscendingChanged(bool value)
         {
             OnPropertyChanged(nameof(SortLabel));
@@ -128,7 +131,7 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
             Details.Update(value.Installation.Definition.ParseResult, _origin, value.Installation.Definition.Source);
         }
 
-        public bool ConfirmDiscard() => !Editor.IsDirty || _confirm("放弃尚未保存的源码修改？");
+        public bool ConfirmDiscard() => !Editor.IsDirty || _confirm(Strings.Get("DiscardChanges"));
         public async Task RefreshAsync()
         {
             var key = SelectedScript?.Installation.ScriptKey;
@@ -147,21 +150,21 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
         private void NewScript()
         {
             if (!ConfirmDiscard()) return;
-            LoadDraft(ScriptEditorViewModel.Template, "application://editor/new.user.js", "新脚本。保存前会显示权限确认。");
+            LoadDraft(ScriptEditorViewModel.Template, "application://editor/new.user.js", Strings.Get("NewScriptDraft"));
         }
 
         public Task ImportFileAsync(string path) => RunAsync(async () =>
         {
             if (!ConfirmDiscard()) return;
             var source = await Task.Run(() => UserScriptSourceFile.ReadText(path), _cancellation.Token);
-            LoadDraft(source, new Uri(path).AbsoluteUri, "已导入草稿；审核权限后点击安装 / 保存。");
+            LoadDraft(source, new Uri(path).AbsoluteUri, Strings.Get("ImportedDraft"));
         });
 
         private async Task LoadUrlAsync()
         {
             if (!ConfirmDiscard()) return;
             var content = await _content.FetchAsync(Url, _cancellation.Token);
-            LoadDraft(content.Text, Url, "已下载草稿；尚未安装。请审核源码并点击安装 / 保存。");
+            LoadDraft(content.Text, Url, Strings.Get("DownloadedDraft"));
         }
 
         private void LoadDraft(string source, string origin, string status)
@@ -184,26 +187,25 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
             switch (result.Status)
             {
                 case UserScriptUpdateStatus.NotConfigured:
-                    Status = "该脚本未配置版本或更新地址。";
+                    Status = Strings.Get("UpdateNotConfigured");
                     return;
                 case UserScriptUpdateStatus.Disabled:
-                    Status = "该脚本通过 @downloadURL none 禁用了更新检查。";
+                    Status = Strings.Get("UpdateDisabled");
                     return;
                 case UserScriptUpdateStatus.UpToDate:
-                    Status = "脚本已是最新版本 v" + result.CurrentVersion + "。";
+                    Status = Strings.Format("UpToDate", result.CurrentVersion);
                     return;
                 case UserScriptUpdateStatus.Available:
-                    if (!_confirm("检测到脚本更新：v" + result.CurrentVersion + " → v" + result.AvailableVersion +
-                        "。下载并替换当前脚本吗？\n\n下载地址：" + result.DownloadUrl))
+                    if (!_confirm(Strings.Format("ConfirmUpdate", result.CurrentVersion, result.AvailableVersion, result.DownloadUrl)))
                     {
-                        Status = "已取消安装更新。";
+                        Status = Strings.Get("UpdateCanceled");
                         return;
                     }
                     var updated = await _updates.ApplyAsync(result, _cancellation.Token);
                     Editor.Load(updated.Definition.Source);
                     await RefreshAsync();
                     SelectedScript = Scripts.First(item => item.Installation.ScriptKey == updated.ScriptKey);
-                    Status = "已安装更新 v" + updated.Definition.Metadata.Version + " 并刷新浏览器标签。";
+                    Status = Strings.Format("UpdateInstalled", updated.Definition.Metadata.Version);
                     return;
                 default:
                     throw new InvalidOperationException("Unknown update check result.");
@@ -213,22 +215,22 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
         private async Task SaveAsync()
         {
             if (Encoding.UTF8.GetByteCount(Editor.Source ?? string.Empty) > UserScriptSourceFile.MaximumBytes)
-                throw new InvalidOperationException("源码超过 10 MiB 限制。");
+                throw new InvalidOperationException(Strings.Get("SourceTooLarge"));
             var parsed = Editor.Parse();
             Details.Update(parsed, _origin, Editor.Source);
             if (!parsed.CanEnable)
             {
-                Status = "元数据无效；旧脚本未改变。";
+                Status = Strings.Get("InvalidMetadata");
                 return;
             }
-            if (!_confirm("允许以下脚本在匹配的网站运行并使用所声明的权限？\n\n" + Details.ToConfirmationText())) return;
+            if (!_confirm(Strings.Format("ConfirmInstall", Details.ToConfirmationText()))) return;
             var installation = SelectedScript == null
                 ? await _repository.InstallAsync(Editor.Source, _origin, true, _cancellation.Token)
                 : await _repository.UpdateAsync(SelectedScript.Installation.ScriptKey, Editor.Source, _origin, _cancellation.Token);
             Editor.Load(installation.Definition.Source);
             await RefreshAsync();
             SelectedScript = Scripts.First(item => item.Installation.ScriptKey == installation.ScriptKey);
-            Status = "已保存并刷新浏览器标签。";
+            Status = Strings.Get("ScriptSaved");
         }
 
         private async Task ToggleAsync(ScriptItemViewModel item)
@@ -237,16 +239,16 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
             var installation = item.Installation;
             item.Update(await _repository.SetEnabledAsync(installation.ScriptKey, !installation.IsEnabled, _cancellation.Token));
             RefreshFilter();
-            Status = (item.Installation.IsEnabled ? "已启用：" : "已停用：") + item.Name;
+            Status = Strings.Format(item.Installation.IsEnabled ? "ScriptEnabled" : "ScriptDisabled", item.Name);
         }
 
         private async Task DeleteAsync()
         {
-            if (SelectedScript == null || !_confirm("删除该脚本、源码文件及其 GM 存储数据？")) return;
+            if (SelectedScript == null || !_confirm(Strings.Get("ConfirmDelete"))) return;
             await _repository.RemoveAsync(SelectedScript.Installation.ScriptKey, _cancellation.Token);
             Editor.Load(ScriptEditorViewModel.Template);
             await RefreshAsync();
-            Status = "已删除脚本。";
+            Status = Strings.Get("ScriptDeleted");
         }
 
         private async Task RunAsync(Func<Task> action)
@@ -254,11 +256,11 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
             if (Busy) return;
             Busy = true;
             try { await action(); }
-            catch (OperationCanceledException) { Status = "操作已取消。"; }
+            catch (OperationCanceledException) { Status = Strings.Get("OperationCanceled"); }
             catch (Exception exception)
             {
                 Status = exception.Message;
-                _diagnostics.Report("脚本管理器：" + exception.Message);
+                _diagnostics.Report(Strings.Format("ManagerError", exception.Message));
             }
             finally { Busy = false; }
         }
@@ -268,11 +270,11 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
             if (item == null || item.IsBusy) return;
             item.IsBusy = true;
             try { await action(); }
-            catch (OperationCanceledException) { Status = "操作已取消。"; }
+            catch (OperationCanceledException) { Status = Strings.Get("OperationCanceled"); }
             catch (Exception exception)
             {
                 Status = exception.Message;
-                _diagnostics.Report("脚本管理器：" + exception.Message);
+                _diagnostics.Report(Strings.Format("ManagerError", exception.Message));
             }
             finally { item.IsBusy = false; }
         }
@@ -280,9 +282,9 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
         private bool FilterScript(object value)
         {
             var item = (ScriptItemViewModel)value;
-            if (StatusFilter == "已启用" && (!item.Installation.IsEnabled || !item.Installation.Definition.ParseResult.CanEnable)) return false;
-            if (StatusFilter == "已停用" && (item.Installation.IsEnabled || !item.Installation.Definition.ParseResult.CanEnable)) return false;
-            if (StatusFilter == "不可用" && item.Installation.Definition.ParseResult.CanEnable) return false;
+            if (StatusFilter == ScriptStatusFilter.Enabled && (!item.Installation.IsEnabled || !item.Installation.Definition.ParseResult.CanEnable)) return false;
+            if (StatusFilter == ScriptStatusFilter.Disabled && (item.Installation.IsEnabled || !item.Installation.Definition.ParseResult.CanEnable)) return false;
+            if (StatusFilter == ScriptStatusFilter.Unavailable && item.Installation.Definition.ParseResult.CanEnable) return false;
             if (string.IsNullOrWhiteSpace(Search)) return true;
             return item.SearchText.IndexOf(Search.Trim(), StringComparison.OrdinalIgnoreCase) >= 0;
         }
@@ -291,6 +293,7 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
         {
             FilteredScripts.Refresh();
             OnPropertyChanged(nameof(FilteredCount));
+            OnPropertyChanged(nameof(FilteredCountLabel));
             OnPropertyChanged(nameof(HasScripts));
             OnPropertyChanged(nameof(HasFilteredScripts));
             OnPropertyChanged(nameof(ShowNoScripts));

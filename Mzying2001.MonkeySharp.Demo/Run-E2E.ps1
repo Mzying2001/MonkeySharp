@@ -1,5 +1,8 @@
 [CmdletBinding()]
-param([string]$CefSharpVersion = '151.3.240', [switch]$NoBuild)
+param(
+    [string]$CefSharpVersion = '151.3.240',
+    [switch]$NoBuild
+)
 
 $ErrorActionPreference = 'Stop'
 $project = Join-Path $PSScriptRoot 'Mzying2001.MonkeySharp.Demo.csproj'
@@ -14,7 +17,8 @@ if (!$NoBuild) {
 $executable = Join-Path $PSScriptRoot 'bin/x64/Release/net462/MonkeySharpDemo.exe'
 $reports = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../artifacts/demo-smoke'))
 New-Item -ItemType Directory -Path $reports -Force | Out-Null
-$report = Join-Path $reports ('smoke-' + [Guid]::NewGuid().ToString('N') + '.json')
+$report = Join-Path $reports ('smoke-en-' + [Guid]::NewGuid().ToString('N') + '.json')
+# The isolated smoke profile has no saved preference; omit --lang to verify default English startup.
 $process = Start-Process -FilePath $executable -ArgumentList @('--smoke', '--smoke-report', ('"' + $report + '"')) -PassThru -WindowStyle Hidden
 if (!$process.WaitForExit(180000)) {
     Stop-Process -Id $process.Id -Force
@@ -26,6 +30,10 @@ Get-Content -LiteralPath $report -Raw
 if (!$result.success -or $process.ExitCode -ne 0) { throw "Demo smoke failed. See $report and $($result.profile)/Data/Logs/demo.log" }
 $expectedVersion = [version]$CefSharpVersion
 if (!$result.environment -or $result.environment.platform -ne 'x64') { throw 'Demo smoke requires actual x64 process evidence.' }
+if ($result.environment.uiLanguage -ne 'en') { throw "Demo used UI language '$($result.environment.uiLanguage)', expected default English (en)." }
+foreach ($check in @('localizedResources', 'localizedBrowser', 'localizedScriptManager', 'localizedPermissionPrompt')) {
+    if ($result.checks.$check -ne $true) { throw "Demo smoke is missing successful English UI assertion: $check" }
+}
 $actualVersion = [version]$result.environment.cefSharpVersion
 if ($actualVersion.Major -ne $expectedVersion.Major -or $actualVersion.Minor -ne $expectedVersion.Minor -or $actualVersion.Build -ne $expectedVersion.Build) {
     throw "Demo ran CefSharp $actualVersion, requested $expectedVersion."
@@ -33,4 +41,4 @@ if ($actualVersion.Major -ne $expectedVersion.Major -or $actualVersion.Minor -ne
 if (@($result.checks.PSObject.Properties).Count -eq 0 -or @($result.checks.PSObject.Properties | Where-Object { $_.Value -isnot [bool] -or !$_.Value }).Count -gt 0) {
     throw 'Demo smoke has missing or unsuccessful assertions.'
 }
-Write-Host "WPF/Chromium smoke passed. Report: $report"
+Write-Host "WPF/Chromium smoke passed (en). Report: $report"

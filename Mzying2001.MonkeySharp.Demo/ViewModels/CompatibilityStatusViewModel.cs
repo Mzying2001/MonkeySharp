@@ -14,6 +14,6 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
         public string Category { get; }
         public string Message { get; }
         public string Brush { get; }
-        public string Display => Category + "：" + Message;
+        public string Display => Category + ": " + Message;
     }
 }

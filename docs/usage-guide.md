@@ -53,7 +53,7 @@ Save the following complete UTF-8 file as `page-marker.user.js`:
 })();
 ```
 
-In the WPF Demo, open the script manager, create a script or import this file, review the source, and choose **安装 / 保存** (install/save). Confirm installation, enable the script, and visit or reload `https://example.com/`. The marker should appear. Installing or editing a script refreshes all open Demo tabs. Other applications choose their own installation UI; opening a `.user.js` URL does not by itself guarantee installation.
+In the WPF Demo, open the script manager, create a script or import this file, review the source, and choose **Install / Save**. Confirm installation, enable the script, and visit or reload `https://example.com/`. The marker should appear. Installing or editing a script refreshes all open Demo tabs. Other applications choose their own installation UI; opening a `.user.js` URL does not by itself guarantee installation.
 
 `@match` selects pages, `@run-at` selects the lifecycle stage, and `@grant none` is sufficient for ordinary page DOM operations. It does not grant storage, network, or host interaction APIs.
 
@@ -643,7 +643,7 @@ XHR cookiePartition remains unsupported on every tested version. The native requ
 
 ## Private browsing
 
-`GM.openInTab(url, {incognito:true})` and the legacy form request an actual private context. The Demo also provides a **私密＋** button and marks private tabs. Omitted `incognito` inherits the originating tab; false explicitly opens a normal tab. Hosts declare `ITabService.SupportsIncognito`; a private request is rejected before opening when the service does not support it.
+`GM.openInTab(url, {incognito:true})` and the legacy form request an actual private context. The Demo also provides a **Private +** button and marks private tabs. Omitted `incognito` inherits the originating tab; false explicitly opens a normal tab. Hosts declare `ITabService.SupportsIncognito`; a private request is rejected before opening when the service does not support it.
 
 Demo private tabs share a separate in-memory RequestContext, isolating cookies/cache from normal browsing; permission decisions and tab data stay in memory. The session is cleared after the last private tab closes and its tasks drain. `@run-in`, `GM.info.isIncognito` and network APIs use that same actual context; see [host integration](integration-reference.md#private-browsing).
 

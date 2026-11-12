@@ -1,3 +1,4 @@
+using Mzying2001.MonkeySharp.Demo.Localization;
 using Mzying2001.MonkeySharp.Core.Apis;
 using Mzying2001.MonkeySharp.Demo.ViewModels;
 using System;
@@ -70,10 +71,10 @@ namespace Mzying2001.MonkeySharp.Demo.Services
                     }
                     var panel = new StackPanel { Margin = new Thickness(20) };
                     panel.Children.Add(new TextBlock { Text = _request.Text, TextWrapping = TextWrapping.Wrap, MaxWidth = 380 });
-                    var click = new Button { Content = "查看 / 点击通知", Margin = new Thickness(0, 15, 0, 0) };
+                    var click = new Button { Content = Strings.Get("NotificationClick"), Margin = new Thickness(0, 15, 0, 0) };
                     click.Click += (_, __) => { if (Interlocked.Exchange(ref _clicked, 1) == 0) Clicked?.Invoke(this, EventArgs.Empty); };
                     panel.Children.Add(click);
-                    var close = new Button { Content = "关闭" };
+                    var close = new Button { Content = Strings.Get("Close") };
                     close.Click += (_, __) => Dispose();
                     panel.Children.Add(close);
                     _window = new Window

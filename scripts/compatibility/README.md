@@ -44,6 +44,10 @@ Positional arguments are `<Edge-exe> <extension-dir> [output.json] [fixture.user
 
 The environment JSON pins `channel` (stable/beta), `version`, `manifestVersion`, `extensionId`, `contentSha256` and records `settings`. Identity comes from the manifest public key. Content fingerprints hash the sorted `[relativePath, fileSha256]` JSON array, excluding Chromium's regenerated `_metadata` verification cache; symbolic links are rejected. Mismatches fail before launch. The browser uses a source copy and fresh profile. `settings.headless: false` selects a visible reference browser. Stable 5.5.1 and beta 5.6.6242 have separate tracked pins and recorded observations; see [fixed-reference scope](../../docs/compatibility/api-contract.md#pinned-reference-observations).
 
+## WPF Demo E2E
+
+The x64 baseline also invokes the [WPF Demo E2E runner](../../Mzying2001.MonkeySharp.Demo/README.md#verification), which runs once using the application's default English UI. Run it directly with `./Mzying2001.MonkeySharp.Demo/Run-E2E.ps1 -CefSharpVersion 151.3.240`; `-NoBuild` reuses an already matching deployment. Demo JSON reports record `environment.uiLanguage` and English UI assertions under `artifacts/demo-smoke/`. Other languages are checked by localization unit tests without repeating the full browser suite.
+
 ## Pinned third-party corpus
 
 ```powershell

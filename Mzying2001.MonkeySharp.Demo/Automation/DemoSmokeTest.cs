@@ -1,6 +1,7 @@
 using Mzying2001.MonkeySharp.Demo.ViewModels;
 using Mzying2001.MonkeySharp.Demo.Views;
 using Mzying2001.MonkeySharp.Demo.Services;
+using Mzying2001.MonkeySharp.Demo.Localization;
 using Mzying2001.MonkeySharp.Core.Apis;
 using System;
 using System.Collections.Generic;
@@ -10,6 +11,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
@@ -23,13 +25,16 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
     {
         internal static async Task RunAsync(DemoRuntime runtime, Dictionary<string, bool> checks)
         {
+            checks["localizedResources"] = Strings.Get("ScriptManager") == "Script manager";
             var permissionPrompts = 0;
             runtime.PermissionPrompt.Opened += dialog =>
             {
                 permissionPrompts++;
                 var panel = (StackPanel)dialog.Content;
                 var buttons = panel.Children.OfType<WrapPanel>().Single();
-                buttons.Children.OfType<Button>().Single(button => (string)button.Content == "记忆允许").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                var remember = buttons.Children.OfType<Button>().Single(button => AutomationProperties.GetAutomationId(button) == "PermissionRememberAllow");
+                checks["localizedPermissionPrompt"] = (string)remember.Content == Strings.Get("RememberAllow");
+                remember.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             };
             using (var fixture = new LocalHttpFixture())
             {
@@ -129,6 +134,8 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                 await VerifyClipboardAsync(primary, checks);
                 checks["tabState"] = await EvaluateBoolean(primary, "window.__demo.tabState");
                 var mainWindow = Application.Current.MainWindow;
+                checks["localizedBrowser"] = mainWindow.Title == Strings.Get("BrowserTitle") &&
+                    DemoRuntime.TrustWarning == Strings.Get("TrustWarning");
                 var selector = (ListBox)mainWindow.FindName("BrowserTabs");
                 mainWindow.UpdateLayout();
                 await WaitAsync(() => Task.FromResult(TabIconTemplatePresent(selector, primary)));
@@ -217,6 +224,7 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
         private static async Task VerifyScriptManagerAsync(DemoRuntime runtime, Dictionary<string, bool> checks)
         {
             var manager = new ScriptManagerWindow(runtime) { Owner = Application.Current.MainWindow };
+            checks["localizedScriptManager"] = manager.Title == Strings.Get("ManagerTitle");
             manager.Show();
             await Task.Delay(200);
             var managerModel = (ScriptManagerViewModel)manager.DataContext;

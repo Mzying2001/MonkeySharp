@@ -1,3 +1,4 @@
+using Mzying2001.MonkeySharp.Demo.Localization;
 using CefSharp;
 using Mzying2001.MonkeySharp.CefSharp;
 using Mzying2001.MonkeySharp.Core.Permissions;
@@ -18,7 +19,7 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
 {
     public sealed class DemoRuntime
     {
-        public const string TrustWarning = "TrustedPageWorld 演示模式：网页可能观察并使用脚本已获授权的桥接能力。请勿运行不可信脚本或访问不可信网站；这不是安全沙箱。";
+        public static string TrustWarning => Strings.Get("TrustWarning");
         private readonly Dispatcher _dispatcher;
         private readonly List<TabRuntime> _tabs = new List<TabRuntime>();
         private FileStream _profileLock;
@@ -96,6 +97,7 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                 RootCachePath = Paths.BrowserCacheDirectory,
                 CachePath = cache,
                 PersistSessionCookies = true,
+                Locale = UiLanguage.CurrentCulture.Name == "zh-CN" ? "zh-CN" : "en-US",
                 LogFile = Path.Combine(Paths.LogsDirectory, "cef.log"),
                 LogSeverity = LogSeverity.Disable,
                 UncaughtExceptionStackSize = 20
@@ -173,7 +175,7 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
             _dispatcher.BeginInvoke(new Action(() =>
             {
                 ReloadTabs();
-                MainWindow.Diagnostics.Report("脚本变更 " + args.Kind + "：已刷新打开的标签页。");
+                MainWindow.Diagnostics.Report(Strings.Format("ScriptsChanged", args.Kind));
             }));
         }
 

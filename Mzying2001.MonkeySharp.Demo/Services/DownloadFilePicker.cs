@@ -1,4 +1,5 @@
 using Microsoft.Win32;
+using Mzying2001.MonkeySharp.Demo.Localization;
 using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
@@ -10,7 +11,7 @@ namespace Mzying2001.MonkeySharp.Demo.Services
 {
     internal static class DownloadFilePicker
     {
-        internal const string Title = "Save userscript download";
+        internal static string Title => Strings.Get("SaveDownloadTitle");
         internal static string Select(string name, string directory, CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();

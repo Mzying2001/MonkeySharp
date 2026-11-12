@@ -1,3 +1,4 @@
+using Mzying2001.MonkeySharp.Demo.Localization;
 using Mzying2001.MonkeySharp.Core.Permissions;
 using Mzying2001.MonkeySharp.Demo.Persistence;
 using System;
@@ -39,7 +40,7 @@ namespace Mzying2001.MonkeySharp.Demo.Views
 
                 var revoke = new Button
                 {
-                    Content = "撤销此脚本的记忆决定",
+                    Content = Strings.Get("RevokeScriptPermissions"),
                     Tag = group.Key,
                     HorizontalAlignment = HorizontalAlignment.Left,
                     Margin = new Thickness(0, 6, 0, 0)
@@ -49,7 +50,7 @@ namespace Mzying2001.MonkeySharp.Demo.Views
             }
 
             if (entries.Count == 0)
-                EntriesPanel.Children.Add(new TextBlock { Text = "没有已记忆的决定。", Margin = new Thickness(0, 15, 0, 0) });
+                EntriesPanel.Children.Add(new TextBlock { Text = Strings.Get("NoRememberedPermissions"), Margin = new Thickness(0, 15, 0, 0) });
         }
 
         private async void RevokeClicked(object sender, RoutedEventArgs args)

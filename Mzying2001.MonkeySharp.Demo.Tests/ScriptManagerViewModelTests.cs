@@ -28,15 +28,15 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
             Assert.Equal("Manager sample", item.Name);
             Assert.Equal("v1.2.0", item.Version);
             Assert.Equal("A script used by manager tests.", item.Description);
-            Assert.Equal("已启用", item.StatusLabel);
-            Assert.Equal("停用", item.ToggleLabel);
+            Assert.Equal("Enabled", item.StatusLabel);
+            Assert.Equal("Disable", item.ToggleLabel);
             Assert.Equal("Disable script", item.ToggleAutomationName);
             Assert.True(item.CanToggle);
 
             item.Update(await repository.SetEnabledAsync(installation.ScriptKey, false, CancellationToken.None));
 
-            Assert.Equal("已停用", item.StatusLabel);
-            Assert.Equal("启用", item.ToggleLabel);
+            Assert.Equal("Disabled", item.StatusLabel);
+            Assert.Equal("Enable", item.ToggleLabel);
             Assert.Equal("Enable script", item.ToggleAutomationName);
             Assert.True(item.CanToggle);
         }
@@ -87,9 +87,9 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
             Assert.Contains("https://example.com/lib.js", details.Requires);
             Assert.Contains("badge = https://example.com/badge.png", details.Resources);
             Assert.Equal("https://example.com/script.user.js", details.SourceOrigin);
-            Assert.Contains(details.CompatibilityStatuses, item => item.Category == "Core 已实现");
-            Assert.Contains(details.CompatibilityStatuses, item => item.Category == "需要宿主 service");
-            Assert.Contains(details.CompatibilityStatuses, item => item.Category == "与 Tampermonkey 有差异");
+            Assert.Contains(details.CompatibilityStatuses, item => item.Category == "Implemented in Core");
+            Assert.Contains(details.CompatibilityStatuses, item => item.Category == "Host services required");
+            Assert.Contains(details.CompatibilityStatuses, item => item.Category == "Differs from Tampermonkey");
             Assert.Contains("Details", details.ToConfirmationText());
         }
 
@@ -108,11 +108,11 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
             var details = new ScriptDetailsViewModel();
             details.Update(new UserScriptMetadataParser().Parse(source), "fixture://compatibility.user.js", source);
 
-            Assert.Contains(details.CompatibilityStatuses, item => item.Category == "有意降级/不支持");
-            Assert.Contains(details.CompatibilityStatuses, item => item.Category == "与 Tampermonkey 有差异" &&
-                item.Message.Contains("静态 @webRequest"));
+            Assert.Contains(details.CompatibilityStatuses, item => item.Category == "Intentionally degraded / Unsupported");
+            Assert.Contains(details.CompatibilityStatuses, item => item.Category == "Differs from Tampermonkey" &&
+                item.Message.Contains("Static @webRequest"));
             Assert.Contains("@unwrap", details.ToConfirmationText());
-            Assert.DoesNotContain("@sandbox 非 raw", details.ToConfirmationText());
+            Assert.DoesNotContain("Unsupported @sandbox", details.ToConfirmationText());
             Assert.Contains("proxy", details.ToConfirmationText());
         }
 
@@ -134,7 +134,7 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
                 Assert.True(manager.HasFilteredScripts);
                 Assert.Equal("Alpha", ((ScriptItemViewModel)manager.FilteredScripts.Cast<object>().First()).Name);
 
-                manager.StatusFilter = "已启用";
+                manager.StatusFilter = ScriptStatusFilter.Enabled;
                 Assert.Equal(1, manager.FilteredCount);
                 manager.Search = "does-not-exist";
                 Assert.True(manager.ShowNoResults);
@@ -160,15 +160,15 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
 
                     var disabled = await repository.GetAsync(installation.ScriptKey, CancellationToken.None);
                     Assert.False(disabled.IsEnabled);
-                    Assert.Equal("已停用", item.StatusLabel);
-                    Assert.Equal("启用", item.ToggleLabel);
+                    Assert.Equal("Disabled", item.StatusLabel);
+                    Assert.Equal("Enable", item.ToggleLabel);
 
                     await manager.ToggleScriptCommand.ExecuteAsync(item);
 
                     var enabled = await repository.GetAsync(installation.ScriptKey, CancellationToken.None);
                     Assert.True(enabled.IsEnabled);
-                    Assert.Equal("已启用", item.StatusLabel);
-                    Assert.Equal("停用", item.ToggleLabel);
+                    Assert.Equal("Enabled", item.StatusLabel);
+                    Assert.Equal("Disable", item.ToggleLabel);
                 }
             }
         }
@@ -196,15 +196,15 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
 
                     Assert.Equal(0, confirmationCount);
                     Assert.False((await repository.GetAsync(installation.ScriptKey, CancellationToken.None)).IsEnabled);
-                    Assert.Equal("已停用", item.StatusLabel);
+                    Assert.Equal("Disabled", item.StatusLabel);
                     Assert.Equal(1, stateNotificationCount);
 
                     await manager.ToggleScriptCommand.ExecuteAsync(item);
 
                     Assert.Equal(0, confirmationCount);
                     Assert.True((await repository.GetAsync(installation.ScriptKey, CancellationToken.None)).IsEnabled);
-                    Assert.Equal("已启用", item.StatusLabel);
-                    Assert.Equal("停用", item.ToggleLabel);
+                    Assert.Equal("Enabled", item.StatusLabel);
+                    Assert.Equal("Disable", item.ToggleLabel);
                     Assert.True(item.CanToggle);
                     Assert.Equal(2, stateNotificationCount);
                 }

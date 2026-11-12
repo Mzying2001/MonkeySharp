@@ -16,6 +16,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Controls;
+using System.Windows.Automation;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Threading;
@@ -40,7 +41,8 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
                 var panel = (StackPanel)dialog.Content;
                 var buttons = panel.Children.OfType<WrapPanel>().Single().Children.OfType<Button>().ToArray();
                 Assert.Equal(3, buttons.Length);
-                buttons.Single(button => (string)button.Content == "允许一次").RaiseEvent(new System.Windows.RoutedEventArgs(Button.ClickEvent));
+                buttons.Single(button => AutomationProperties.GetAutomationId(button) == "PermissionAllowOnce")
+                    .RaiseEvent(new System.Windows.RoutedEventArgs(Button.ClickEvent));
             };
             var choice = await prompt.PromptAsync(request, scope, CancellationToken.None);
             Assert.Equal(Mzying2001.MonkeySharp.Core.Permissions.PermissionDecision.Allow, choice.Decision);

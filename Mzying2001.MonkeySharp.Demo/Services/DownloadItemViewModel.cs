@@ -1,3 +1,4 @@
+using Mzying2001.MonkeySharp.Demo.Localization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using System;
@@ -7,7 +8,7 @@ namespace Mzying2001.MonkeySharp.Demo.Services
     public sealed partial class DownloadItemViewModel : ObservableObject
     {
         [ObservableProperty]
-        private string _status = "等待下载";
+        private string _status = Strings.Get("WaitingDownload");
 
         [ObservableProperty]
         private long _loaded;

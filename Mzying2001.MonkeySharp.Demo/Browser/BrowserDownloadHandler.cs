@@ -1,4 +1,5 @@
 using CefSharp;
+using Mzying2001.MonkeySharp.Demo.Localization;
 using System;
 
 namespace Mzying2001.MonkeySharp.Demo.Browser
@@ -27,6 +28,6 @@ namespace Mzying2001.MonkeySharp.Demo.Browser
 #endif
         }
         public void OnDownloadUpdated(IWebBrowser control, IBrowser browser, DownloadItem item, IDownloadItemCallback callback)
-        { if (item.IsComplete) _report("浏览器下载完成：" + item.FullPath); }
+        { if (item.IsComplete) _report(Strings.Format("BrowserDownloadComplete", item.FullPath)); }
     }
 }

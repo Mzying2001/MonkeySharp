@@ -11,6 +11,21 @@ dotnet build Mzying2001.MonkeySharp.Demo/Mzying2001.MonkeySharp.Demo.csproj -c R
 
 `CefSharpVersion` can be overridden for source builds; all managed and native CefSharp components must use the same version. `Run-E2E.ps1` also defaults to `151.3.240`. The Demo includes the download handler signature compatibility needed by the repository's `84.4.10`, `121.3.70`, and `151.3.240` CI configurations; this does not promise compatibility with arbitrary versions. Clean build outputs before switching `CefSharpVersion`; otherwise NuGet's native copy rules can retain DLLs from the previously built version. `Run-E2E.ps1` performs this clean automatically unless `-NoBuild` is supplied. It does not delete the application profile.
 
+## Interface language
+
+The Demo supports English (`en`, the default regardless of Windows language) and Simplified Chinese (`zh-CN`). Choose **Tools → Language (restart required) → English / 简体中文**, then close and reopen the application. In Chinese the menu is **工具 → 语言（重启后生效）**. The preference is stored in `<executable directory>/Data/ui-language.txt`; no database migration is required. A missing, unreadable or unsupported preference falls back to English.
+
+Use a startup override for one launch; it takes precedence over the saved preference without changing it:
+
+```powershell
+& .\Mzying2001.MonkeySharp.Demo\bin\x64\Release\net462\MonkeySharpDemo.exe --lang zh-CN
+& .\Mzying2001.MonkeySharp.Demo\bin\x64\Release\net462\MonkeySharpDemo.exe --lang en
+```
+
+Language is selected before creating the runtime and windows, including Chromium's native UI locale. Changes take effect on the next launch so open tabs, permission requests and unsaved drafts can finish normally. Windows-owned file-dialog buttons follow the operating system's language. Script metadata, user-authored content and runtime/third-party diagnostic messages retain their original text.
+
+`Localization/Strings.resx` contains neutral English resources and `Strings.zh-CN.resx` contains the Chinese satellite resources. XAML uses `{loc:Text Key}` and C# uses `Strings.Get` / `Strings.Format`; keep complete formatted messages together with the same placeholders in both files. Deploy the `zh-CN/MonkeySharpDemo.resources.dll` satellite directory alongside the executable. Resource parity and format placeholders are checked by the Demo tests. Additional languages require a resource file, a supported language entry, a menu option and unit-test coverage; the E2E runner always uses English.
+
 ## Code organization
 
 The Demo keeps its existing WPF/MVVM layers. `Runtime` assembles profile resources and hosts; `TabContextManager` owns live tab contexts and the shared temporary private session, while `TabRuntime` owns one host, download service and browser. Teardown stops the browser, cancels downloads, detaches the host, drains accepted downloads, disposes the browser and finally releases its context. Repeated disposal and shutdown await the same operation.
@@ -19,7 +34,7 @@ The Demo keeps its existing WPF/MVVM layers. `Runtime` assembles profile resourc
 
 `ViewModels` coordinates tab selection, editing and script-manager actions. Draft loading updates source, origin and details together, even when importing identical source from a different file. `Services` contains individual WPF host adapters, bounded UTF-8 source reading and content hashing. `Persistence` retains SQLite transactions, typed storage, source staging and crash recovery; the database format and portable directory layout are unchanged.
 
-`Automation` contains the executable's smoke scenarios, loopback fixture, userscript fixture, bounded browser polling and report writer. These internal types retain their existing runtime namespace. `App` selects normal or smoke startup; `Run-E2E.ps1`, `--smoke`, `--smoke-report`, report fields, check names and automation-facing control identifiers remain stable. Explicit automation names use English; visible labels and tooltips remain localized.
+`Automation` contains the executable's smoke scenarios, loopback fixture, userscript fixture, bounded browser polling and report writer. These internal types retain their existing runtime namespace. `App` selects normal or smoke startup; `--smoke`, `--smoke-report`, existing report fields, check names and automation-facing control identifiers remain stable. Explicit automation names and IDs use stable English identifiers; visible labels and tooltips follow the selected language. Reports additionally record `environment.uiLanguage` and localization checks.
 
 ## Browser and manager
 
@@ -27,13 +42,13 @@ The Demo keeps its existing WPF/MVVM layers. `Runtime` assembles profile resourc
 - Tabs retain their actual browser controls when switching; background tabs keep running. Each browser attaches its MonkeySharp host before entering the visual tree. Closing a tab awaits host teardown before disposing its browser.
 - Closing the selected tab returns to its parent when one was assigned, otherwise to its left neighbor (or the next tab when closing the first). Closing a background tab keeps the current selection; closing the last opens a blank tab. Tab colors stay readable whether the tab strip or page has keyboard focus.
 - Web popups and new-tab links open as managed tabs. Popup dimensions and a JavaScript `window.opener` relationship are not preserved.
-- The script manager is a native WPF window. Create a script, import a UTF-8 `.user.js` file, or load an HTTP(S) URL into a draft. Review the source and use **安装 / 保存** to see its structured metadata and approve the requested permissions. `Ctrl+S` performs the same save/install action and the editor shows an unsaved-change indicator.
+- The script manager is a native WPF window. Create a script, import a UTF-8 `.user.js` file, or load an HTTP(S) URL into a draft. Review the source and use **Install / Save** to see its structured metadata and approve the requested permissions. `Ctrl+S` performs the same save/install action and the editor shows an unsaved-change indicator.
 - Source editing uses AvalonEdit with line numbers, JavaScript highlighting (including async/await and template strings), four-space Tab / Shift+Tab indentation, inherited indentation on new lines, and Ctrl+Z / Ctrl+Y undo/redo. Long lines scroll horizontally without wrapping. Template strings are colored as strings, without separately highlighting interpolation expressions.
 - Installed scripts appear as readable rows with status, version, description, and an inline enable/disable toggle. The manager supports search across name, description, namespace, and source, status filtering, name sorting, deletion, and a manual **check for updates and install** action. Invalid metadata does not replace the installed version. Unsaved edits require confirmation before changing selection or closing the manager.
 - Metadata details are read-only and grouped into identity, matching rules, permissions, dependencies/resources, and diagnostics; edit the source to change metadata. The row prefers `@icon64` and then `@icon`; WPF loads valid HTTP(S) URLs directly and uses a first-letter placeholder when an icon is missing or cannot be loaded.
 - Update checks prefer `@updateURL`, then `@downloadURL`; `@downloadURL none` disables checks. The downloaded script must have the same non-empty name and namespace and a newer version. Checks use the independent HTTP client without browser login cookies; there is no background update task.
 - Repository mutations refresh **all open tabs**, including frames, so old execution state is revoked and matching scripts run again. This intentionally favors correctness over avoiding reloads in the Demo.
-- The current tab's registered commands appear under **脚本菜单**. `@run-at context-menu` entries are added to the native page context menu only for matching frames; selecting one creates a fresh script execution. Access keys can be invoked with Alt+key. **工具** opens data/download folders, diagnostics, download cancellation controls, or DevTools.
+- The current tab's registered commands appear under **Script menu**. `@run-at context-menu` entries are added to the native page context menu only for matching frames; selecting one creates a fresh script execution. Access keys can be invoked with Alt+key. **Tools** opens data/download folders, diagnostics, download cancellation controls, DevTools, or language preferences.
 
 ## Portable data and recovery
 
@@ -44,6 +59,7 @@ If startup reports an unsupported database format, close all Demo processes and 
 ```text
 <executable directory>/Data/
   .profile.lock
+  ui-language.txt
   monkeysharp.db
   BrowserCache/Default/
   UserScripts/<script-key>.user.js
@@ -63,7 +79,7 @@ Core's `IUserScriptRepositoryPersistence`, `UserScriptPersistenceRecord`, and `P
 
 ## Private browsing
 
-`GM.openInTab(url, {incognito:true})` and the legacy form request an actual private context. The Demo also provides a **私密＋** button and marks private tabs. Omitted `incognito` inherits the originating tab; false explicitly opens a normal tab. Hosts declare `ITabService.SupportsIncognito`; a private request is rejected before opening when the service does not support it.
+`GM.openInTab(url, {incognito:true})` and the legacy form request an actual private context. The Demo also provides a **Private +** button and marks private tabs. Omitted `incognito` inherits the originating tab; false explicitly opens a normal tab. Hosts declare `ITabService.SupportsIncognito`; a private request is rejected before opening when the service does not support it.
 
 The Demo's `TabContext` binds stable tab identity, the native RequestContext, privacy state, value store, permission policy and tab-state service. All private tabs in one live session share a separate in-memory RequestContext. Cookies and cache are isolated from normal browsing; permission decisions and tab data stay in memory. The last private tab closes and drains its host before releasing that context and clearing the private session. `@run-in`, `GM.info.isIncognito`, network APIs and tab opening all use that same actual context.
 
@@ -102,10 +118,14 @@ The default `AllowDeclaredPermissionsPolicy` approves calls that pass the Core g
 dotnet test MonkeySharp.slnx -c Release -p:Platform=x64
 node --test Mzying2001.MonkeySharp.Core.Tests/JavaScript/*.test.js
 powershell -NoProfile -ExecutionPolicy Bypass -File Mzying2001.MonkeySharp.Demo/Run-E2E.ps1
+# Reuse an already matching build:
+./Mzying2001.MonkeySharp.Demo/Run-E2E.ps1 -NoBuild
 ```
+
+`Run-E2E.ps1` builds once and runs one English process. It omits `--lang` to verify default English startup in an isolated profile, then checks rendered browser/manager titles, permission buttons, English resource loading, actual UI language and all existing browser assertions. CI runs this English E2E once for each supported x64 CefSharp version. Other languages are covered by resource and localization unit tests, so adding a language does not add E2E runs.
 
 The E2E runner starts a real WPF application with loopback fixtures and a separate `SmokeRuns/<id>/Data` profile, never the normal browser profile. It leaves a JSON report under `artifacts/demo-smoke` and logs under the reported profile. It tests background tabs, tab switching, iframe injection, shared values/cookies, undefined persistence across tab creation/navigation, resources, XHR/webRequest, menus, notifications, real downloads, tab state, navigation, script enable/disable and final disposal, including repeated tab disposal and application shutdown. The test verifies Unicode text and HTML on the system clipboard, then restores its previous contents. Test-project shadow copying is disabled so SQLite's native library resolves from the deployed test output.
 
 CI runs the SmokeHost real-Chromium gate for CefSharp `84.4.10`, `121.3.70`, and `151.3.240` on x64 and x86. The WPF Demo gates cover all three versions on x64.
 
-Manual acceptance checks: install/edit/delete through the manager; reject the permission prompt; close with unsaved edits; confirm/cancel Save As; write text and HTML to the clipboard from a trusted script; verify browser login persistence after restart; lock/remove a source file and check the recovery diagnostics; launch a second process with the same profile and check the startup error.
+Manual acceptance checks: switch language through Tools, restart and verify the preference; use `--lang` to override it for one launch; install/edit/delete through the manager; reject the permission prompt; close with unsaved edits; confirm/cancel Save As; write text and HTML to the clipboard from a trusted script; verify browser login persistence after restart; lock/remove a source file and check the recovery diagnostics; launch a second process with the same profile and check the startup error.

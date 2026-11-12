@@ -1,3 +1,4 @@
+using Mzying2001.MonkeySharp.Demo.Localization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using System;
@@ -126,7 +127,7 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
             if (!text.Contains("://")) text = "https://" + text;
             if (!Uri.TryCreate(text, UriKind.Absolute, out var uri) ||
                 (uri.Scheme != "http" && uri.Scheme != "https") || string.IsNullOrEmpty(uri.Host))
-                throw new ArgumentException("请输入 HTTP(S) 地址，或 about:blank。");
+                throw new ArgumentException(Strings.Get("InvalidAddress"));
             return uri.AbsoluteUri;
         }
 

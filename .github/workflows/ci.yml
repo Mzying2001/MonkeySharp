@@ -95,3 +95,11 @@ jobs:
           pwsh -NoProfile -ExecutionPolicy Bypass -File
           Mzying2001.MonkeySharp.Demo/Run-E2E.ps1
           -CefSharpVersion ${{ matrix.cefSharpVersion }}
+
+      - name: Upload Demo evidence
+        if: always() && matrix.platform == 'x64'
+        uses: actions/upload-artifact@v4
+        with:
+          name: demo-${{ matrix.cefSharpVersion }}-x64
+          path: artifacts/demo-smoke/
+          if-no-files-found: error

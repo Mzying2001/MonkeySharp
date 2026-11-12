@@ -1,3 +1,4 @@
+using Mzying2001.MonkeySharp.Demo.Localization;
 using Mzying2001.MonkeySharp.Demo.Runtime;
 using Mzying2001.MonkeySharp.Demo.ViewModels;
 using Mzying2001.MonkeySharp.Demo.Views;
@@ -26,6 +27,7 @@ namespace Mzying2001.MonkeySharp.Demo
         {
             InitializeComponent();
             _runtime = runtime;
+            ShowLanguageSelection(UiLanguage.CurrentCulture.Name);
             DataContext = runtime.MainWindow;
             TrustWarning.Text = DemoRuntime.TrustWarning;
             runtime.MainWindow.Tabs.CollectionChanged += TabsChanged;
@@ -190,6 +192,27 @@ namespace Mzying2001.MonkeySharp.Demo
         }
         private void OpenDataDirectory(object sender, RoutedEventArgs args) => OpenDirectory(_runtime.Paths.DataDirectory);
         private void OpenDownloadsDirectory(object sender, RoutedEventArgs args) => OpenDirectory(_runtime.Paths.DownloadsDirectory);
+        private void ShowLanguageSelection(string language)
+        {
+            EnglishLanguage.IsChecked = language == "en";
+            ChineseLanguage.IsChecked = language == "zh-CN";
+        }
+        private void SelectLanguage(object sender, RoutedEventArgs args)
+        {
+            try
+            {
+                var language = (string)((MenuItem)sender).Tag;
+                UiLanguage.Save(_runtime.Paths.BaseDirectory, language);
+                ShowLanguageSelection(language);
+                MessageBox.Show(this, Strings.Get("LanguageSaved"), Strings.Get("LanguageMenu"), MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception exception)
+            {
+                ShowLanguageSelection(UiLanguage.Resolve(new string[0], _runtime.Paths.BaseDirectory));
+                MessageBox.Show(this, Strings.Get("LanguageSaveFailed") + "\n\n" + exception.Message,
+                    Strings.Get("LanguageMenu"), MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
         private void OpenDirectory(string path)
         {
             try { Process.Start(new ProcessStartInfo(path) { UseShellExecute = true }); }
@@ -205,7 +228,7 @@ namespace Mzying2001.MonkeySharp.Demo
             IsEnabled = false;
             _manager?.Close();
             try { await _runtime.ShutdownAsync(); }
-            catch (Exception exception) { MessageBox.Show(exception.Message, "关闭失败"); }
+            catch (Exception exception) { MessageBox.Show(exception.Message, Strings.Get("ShutdownFailed")); }
             DetachWindowEvents();
             Close();
             Application.Current.Shutdown();

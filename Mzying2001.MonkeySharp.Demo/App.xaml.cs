@@ -1,4 +1,5 @@
 using System;
+using Mzying2001.MonkeySharp.Demo.Localization;
 using Mzying2001.MonkeySharp.Demo.Runtime;
 using System.Linq;
 using System.Windows;
@@ -15,8 +16,10 @@ namespace Mzying2001.MonkeySharp.Demo
             var smoke = e.Args.Contains("--smoke");
             var report = e.Args.SkipWhile(argument => argument != "--smoke-report").Skip(1).FirstOrDefault();
             var smokeRun = smoke ? new DemoSmokeRun(report) : null;
+            UiLanguage.Apply(UiLanguage.DefaultLanguage);
             try
             {
+                UiLanguage.Apply(UiLanguage.Resolve(e.Args, smokeRun?.ProfileDirectory ?? AppDomain.CurrentDomain.BaseDirectory));
                 Runtime = await DemoRuntime.CreateAsync(Dispatcher, smokeRun?.ProfileDirectory);
                 MainWindow = new MainWindow(Runtime);
                 MainWindow.Show();
@@ -37,7 +40,7 @@ namespace Mzying2001.MonkeySharp.Demo
                     return;
                 }
                 if (Runtime != null) await Runtime.ShutdownAsync();
-                MessageBox.Show("启动失败。请确认程序目录可写、没有另一个实例占用 Data，并安装 x64 VC++ 运行库。\n\n" + exception,
+                MessageBox.Show(Strings.Format("StartupFailed", exception),
                     "MonkeySharp Demo", MessageBoxButton.OK, MessageBoxImage.Error);
                 Shutdown(1);
             }

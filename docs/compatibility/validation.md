@@ -15,6 +15,8 @@ node --test Mzying2001.MonkeySharp.Core.Tests/JavaScript/*.test.js
 
 Run from the repository root in a Windows desktop session. Use an SDK that supports the solution's `.slnx` format and Node.js 24, the CI-tested JavaScript version. Real-CefSharp builds require an explicit x64/x86 platform and matching managed/native versions. The Demo gate runs only for x64.
 
+The WPF Demo runner builds once and runs only the default English UI in an isolated smoke profile. Reports under `artifacts/demo-smoke/` include `environment.uiLanguage` and require English resources, browser/manager titles and permission controls alongside the existing runtime assertions. Resource-key parity, format placeholders, preference precedence and language-independent status filtering are covered by the Demo unit tests. CI uploads one English Demo report for each supported x64 CefSharp version; adding UI languages does not add E2E runs.
+
 ```powershell
 # Clean solution/.NET/JS/SmokeHost/CDP, plus WPF on x64.
 ./scripts/compatibility/Run-Baseline.ps1 -Platform x64 -CefSharpVersion 84.4.10
