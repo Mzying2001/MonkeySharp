@@ -1,4 +1,5 @@
 using Mzying2001.MonkeySharp.Core.Apis;
+using Mzying2001.MonkeySharp.Core.Repository;
 using Mzying2001.MonkeySharp.Demo.ViewModels;
 using System;
 using System.Collections.Generic;
@@ -12,15 +13,19 @@ namespace Mzying2001.MonkeySharp.Demo.Services
     {
         private readonly BrowserTabViewModel _tab;
         private readonly Dispatcher _dispatcher;
+        private readonly IUserScriptRepository _repository;
         private readonly Dictionary<Tuple<string, string, string, string>, ScriptMenuCommand> _groups = new Dictionary<Tuple<string, string, string, string>, ScriptMenuCommand>();
-        public WpfMenuService(BrowserTabViewModel tab, Dispatcher dispatcher)
+
+        public WpfMenuService(BrowserTabViewModel tab, Dispatcher dispatcher, IUserScriptRepository repository)
         {
             _tab = tab;
             _dispatcher = dispatcher;
+            _repository = repository ?? throw new ArgumentNullException(nameof(repository));
         }
 
         public async Task<IMenuRegistration> RegisterAsync(MenuCommandRequest request, Action<MenuCommandInvocation> invoked, CancellationToken cancellationToken)
         {
+            var installation = await _repository.GetAsync(request.ScriptKey, cancellationToken).ConfigureAwait(false);
             return await _dispatcher.InvokeAsync(() =>
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -28,7 +33,7 @@ namespace Mzying2001.MonkeySharp.Demo.Services
                 var key = Tuple.Create(request.ScriptKey.ToString(), request.Name, request.Title ?? "", request.AccessKey ?? "");
                 if (!_groups.TryGetValue(key, out var command))
                 {
-                    command = new ScriptMenuCommand(request);
+                    command = new ScriptMenuCommand(request, installation.Definition.Metadata.Name);
                     _groups.Add(key, command);
                     _tab.MenuCommands.Add(command);
                 }

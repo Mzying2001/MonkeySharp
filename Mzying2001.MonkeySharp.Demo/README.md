@@ -43,7 +43,7 @@ Windows-owned file-dialog controls follow the operating system's language. Scrip
 - Metadata details are read-only and grouped into identity, matching rules, permissions, dependencies/resources, and diagnostics. Edit the source to change metadata. Icons prefer `@icon64`, then `@icon`; WPF loads HTTP(S) icons and uses a first-letter placeholder when unavailable.
 - **Check and install updates** prefers `@updateURL`, then `@downloadURL`; `@downloadURL none` disables checks. Updates need the same non-empty name and namespace and a newer version. Checks use an independent HTTP client without browser login cookies. There is no background update task.
 - Installing, editing, enabling, disabling, or deleting a script reloads **all open tabs**, including frames, to revoke old execution state and rerun matching scripts.
-- Registered commands appear under **Script menu** and support Alt+access key. Matching `@run-at context-menu` entries appear in the native page context menu and start a fresh execution when selected. **Tools** provides diagnostics, download cancellation controls, DevTools, data/download folders, and language preferences.
+- Registered commands appear under **Script menu**, grouped beneath non-interactive script-name headings, and support Alt+access key. Command labels show their names without installation identifiers. The menu is hidden when the selected tab has no registered commands. Matching `@run-at context-menu` entries appear in the native page context menu and start a fresh execution when selected. **Tools** provides diagnostics, download cancellation controls, DevTools, data/download folders, and language preferences.
 
 ## Portable data and recovery
 

@@ -128,7 +128,7 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
             var host = new CefSharpUserScriptHostBuilder(Repository)
                 .UseValueStore(context.Values)
                 .UsePermissionPolicy(context.Permissions)
-                .UseMenuService(new WpfMenuService(tab, _dispatcher))
+                .UseMenuService(new WpfMenuService(tab, _dispatcher, Repository))
                 .UseNotificationService(new WpfNotificationService(_dispatcher, Content, MainWindow, tab))
                 .UseClipboardService(new WpfClipboardService(_dispatcher))
                 .UseTabService(new WpfTabService(MainWindow, tab, _dispatcher))

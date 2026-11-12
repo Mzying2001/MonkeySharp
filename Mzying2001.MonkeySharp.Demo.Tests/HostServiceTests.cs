@@ -6,6 +6,7 @@ using Mzying2001.MonkeySharp.Demo.ViewModels;
 using Mzying2001.MonkeySharp.Demo.Views;
 using Mzying2001.MonkeySharp.Demo.Persistence;
 using Mzying2001.MonkeySharp.Core.Permissions;
+using Mzying2001.MonkeySharp.Core.Repository;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -208,17 +209,98 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
         public Task MenuRegistrationHasUserVisibleCommandAndDeterministicRemoval() => OnDispatcher(async () =>
         {
             var tab = new BrowserTabViewModel("about:blank");
-            var menu = new WpfMenuService(tab, Dispatcher.CurrentDispatcher);
+            var repository = new InMemoryUserScriptRepository();
+            var script = await InstallMenuScriptAsync(repository, "Menu sample");
+            var menu = new WpfMenuService(tab, Dispatcher.CurrentDispatcher, repository);
             var invoked = 0;
-            var key = ScriptKey.Parse(Guid.NewGuid().ToString());
-            var registration = await menu.RegisterAsync(new MenuCommandRequest(key, "Test command", "t"), _ => invoked++, CancellationToken.None);
-            Assert.Contains("Test command", Assert.Single(tab.MenuCommands).Label);
+            var registration = await menu.RegisterAsync(new MenuCommandRequest(script.ScriptKey, "Test command", "t"), _ => invoked++, CancellationToken.None);
+            Assert.Equal("Test command", Assert.Single(tab.MenuCommands).Label);
+            Assert.Equal("Menu sample", tab.MenuCommands[0].ScriptName);
+            Assert.Equal(new[] { "Menu sample", "Test command" }, tab.MenuRows.Select(row => row.Label));
             tab.MenuCommands[0].InvokeCommand.Execute(null);
             Assert.Equal(1, invoked);
             registration.Dispose();
             await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
             Assert.Empty(tab.MenuCommands);
+            Assert.Empty(tab.MenuRows);
         });
+
+        [Fact]
+        public Task MenuGroupsPreserveCommandsWhileSubscribersAndScriptsChange() => OnDispatcher(async () =>
+        {
+            var repository = new InMemoryUserScriptRepository();
+            var first = await InstallMenuScriptAsync(repository, "First script");
+            var second = await InstallMenuScriptAsync(repository, "Second script");
+            var tab = new BrowserTabViewModel("about:blank");
+            var menu = new WpfMenuService(tab, Dispatcher.CurrentDispatcher, repository);
+            var clicks = 0;
+            var firstRegistration = await menu.RegisterAsync(new MenuCommandRequest(first.ScriptKey, "One", "o", "First tooltip"), _ => clicks++, CancellationToken.None);
+            var secondRegistration = await menu.RegisterAsync(new MenuCommandRequest(second.ScriptKey, "One", "o"), _ => { }, CancellationToken.None);
+            var secondHeader = tab.MenuRows[2];
+            var secondRow = tab.MenuRows[3];
+            var firstRow = tab.MenuRows[1];
+            var extraRegistration = await menu.RegisterAsync(new MenuCommandRequest(first.ScriptKey, "Two", "t"), _ => { }, CancellationToken.None);
+            var subscriber = await menu.RegisterAsync(new MenuCommandRequest(first.ScriptKey, "One", "o", "First tooltip", false), _ => clicks += 10, CancellationToken.None);
+
+            Assert.Equal(new[] { "First script", "One", "Two", "Second script", "One" }, tab.MenuRows.Select(row => row.Label));
+            Assert.Equal(3, tab.MenuCommands.Count);
+            Assert.Same(firstRow, tab.MenuRows[1]);
+            Assert.Same(secondHeader, tab.MenuRows[3]);
+            Assert.Same(secondRow, tab.MenuRows[4]);
+            Assert.False(tab.MenuRows[0].HasSeparator);
+            Assert.True(secondHeader.HasSeparator);
+            Assert.Null(secondHeader.Command);
+            Assert.True(secondHeader.IsHeader);
+            Assert.False(firstRow.IsHeader);
+            Assert.True(firstRow.Command.StaysOpenOnClick);
+            Assert.Equal("First tooltip", firstRow.Command.Title);
+            firstRow.Command.InvokeCommand.Execute(null);
+            Assert.Equal(11, clicks);
+
+            subscriber.Dispose();
+            await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
+            Assert.False(firstRow.Command.StaysOpenOnClick);
+            firstRow.Command.InvokeCommand.Execute(null);
+            Assert.Equal(12, clicks);
+            firstRegistration.Dispose();
+            extraRegistration.Dispose();
+            await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
+            Assert.Equal(new[] { "Second script", "One" }, tab.MenuRows.Select(row => row.Label));
+            Assert.Same(secondHeader, tab.MenuRows[0]);
+            Assert.Same(secondRow, tab.MenuRows[1]);
+            Assert.False(secondHeader.HasSeparator);
+            secondRegistration.Dispose();
+            await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
+            Assert.Empty(tab.MenuRows);
+        });
+
+        [Fact]
+        public Task IdenticallyNamedScriptsKeepSeparateMenuSectionsAndCallbacks() => OnDispatcher(async () =>
+        {
+            var repository = new InMemoryUserScriptRepository();
+            var first = await InstallMenuScriptAsync(repository, "Same name");
+            var second = await InstallMenuScriptAsync(repository, "Same name");
+            var tab = new BrowserTabViewModel("about:blank");
+            var menu = new WpfMenuService(tab, Dispatcher.CurrentDispatcher, repository);
+            var firstClicks = 0;
+            var secondClicks = 0;
+            using (await menu.RegisterAsync(new MenuCommandRequest(first.ScriptKey, "Run", "r"), _ => firstClicks++, CancellationToken.None))
+            using (await menu.RegisterAsync(new MenuCommandRequest(second.ScriptKey, "Run", "r"), _ => secondClicks++, CancellationToken.None))
+            {
+                Assert.Equal(new[] { "Same name", "Run", "Same name", "Run" }, tab.MenuRows.Select(row => row.Label));
+                Assert.NotEqual(tab.MenuRows[0].ScriptKey, tab.MenuRows[2].ScriptKey);
+                tab.MenuRows[1].Command.InvokeCommand.Execute(null);
+                Assert.Equal(1, firstClicks);
+                Assert.Equal(0, secondClicks);
+                tab.MenuRows[3].Command.InvokeCommand.Execute(null);
+                Assert.Equal(1, secondClicks);
+            }
+            await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
+            Assert.Empty(tab.MenuRows);
+        });
+
+        private static Task<UserScriptInstallation> InstallMenuScriptAsync(IUserScriptRepository repository, string name)
+            => repository.InstallAsync("// ==UserScript==\n// @name " + name + "\n// @match https://example.com/*\n// @grant GM.registerMenuCommand\n// ==/UserScript==", "test", true, CancellationToken.None);
 
         [Theory]
         [InlineData("../../escape.exe", "escape.exe")]

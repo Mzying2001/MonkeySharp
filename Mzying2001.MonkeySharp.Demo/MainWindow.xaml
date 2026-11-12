@@ -124,17 +124,51 @@
                         <Button Content="{loc:Text Permissions}" Margin="0,0,4,0" Click="OpenPermissions" />
                         <Button Content="{loc:Text ScriptManager}" Margin="0,0,4,0" Command="{Binding ScriptManagerCommand}" />
                         <Menu Background="Transparent" VerticalAlignment="Center">
-                            <MenuItem Header="{loc:Text ScriptMenu}" ItemsSource="{Binding SelectedTab.MenuCommands}">
+                            <MenuItem x:Name="ScriptMenu" Header="{loc:Text ScriptMenu}" ItemsSource="{Binding SelectedTab.MenuRows}" AutomationProperties.AutomationId="ScriptMenu">
+                                <MenuItem.Style>
+                                    <Style TargetType="MenuItem">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <Trigger Property="HasItems" Value="True"><Setter Property="Visibility" Value="Visible" /></Trigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </MenuItem.Style>
                                 <MenuItem.ItemContainerStyle>
                                     <Style TargetType="MenuItem">
                                         <Setter Property="Header" Value="{Binding Label}" />
-                                        <Setter Property="Command" Value="{Binding InvokeCommand}" />
+                                        <Setter Property="AutomationProperties.Name" Value="{Binding Label}" />
+                                        <Setter Property="Command" Value="{Binding Command.InvokeCommand}" />
                                         <Setter Property="CommandParameter" Value="{Binding Tag, RelativeSource={RelativeSource Self}}" />
                                         <EventSetter Event="PreviewMouseUp" Handler="ScriptMenuMouseUp" />
                                         <EventSetter Event="PreviewKeyDown" Handler="ScriptMenuKeyDown" />
-                                        <Setter Property="InputGestureText" Value="{Binding AccessKey}" />
-                                        <Setter Property="ToolTip" Value="{Binding Title}" />
-                                        <Setter Property="StaysOpenOnClick" Value="{Binding StaysOpenOnClick}" />
+                                        <Setter Property="InputGestureText" Value="{Binding Command.AccessKey}" />
+                                        <Setter Property="ToolTip" Value="{Binding Command.Title}" />
+                                        <Setter Property="StaysOpenOnClick" Value="{Binding Command.StaysOpenOnClick}" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsHeader}" Value="True">
+                                                <Setter Property="IsEnabled" Value="False" />
+                                                <Setter Property="Focusable" Value="False" />
+                                                <Setter Property="IsTabStop" Value="False" />
+                                                <Setter Property="ToolTip" Value="{Binding Label}" />
+                                                <Setter Property="ToolTipService.ShowOnDisabled" Value="True" />
+                                                <Setter Property="HeaderTemplate">
+                                                    <Setter.Value>
+                                                        <DataTemplate>
+                                                            <StackPanel>
+                                                                <Separator x:Name="GroupSeparator" Visibility="Collapsed" Margin="0,4,0,2" />
+                                                                <TextBlock Text="{Binding}" FontSize="12" FontWeight="SemiBold" Foreground="#526579"
+                                                                           Margin="0,5,0,3" MaxWidth="340" TextTrimming="CharacterEllipsis" HorizontalAlignment="Left" />
+                                                            </StackPanel>
+                                                            <DataTemplate.Triggers>
+                                                                <DataTrigger Binding="{Binding DataContext.HasSeparator, RelativeSource={RelativeSource AncestorType=MenuItem}}" Value="True">
+                                                                    <Setter TargetName="GroupSeparator" Property="Visibility" Value="Visible" />
+                                                                </DataTrigger>
+                                                            </DataTemplate.Triggers>
+                                                        </DataTemplate>
+                                                    </Setter.Value>
+                                                </Setter>
+                                            </DataTrigger>
+                                        </Style.Triggers>
                                     </Style>
                                 </MenuItem.ItemContainerStyle>
                             </MenuItem>

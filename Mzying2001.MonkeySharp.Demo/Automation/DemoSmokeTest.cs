@@ -44,7 +44,7 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                     "/frame\n// @grant none\n// ==/UserScript==\nwindow.__demoFrame = true;", "application://frame-smoke", true, CancellationToken.None);
                 await runtime.Repository.InstallAsync("// ==UserScript==\n// @name merged-menu\n// @match " + fixture.BaseUrl +
                     "/page*\n// @match " + fixture.BaseUrl + "/frame\n// @grant GM_registerMenuCommand\n// @grant GM_unregisterMenuCommand\n// @run-at document-end\n// ==/UserScript==\n" +
-                    "if (top.location.search === '?primary') { window.__mergedClicks = 0; const id = GM_registerMenuCommand('Merged command', () => window.__mergedClicks++, {id:'merged',title:'Merged tooltip',autoClose:false}); window.__removeMerged = () => GM_unregisterMenuCommand(id); window.__updateMerged = () => GM_registerMenuCommand('Updated command', () => window.__mergedClicks += 10, {id,title:'Updated tooltip',autoClose:true}); }",
+                    "if (top.location.search === '?primary') { window.__mergedClicks = 0; const id = GM_registerMenuCommand('Merged command', () => window.__mergedClicks++, {id:'merged',title:'Merged tooltip',accessKey:'m',autoClose:false}); window.__removeMerged = () => GM_unregisterMenuCommand(id); window.__updateMerged = () => GM_registerMenuCommand('Updated command', () => window.__mergedClicks += 10, {id,title:'Updated tooltip',autoClose:true}); }",
                     "application://merged-menu-smoke", true, CancellationToken.None);
                 await runtime.Repository.InstallAsync("// ==UserScript==\n// @name zz-tabstate-isolation\n// @match " + fixture.BaseUrl +
                     "/page*\n// @grant GM_getTab\n// @grant GM_saveTab\n// @grant GM_getTabs\n// @run-at document-end\n// ==/UserScript==\n" +
@@ -70,6 +70,7 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                     "document.querySelector('iframe').contentWindow.__demoFrame === true"));
                 checks["iframe"] = true;
                 await WaitAsync(() => Task.FromResult(primary.MenuCommands.Count == 2));
+                await ScriptMenuSmokeTest.VerifyGroupsAsync(primary, checks, Path.Combine(runtime.Paths.BaseDirectory, "script-menu.png"));
                 primary.MenuCommands.Single(item => item.Label.StartsWith("Demo smoke menu")).InvokeCommand.Execute(
                     new MenuCommandInvocation { Kind = "keyboard", Key = "s", Code = "KeyS", AltKey = true });
                 await WaitAsync(async () => await EvaluateBoolean(primary, "window.__demo.menu === true"));
@@ -77,13 +78,13 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                 checks["menuKeyboardFields"] = await EvaluateBoolean(primary, "window.__demo.menuInput.type === 'keydown' && window.__demo.menuInput.key === 's' && window.__demo.menuInput.altKey && !window.__demo.menuInput.isTrusted");
                 var merged = primary.MenuCommands.Single(item => item.Label.StartsWith("Merged command"));
                 checks["menuOptions"] = merged.Title == "Merged tooltip" && merged.StaysOpenOnClick;
-                merged.InvokeCommand.Execute(null);
+                checks["menuStaysOpenOnClick"] = await ScriptMenuSmokeTest.InvokeAsync(merged);
                 await WaitAsync(async () => await EvaluateBoolean(primary, "window.__mergedClicks === 1 && document.querySelector('iframe').contentWindow.__mergedClicks === 1"));
                 await Evaluate(primary, "window.__updateMerged()");
                 await WaitAsync(() => Task.FromResult(primary.MenuCommands.Count == 3));
                 var updatedMenu = primary.MenuCommands.Single(item => item.Label.StartsWith("Updated command"));
                 checks["menuUpdate"] = updatedMenu.Title == "Updated tooltip" && !updatedMenu.StaysOpenOnClick;
-                updatedMenu.InvokeCommand.Execute(null);
+                checks["menuAutoCloseOnClick"] = await ScriptMenuSmokeTest.InvokeAsync(updatedMenu);
                 await WaitAsync(async () => await EvaluateBoolean(primary, "window.__mergedClicks === 11"));
                 await Evaluate(primary, "window.__removeMerged()");
                 await Task.Delay(100);

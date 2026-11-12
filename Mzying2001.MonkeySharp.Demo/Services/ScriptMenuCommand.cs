@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Mzying2001.MonkeySharp.Core.Apis;
+using Mzying2001.MonkeySharp.Core.Domain;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -11,12 +12,16 @@ namespace Mzying2001.MonkeySharp.Demo.Services
     {
         internal readonly Dictionary<Action<MenuCommandInvocation>, bool> Subscribers = new Dictionary<Action<MenuCommandInvocation>, bool>();
         public string Label { get; }
+        public ScriptKey ScriptKey { get; }
+        public string ScriptName { get; }
         public string AccessKey { get; }
         public string Title { get; }
         public bool StaysOpenOnClick => Subscribers.Values.Any(autoClose => !autoClose);
-        internal ScriptMenuCommand(MenuCommandRequest request)
+        internal ScriptMenuCommand(MenuCommandRequest request, string scriptName)
         {
-            Label = request.Name + " · " + request.ScriptKey.ToString().Substring(0, 8);
+            Label = request.Name;
+            ScriptKey = request.ScriptKey;
+            ScriptName = scriptName;
             AccessKey = request.AccessKey;
             Title = request.Title;
         }
