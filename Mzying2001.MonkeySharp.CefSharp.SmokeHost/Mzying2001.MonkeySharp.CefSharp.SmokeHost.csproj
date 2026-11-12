@@ -9,7 +9,7 @@
     <RootNamespace>Mzying2001.MonkeySharp.CefSharp.SmokeHost</RootNamespace>
     <AssemblyName>MonkeySharp.CefSharp.SmokeHost</AssemblyName>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
-    <CefSharpVersion Condition="'$(CefSharpVersion)' == ''">121.3.70</CefSharpVersion>
+    <CefSharpVersion Condition="'$(CefSharpVersion)' == ''">151.3.240</CefSharpVersion>
     <DefineConstants Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(CefSharpVersion)', '130.0.0'))">$(DefineConstants);CEF_CORPUS_NEW_DOWNLOAD_RETURN</DefineConstants>
     <DefineConstants Condition="$([MSBuild]::VersionLessThan('$(CefSharpVersion)', '100.0.0'))">$(DefineConstants);CEF_SHARP_LEGACY_REQUEST_FACTORY</DefineConstants>
   </PropertyGroup>

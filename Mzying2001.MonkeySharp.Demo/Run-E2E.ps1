@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([string]$CefSharpVersion = '121.3.70', [switch]$NoBuild)
+param([string]$CefSharpVersion = '151.3.240', [switch]$NoBuild)
 
 $ErrorActionPreference = 'Stop'
 $project = Join-Path $PSScriptRoot 'Mzying2001.MonkeySharp.Demo.csproj'

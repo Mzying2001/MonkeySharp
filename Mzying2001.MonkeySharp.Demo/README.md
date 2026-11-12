@@ -2,14 +2,14 @@
 
 ## Build and run
 
-The Demo targets .NET Framework 4.6.2 and an **x64 process**. It references the Core and CefSharp projects, pins `CefSharp.Wpf` to the repository's default `121.3.70`, and uses `CommunityToolkit.Mvvm` 8.4.0 and `Microsoft.Data.Sqlite` 8.0.8. Build with a compatible .NET SDK installed on the development machine. Windows needs a compatible .NET Framework installation and the x64 Visual C++ runtime required by CefSharp. Deploy the entire output directory, including native DLLs and the browser subprocess, rather than copying the EXE alone.
+The Demo targets .NET Framework 4.6.2 and an **x64 process**. It references the Core and CefSharp projects, pins `CefSharp.Wpf` to the repository's default `151.3.240`, and uses `CommunityToolkit.Mvvm` 8.4.0 and `Microsoft.Data.Sqlite` 8.0.8. Build with a compatible .NET SDK installed on the development machine. Windows needs a compatible .NET Framework installation and the x64 Visual C++ runtime required by CefSharp. Deploy the entire output directory, including native DLLs and the browser subprocess, rather than copying the EXE alone.
 
 ```powershell
 dotnet build Mzying2001.MonkeySharp.Demo/Mzying2001.MonkeySharp.Demo.csproj -c Release -p:Platform=x64
 & .\Mzying2001.MonkeySharp.Demo\bin\x64\Release\net462\MonkeySharpDemo.exe
 ```
 
-`CefSharpVersion` can be overridden for source builds; all managed and native CefSharp components must use the same version. The Demo includes the download handler signature compatibility needed by the repository's `151.3.240` CI configuration; this does not promise compatibility with arbitrary versions. Clean build outputs before switching `CefSharpVersion`; otherwise NuGet's native copy rules can retain DLLs from the previously built version. `Run-E2E.ps1` performs this clean automatically unless `-NoBuild` is supplied. It does not delete the application profile.
+`CefSharpVersion` can be overridden for source builds; all managed and native CefSharp components must use the same version. `Run-E2E.ps1` also defaults to `151.3.240`. The Demo includes the download handler signature compatibility needed by the repository's `84.4.10`, `121.3.70`, and `151.3.240` CI configurations; this does not promise compatibility with arbitrary versions. Clean build outputs before switching `CefSharpVersion`; otherwise NuGet's native copy rules can retain DLLs from the previously built version. `Run-E2E.ps1` performs this clean automatically unless `-NoBuild` is supplied. It does not delete the application profile.
 
 ## Code organization
 

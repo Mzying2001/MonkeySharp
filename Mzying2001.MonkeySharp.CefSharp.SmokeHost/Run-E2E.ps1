@@ -2,7 +2,7 @@
 param(
     [ValidateSet('x64', 'x86')]
     [string]$Platform = 'x64',
-    [string]$CefSharpVersion = '121.3.70',
+    [string]$CefSharpVersion = '151.3.240',
     [string]$OutputDirectory = ''
 )
 

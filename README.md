@@ -31,7 +31,7 @@ Both adapter packages expose the `Mzying2001.MonkeySharp.CefSharp` assembly and 
 </ItemGroup>
 ```
 
-The host must also reference the matching `CefSharp.WinForms`, `CefSharp.Wpf`, or `CefSharp.Common` package; the adapter's `CefSharp.Common` dependency is private. Build the application and adapter for the same explicit `x64` or `x86` process platform. The adapter defaults to CefSharp `121.3.70`; compile and test against the exact version you ship. See the [integration reference](docs/integration-reference.md#cefsharp-version-compatibility) for tested versions and binding details.
+The host must also reference the matching `CefSharp.WinForms`, `CefSharp.Wpf`, or `CefSharp.Common` package; the adapter's `CefSharp.Common` dependency is private. Build the application and adapter for the same explicit `x64` or `x86` process platform. The adapter defaults to CefSharp `151.3.240`; compile and test against the exact version you ship. See the [integration reference](docs/integration-reference.md#cefsharp-version-compatibility) for tested versions and binding details.
 
 ## Quick Start
 
@@ -193,9 +193,9 @@ See the [integration reference](docs/integration-reference.md#lifecycle-and-diag
 Build on Windows with a .NET SDK that supports `MonkeySharp.slnx` and Node.js for JavaScript tests. CI uses .NET SDK `9.0.315` and Node.js `24`; these are tested versions, not minimum requirements. Core tests target `net8.0`; CefSharp tests and applications target `net462`.
 
 ```powershell
-dotnet restore MonkeySharp.slnx -p:Platform=x64 -p:CefSharpVersion=121.3.70
-dotnet build MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=121.3.70 --no-restore
-dotnet test MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=121.3.70 --no-build
+dotnet restore MonkeySharp.slnx -p:Platform=x64 -p:CefSharpVersion=151.3.240
+dotnet build MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=151.3.240 --no-restore
+dotnet test MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=151.3.240 --no-build
 node --test Mzying2001.MonkeySharp.Core.Tests/JavaScript/*.test.js
 ```
 

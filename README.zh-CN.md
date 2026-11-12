@@ -31,7 +31,7 @@ MonkeySharp 是面向 CefSharp 嵌入式应用的用户脚本运行时。Core �
 </ItemGroup>
 ```
 
-宿主还必须引用版本匹配的 `CefSharp.WinForms`、`CefSharp.Wpf` 或 `CefSharp.Common` 包；适配器的 `CefSharp.Common` 依赖是私有的。应用程序和适配器必须使用同一个显式 `x64` 或 `x86` 进程平台。适配器默认使用 CefSharp `121.3.70`；发布前应针对实际版本编译和测试。已测试版本及绑定说明见[集成参考](docs/integration-reference.zh-CN.md#cefsharp-版本兼容性)。
+宿主还必须引用版本匹配的 `CefSharp.WinForms`、`CefSharp.Wpf` 或 `CefSharp.Common` 包；适配器的 `CefSharp.Common` 依赖是私有的。应用程序和适配器必须使用同一个显式 `x64` 或 `x86` 进程平台。适配器默认使用 CefSharp `151.3.240`；发布前应针对实际版本编译和测试。已测试版本及绑定说明见[集成参考](docs/integration-reference.zh-CN.md#cefsharp-版本兼容性)。
 
 ## 快速开始
 
@@ -193,9 +193,9 @@ host.Diagnostic += (_, diagnostic) =>
 在 Windows 上使用支持 `MonkeySharp.slnx` 的 .NET SDK 构建，并安装 Node.js 运行 JavaScript 测试。CI 使用 .NET SDK `9.0.315` 和 Node.js `24`；这些是已测试版本，不代表最低要求。Core 测试目标为 `net8.0`，CefSharp 测试及应用程序目标为 `net462`。
 
 ```powershell
-dotnet restore MonkeySharp.slnx -p:Platform=x64 -p:CefSharpVersion=121.3.70
-dotnet build MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=121.3.70 --no-restore
-dotnet test MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=121.3.70 --no-build
+dotnet restore MonkeySharp.slnx -p:Platform=x64 -p:CefSharpVersion=151.3.240
+dotnet build MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=151.3.240 --no-restore
+dotnet test MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=151.3.240 --no-build
 node --test Mzying2001.MonkeySharp.Core.Tests/JavaScript/*.test.js
 ```
 
