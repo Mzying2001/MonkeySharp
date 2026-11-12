@@ -51,8 +51,8 @@ namespace Mzying2001.MonkeySharp.Demo.Persistence
                             command.Transaction = transaction;
                             command.CommandText = value == null
                                 ? "DELETE FROM script_values WHERE script_key=$script AND value_key=$key"
-                                : @"INSERT INTO script_values(script_key,value_key,encoded_value,updated_at) VALUES($script,$key,$value,$updated)
-ON CONFLICT(script_key,value_key) DO UPDATE SET encoded_value=excluded.encoded_value,updated_at=excluded.updated_at";
+                                : ("INSERT INTO script_values(script_key,value_key,encoded_value,updated_at) VALUES($script,$key,$value,$updated) " +
+                                   "ON CONFLICT(script_key,value_key) DO UPDATE SET encoded_value=excluded.encoded_value,updated_at=excluded.updated_at");
                             command.Parameters.AddWithValue("$script", scriptKey);
                             command.Parameters.AddWithValue("$key", mutation.Key);
                             if (value != null)

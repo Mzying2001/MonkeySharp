@@ -62,8 +62,9 @@ namespace Mzying2001.MonkeySharp.Demo.Persistence
                         using (var connection = _owner._database.OpenReady())
                         using (var command = connection.CreateCommand())
                         {
-                            command.CommandText = @"INSERT INTO tab_states(script_key,tab_id,json_value,updated_at) VALUES($script,$tab,$value,$updated)
-ON CONFLICT(script_key,tab_id) DO UPDATE SET json_value=excluded.json_value,updated_at=excluded.updated_at";
+                            command.CommandText =
+                                "INSERT INTO tab_states(script_key,tab_id,json_value,updated_at) VALUES($script,$tab,$value,$updated) " +
+                                "ON CONFLICT(script_key,tab_id) DO UPDATE SET json_value=excluded.json_value,updated_at=excluded.updated_at";
                             command.Parameters.AddWithValue("$script", scriptKey.ToString());
                             command.Parameters.AddWithValue("$tab", _tabId);
                             command.Parameters.AddWithValue("$value", jsonValue);

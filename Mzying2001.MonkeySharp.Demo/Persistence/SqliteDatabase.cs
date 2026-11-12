@@ -42,17 +42,17 @@ namespace Mzying2001.MonkeySharp.Demo.Persistence
                     using (var command = connection.CreateCommand())
                     {
                         command.Transaction = transaction;
-                        command.CommandText = @"
-CREATE TABLE IF NOT EXISTS scripts(script_key TEXT PRIMARY KEY, source_path TEXT NOT NULL,
- source_origin TEXT, is_enabled INTEGER NOT NULL, installed_at TEXT NOT NULL, updated_at TEXT NOT NULL);
-ALTER TABLE scripts ADD COLUMN source_hash TEXT;
-CREATE TABLE IF NOT EXISTS script_values(script_key TEXT NOT NULL,value_key TEXT NOT NULL,encoded_value TEXT NOT NULL,
- updated_at TEXT NOT NULL,PRIMARY KEY(script_key,value_key));
-CREATE TABLE IF NOT EXISTS tab_states(script_key TEXT NOT NULL,tab_id TEXT NOT NULL,json_value TEXT NOT NULL,
- updated_at TEXT NOT NULL,PRIMARY KEY(script_key,tab_id));
-CREATE TABLE IF NOT EXISTS prepared_revisions(script_key TEXT PRIMARY KEY REFERENCES scripts(script_key) ON DELETE CASCADE, payload TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS permission_decisions(script_key TEXT NOT NULL,kind TEXT NOT NULL,target TEXT NOT NULL,decision INTEGER NOT NULL CHECK(decision IN (0,1)),PRIMARY KEY(script_key,kind,target));
-PRAGMA user_version=2;";
+                        command.CommandText =
+                            "CREATE TABLE IF NOT EXISTS scripts(script_key TEXT PRIMARY KEY, source_path TEXT NOT NULL, " +
+                            "source_origin TEXT, is_enabled INTEGER NOT NULL, installed_at TEXT NOT NULL, updated_at TEXT NOT NULL);" +
+                            "ALTER TABLE scripts ADD COLUMN source_hash TEXT;" +
+                            "CREATE TABLE IF NOT EXISTS script_values(script_key TEXT NOT NULL,value_key TEXT NOT NULL,encoded_value TEXT NOT NULL, " +
+                            "updated_at TEXT NOT NULL,PRIMARY KEY(script_key,value_key));" +
+                            "CREATE TABLE IF NOT EXISTS tab_states(script_key TEXT NOT NULL,tab_id TEXT NOT NULL,json_value TEXT NOT NULL, " +
+                            "updated_at TEXT NOT NULL,PRIMARY KEY(script_key,tab_id));" +
+                            "CREATE TABLE IF NOT EXISTS prepared_revisions(script_key TEXT PRIMARY KEY REFERENCES scripts(script_key) ON DELETE CASCADE, payload TEXT NOT NULL);" +
+                            "CREATE TABLE IF NOT EXISTS permission_decisions(script_key TEXT NOT NULL,kind TEXT NOT NULL,target TEXT NOT NULL,decision INTEGER NOT NULL CHECK(decision IN (0,1)),PRIMARY KEY(script_key,kind,target));" +
+                            "PRAGMA user_version=2;";
                         command.ExecuteNonQuery();
                         transaction.Commit();
                     }

@@ -100,10 +100,11 @@ namespace Mzying2001.MonkeySharp.Demo.Persistence
                     using (var command = connection.CreateCommand())
                     {
                         command.Transaction = transaction;
-                        command.CommandText = @"INSERT INTO scripts(script_key,source_path,source_origin,is_enabled,installed_at,updated_at,source_hash)
-VALUES($key,$path,$origin,$enabled,$installed,$updated,$hash)
-ON CONFLICT(script_key) DO UPDATE SET source_origin=excluded.source_origin,is_enabled=excluded.is_enabled,
- updated_at=excluded.updated_at,source_hash=excluded.source_hash";
+                        command.CommandText =
+                            "INSERT INTO scripts(script_key,source_path,source_origin,is_enabled,installed_at,updated_at,source_hash) " +
+                            "VALUES($key,$path,$origin,$enabled,$installed,$updated,$hash) " +
+                            "ON CONFLICT(script_key) DO UPDATE SET source_origin=excluded.source_origin,is_enabled=excluded.is_enabled, " +
+                            "updated_at=excluded.updated_at,source_hash=excluded.source_hash";
                         command.Parameters.AddWithValue("$key", record.ScriptKey.ToString());
                         command.Parameters.AddWithValue("$path", Path.Combine("UserScripts", record.ScriptKey + ".user.js"));
                         command.Parameters.AddWithValue("$origin", (object)record.SourceOrigin ?? DBNull.Value);
