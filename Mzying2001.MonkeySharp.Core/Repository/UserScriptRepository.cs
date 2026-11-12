@@ -115,22 +115,25 @@ namespace Mzying2001.MonkeySharp.Core.Repository
     {
         private readonly object _sync = new object();
         private readonly IUserScriptMetadataParser _parser;
+        private readonly UserScriptPreparer _preparer;
         private readonly Dictionary<ScriptKey, UserScriptInstallation> _installations =
             new Dictionary<ScriptKey, UserScriptInstallation>();
         private readonly List<ScriptKey> _order = new List<ScriptKey>();
 
         /// <summary>Initializes an empty in-memory repository.</summary>
         /// <param name="parser">The metadata parser, or <see langword="null"/> to use the default parser.</param>
-        public InMemoryUserScriptRepository(IUserScriptMetadataParser parser = null)
+        /// <param name="preparer">The installation content preparation service.</param>
+        public InMemoryUserScriptRepository(IUserScriptMetadataParser parser = null, UserScriptPreparer preparer = null)
         {
             _parser = parser ?? new UserScriptMetadataParser();
+            _preparer = preparer ?? new UserScriptPreparer();
         }
 
         /// <inheritdoc />
         public event EventHandler<UserScriptRepositoryChangedEventArgs> Changed;
 
         /// <inheritdoc />
-        public Task<UserScriptInstallation> InstallAsync(
+        public async Task<UserScriptInstallation> InstallAsync(
             string source,
             string sourceOrigin,
             bool enabled,
@@ -141,6 +144,7 @@ namespace Mzying2001.MonkeySharp.Core.Repository
             var now = DateTimeOffset.UtcNow;
             var installation = new UserScriptInstallation(
                 ScriptKey.Create(), definition, sourceOrigin, enabled, now, now);
+            installation = await _preparer.PrepareAsync(installation, cancellationToken).ConfigureAwait(false);
             lock (_sync)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -148,31 +152,24 @@ namespace Mzying2001.MonkeySharp.Core.Repository
                 _order.Add(installation.ScriptKey);
             }
             Changed?.Invoke(this, new UserScriptRepositoryChangedEventArgs(RepositoryChangeKind.Installed, installation));
-            return Task.FromResult(installation);
+            return installation;
         }
 
         /// <inheritdoc />
-        public Task<UserScriptInstallation> UpdateAsync(
+        public async Task<UserScriptInstallation> UpdateAsync(
             ScriptKey scriptKey,
             string source,
             string sourceOrigin,
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var definition = ParseDefinition(source);
-            UserScriptInstallation installation;
-            lock (_sync)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                installation = GetRequired(scriptKey).WithDefinition(definition, sourceOrigin, DateTimeOffset.UtcNow);
-                _installations[scriptKey] = installation;
-            }
-            Changed?.Invoke(this, new UserScriptRepositoryChangedEventArgs(RepositoryChangeKind.Updated, installation));
-            return Task.FromResult(installation);
+            Guid revision;
+            lock (_sync) revision = GetRequired(scriptKey).RevisionId;
+            return await UpdateIfUnchangedAsync(scriptKey, revision, source, sourceOrigin, cancellationToken).ConfigureAwait(false);
         }
 
         /// <inheritdoc />
-        public Task<UserScriptInstallation> UpdateIfUnchangedAsync(
+        public async Task<UserScriptInstallation> UpdateIfUnchangedAsync(
             ScriptKey scriptKey,
             Guid expectedRevisionId,
             string source,
@@ -189,10 +186,17 @@ namespace Mzying2001.MonkeySharp.Core.Repository
                 if (current.RevisionId != expectedRevisionId)
                     throw new RepositoryRevisionMismatchException(scriptKey);
                 installation = current.WithDefinition(definition, sourceOrigin, DateTimeOffset.UtcNow);
+            }
+            installation = await _preparer.PrepareAsync(installation, cancellationToken).ConfigureAwait(false);
+            lock (_sync)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (GetRequired(scriptKey).RevisionId != expectedRevisionId)
+                    throw new RepositoryRevisionMismatchException(scriptKey);
                 _installations[scriptKey] = installation;
             }
             Changed?.Invoke(this, new UserScriptRepositoryChangedEventArgs(RepositoryChangeKind.Updated, installation));
-            return Task.FromResult(installation);
+            return installation;
         }
 
         /// <inheritdoc />

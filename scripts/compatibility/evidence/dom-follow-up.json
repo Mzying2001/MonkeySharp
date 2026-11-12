@@ -1,0 +1,32 @@
+{
+  "date": "2026-11-10",
+  "baseCommit": "8802ff399136bae3a6466ccca957192686431d5b",
+  "sourcePatchSha256": "7d13011c1a5a76e377104f75610bdac05a10f597c06362d2230d3d9375f52606",
+  "javascript": {
+    "passed": 116
+  },
+  "reference": "tampermonkey-5.5.1-dom.json",
+  "native": [
+    {
+      "cefSharpVersion": "84.4.10",
+      "platform": "x64",
+      "status": "passed",
+      "pageHelpers": true,
+      "resultsSha256": "30dec601de9d5792677abe0be7462ed4c18d8568422db2d5a17761e60c92c0a2"
+    },
+    {
+      "cefSharpVersion": "121.3.70",
+      "platform": "x64",
+      "status": "passed",
+      "pageHelpers": true,
+      "resultsSha256": "94e0342f77f47dda4cd846c0bf7aa39664bbac50b338181b27de86800e5a8fb3"
+    },
+    {
+      "cefSharpVersion": "151.3.240",
+      "platform": "x64",
+      "status": "passed",
+      "pageHelpers": true,
+      "resultsSha256": "d3271cf2adfb207c29ae4d07da298c681b43f3e2c43c6109229f4e16625fd361"
+    }
+  ]
+}

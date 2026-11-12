@@ -1,15 +1,15 @@
+const completePlan = require("./test-plan");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 
-const template = fs.readFileSync(
-    path.resolve(__dirname, "../../Mzying2001.MonkeySharp.Core/Js/Init.js"), "utf8");
+const template = require("./bootstrap-template");
 
 test("openInTab handles are local, default inactive, and close before id is queued", async () => {
     const payload = {
-        protocol: 1,
+        protocol: 2,
         documentId: "tab-document",
         frameId: "main",
         runAt: "DocumentEnd",
@@ -18,7 +18,7 @@ test("openInTab handles are local, default inactive, and close before id is queu
             scriptKey: "55555555-5555-5555-5555-555555555555",
             source: [
                 "globalThis.__tabPromise = (async function () {",
-                "  globalThis.__modern = GM.openInTab('https://example.com/modern');",
+                "  globalThis.__modern = await GM.openInTab('https://example.com/modern');",
                 "  globalThis.__modern.onclose = () => globalThis.__modernClosed = (globalThis.__modernClosed || 0) + 1;",
                 "  globalThis.__modernClose = globalThis.__modern.close();",
                 "  globalThis.__legacy = GM_openInTab('https://example.com/legacy', true);",
@@ -27,7 +27,6 @@ test("openInTab handles are local, default inactive, and close before id is queu
             ].join("\n"),
             grants: ["GM.openInTab"],
             info: {},
-            compatibility: { legacyGlobals: true },
             capability: "tab-capability",
             deliveryToken: "tab-delivery"
         }]
@@ -37,32 +36,32 @@ test("openInTab handles are local, default inactive, and close before id is queu
         dispatch: async requestJson => {
             const request = JSON.parse(requestJson);
             if (request.type === "hello") {
-                return JSON.stringify({ type: "hello-result", protocol: 1, ok: true, limits: {}, apis: ["GM.openInTab"] });
+                return JSON.stringify({ type: "hello-result", protocol: 2, ok: true, limits: {}, apis: ["GM.openInTab"] });
             }
             if (request.method === "GM.openInTab" && !request.params.close) {
                 starts.push(request.params);
                 const id = starts.length;
                 await new Promise(resolve => setTimeout(resolve, 5));
-                return JSON.stringify({ type: "response", protocol: 1, requestId: request.requestId, ok: true,
+                return JSON.stringify({ type: "response", protocol: 2, requestId: request.requestId, ok: true,
                     result: { id: "tab-" + id } });
             }
             if (request.method === "GM.openInTab" && request.params.close) {
                 globalThis.__MonkeySharpRuntime.receive({
-                    type: "notification", protocol: 1, executionId: "tab-execution", deliveryToken: "tab-delivery",
+                    type: "notification", protocol: 2, executionId: "tab-execution", deliveryToken: "tab-delivery",
                     event: "tab-closed", data: { tabId: request.params.tabId }
                 });
                 globalThis.__MonkeySharpRuntime.receive({
-                    type: "notification", protocol: 1, executionId: "tab-execution", deliveryToken: "tab-delivery",
+                    type: "notification", protocol: 2, executionId: "tab-execution", deliveryToken: "tab-delivery",
                     event: "tab-closed", data: { tabId: request.params.tabId }
                 });
-                return JSON.stringify({ type: "response", protocol: 1, requestId: request.requestId, ok: true, result: true });
+                return JSON.stringify({ type: "response", protocol: 2, requestId: request.requestId, ok: true, result: true });
             }
-            return JSON.stringify({ type: "response", protocol: 1, requestId: request.requestId, ok: true,
+            return JSON.stringify({ type: "response", protocol: 2, requestId: request.requestId, ok: true,
                 result: { $monkeySharpType: "undefined" } });
         }
     };
 
-    const encoded = Buffer.from(JSON.stringify(payload), "utf8").toString("base64");
+    const encoded = Buffer.from(JSON.stringify(completePlan(payload)), "utf8").toString("base64");
     vm.runInThisContext(template.replace("__MONKEYSHARP_PAYLOAD_BASE64__", encoded));
     await globalThis.__tabPromise;
     await new Promise(resolve => setTimeout(resolve, 30));
@@ -70,32 +69,32 @@ test("openInTab handles are local, default inactive, and close before id is queu
     assert.equal(starts.length, 2);
     assert.equal(starts[0].active, false);
     assert.equal(starts[1].active, false);
-    assert.equal(globalThis.__modern.id, "tab-1");
+    assert.equal(globalThis.__modern.id, undefined);
     assert.equal(globalThis.__modern.closed, true);
     assert.equal(globalThis.__modernClosed, 1);
-    assert.equal(globalThis.__legacy.id, "tab-2");
+    assert.equal(globalThis.__legacy.id, undefined);
     assert.equal(globalThis.__legacy.closed, false);
-    assert.equal(typeof globalThis.__modernClose.then, "function");
+    assert.equal(globalThis.__modernClose, undefined);
 });
 
 test("legacy tab callbacks receive structured bridge errors", async () => {
     globalThis.__tabError = null;
     const payload = {
-        protocol: 1, documentId: "tab-error-document", frameId: "main", runAt: "DocumentEnd",
+        protocol: 2, documentId: "tab-error-document", frameId: "main", runAt: "DocumentEnd",
         invocations: [{
             executionId: "tab-error-execution", scriptKey: "56565656-5656-5656-5656-565656565656",
             source: "GM_getTab((tab, error) => globalThis.__tabError = [tab, error]);",
-            grants: ["GM.getTab"], info: {}, compatibility: { legacyGlobals: true },
+            grants: ["GM.getTab"], info: {},
             capability: "tab-error-capability", deliveryToken: "tab-error-delivery"
         }]
     };
     globalThis.__MonkeySharpBridge = { dispatch: async requestJson => {
         const request = JSON.parse(requestJson);
-        if (request.type === "hello") return JSON.stringify({ type: "hello-result", protocol: 1, ok: true, limits: {}, apis: ["GM.getTab"] });
-        return JSON.stringify({ type: "response", protocol: 1, requestId: request.requestId, ok: false,
+        if (request.type === "hello") return JSON.stringify({ type: "hello-result", protocol: 2, ok: true, limits: {}, apis: ["GM.getTab"] });
+        return JSON.stringify({ type: "response", protocol: 2, requestId: request.requestId, ok: false,
             error: { code: "MSP005_PERMISSION_DENIED", message: "denied" } });
     }};
-    vm.runInThisContext(template.replace("__MONKEYSHARP_PAYLOAD_BASE64__", Buffer.from(JSON.stringify(payload)).toString("base64")));
+    vm.runInThisContext(template.replace("__MONKEYSHARP_PAYLOAD_BASE64__", Buffer.from(JSON.stringify(completePlan(payload))).toString("base64")));
     while (!globalThis.__tabError) await new Promise(resolve => setTimeout(resolve, 5));
     assert.equal(globalThis.__tabError[0], null);
     assert.equal(globalThis.__tabError[1].error, "not_permitted");

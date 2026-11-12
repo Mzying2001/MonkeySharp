@@ -1,11 +1,11 @@
+const completePlan = require("./test-plan");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 
-const template = fs.readFileSync(
-    path.resolve(__dirname, "../../Mzying2001.MonkeySharp.Core/Js/Init.js"), "utf8");
+const template = require("./bootstrap-template");
 const fixture = fs.readFileSync(path.resolve(__dirname, "fixtures/legacy-userscript.user.js"), "utf8");
 
 function waitFor(predicate) {
@@ -33,8 +33,8 @@ test("the shared legacy userscript fixture exercises callback and modern facade 
         dispatch: async requestJson => {
             const request = JSON.parse(requestJson);
             if (request.type === "hello") return JSON.stringify({
-                type: "hello-result", protocol: 1, ok: true, limits: {},
-                apis: ["GM.cookie", "GM.download", "GM.getResourceText", "GM.getResourceURL",
+                type: "hello-result", protocol: 2, ok: true, limits: {},
+                apis: ["GM.cookie", "GM.download", "GM.getResourceText", "GM.getResourceUrl",
                     "GM.notification", "GM.webRequest", "window.close", "window.focus"],
                 compatibility: { resources: { complete: true, values: {
                     "fixture-template": { text: "fixture resource", url: "data:text/plain;base64,ZA==" }
@@ -48,7 +48,7 @@ test("the shared legacy userscript fixture exercises callback and modern facade 
                 result = { id: "download-" + downloadStarts.length, clientId: request.params.clientId };
             } else if (request.method === "GM.download" && request.params.operation === "abort") {
                 abortCount += 1;
-                result = true;
+                result = { accepted: true };
             } else if (request.method === "GM.notification") {
                 notificationRequests.push(request.params);
                 result = { id: "notification-" + notificationRequests.length };
@@ -57,30 +57,27 @@ test("the shared legacy userscript fixture exercises callback and modern facade 
                 result = { id: "webrequest-1", listenerId: request.params.listenerId };
             } else if (request.method === "GM.webRequest") result = true;
             else if (request.method === "window.close" || request.method === "window.focus") result = true;
-            return JSON.stringify({ type: "response", protocol: 1, requestId: request.requestId, ok: true, result });
+            return JSON.stringify({ type: "response", protocol: 2, requestId: request.requestId, ok: true, result });
         }
     };
 
     const payload = {
-        protocol: 1, documentId: "legacy-fixture-document", frameId: "main", runAt: "DocumentEnd",
+        protocol: 2, documentId: "legacy-fixture-document", frameId: "main", runAt: "DocumentEnd",
         invocations: [{
             executionId: "legacy-fixture-execution", scriptKey: "88888888-8888-8888-8888-888888888888",
             source: fixture.slice(fixture.indexOf("// ==/UserScript==") + "// ==/UserScript==".length),
             declaredGrants: ["GM_cookie", "GM_download", "GM_getResourceText", "GM_getResourceURL",
                 "GM_notification", "GM_webRequest", "window.close", "window.focus", "window.onurlchange"],
-            grants: ["GM.cookie", "GM.download", "GM.getResourceText", "GM.getResourceURL", "GM.notification",
+            grants: ["GM.cookie", "GM.download", "GM.getResourceText", "GM.getResourceUrl", "GM.notification",
                 "GM.webRequest", "window.close", "window.focus", "window.onurlchange"],
             grantDeclarationState: "ExplicitList", info: {}, capability: "legacy-fixture-capability",
             deliveryToken: "legacy-fixture-delivery",
-            compatibility: { profile: "LegacyCompatible", strict: false, legacyGlobals: true,
-                synchronousResourceSnapshot: true }
         }]
     };
-    const encoded = Buffer.from(JSON.stringify(payload), "utf8").toString("base64");
+    const encoded = Buffer.from(JSON.stringify(completePlan(payload)), "utf8").toString("base64");
     vm.runInThisContext(template.replace("__MONKEYSHARP_PAYLOAD_BASE64__", encoded));
     await waitFor(() => globalThis.__legacyFixtureState && globalThis.__legacyFixtureState.cookie &&
         downloadStarts.length === 3 && notificationRequests.length === 2 && webRequestRegistrations.length === 1);
-    await waitFor(() => globalThis.__legacyFixtureState.abortDownload.id !== null);
     await globalThis.__legacyFixtureState.windowActions;
 
     const state = globalThis.__legacyFixtureState;
@@ -93,48 +90,52 @@ test("the shared legacy userscript fixture exercises callback and modern facade 
     });
     assert.deepEqual(webRequestRegistrations[0].rules[0].action, { redirect: { from: "/old", to: "/new" } });
     assert.deepEqual(notificationRequests[0], {
+        clientId: notificationRequests[0].clientId, tag: null, url: null,
         title: "Legacy notification title", text: "Legacy notification text",
-        imageUrl: "https://cdn.example.com/notification.png", highlight: false, silent: false, timeout: null
+        imageUrl: "https://cdn.example.com/notification.png", highlight: false, silent: false
     });
     assert.deepEqual(notificationRequests[1], {
+        clientId: notificationRequests[1].clientId, tag: null, url: null,
         title: "Modern notification title", text: "Modern notification text",
         imageUrl: "https://cdn.example.com/modern-notification.png", highlight: true, silent: true, timeout: 250
     });
 
     const receive = (event, data) => globalThis.__MonkeySharpRuntime.receive({
-        type: "notification", protocol: 1, executionId: "legacy-fixture-execution",
+        type: "notification", protocol: 2, executionId: "legacy-fixture-execution",
         deliveryToken: "legacy-fixture-delivery", event, data
     });
     assert.equal(receive("download-progress", {
         clientId: downloadStarts[0].clientId, loaded: 3, total: 8
     }), true);
     assert.equal(receive("download-complete", {
-        clientId: downloadStarts[0].clientId, downloadId: "download-1"
+        clientId: downloadStarts[0].clientId, result: { name: "legacy.bin", loaded: 8 }
     }), true);
     assert.equal(receive("download-timeout", {
         clientId: downloadStarts[1].clientId, error: "timeout"
     }), true);
     await state.abortDownload.abort();
     assert.equal(receive("download-aborted", {
-        clientId: downloadStarts[2].clientId, error: "aborted"
+        clientId: downloadStarts[2].clientId, error: "not_succeeded"
     }), true);
     assert.equal(abortCount, 1);
     assert.deepEqual(state.downloadProgress, { loaded: 3, total: 8 });
-    assert.deepEqual(state.downloadComplete, { id: "download-1" });
+    assert.deepEqual(state.downloadComplete, { name: "legacy.bin", loaded: 8 });
     assert.equal(state.downloadTimeout.error, "timeout");
-    assert.equal(state.downloadAbortError.error, "aborted");
+    assert.equal(state.downloadAbortError.error, "not_succeeded");
 
-    assert.equal(receive("notification-click", { notificationId: "notification-1" }), true);
-    assert.equal(receive("notification-click", { notificationId: "notification-2" }), true);
-    assert.equal(receive("notification-done", { notificationId: "notification-2" }), true);
+    assert.equal(receive("notification-click", { clientId: notificationRequests[0].clientId }), true);
+    assert.equal(receive("notification-click", { clientId: notificationRequests[1].clientId }), true);
+    assert.equal(receive("notification-done", { clientId: notificationRequests[1].clientId }), true);
     assert.equal(state.notificationClicked, true);
     assert.equal(state.modernNotificationClicked, true);
     assert.equal(state.modernNotificationDone, true);
     assert.equal(receive("webrequest-result", {
         listenerId: webRequestRegistrations[0].listenerId,
-        info: { url: "https://example.com/old" }, message: "redirect", details: { redirectUrl: "/new" }
+        info: "redirect", message: "ok", details: { url: "https://example.com/old", redirect_url: "/new" }
     }), true);
-    assert.equal(state.webRequestEvent.details.redirectUrl, "/new");
+    assert.equal(state.webRequestEvent.info, "redirect");
+    assert.equal(state.webRequestEvent.message, "ok");
+    assert.equal(state.webRequestEvent.details.redirect_url, "/new");
 
     globalThis.__MonkeySharpRuntime.urlChanged({ url: "https://example.com/next", oldURL: "https://example.com/" });
     assert.equal(state.urlChange.url, "https://example.com/next");

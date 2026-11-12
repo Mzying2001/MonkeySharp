@@ -1,8 +1,7 @@
 using System;
-using System.Collections.Generic;
-using System.IO;
+using Mzying2001.MonkeySharp.Demo.Localization;
+using Mzying2001.MonkeySharp.Demo.Runtime;
 using System.Linq;
-using System.Text.Json;
 using System.Windows;
 
 namespace Mzying2001.MonkeySharp.Demo
@@ -15,43 +14,36 @@ namespace Mzying2001.MonkeySharp.Demo
         {
             ShutdownMode = ShutdownMode.OnExplicitShutdown;
             var smoke = e.Args.Contains("--smoke");
-            var checks = new Dictionary<string, bool>();
             var report = e.Args.SkipWhile(argument => argument != "--smoke-report").Skip(1).FirstOrDefault();
+            var smokeRun = smoke ? new DemoSmokeRun(report) : null;
+            UiLanguage.Apply(UiLanguage.DefaultLanguage);
             try
             {
-                var directory = smoke ? Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "SmokeRuns", Guid.NewGuid().ToString("N")) : null;
-                Runtime = await Mzying2001.MonkeySharp.Demo.Runtime.DemoRuntime.CreateAsync(Dispatcher, directory);
+                UiLanguage.Apply(UiLanguage.Resolve(e.Args, smokeRun?.ProfileDirectory ?? AppDomain.CurrentDomain.BaseDirectory));
+                Runtime = await DemoRuntime.CreateAsync(Dispatcher, smokeRun?.ProfileDirectory);
                 MainWindow = new MainWindow(Runtime);
                 MainWindow.Show();
                 if (smoke)
                 {
-                    await Mzying2001.MonkeySharp.Demo.Runtime.DemoSmokeTest.RunAsync(Runtime, checks);
-                    await Runtime.ShutdownAsync();
-                    checks["finalDisposal"] = true;
-                    if (report != null) File.WriteAllText(report, JsonSerializer.Serialize(new { success = true, checks, profile = directory }));
+                    await smokeRun.RunAsync(Runtime);
                     await ((MainWindow)MainWindow).CloseForSmokeAsync(0);
                 }
                 else Runtime.MainWindow.NewTab();
             }
-            catch (System.Exception exception)
+            catch (Exception exception)
             {
                 if (smoke)
                 {
-                    if (report != null) File.WriteAllText(report, JsonSerializer.Serialize(new { success = false, error = exception.ToString(), checks, profile = Runtime?.Paths.BaseDirectory }));
+                    smokeRun.ReportFailure(exception, Runtime);
                     if (MainWindow is MainWindow window) await window.CloseForSmokeAsync(1);
                     else Shutdown(1);
                     return;
                 }
                 if (Runtime != null) await Runtime.ShutdownAsync();
-                MessageBox.Show("启动失败。请确认程序目录可写、没有另一个实例占用 Data，并安装 x64 VC++ 运行库。\n\n" + exception,
+                MessageBox.Show(Strings.Format("StartupFailed", exception),
                     "MonkeySharp Demo", MessageBoxButton.OK, MessageBoxImage.Error);
                 Shutdown(1);
             }
-        }
-
-        protected override void OnExit(ExitEventArgs e)
-        {
-            base.OnExit(e);
         }
     }
 }

@@ -1,0 +1,161 @@
+{
+  "schemaVersion": 1,
+  "caseId": "page-helpers",
+  "date": "2026-11-07",
+  "baseCommit": "78d916a",
+  "runs": [
+    {
+      "version": "84.4.10",
+      "platform": "x64",
+      "status": "passed",
+      "checks": {
+        "legacyLog": true,
+        "modernLog": true,
+        "logObjects": true,
+        "style": true,
+        "defaultParent": true,
+        "modernNode": true,
+        "noHeadOrBody": true
+      },
+      "compatibilityCases": 13
+    },
+    {
+      "version": "84.4.10",
+      "platform": "x86",
+      "status": "passed",
+      "checks": {
+        "legacyLog": true,
+        "modernLog": true,
+        "logObjects": true,
+        "style": true,
+        "defaultParent": true,
+        "modernNode": true,
+        "noHeadOrBody": true
+      },
+      "compatibilityCases": 13
+    },
+    {
+      "version": "121.3.70",
+      "platform": "x64",
+      "status": "passed",
+      "checks": {
+        "legacyLog": true,
+        "modernLog": true,
+        "logObjects": true,
+        "style": true,
+        "defaultParent": true,
+        "modernNode": true,
+        "noHeadOrBody": true
+      },
+      "compatibilityCases": 13
+    },
+    {
+      "version": "121.3.70",
+      "platform": "x86",
+      "status": "passed",
+      "checks": {
+        "legacyLog": true,
+        "modernLog": true,
+        "logObjects": true,
+        "style": true,
+        "defaultParent": true,
+        "modernNode": true,
+        "noHeadOrBody": true
+      },
+      "compatibilityCases": 13
+    },
+    {
+      "version": "151.3.240",
+      "platform": "x64",
+      "status": "passed",
+      "checks": {
+        "legacyLog": true,
+        "modernLog": true,
+        "logObjects": true,
+        "style": true,
+        "defaultParent": true,
+        "modernNode": true,
+        "noHeadOrBody": true
+      },
+      "compatibilityCases": 13
+    },
+    {
+      "version": "151.3.240",
+      "platform": "x86",
+      "status": "passed",
+      "checks": {
+        "legacyLog": true,
+        "modernLog": true,
+        "logObjects": true,
+        "style": true,
+        "defaultParent": true,
+        "modernNode": true,
+        "noHeadOrBody": true
+      },
+      "compatibilityCases": 13
+    }
+  ],
+  "wpf": [
+    {
+      "version": "84.4.10",
+      "platform": "x64",
+      "status": "passed",
+      "environment": {
+        "cefSharpVersion": "84.4.10.0",
+        "platform": "x64"
+      },
+      "checks": {
+        "tabStateScriptIsolation": true,
+        "tabStateNavigation": true,
+        "windowFocus": true,
+        "windowClose": true,
+        "lastTabPolicy": true,
+        "tabRelativeUrlAndPosition": true,
+        "tabCloseOnce": true,
+        "domAndInfo": true,
+        "finalDisposal": true
+      }
+    },
+    {
+      "version": "121.3.70",
+      "platform": "x64",
+      "status": "passed",
+      "environment": {
+        "cefSharpVersion": "121.3.70.0",
+        "platform": "x64"
+      },
+      "checks": {
+        "tabStateScriptIsolation": true,
+        "tabStateNavigation": true,
+        "windowFocus": true,
+        "windowClose": true,
+        "lastTabPolicy": true,
+        "tabRelativeUrlAndPosition": true,
+        "tabCloseOnce": true,
+        "domAndInfo": true,
+        "finalDisposal": true
+      }
+    }
+  ],
+  "dotnet": {
+    "versions": [
+      "84.4.10",
+      "121.3.70"
+    ],
+    "platform": "x64",
+    "core": 288,
+    "adapter": 44,
+    "demo": 43,
+    "totalPerVersion": 375
+  },
+  "javascript": {
+    "passed": 113
+  },
+  "reference": "tampermonkey-5.5.1-page-helpers.json",
+  "differences": [
+    "Local console accepts circular values; pinned TM 5.5.1 log rejects them",
+    "Early close is queued once; pinned reference needed a later retry",
+    "DOM helpers retain page CSP restrictions",
+    "Private tab creation remains unsupported; Demo has no automatic update scheduler"
+  ]
+}

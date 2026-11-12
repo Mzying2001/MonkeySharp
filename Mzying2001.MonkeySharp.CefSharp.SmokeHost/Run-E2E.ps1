@@ -2,7 +2,7 @@
 param(
     [ValidateSet('x64', 'x86')]
     [string]$Platform = 'x64',
-    [string]$CefSharpVersion = '121.3.70',
+    [string]$CefSharpVersion = '151.3.240',
     [string]$OutputDirectory = ''
 )
 
@@ -53,3 +53,4 @@ try {
 } finally { $process.Dispose() }
 
 Write-Host "SmokeHost E2E passed ($Platform, CefSharp $CefSharpVersion). Results: $OutputDirectory"
+& (Join-Path $PSScriptRoot 'Run-CdpProbe.ps1') -Platform $Platform -CefSharpVersion $CefSharpVersion -NoBuild -OutputDirectory $OutputDirectory

@@ -1,8 +1,11 @@
-using CefSharp;
+﻿using CefSharp;
 using Mzying2001.MonkeySharp.Core.Apis;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
+using Mzying2001.MonkeySharp.Core.Runtime;
 using System.Linq;
 using System.Security.Cryptography.X509Certificates;
 
@@ -14,22 +17,35 @@ namespace Mzying2001.MonkeySharp.CefSharp
         private static readonly WebRequestDecision DetachedDecision = new WebRequestDecision();
         private readonly object _sync = new object();
         private IWebRequestService _service;
+        private readonly Func<IFrame, IRequest, DocumentFrame> _frame;
+        private readonly CancellationTokenSource _lifetime = new CancellationTokenSource();
 
         /// <summary>Initializes a handler over an application-owned web request service.</summary>
-        public CefSharpWebRequestHandler(IWebRequestService service)
+        public CefSharpWebRequestHandler(IWebRequestService service, Func<IFrame, IRequest, DocumentFrame> frame = null)
         {
             _service = service ?? throw new ArgumentNullException(nameof(service));
+            _frame = frame;
         }
 
         /// <summary>Stops forwarding callbacks and waits for active service evaluations without disposing the application-owned service.</summary>
         public void Dispose()
         {
-            lock (_sync) _service = null;
+            lock (_sync) { _service = null; _lifetime.Cancel(); }
         }
 
         private WebRequestDecision Evaluate(WebRequestEvent request)
         {
             lock (_sync) return _service == null ? DetachedDecision : _service.Evaluate(request);
+        }
+
+        private Task<WebRequestDecision> EvaluateAsync(WebRequestEvent request)
+        {
+            lock (_sync)
+            {
+                if (_service == null) return Task.FromResult(DetachedDecision);
+                return _service is IAsyncWebRequestService asyncService
+                    ? asyncService.EvaluateAsync(request, _lifetime.Token) : Task.FromResult(_service.Evaluate(request));
+            }
         }
 
         /// <inheritdoc />
@@ -46,11 +62,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
         /// <inheritdoc />
         public bool GetAuthCredentials(IWebBrowser chromiumWebBrowser, IBrowser browser, string originUrl, bool isProxy, string host, int port, string realm, string scheme, IAuthCallback callback)
         {
-            var eventData = new WebRequestEvent(WebRequestPhase.OnAuthRequired, 0, originUrl ?? string.Empty, "GET");
-            var decision = Evaluate(eventData);
-            if (decision.Kind != WebRequestActionKind.AuthResponse) return false;
-            callback.Continue(decision.Username, decision.Password);
-            return true;
+            return false;
         }
         /// <inheritdoc />
         public bool OnCertificateError(IWebBrowser chromiumWebBrowser, IBrowser browser, CefErrorCode errorCode, string requestUrl, ISslInfo sslInfo, IRequestCallback callback) { return false; }
@@ -73,7 +85,9 @@ namespace Mzying2001.MonkeySharp.CefSharp
         private sealed class ResourceHandler : IResourceRequestHandler
         {
             private readonly CefSharpWebRequestHandler _owner;
-            private bool _responseBlocked;
+            private DocumentFrame _frame;
+            private bool _ownershipCaptured;
+
             public ResourceHandler(CefSharpWebRequestHandler owner)
             {
                 _owner = owner;
@@ -81,57 +95,87 @@ namespace Mzying2001.MonkeySharp.CefSharp
             public ICookieAccessFilter GetCookieAccessFilter(IWebBrowser chromiumWebBrowser, IBrowser browser, IFrame frame, IRequest request) { return null; }
             public CefReturnValue OnBeforeResourceLoad(IWebBrowser chromiumWebBrowser, IBrowser browser, IFrame frame, IRequest request, IRequestCallback callback)
             {
-                var decision = _owner.Evaluate(CreateEvent(WebRequestPhase.OnBeforeRequest, request));
+                // Frame URL is not ready at GetResourceRequestHandler on every CEF version.
+                // Freeze ownership at the first decision, then never query a late native frame.
+                if (!_ownershipCaptured)
+                {
+                    _frame = _owner._frame?.Invoke(frame, request);
+                    _ownershipCaptured = true;
+                }
+                var evaluation = _owner.EvaluateAsync(CreateEvent(WebRequestPhase.OnBeforeRequest, frame, request));
+                _owner.Evaluate(CreateEvent(WebRequestPhase.OnBeforeSendHeaders, frame, request));
+                if (evaluation.IsCompleted)
+                {
+                    try { return ApplyDecision(request, evaluation.GetAwaiter().GetResult()); }
+                    catch { return CefReturnValue.Cancel; }
+                }
+                ContinueAsync(evaluation, request, callback);
+                return CefReturnValue.ContinueAsync;
+            }
+            private static CefReturnValue ApplyDecision(IRequest request, WebRequestDecision decision)
+            {
                 if (decision.Kind == WebRequestActionKind.Block) return CefReturnValue.Cancel;
-                if (decision.Kind == WebRequestActionKind.Redirect && !string.IsNullOrEmpty(decision.RedirectUrl)) request.Url = decision.RedirectUrl;
-                ApplyRequestHeaders(request, decision.Headers);
-                // CefSharp exposes request interception as one callback. Evaluate
-                // both request phases explicitly so phase-specific rules remain
-                // isolated while still allowing header edits before dispatch.
-                var headerDecision = _owner.Evaluate(CreateEvent(WebRequestPhase.OnBeforeSendHeaders, request));
-                if (headerDecision.Kind == WebRequestActionKind.Block) return CefReturnValue.Cancel;
-                if (headerDecision.Kind == WebRequestActionKind.Redirect && !string.IsNullOrEmpty(headerDecision.RedirectUrl))
-                    request.Url = headerDecision.RedirectUrl;
-                ApplyRequestHeaders(request, headerDecision.Headers);
+                if (decision.Kind == WebRequestActionKind.Redirect) request.Url = decision.RedirectUrl;
                 return CefReturnValue.Continue;
             }
+            private async void ContinueAsync(Task<WebRequestDecision> evaluation, IRequest request, IRequestCallback callback)
+            {
+                using (callback)
+                {
+                    try
+                    {
+                        var decision = await evaluation.ConfigureAwait(false);
+                        if (_owner._lifetime.IsCancellationRequested || ApplyDecision(request, decision) == CefReturnValue.Cancel) callback.Cancel();
+                        else callback.Continue(true);
+                    }
+                    catch { if (!callback.IsDisposed) callback.Cancel(); }
+                }
+            }
+
             public IResourceHandler GetResourceHandler(IWebBrowser chromiumWebBrowser, IBrowser browser, IFrame frame, IRequest request) { return null; }
             public void OnResourceRedirect(IWebBrowser chromiumWebBrowser, IBrowser browser, IFrame frame, IRequest request, IResponse response, ref string newUrl)
             {
-                var decision = _owner.Evaluate(CreateEvent(WebRequestPhase.OnBeforeRequest, request, response, null, newUrl));
+                var decision = _owner.Evaluate(CreateEvent(WebRequestPhase.OnBeforeRequest, frame, request, response, null, newUrl));
                 if (decision.Kind == WebRequestActionKind.Block) newUrl = "about:blank";
                 else if (decision.Kind == WebRequestActionKind.Redirect && !string.IsNullOrEmpty(decision.RedirectUrl)) newUrl = decision.RedirectUrl;
             }
             public bool OnResourceResponse(IWebBrowser chromiumWebBrowser, IBrowser browser, IFrame frame, IRequest request, IResponse response)
             {
-                var decision = _owner.Evaluate(CreateEvent(WebRequestPhase.OnHeadersReceived, request, response));
-                if (decision.Kind == WebRequestActionKind.Block)
-                    _responseBlocked = true;
-                foreach (var header in decision.Headers)
-                    if (response.Headers != null) response.Headers[header.Key] = header.Value;
-                _owner.Evaluate(CreateEvent(WebRequestPhase.OnResponseStarted, request, response));
+                var decision = _owner.Evaluate(CreateEvent(WebRequestPhase.OnHeadersReceived, frame, request, response));
+                _owner.Evaluate(CreateEvent(WebRequestPhase.OnResponseStarted, frame, request, response));
                 return false;
             }
             public IResponseFilter GetResourceResponseFilter(IWebBrowser chromiumWebBrowser, IBrowser browser, IFrame frame, IRequest request, IResponse response)
-            { return _responseBlocked ? new BlockingResponseFilter() : null; }
+            { return null; }
             public void OnResourceLoadComplete(IWebBrowser chromiumWebBrowser, IBrowser browser, IFrame frame, IRequest request, IResponse response, UrlRequestStatus status, long receivedContentLength)
             {
                 var phase = status == UrlRequestStatus.Success ? WebRequestPhase.OnCompleted : WebRequestPhase.OnErrorOccurred;
-                _owner.Evaluate(CreateEvent(phase, request, response, status.ToString()));
+                _owner.Evaluate(CreateEvent(phase, frame, request, response, status.ToString()));
             }
             public bool OnProtocolExecution(IWebBrowser chromiumWebBrowser, IBrowser browser, IFrame frame, IRequest request) { return false; }
             public void Dispose()
             {
             }
 
-            private static WebRequestEvent CreateEvent(WebRequestPhase phase, IRequest request, IResponse response = null, string error = null, string url = null)
+            private WebRequestEvent CreateEvent(WebRequestPhase phase, IFrame frame, IRequest request, IResponse response = null, string error = null, string url = null)
             {
                 var responsePhase = phase == WebRequestPhase.OnHeadersReceived ||
                     phase == WebRequestPhase.OnResponseStarted ||
                     phase == WebRequestPhase.OnCompleted ||
                     phase == WebRequestPhase.OnErrorOccurred;
-                return new WebRequestEvent(phase, request.Identifier, url ?? request.Url, request.Method, request.ResourceType.ToString(),
-                    responsePhase ? ToHeaders(response) : ToHeaders(request), response?.StatusCode, error);
+                return new WebRequestEvent(phase, request.Identifier, url ?? request.Url, request.Method, ResourceName(request.ResourceType.ToString()),
+                    responsePhase ? ToHeaders(response) : ToHeaders(request), response?.StatusCode, error, _frame);
+            }
+            private static string ResourceName(string type)
+            {
+                switch (type.ToLowerInvariant())
+                {
+                    case "subframe": return "sub_frame";
+                    case "script": return "script";
+                    case "xhr": case "xmlhttprequest": return "xhr";
+                    case "websocket": return "websocket";
+                    default: return type.ToLowerInvariant();
+                }
             }
             private static IDictionary<string, string> ToHeaders(IRequest request)
             {
@@ -146,20 +190,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     headers[name] = response.Headers[name];
                 return headers;
             }
-            private static void ApplyRequestHeaders(IRequest request, IReadOnlyDictionary<string, string> headers)
-            { foreach (var header in headers) request.SetHeaderByName(header.Key, header.Value, true); }
 
-            private sealed class BlockingResponseFilter : IResponseFilter
-            {
-                public bool InitFilter() { return true; }
-                public FilterStatus Filter(Stream dataIn, out long dataInRead, Stream dataOut, out long dataOutWritten)
-                {
-                    dataInRead = 0;
-                    dataOutWritten = 0;
-                    return FilterStatus.Error;
-                }
-                public void Dispose() { }
-            }
         }
     }
 

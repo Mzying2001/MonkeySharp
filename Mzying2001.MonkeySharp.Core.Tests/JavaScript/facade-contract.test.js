@@ -1,11 +1,11 @@
+const completePlan = require("./test-plan");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 
-const template = fs.readFileSync(
-    path.resolve(__dirname, "../../Mzying2001.MonkeySharp.Core/Js/Init.js"), "utf8");
+const template = require("./bootstrap-template");
 
 function waitFor(predicate) {
     return new Promise((resolve, reject) => {
@@ -24,7 +24,7 @@ function waitFor(predicate) {
 
 function install(payload, bridge) {
     globalThis.__MonkeySharpBridge = bridge;
-    const encoded = Buffer.from(JSON.stringify(payload), "utf8").toString("base64");
+    const encoded = Buffer.from(JSON.stringify(completePlan(payload)), "utf8").toString("base64");
     vm.runInThisContext(template.replace("__MONKEYSHARP_PAYLOAD_BASE64__", encoded));
 }
 
@@ -48,7 +48,7 @@ test("modern info is implicit while log, style, and element use granted capabili
     globalThis.__contractPromise = null;
     globalThis.__logged = null;
     install({
-        protocol: 1,
+        protocol: 2,
         documentId: "facade-modern-document",
         frameId: "main",
         runAt: "DocumentEnd",
@@ -68,20 +68,19 @@ test("modern info is implicit while log, style, and element use granted capabili
             info: { name: "contract", compatibility: { contractVersion: 1, handler: "MonkeySharp", executionWorld: "page", isolatedWorld: false, fields: {} } },
             capability: "facade-modern-capability",
             deliveryToken: "facade-modern-delivery",
-            compatibility: { profile: "ModernStrict", strict: true, legacyGlobals: false }
         }]
     }, {
         dispatch: async requestJson => {
             const request = JSON.parse(requestJson);
             if (request.type === "hello") {
                 return JSON.stringify({
-                    type: "hello-result", protocol: 1, ok: true, limits: {},
+                    type: "hello-result", protocol: 2, ok: true, limits: {},
                     apis: ["GM.log", "GM.addStyle", "GM.addElement"]
                 });
             }
             if (request.method === "GM.log") globalThis.__logged = request.params.value;
             return JSON.stringify({
-                type: "response", protocol: 1, requestId: request.requestId,
+                type: "response", protocol: 2, requestId: request.requestId,
                 ok: true, result: { $monkeySharpType: "undefined" }
             });
         }
@@ -107,7 +106,7 @@ test("legacy facade shadows ungranted globals and keeps new APIs absent without 
     globalThis.GM_addStyle = () => "page value";
     globalThis.__contractLegacy = null;
     install({
-        protocol: 1,
+        protocol: 2,
         documentId: "facade-legacy-document",
         frameId: "main",
         runAt: "DocumentEnd",
@@ -128,18 +127,17 @@ test("legacy facade shadows ungranted globals and keeps new APIs absent without 
             info: { grants: ["GM_log"] },
             capability: "facade-legacy-capability",
             deliveryToken: "facade-legacy-delivery",
-            compatibility: { profile: "LegacyCompatible", strict: false, legacyGlobals: true }
         }]
     }, {
         dispatch: async requestJson => {
             const request = JSON.parse(requestJson);
             if (request.type === "hello") {
                 return JSON.stringify({
-                    type: "hello-result", protocol: 1, ok: true, limits: {}, apis: ["GM.log"]
+                    type: "hello-result", protocol: 2, ok: true, limits: {}, apis: ["GM.log"]
                 });
             }
             return JSON.stringify({
-                type: "response", protocol: 1, requestId: request.requestId,
+                type: "response", protocol: 2, requestId: request.requestId,
                 ok: true, result: { $monkeySharpType: "undefined" }
             });
         }
@@ -167,20 +165,19 @@ test("modern and legacy addElement share DOM property semantics", async () => {
     };
     globalThis.__legacyElementPromise = null;
     install({
-        protocol: 1, documentId: "facade-element-legacy", frameId: "main", runAt: "DocumentEnd",
+        protocol: 2, documentId: "facade-element-legacy", frameId: "main", runAt: "DocumentEnd",
         invocations: [{
             executionId: "facade-element-legacy-execution",
             scriptKey: "99999999-9999-9999-9999-999999999999",
             source: "globalThis.__legacyElementPromise = Promise.resolve(GM_addElement('button', { value: 'legacy', style: 'display:none', onclick: function () {}, 'aria-label': 'run' }));",
             declaredGrants: ["GM_addElement"], grants: ["GM.addElement"], info: {},
             capability: "facade-element-capability", deliveryToken: "facade-element-delivery",
-            compatibility: { profile: "LegacyCompatible", strict: false, legacyGlobals: true }
         }]
     }, {
         dispatch: async requestJson => {
             const request = JSON.parse(requestJson);
-            if (request.type === "hello") return JSON.stringify({ type: "hello-result", protocol: 1, ok: true, limits: {}, apis: ["GM.addElement"] });
-            return JSON.stringify({ type: "response", protocol: 1, requestId: request.requestId, ok: true, result: { $monkeySharpType: "undefined" } });
+            if (request.type === "hello") return JSON.stringify({ type: "hello-result", protocol: 2, ok: true, limits: {}, apis: ["GM.addElement"] });
+            return JSON.stringify({ type: "response", protocol: 2, requestId: request.requestId, ok: true, result: { $monkeySharpType: "undefined" } });
         }
     });
     await waitFor(() => globalThis.__legacyElementPromise);
@@ -201,11 +198,7 @@ for (const bridgeState of ["absent", "failing"]) {
         };
         globalThis.__infoStates = {};
         const invocations = [];
-        for (const compatibility of [
-            { profile: "LegacyCompatible", strict: false, legacyGlobals: true },
-            { profile: "LegacyCompatible", strict: false, legacyGlobals: false },
-            { profile: "ModernStrict", strict: true, legacyGlobals: false }
-        ]) {
+        for (const execution of [0]) {
             for (const declaration of [
                 { declaredGrants: [], grants: [], grantDeclarationState: "Missing" },
                 { declaredGrants: ["none"], grants: ["none"], grantDeclarationState: "ExplicitNone" },
@@ -215,7 +208,7 @@ for (const bridgeState of ["absent", "failing"]) {
             ]) {
                 const id = `info-${bridgeState}-${invocations.length}`;
                 invocations.push({
-                    ...declaration, compatibility, executionId: id, scriptKey: id,
+                    ...declaration, executionId: id, scriptKey: id,
                     capability: id, deliveryToken: id,
                     info: { script: { name: id, grant: declaration.declaredGrants } },
                     source: `globalThis.__infoStates[${JSON.stringify(id)}] = {
@@ -230,7 +223,7 @@ for (const bridgeState of ["absent", "failing"]) {
         }
         try {
             install({
-                protocol: 1, documentId: `info-${bridgeState}`, frameId: "main",
+                protocol: 2, documentId: `info-${bridgeState}`, frameId: "main",
                 runAt: "DocumentEnd", invocations
             }, bridgeState === "absent" ? null : {
                 dispatch: async () => { dispatchCalls++; throw new Error("dispatch unavailable"); }
@@ -251,38 +244,34 @@ for (const bridgeState of ["absent", "failing"]) {
     });
 }
 
-test("info bypasses legacy switches while other aliases still follow the profile", async () => {
+test("info is implicit while legacy globals require their exact declared names", async () => {
     const previousCefSharp = globalThis.CefSharp;
     let bindCalls = 0;
     let helloCalls = 0;
     globalThis.CefSharp = { BindObjectAsync: async () => { bindCalls++; } };
-    globalThis.__profileInfo = {};
-    const profiles = [
-        { profile: "LegacyCompatible", strict: false, legacyGlobals: true },
-        { profile: "LegacyCompatible", strict: false, legacyGlobals: false },
-        { profile: "ModernStrict", strict: true, legacyGlobals: false }
-    ];
+    globalThis.__declaredInfo = {};
+    const declarations = [["GM_info", "GM.log"], ["GM_info", "GM_log"]];
     try {
         install({
-            protocol: 1, documentId: "info-profile-switches", frameId: "main", runAt: "DocumentEnd",
-            invocations: profiles.map((compatibility, index) => ({
-                executionId: `info-profile-${index}`, scriptKey: `info-profile-${index}`,
-                declaredGrants: ["GM_info", "GM.log"], grants: ["GM.info", "GM.log"],
-                grantDeclarationState: "ExplicitList", info: {}, compatibility,
-                source: `globalThis.__profileInfo[${index}] = [GM_info === GM.info, typeof GM.log, typeof GM_log, typeof GM.getValue];`
+            protocol: 2, documentId: "info-declarations-switches", frameId: "main", runAt: "DocumentEnd",
+            invocations: declarations.map((declaredGrants, index) => ({
+                executionId: `info-declarations-${index}`, scriptKey: `info-declarations-${index}`,
+                declaredGrants, grants: ["GM.info", "GM.log"],
+                grantDeclarationState: "ExplicitList", info: {},
+                source: `globalThis.__declaredInfo[${index}] = [GM_info === GM.info, typeof GM.log, typeof GM_log, typeof GM.getValue];`
             }))
         }, {
             dispatch: async requestJson => {
                 assert.equal(JSON.parse(requestJson).type, "hello");
                 helloCalls++;
-                return { type: "hello-result", protocol: 1, ok: true, apis: ["GM.log"] };
+                return { type: "hello-result", protocol: 2, ok: true, apis: ["GM.log"] };
             }
         });
-        await waitFor(() => Object.keys(globalThis.__profileInfo).length === profiles.length);
+        await waitFor(() => Object.keys(globalThis.__declaredInfo).length === declarations.length);
         assert.equal(bindCalls, 1);
-        assert.equal(helloCalls, profiles.length);
-        profiles.forEach((profile, index) => assert.deepEqual(globalThis.__profileInfo[index],
-            [true, "function", profile.legacyGlobals ? "function" : "undefined", "undefined"]));
+        assert.equal(helloCalls, declarations.length);
+        declarations.forEach((declaration, index) => assert.deepEqual(globalThis.__declaredInfo[index],
+            [true, "function", declaration.includes("GM_log") ? "function" : "undefined", "undefined"]));
     } finally {
         globalThis.CefSharp = previousCefSharp;
     }
@@ -300,7 +289,7 @@ test("a failed privileged binding does not prevent a later info-only invocation"
     globalThis.__afterBindingFailure = null;
     try {
         install({
-            protocol: 1, documentId: "info-after-failed-binding", frameId: "main", runAt: "DocumentEnd",
+            protocol: 2, documentId: "info-after-failed-binding", frameId: "main", runAt: "DocumentEnd",
             invocations: [{
                 executionId: "failed-binding", scriptKey: "privileged", grants: ["GM.getValue"],
                 info: {}, source: "throw new Error('privileged source must not execute');"

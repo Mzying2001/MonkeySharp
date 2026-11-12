@@ -1,5 +1,6 @@
 using Mzying2001.MonkeySharp.Core.Repository;
 using Mzying2001.MonkeySharp.Core.Storage;
+using static Mzying2001.MonkeySharp.Core.Storage.UserScriptValue;
 using System;
 using System.Collections.Generic;
 using System.Threading;
@@ -20,7 +21,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             var second = await repository.InstallAsync(source, "two", true, CancellationToken.None);
             using (var store = new InMemoryUserScriptValueStore())
             {
-                await store.SetAsync(first.ScriptKey.ToString(), "key", "1", CancellationToken.None);
+                await store.SetAsync(first.ScriptKey.ToString(), "key", FromJson("1"), CancellationToken.None);
 
                 Assert.NotEqual(first.ScriptKey, second.ScriptKey);
                 Assert.True((await store.GetAsync(first.ScriptKey.ToString(), "key", CancellationToken.None)).Exists);
@@ -56,7 +57,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             {
                 var changes = new List<UserScriptValueChangedEventArgs>();
                 store.ValueChanged += (_, args) => changes.Add(args);
-                var set = store.SetAsync("script", "key", "{ \"value\": 1 }", CancellationToken.None);
+                var set = store.SetAsync("script", "key", FromJson("{ \"value\": 1 }"), CancellationToken.None);
                 await store.Entered.Task;
                 var delete = store.DeleteAsync("script", "key", CancellationToken.None);
                 store.Release.TrySetResult(null);
@@ -68,7 +69,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 Assert.Equal(ValueChangeKind.Set, changes[0].Kind);
                 Assert.Equal(ValueChangeKind.Deleted, changes[1].Kind);
                 Assert.True(changes[0].Sequence < changes[1].Sequence);
-                Assert.Equal("{\"value\":1}", changes[0].NewValue.JsonValue);
+                Assert.Equal("o{\"value\":1}", changes[0].NewValue.Value.EncodedValue);
             }
         }
 
@@ -80,7 +81,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             {
                 var notifications = 0;
                 store.ValueChanged += (_, __) => notifications++;
-                var set = store.SetAsync("script", "key", "null", cancellation.Token);
+                var set = store.SetAsync("script", "key", FromJson("null"), cancellation.Token);
                 await store.Entered.Task;
                 cancellation.Cancel();
                 store.Release.TrySetResult(null);
@@ -100,25 +101,89 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 var notifications = 0;
                 store.ValueChanged += (_, __) => notifications++;
 
-                await store.SetAsync("script", "key", "null", cancellation.Token);
+                await store.SetAsync("script", "key", FromJson("null"), cancellation.Token);
 
                 var stored = await store.GetAsync("script", "key", CancellationToken.None);
                 Assert.True(stored.Exists);
-                Assert.Equal("null", stored.JsonValue);
+                Assert.Equal("onull", stored.Value.EncodedValue);
                 Assert.Equal(1, notifications);
             }
         }
 
         [Fact]
-        public async Task KeysAreOrdinalSorted()
+        public async Task KeysRetainInsertionOrder()
         {
             using (var store = new InMemoryUserScriptValueStore())
             {
-                await store.SetAsync("script", "z", "1", CancellationToken.None);
-                await store.SetAsync("script", "A", "2", CancellationToken.None);
-                await store.SetAsync("script", "a", "3", CancellationToken.None);
+                await store.SetAsync("script", "z", FromJson("1"), CancellationToken.None);
+                await store.SetAsync("script", "A", FromJson("2"), CancellationToken.None);
+                await store.SetAsync("script", "a", FromJson("3"), CancellationToken.None);
 
-                Assert.Equal(new[] { "A", "a", "z" }, await store.ListKeysAsync("script", CancellationToken.None));
+                Assert.Equal(new[] { "z", "A", "a" }, await store.ListKeysAsync("script", CancellationToken.None));
+            }
+        }
+
+        [Theory]
+        [InlineData("u", "u")]
+        [InlineData("s", "s")]
+        [InlineData("sundefined", "sundefined")]
+        [InlineData("btrue", "btrue")]
+        [InlineData("bfalse", "bfalse")]
+        [InlineData("nNaN", "nNaN")]
+        [InlineData("nInfinity", "nInfinity")]
+        [InlineData("n-Infinity", "n-Infinity")]
+        [InlineData("n-0", "n0")]
+        [InlineData("n1.0", "n1")]
+        [InlineData("onull", "onull")]
+        [InlineData("o{ \"a\": 1 }", "o{\"a\":1}")]
+        public void TypedValuesCanonicalizeWithoutConfusingUndefinedAndJson(string input, string canonical)
+        {
+            var value = FromEncoded(input);
+            Assert.Equal(canonical, value.EncodedValue);
+            Assert.Equal(value, FromEncoded(canonical));
+        }
+
+        [Theory]
+        [InlineData("")]
+        [InlineData("undefined")]
+        [InlineData("b1")]
+        [InlineData("nnull")]
+        [InlineData("n1e999")]
+        [InlineData("o42")]
+        [InlineData("o\"text\"")]
+        [InlineData("xunknown")]
+        public void TypedValuesRejectInvalidEncodings(string encoded)
+        {
+            Assert.ThrowsAny<FormatException>(() => FromEncoded(encoded));
+        }
+
+        [Fact]
+        public async Task UndefinedKeysSnapshotsAndChangeSuppressionUseExistenceAndTypedValues()
+        {
+            using (var store = new InMemoryUserScriptValueStore())
+            {
+                var changes = new List<UserScriptValueChangedEventArgs>();
+                store.ValueChanged += (_, args) => changes.Add(args);
+                Assert.False((await store.GetAsync("script", "", CancellationToken.None)).Exists);
+                await store.SetAsync("script", "", Undefined, CancellationToken.None);
+                await store.SetAsync("script", "", Undefined, CancellationToken.None);
+                await store.SetAsync("script", "null", FromJson("null"), CancellationToken.None);
+                var stored = await store.GetAsync("script", "", CancellationToken.None);
+                Assert.True(stored.Exists);
+                Assert.Equal(Undefined, stored.Value);
+                var snapshot = await store.GetSnapshotAsync("script", CancellationToken.None);
+                Assert.Equal(new[] { "", "null" }, System.Linq.Enumerable.Select(snapshot, item => item.Key));
+                Assert.Equal(Undefined, snapshot[0].Value);
+                await store.DeleteAsync("script", "", CancellationToken.None);
+                await store.DeleteAsync("script", "", CancellationToken.None);
+                Assert.Equal(3, changes.Count);
+                Assert.False(changes[0].OldValue.Exists);
+                Assert.True(changes[0].NewValue.Exists);
+                Assert.Equal(Undefined, changes[2].OldValue.Value);
+                Assert.False(changes[2].NewValue.Exists);
+                await store.SetAsync("script", "", Undefined, CancellationToken.None);
+                Assert.Equal(new[] { "null", "" }, await store.ListKeysAsync("script", CancellationToken.None));
+                Assert.Equal(new[] { "", "null" }, System.Linq.Enumerable.Select(snapshot, item => item.Key));
             }
         }
 

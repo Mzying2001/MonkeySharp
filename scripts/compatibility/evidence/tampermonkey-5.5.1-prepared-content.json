@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "caseId": "prepared-content",
+  "events": [],
+  "promise": {},
+  "immediateReturn": {
+    "source": "executed"
+  },
+  "effects": {
+    "shared": 3,
+    "strict": true,
+    "accented": "café",
+    "resourceText": "",
+    "binary": "AP8B",
+    "hashes": "sha1,sha384,sha512",
+    "tabsBefore": 4,
+    "tabsAfter": 4
+  },
+  "info": {
+    "handler": "Tampermonkey",
+    "version": "5.5.1",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36 Edg/156.0.0.0"
+  },
+  "fixtureHash": "777324273e9c34aacde9f4d6e92b342eb1365dba2575944e8506e1a8141c8f92",
+  "contractSource": [
+    "https://www.tampermonkey.net/documentation.php?locale=en",
+    "Tampermonkey 5.5.1/MV3 runtime"
+  ],
+  "environment": {
+    "manager": "Tampermonkey",
+    "managerVersion": "5.5.1",
+    "chromiumVersion": "Edg/156.0.4314.58",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36 Edg/156.0.0.0",
+    "manifestVersion": 3,
+    "settings": {
+      "headless": true,
+      "userScriptsAccess": true,
+      "freshProfile": true
+    },
+    "commit": "807abcccfa5d47ea138cb9d9bb45613dcdf3c7a9",
+    "platform": "x64",
+    "capabilities": {
+      "referenceReturnProbe": true
+    },
+    "world": "manager-selected"
+  },
+  "checks": {
+    "sourceExecuted": true,
+    "strictInherited": true,
+    "nonUtf8": true,
+    "binaryResource": true,
+    "allAlgorithms": true
+  },
+  "status": "passed"
+}

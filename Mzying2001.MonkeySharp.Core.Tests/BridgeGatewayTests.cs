@@ -5,6 +5,7 @@ using Mzying2001.MonkeySharp.Core.Permissions;
 using Mzying2001.MonkeySharp.Core.Repository;
 using Mzying2001.MonkeySharp.Core.Runtime;
 using Mzying2001.MonkeySharp.Core.Storage;
+using static Mzying2001.MonkeySharp.Core.Storage.UserScriptValue;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -39,7 +40,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         [InlineData("GM.info")]
         [InlineData("GM_info")]
         [InlineData("GM.getValue")]
-        public async Task HelloAlwaysIncludesInfoWithoutGrantingOtherCapabilities(string grant)
+        public async Task HelloIncludesInfoAndOnlyTheDeclaredModernFamily(string grant)
         {
             var grants = grant == null ? Array.Empty<string>() : new[] { grant };
             using (var fixture = await BridgeFixture.CreateAsync(grants))
@@ -48,10 +49,9 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 var apis = response.GetProperty("apis").EnumerateArray().Select(item => item.GetString()).ToList();
                 Assert.Contains("GM.info", apis);
                 Assert.Equal(grant == "GM.getValue", apis.Contains("GM.getValue"));
-                Assert.DoesNotContain("GM.setValue", apis);
+                Assert.Equal(grant == "GM.getValue", apis.Contains("GM.setValue"));
                 Assert.DoesNotContain("GM.addStyle", apis);
-                AssertError(await fixture.RequestAsync("GM.setValue", new { key = "denied", value = true }),
-                    BridgeErrorCodes.GrantDenied);
+                AssertError(await fixture.RequestAsync("GM.notification", new { }), BridgeErrorCodes.GrantDenied);
             }
         }
 
@@ -73,7 +73,9 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 });
 
                 Assert.True(result.GetProperty("ok").GetBoolean());
-                Assert.Equal("example.com", result.GetProperty("result").GetProperty("domain").GetString());
+                Assert.Equal("undefined", result.GetProperty("result").GetProperty("$monkeySharpType").GetString());
+                var listed = await fixture.RequestAsync("GM.cookie", new { operation = "list" });
+                Assert.Equal("example.com", listed.GetProperty("result")[0].GetProperty("domain").GetString());
             }
         }
 
@@ -83,13 +85,62 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             using (var fixture = await BridgeFixture.CreateAsync("GM.getValue", "GM.listValues"))
             {
                 await fixture.Store.SetAsync(
-                    fixture.Invocation.ScriptKey.ToString(), "theme", "{\"dark\":true}", CancellationToken.None);
+                    fixture.Invocation.ScriptKey.ToString(), "theme", FromJson("{\"dark\":true}"), CancellationToken.None);
 
                 var response = await fixture.HelloAsync();
                 var storage = response.GetProperty("compatibility").GetProperty("storage");
 
                 Assert.True(storage.GetProperty("complete").GetBoolean());
-                Assert.True(storage.GetProperty("values").GetProperty("theme").GetProperty("dark").GetBoolean());
+                Assert.Equal("theme", storage.GetProperty("entries")[0][0].GetString());
+                Assert.Equal("o{\"dark\":true}", storage.GetProperty("entries")[0][1].GetString());
+            }
+        }
+
+        [Theory]
+        [InlineData("GM.getResourceUrl")]
+        [InlineData("GM_getResourceURL")]
+        public async Task ResourceUrlGrantsAuthorizeCanonicalBridgeAndBootstrapResources(string grant)
+        {
+            var source = MetadataAndMatchingTests.Script(
+                "// @name resource\n// @match https://example.com/*\n// @run-at document-end\n" +
+                "// @grant " + grant + "\n// @resource template https://cdn.example/template.txt");
+            using (var provider = new ResourceAndNetworkApiProvider())
+            using (var fixture = await BridgeFixture.CreateFromSourceAsync(
+                source, new IUserScriptApiProvider[] { provider }))
+            {
+                Assert.Equal(new[] { grant }, fixture.Invocation.DeclaredGrants);
+                Assert.Equal(new[] { "GM.getResourceText", "GM.getResourceUrl" }, fixture.Invocation.Grants.OrderBy(value => value));
+                var hello = await fixture.HelloAsync();
+                Assert.Contains("GM.getResourceUrl", hello.GetProperty("apis").EnumerateArray().Select(item => item.GetString()));
+                var resources = hello.GetProperty("compatibility").GetProperty("resources");
+                Assert.True(resources.GetProperty("complete").GetBoolean());
+                Assert.Equal("data:text/plain;base64,aGVsbG8=",
+                    resources.GetProperty("values").GetProperty("template").GetProperty("url").GetString());
+
+                var response = await fixture.RequestAsync("GM.getResourceUrl", new { name = "template" });
+                Assert.True(response.GetProperty("ok").GetBoolean());
+                Assert.Equal("data:text/plain;base64,aGVsbG8=", response.GetProperty("result").GetString());
+                Assert.Equal("hello", (await fixture.RequestAsync("GM.getResourceText", new { name = "template" })).GetProperty("result").GetString());
+            }
+        }
+
+        [Theory]
+        [InlineData(null)]
+        [InlineData("none")]
+        public async Task ResourceUrlBridgeRequiresAResourceFamilyGrant(string grant)
+        {
+            var source = MetadataAndMatchingTests.Script(
+                "// @name resource\n// @match https://example.com/*\n// @run-at document-end\n" +
+                (grant == null ? "" : "// @grant " + grant + "\n") +
+                "// @resource template https://cdn.example/template.txt");
+            using (var provider = new ResourceAndNetworkApiProvider())
+            using (var fixture = await BridgeFixture.CreateFromSourceAsync(
+                source, new IUserScriptApiProvider[] { provider }))
+            {
+                var hello = await fixture.HelloAsync();
+                Assert.DoesNotContain("GM.getResourceUrl", hello.GetProperty("apis").EnumerateArray().Select(item => item.GetString()));
+                AssertError(await fixture.RequestAsync("GM.getResourceUrl", new { name = "template" }),
+                    BridgeErrorCodes.GrantDenied);
             }
         }
 
@@ -111,12 +162,137 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             }
         }
 
+        [Theory]
+        [InlineData("GM_getValues", "GM.getValues")]
+        [InlineData("GM_setValues", "GM.setValues")]
+        [InlineData("GM_deleteValues", "GM.deleteValues")]
+        public async Task BulkGrantsEnableTheModernStorageFamilyAndBootstrap(string alias, string canonical)
+        {
+            using (var fixture = await BridgeFixture.CreateAsync(alias))
+            {
+                var hello = await fixture.HelloAsync();
+                var apis = hello.GetProperty("apis").EnumerateArray().Select(item => item.GetString()).ToList();
+                Assert.Contains(canonical, apis);
+                Assert.Contains("GM.setValue", apis);
+                Assert.Contains("GM.getValue", apis);
+                Assert.True(hello.GetProperty("compatibility").GetProperty("storage").GetProperty("complete").GetBoolean());
+                Assert.True((await fixture.RequestAsync("GM.setValue", new { key = "x", value = "n1" })).GetProperty("ok").GetBoolean());
+                Assert.Equal("n1", (await fixture.RequestAsync("GM.getValue", new { key = "x" })).GetProperty("result").GetProperty("value").GetString());
+                AssertError(await fixture.RequestAsync("GM.notification", new { }), BridgeErrorCodes.GrantDenied);
+                Assert.Equal(new[] { alias }, fixture.Invocation.DeclaredGrants);
+            }
+        }
+
+        [Fact]
+        public async Task BulkStorageReadsDefaultsAllValuesAndDeletesDistinctKeys()
+        {
+            using (var fixture = await BridgeFixture.CreateAsync("GM.getValues", "GM.setValues", "GM.deleteValues"))
+            {
+                var values = new Dictionary<string, object>
+                {
+                    ["nullable"] = null, ["nested"] = new { items = new[] { 1, 2 }, enabled = true },
+                    ["__proto__"] = "ordinary", ["constructor"] = 42
+                };
+                var set = await fixture.RequestAsync("GM.setValues", new { values = values.ToDictionary(item => item.Key, item => FromJson(JsonSerializer.Serialize(item.Value)).EncodedValue) });
+                Assert.True(set.GetProperty("ok").GetBoolean());
+                Assert.Equal((await fixture.Store.GetSnapshotAsync(fixture.Invocation.ScriptKey.ToString(), CancellationToken.None)).Sequence, set.GetProperty("result").GetProperty("sequence").GetInt64());
+                var read = (await fixture.RequestAsync("GM.getValues", new { keys = new[] { "nullable", "nested", "missing", "nested" } }))
+                    .GetProperty("result");
+                Assert.Equal("onull", read.GetProperty("nullable").GetString());
+                Assert.Equal("o{\"items\":[1,2],\"enabled\":true}", read.GetProperty("nested").GetString());
+                Assert.False(read.TryGetProperty("missing", out _));
+                await fixture.Store.SetAsync(Guid.NewGuid().ToString("D"), "other-script", FromJson("true"), CancellationToken.None);
+                var all = (await fixture.RequestAsync("GM.getValues", new { keys = (string[])null })).GetProperty("result");
+                Assert.Equal(4, all.EnumerateObject().Count());
+                Assert.Equal("sordinary", all.GetProperty("__proto__").GetString());
+                Assert.Equal("n42", all.GetProperty("constructor").GetString());
+                Assert.Empty((await fixture.RequestAsync("GM.getValues", new { keys = Array.Empty<string>() }))
+                    .GetProperty("result").EnumerateObject());
+
+                var changes = new List<UserScriptValueChangedEventArgs>();
+                fixture.Store.ValueChanged += (_, change) => changes.Add(change);
+                var deleted = await fixture.RequestAsync("GM.deleteValues", new { keys = new[] { "nullable", "nullable", "missing" } });
+                Assert.Equal((await fixture.Store.GetSnapshotAsync(fixture.Invocation.ScriptKey.ToString(), CancellationToken.None)).Sequence, deleted.GetProperty("result").GetProperty("sequence").GetInt64());
+                Assert.Equal("nullable", Assert.Single(changes).Key);
+                Assert.True((await fixture.RequestAsync("GM.setValues", new { values = new { } })).GetProperty("ok").GetBoolean());
+                Assert.True((await fixture.RequestAsync("GM.deleteValues", new { keys = Array.Empty<string>() })).GetProperty("ok").GetBoolean());
+            }
+        }
+
+        [Theory]
+        [InlineData("GM.setValues", "{\"values\":{\"valid\":\"n2\",\"bad\":\"invalid\"}}")]
+        [InlineData("GM.setValues", "{\"values\":[]}")]
+        [InlineData("GM.setValues", "{\"values\":null}")]
+        [InlineData("GM.deleteValues", "{\"keys\":[\"valid\",12]}")]
+        [InlineData("GM.deleteValues", "{\"keys\":{}}")]
+        [InlineData("GM.getValues", "{\"keys\":[\"valid\",false]}")]
+        [InlineData("GM.getValues", "{\"keys\":false}")]
+        public async Task BulkStorageValidatesEntireRequestBeforeChangingValues(string method, string json)
+        {
+            using (var fixture = await BridgeFixture.CreateAsync(method))
+            using (var parameters = JsonDocument.Parse(json))
+            {
+                await fixture.Store.SetAsync(fixture.Invocation.ScriptKey.ToString(), "valid", FromJson("1"), CancellationToken.None);
+                var changes = 0;
+                fixture.Store.ValueChanged += (_, __) => changes++;
+                AssertError(await fixture.RequestAsync(method, parameters.RootElement), BridgeErrorCodes.InvalidParams);
+                Assert.Equal("n1", (await fixture.Store.GetAsync(fixture.Invocation.ScriptKey.ToString(), "valid", CancellationToken.None)).Value.EncodedValue);
+                Assert.Equal(0, changes);
+            }
+        }
+
+        [Fact]
+        public async Task BulkStorageFailurePreservesWholePartitionAndPublishesNothing()
+        {
+            using (var fixture = await BridgeFixture.CreateWithStoreAsync(new FailingBulkStore(), "GM.setValues", "GM.addValueChangeListener"))
+            {
+                var notifications = new List<BridgeNotificationEventArgs>();
+                fixture.Gateway.Notification += (_, notification) => notifications.Add(notification);
+                await fixture.RequestAsync("GM.addValueChangeListener", new { key = "first", listenerId = 1 });
+                var requestId = Guid.NewGuid().ToString("D");
+                AssertError(await fixture.RequestAsync("GM.setValues", new
+                {
+                    values = new { first = "n1", fail = "n2", last = "n3" }
+                }, requestId), BridgeErrorCodes.Internal);
+                var scriptKey = fixture.Invocation.ScriptKey.ToString();
+                Assert.False((await fixture.Store.GetAsync(scriptKey, "first", CancellationToken.None)).Exists);
+                Assert.False((await fixture.Store.GetAsync(scriptKey, "last", CancellationToken.None)).Exists);
+                Assert.Empty(notifications);
+                notifications.Clear();
+                await fixture.Store.SetAsync(scriptKey, "last", FromJson("4"), CancellationToken.None);
+                using (var data = JsonDocument.Parse(Assert.Single(notifications).DataJson))
+                    Assert.False(data.RootElement.TryGetProperty("originExecutionId", out _));
+            }
+        }
+
+        [Fact]
+        public async Task BulkStorageHonorsHostPermissionDenial()
+        {
+            using (var fixture = await BridgeFixture.CreateAsync(new DenyPolicy(), null, null, "GM.setValues"))
+            {
+                AssertError(await fixture.RequestAsync("GM.setValues", new { values = new { key = 1 } }), BridgeErrorCodes.PermissionDenied);
+                Assert.Empty(await fixture.Store.ListKeysAsync(fixture.Invocation.ScriptKey.ToString(), CancellationToken.None));
+            }
+        }
+
+        [Fact]
+        public async Task BulkReadAllUsesRequiredAtomicSnapshot()
+        {
+            using (var fixture = await BridgeFixture.CreateWithStoreAsync(new InMemoryUserScriptValueStore(), "GM.getValues", "GM.setValues"))
+            {
+                await fixture.RequestAsync("GM.setValues", new { values = new { first = "n1", second = "stwo" } });
+                var result = (await fixture.RequestAsync("GM.getValues", new { })).GetProperty("result");
+                Assert.Equal("n1", result.GetProperty("first").GetString());
+                Assert.Equal("stwo", result.GetProperty("second").GetString());
+            }
+        }
+
         [Fact]
         public async Task GrantAndHostSupportAreCheckedIndependently()
         {
             using (var fixture = await BridgeFixture.CreateAsync("GM.getValue", "GM.download"))
             {
-                var denied = await fixture.RequestAsync("GM.setValue", new { key = "x", value = 1 });
+                var denied = await fixture.RequestAsync("GM.notification", new { });
                 var unsupported = await fixture.RequestAsync("GM.download", new { url = "https://example.com/a" });
 
                 AssertError(denied, BridgeErrorCodes.GrantDenied);
@@ -178,20 +354,82 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 "GM.getValue", "GM.setValue", "GM.deleteValue", "GM.listValues"))
             {
                 var missing = await fixture.RequestAsync("GM.getValue", new { key = "missing", defaultValue = "fallback" });
-                await fixture.RequestAsync("GM.setValue", new { key = "null", value = (object)null });
-                await fixture.RequestAsync("GM.setValue", new { key = "object", value = new { nested = new[] { 1, 2 } } });
+                await fixture.RequestAsync("GM.setValue", new { key = "null", value = "onull" });
+                await fixture.RequestAsync("GM.setValue", new { key = "object", value = "o{\"nested\":[1,2]}" });
                 var storedNull = await fixture.RequestAsync("GM.getValue", new { key = "null", defaultValue = "fallback" });
                 var storedObject = await fixture.RequestAsync("GM.getValue", new { key = "object" });
                 var keys = await fixture.RequestAsync("GM.listValues", new { });
                 var deleted = await fixture.RequestAsync("GM.deleteValue", new { key = "null" });
                 var absentWithoutDefault = await fixture.RequestAsync("GM.getValue", new { key = "null" });
 
-                Assert.Equal("fallback", missing.GetProperty("result").GetString());
-                Assert.Equal(JsonValueKind.Null, storedNull.GetProperty("result").ValueKind);
-                Assert.Equal(2, storedObject.GetProperty("result").GetProperty("nested")[1].GetInt32());
+                Assert.False(missing.GetProperty("result").GetProperty("exists").GetBoolean());
+                Assert.Equal("onull", storedNull.GetProperty("result").GetProperty("value").GetString());
+                Assert.Equal("o{\"nested\":[1,2]}", storedObject.GetProperty("result").GetProperty("value").GetString());
                 Assert.Equal(new[] { "null", "object" }, keys.GetProperty("result").EnumerateArray().Select(item => item.GetString()));
-                Assert.True(deleted.GetProperty("result").GetBoolean());
-                Assert.Equal("undefined", absentWithoutDefault.GetProperty("result").GetProperty("$monkeySharpType").GetString());
+                Assert.Equal((await fixture.Store.GetSnapshotAsync(fixture.Invocation.ScriptKey.ToString(), CancellationToken.None)).Sequence, deleted.GetProperty("result").GetProperty("sequence").GetInt64());
+                Assert.False(absentWithoutDefault.GetProperty("result").GetProperty("exists").GetBoolean());
+            }
+        }
+
+        [Fact]
+        public async Task TypedUndefinedSurvivesSingleBulkSnapshotAndListenerBridgePaths()
+        {
+            using (var fixture = await BridgeFixture.CreateAsync("GM.getValue", "GM.setValue", "GM.getValues",
+                "GM.setValues", "GM.deleteValue", "GM.addValueChangeListener"))
+            {
+                var notifications = new List<BridgeNotificationEventArgs>();
+                fixture.Gateway.Notification += (_, item) => notifications.Add(item);
+                await fixture.RequestAsync("GM.addValueChangeListener", new { listenerId = 1, key = "" });
+                var set = await fixture.RequestAsync("GM.setValue", new { key = "", value = "u" });
+                Assert.True(set.GetProperty("ok").GetBoolean());
+                var read = (await fixture.RequestAsync("GM.getValue", new { key = "" })).GetProperty("result");
+                Assert.True(read.GetProperty("exists").GetBoolean());
+                Assert.Equal("u", read.GetProperty("value").GetString());
+                var all = (await fixture.RequestAsync("GM.getValues", new { })).GetProperty("result");
+                Assert.Equal("u", all.GetProperty("").GetString());
+                var snapshot = (await fixture.HelloAsync()).GetProperty("compatibility").GetProperty("storage");
+                Assert.Equal("", snapshot.GetProperty("entries")[0][0].GetString());
+                Assert.Equal("u", snapshot.GetProperty("entries")[0][1].GetString());
+                await fixture.RequestAsync("GM.setValue", new { key = "", value = "u" });
+                Assert.Equal(2, notifications.Count);
+                using (var created = JsonDocument.Parse(notifications[0].DataJson))
+                {
+                    Assert.False(created.RootElement.GetProperty("oldValueExists").GetBoolean());
+                    Assert.True(created.RootElement.GetProperty("newValueExists").GetBoolean());
+                    Assert.Equal("u", created.RootElement.GetProperty("newValue").GetString());
+                }
+                await fixture.RequestAsync("GM.deleteValue", new { key = "" });
+                Assert.Equal(4, notifications.Count);
+                using (var deleted = JsonDocument.Parse(notifications[2].DataJson))
+                {
+                    Assert.True(deleted.RootElement.GetProperty("oldValueExists").GetBoolean());
+                    Assert.False(deleted.RootElement.GetProperty("newValueExists").GetBoolean());
+                    Assert.Equal("u", deleted.RootElement.GetProperty("oldValue").GetString());
+                }
+                await fixture.RequestAsync("GM.setValues", new { values = new Dictionary<string, string>
+                {
+                    ["$monkeySharpType"] = "sundefined", ["__proto__"] = "o{\"safe\":true}",
+                    ["constructor"] = "nInfinity", ["undefined"] = "u"
+                } });
+                all = (await fixture.RequestAsync("GM.getValues", new { })).GetProperty("result");
+                Assert.Equal("sundefined", all.GetProperty("$monkeySharpType").GetString());
+                Assert.Equal("o{\"safe\":true}", all.GetProperty("__proto__").GetString());
+                Assert.Equal("nInfinity", all.GetProperty("constructor").GetString());
+                Assert.Equal("u", all.GetProperty("undefined").GetString());
+            }
+        }
+
+        [Theory]
+        [InlineData("o{invalid")]
+        [InlineData("o42")]
+        [InlineData("n1e999")]
+        [InlineData("invalid")]
+        public async Task InvalidTypedSingleValuesReturnInvalidParamsWithoutMutation(string encoded)
+        {
+            using (var fixture = await BridgeFixture.CreateAsync("GM.setValue"))
+            {
+                AssertError(await fixture.RequestAsync("GM.setValue", new { key = "", value = encoded }), BridgeErrorCodes.InvalidParams);
+                Assert.Empty(await fixture.Store.ListKeysAsync(fixture.Invocation.ScriptKey.ToString(), CancellationToken.None));
             }
         }
 
@@ -238,8 +476,10 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             }
         }
 
-        [Fact]
-        public async Task MalformedVersionAndInvalidParamsUseStableErrors()
+        [Theory]
+        [InlineData(1)]
+        [InlineData(99)]
+        public async Task MalformedVersionAndInvalidParamsUseStableErrors(int unsupportedVersion)
         {
             using (var fixture = await BridgeFixture.CreateAsync("GM.getValue"))
             {
@@ -248,7 +488,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 var versionMessage = new Dictionary<string, object>
                 {
                     ["type"] = "hello",
-                    ["protocol"] = 99,
+                    ["protocol"] = unsupportedVersion,
                     ["documentId"] = fixture.Frame.DocumentId,
                     ["scriptKey"] = fixture.Invocation.ScriptKey.ToString(),
                     ["capability"] = fixture.Invocation.Capability
@@ -442,7 +682,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                     secondInvocation,
                     "GM.addValueChangeListener",
                     new { listenerId = 1, key = "theme" });
-                await fixture.Store.SetAsync(fixture.Invocation.ScriptKey.ToString(), "theme", "\"dark\"", CancellationToken.None);
+                await fixture.Store.SetAsync(fixture.Invocation.ScriptKey.ToString(), "theme", FromJson("\"dark\""), CancellationToken.None);
 
                 Assert.Equal(4, notifications.Count);
                 Assert.Equal(2, notifications.Count(item => item.EventName == "storage-sync"));
@@ -464,7 +704,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                     "GM.removeValueChangeListener",
                     new { listenerId = 1 });
                 notifications.Clear();
-                await fixture.Store.SetAsync(fixture.Invocation.ScriptKey.ToString(), "theme", "\"light\"", CancellationToken.None);
+                await fixture.Store.SetAsync(fixture.Invocation.ScriptKey.ToString(), "theme", FromJson("\"light\""), CancellationToken.None);
                 Assert.Equal(2, notifications.Count(item => item.EventName == "storage-sync"));
                 Assert.DoesNotContain(notifications, item => item.EventName == "value-change");
             }
@@ -483,7 +723,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 var notifications = new List<BridgeNotificationEventArgs>();
                 fixture.Gateway.Notification += (_, item) => notifications.Add(item);
 
-                await fixture.RequestAsync("GM.setValue", new { key = "count", value = 4 });
+                await fixture.RequestAsync("GM.setValue", new { key = "count", value = "n4" });
 
                 Assert.Equal(2, notifications.Count);
                 Assert.All(notifications, item => Assert.Equal("storage-sync", item.EventName));
@@ -498,20 +738,23 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             }
         }
 
-        [Fact]
-        public async Task AcceptedStorageMutationCompletesAfterExecutionEnds()
+        [Theory]
+        [InlineData("GM.setValue")]
+        [InlineData("GM.setValues")]
+        public async Task AcceptedStorageMutationCompletesAfterExecutionEnds(string method)
         {
             var store = new DelayedCommitStore();
-            using (var fixture = await BridgeFixture.CreateWithStoreAsync(store, "GM.setValue"))
+            using (var fixture = await BridgeFixture.CreateWithStoreAsync(store, method))
             {
-                var request = fixture.RequestAsync("GM.setValue", new { key = "count", value = 1 });
+                var request = fixture.RequestAsync(method, method == "GM.setValue"
+                    ? (object)new { key = "count", value = "n1" } : new { values = new { count = "n1", second = "n2" } });
                 await store.Started.Task;
                 await fixture.Engine.InvalidateDocumentAsync(fixture.Frame.DocumentId, CancellationToken.None);
                 store.Release.TrySetResult(null);
                 var response = await request;
                 Assert.True(response.GetProperty("ok").GetBoolean());
-                Assert.Equal("1", (await store.GetAsync(
-                    fixture.Invocation.ScriptKey.ToString(), "count", CancellationToken.None)).JsonValue);
+                Assert.Equal("n1", (await store.GetAsync(
+                    fixture.Invocation.ScriptKey.ToString(), "count", CancellationToken.None)).Value.EncodedValue);
             }
         }
 
@@ -537,6 +780,9 @@ namespace Mzying2001.MonkeySharp.Core.Tests
 
                 delivered = null;
                 await fixture.Engine.InvalidateDocumentAsync(fixture.Frame.DocumentId, CancellationToken.None);
+                Assert.Equal("execution-ended", delivered.EventName);
+                Assert.Equal(fixture.Invocation.DeliveryToken, delivered.DeliveryToken);
+                delivered = null;
                 provider.Emit(fixture.Invocation.ScriptKey, fixture.Invocation.ExecutionId);
 
                 Assert.Equal(fixture.Invocation.ExecutionId, provider.EndedExecutionId);
@@ -746,10 +992,28 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             }
         }
 
+        private sealed class FailingBulkStore : InMemoryUserScriptValueStore
+        {
+            protected override Task BeforeCommitAsync(string scriptKey, string key, ValueChangeKind kind, CancellationToken cancellationToken)
+            {
+                if (key == "fail") throw new InvalidOperationException("Simulated storage failure.");
+                return Task.CompletedTask;
+            }
+        }
+
+        private sealed class FixtureResourceProvider : IResourceProvider
+        {
+            public Task<ResourceContent> GetAsync(
+                UserScriptInstallation installation, ResourceDeclaration resource, CancellationToken cancellationToken)
+            {
+                return Task.FromResult(new ResourceContent(Encoding.UTF8.GetBytes("hello"), "text/plain", "hello"));
+            }
+        }
+
         private sealed class BridgeFixture : IDisposable
         {
             private BridgeFixture(
-                InMemoryUserScriptValueStore store,
+                IUserScriptValueStore store,
                 UserScriptEngine engine,
                 UserScriptBridgeGateway gateway,
                 DocumentFrame frame,
@@ -763,7 +1027,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 Invocation = Assert.Single(plan.Invocations);
             }
 
-            public InMemoryUserScriptValueStore Store { get; }
+            public IUserScriptValueStore Store { get; }
             public UserScriptEngine Engine { get; }
             public UserScriptBridgeGateway Gateway { get; }
             public DocumentFrame Frame { get; }
@@ -776,12 +1040,12 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             }
 
             public static async Task<BridgeFixture> CreateWithStoreAsync(
-                InMemoryUserScriptValueStore store, params string[] grants)
+                IUserScriptValueStore store, params string[] grants)
             {
                 var repository = new InMemoryUserScriptRepository();
                 var grantLines = string.Join("\n", grants.Select(item => "// @grant " + item));
                 var source = MetadataAndMatchingTests.Script(
-                    "// @name bridge\n// @match https://example.com/*\n// @run-at document-end\n" + grantLines,
+                    "// @name bridge\n// @match https://example.com/*\n// @connect example.com\n// @run-at document-end\n" + grantLines,
                     "window.bridgeTest = \"'</script>\";");
                 await repository.InstallAsync(source, "test", true, CancellationToken.None);
                 var engine = new UserScriptEngine(repository);
@@ -802,7 +1066,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 var repository = new InMemoryUserScriptRepository();
                 var grantLines = string.Join("\n", grants.Select(item => "// @grant " + item));
                 var source = MetadataAndMatchingTests.Script(
-                    "// @name bridge\n// @match https://example.com/*\n// @run-at document-end\n" + grantLines,
+                    "// @name bridge\n// @match https://example.com/*\n// @connect example.com\n// @run-at document-end\n" + grantLines,
                     "window.bridgeTest = \"'</script>\";");
                 await repository.InstallAsync(source, "test", true, CancellationToken.None);
                 var engine = new UserScriptEngine(repository);
@@ -819,10 +1083,9 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 string source,
                 IEnumerable<IUserScriptApiProvider> providers)
             {
-                var repository = new InMemoryUserScriptRepository();
+                var repository = new InMemoryUserScriptRepository(preparer: new UserScriptPreparer(new FixtureDependencyProvider(), new FixtureResourceProvider()));
                 await repository.InstallAsync(source, "fixture", true, CancellationToken.None);
-                var engine = new UserScriptEngine(repository, sourceResolver: new ResourceScriptSourceResolver(
-                    new FixtureDependencyProvider(), 4096));
+                var engine = new UserScriptEngine(repository);
                 var frame = CreateFrame("legacy-fixture-document");
                 var plan = await engine.ProcessLifecycleAsync(
                     new DocumentLifecycleEventArgs(DocumentLifecycleKind.DomContentLoaded, frame),
@@ -892,7 +1155,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             {
                 Gateway.Dispose();
                 Engine.Dispose();
-                Store.Dispose();
+                (Store as IDisposable)?.Dispose();
             }
 
             private async Task<JsonElement> DispatchAsync(Dictionary<string, object> envelope)
@@ -906,7 +1169,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             {
                 return new Dictionary<string, object>
                 {
-                    ["protocol"] = 1,
+                    ["protocol"] = 2,
                     ["documentId"] = frame.DocumentId,
                     ["scriptKey"] = invocation.ScriptKey.ToString(),
                     ["capability"] = invocation.Capability

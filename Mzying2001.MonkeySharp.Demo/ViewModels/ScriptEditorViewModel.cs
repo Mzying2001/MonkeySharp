@@ -1,3 +1,4 @@
+using Mzying2001.MonkeySharp.Demo.Localization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Mzying2001.MonkeySharp.Core.Domain;
 using Mzying2001.MonkeySharp.Core.Parsing;
@@ -26,12 +27,11 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
             var metadata = parsed.Metadata;
             var diagnostics = string.Join("\n", parsed.Diagnostics.Select(item => item.Severity + " " + item.Code + " L" + item.LineNumber + ": " + item.Message));
             if (metadata == null) return diagnostics;
-            return metadata.Name + "  v" + metadata.Version + "\n作者：" + metadata.Author + "\n" + metadata.Description +
-                "\n匹配：" + string.Join(", ", metadata.Matches) + "\nInclude：" + string.Join(", ", metadata.Includes) +
-                "\n排除：" + string.Join(", ", metadata.Excludes.Concat(metadata.ExcludeMatches)) +
-                "\n权限：" + string.Join(", ", metadata.DeclaredGrants) + "\nConnect：" + string.Join(", ", metadata.Connects) +
-                "\nRequire：" + string.Join(", ", metadata.Requires.Select(item => item.Url)) +
-                "\nResource：" + string.Join(", ", metadata.Resources.Select(item => item.Name + " = " + item.Url)) + "\n" + diagnostics;
+            return Strings.Format("EditorDescription", metadata.Name, metadata.Version, metadata.Author, metadata.Description,
+                string.Join(", ", metadata.Matches), string.Join(", ", metadata.Includes),
+                string.Join(", ", metadata.Excludes.Concat(metadata.ExcludeMatches)), string.Join(", ", metadata.DeclaredGrants),
+                string.Join(", ", metadata.Connects), string.Join(", ", metadata.Requires.Select(item => item.Url)),
+                string.Join(", ", metadata.Resources.Select(item => item.Name + " = " + item.Url)), diagnostics);
         }
     }
 }

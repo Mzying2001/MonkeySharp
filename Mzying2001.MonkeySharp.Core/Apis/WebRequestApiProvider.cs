@@ -1,7 +1,8 @@
-using Mzying2001.MonkeySharp.Core.Bridge;
+﻿using Mzying2001.MonkeySharp.Core.Bridge;
 using Mzying2001.MonkeySharp.Core.Domain;
 using Mzying2001.MonkeySharp.Core.Matching;
 using Mzying2001.MonkeySharp.Core.Runtime;
+using Mzying2001.MonkeySharp.Core.Repository;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -40,13 +41,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         /// <summary>Blocks the request.</summary>
         Block,
         /// <summary>Redirects the request.</summary>
-        Redirect,
-        /// <summary>Changes request headers.</summary>
-        ModifyRequestHeaders,
-        /// <summary>Changes response headers.</summary>
-        ModifyResponseHeaders,
-        /// <summary>Supplies authentication credentials.</summary>
-        AuthResponse
+        Redirect
     }
 
     /// <summary>Matches requests by URL glob, resource type, and HTTP method.</summary>
@@ -95,70 +90,28 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         }
     }
 
-    /// <summary>Describes the effect of a web request rule.</summary>
-    public sealed class WebRequestAction
-    {
-        /// <summary>Initializes a rule action and copies its header mutations.</summary>
-        public WebRequestAction(WebRequestActionKind kind, string redirectUrl = null, IDictionary<string, string> headers = null, string username = null, string password = null,
-            string from = null, string to = null, Func<Uri, bool> redirectAllowed = null)
-        {
-            Kind = kind;
-            RedirectUrl = redirectUrl;
-            Username = username;
-            Password = password;
-            Headers = new ReadOnlyDictionary<string, string>(new Dictionary<string, string>(
-                headers ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase));
-            From = from;
-            To = to;
-            RedirectAllowed = redirectAllowed;
-        }
-        /// <summary>Gets the action kind.</summary>
-        public WebRequestActionKind Kind { get; }
-        /// <summary>Gets the redirect target for <see cref="WebRequestActionKind.Redirect"/>.</summary>
-        public string RedirectUrl { get; }
-        /// <summary>Gets request or response header replacements.</summary>
-        public IReadOnlyDictionary<string, string> Headers { get; }
-        /// <summary>Gets the authentication username.</summary>
-        public string Username { get; }
-        /// <summary>Gets the authentication password.</summary>
-        public string Password { get; }
-        /// <summary>Gets the source text for a dynamic redirect.</summary>
-        public string From { get; }
-        /// <summary>Gets the replacement text for a dynamic redirect.</summary>
-        public string To { get; }
-        internal Func<Uri, bool> RedirectAllowed { get; }
-
-        internal string ResolveRedirect(string url)
-        {
-            if (From == null) return RedirectUrl;
-            var index = (url ?? string.Empty).IndexOf(From, StringComparison.Ordinal);
-            return index < 0 ? url : url.Substring(0, index) + (To ?? string.Empty) + url.Substring(index + From.Length);
-        }
-    }
-
-    /// <summary>Defines a prioritized action for one request lifecycle phase.</summary>
+    /// <summary>One compiled Tampermonkey selector/action pair.</summary>
     public sealed class WebRequestRule
     {
-        /// <summary>Initializes a web request rule.</summary>
-        public WebRequestRule(string id, WebRequestFilter filter, WebRequestPhase phase, int priority, WebRequestAction action)
+        private readonly Func<string, bool> _matches;
+        private readonly Func<string, string> _redirect;
+        private readonly Func<Uri, bool> _redirectAllowed;
+        internal WebRequestRule(JsonElement value, Func<string, bool> matches, bool cancel,
+            Func<string, string> redirect, Func<Uri, bool> redirectAllowed)
+        { Value = value.Clone(); _matches = matches; Cancel = cancel; _redirect = redirect; _redirectAllowed = redirectAllowed; }
+        /// <summary>Gets the original, validated rule for listener details.</summary>
+        public JsonElement Value { get; }
+        internal bool Cancel { get; }
+        internal bool Matches(string url) => _matches(url);
+        internal WebRequestDecision Decide(string url)
         {
-            if (string.IsNullOrWhiteSpace(id)) throw new ArgumentException("Rule id is required.", nameof(id));
-            Id = id;
-            Filter = filter ?? throw new ArgumentNullException(nameof(filter));
-            Action = action ?? throw new ArgumentNullException(nameof(action));
-            Phase = phase;
-            Priority = priority;
+            if (Cancel) return new WebRequestDecision(WebRequestActionKind.Block);
+            var target = _redirect(url);
+            if (!Uri.TryCreate(target, UriKind.Absolute, out var uri) ||
+                (uri.Scheme != "http" && uri.Scheme != "https") || !_redirectAllowed(uri))
+                return new WebRequestDecision(WebRequestActionKind.Block, description: "Redirect target is outside the script URL permissions.");
+            return new WebRequestDecision(WebRequestActionKind.Redirect, uri.AbsoluteUri);
         }
-        /// <summary>Gets the service-local rule identifier.</summary>
-        public string Id { get; }
-        /// <summary>Gets the request filter.</summary>
-        public WebRequestFilter Filter { get; }
-        /// <summary>Gets the evaluated lifecycle phase.</summary>
-        public WebRequestPhase Phase { get; }
-        /// <summary>Gets rule priority; higher values win terminal and conflicting header decisions.</summary>
-        public int Priority { get; }
-        /// <summary>Gets the rule action.</summary>
-        public WebRequestAction Action { get; }
     }
 
     /// <summary>Contains an immutable request snapshot delivered to rules and listeners.</summary>
@@ -166,8 +119,9 @@ namespace Mzying2001.MonkeySharp.Core.Apis
     {
         /// <summary>Initializes a request lifecycle event.</summary>
         public WebRequestEvent(WebRequestPhase phase, ulong requestId, string url, string method = "GET", string resourceType = null,
-            IDictionary<string, string> headers = null, int? statusCode = null, string error = null)
+            IDictionary<string, string> headers = null, int? statusCode = null, string error = null, DocumentFrame frame = null)
         {
+            Frame = frame;
             Phase = phase;
             RequestId = requestId;
             Url = url ?? throw new ArgumentNullException(nameof(url));
@@ -178,6 +132,8 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             StatusCode = statusCode;
             Error = error;
         }
+        /// <summary>Gets host-verified ownership; null requests cannot use script rules.</summary>
+        public DocumentFrame Frame { get; }
         /// <summary>Gets the lifecycle phase.</summary>
         public WebRequestPhase Phase { get; }
         /// <summary>Gets the adapter-provided request identifier.</summary>
@@ -199,63 +155,59 @@ namespace Mzying2001.MonkeySharp.Core.Apis
     /// <summary>Contains the combined synchronous decision for a request event.</summary>
     public sealed class WebRequestDecision
     {
-        /// <summary>Initializes a combined request decision.</summary>
-        public WebRequestDecision(WebRequestActionKind kind = WebRequestActionKind.Allow, string redirectUrl = null, IDictionary<string, string> headers = null, string username = null, string password = null)
-        {
-            Kind = kind;
-            RedirectUrl = redirectUrl;
-            Headers = new ReadOnlyDictionary<string, string>(new Dictionary<string, string>(
-                headers ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase));
-            Username = username;
-            Password = password;
-        }
-        /// <summary>Gets the terminal action kind.</summary>
+        /// <summary>Initializes a synchronous cancel/redirect decision.</summary>
+        public WebRequestDecision(WebRequestActionKind kind = WebRequestActionKind.Allow, string redirectUrl = null, string description = null)
+        { Kind = kind; RedirectUrl = redirectUrl; Description = description; }
+        /// <summary>Gets the action.</summary>
         public WebRequestActionKind Kind { get; }
-        /// <summary>Gets the redirect URL.</summary>
+        /// <summary>Gets the authorized redirect destination.</summary>
         public string RedirectUrl { get; }
-        /// <summary>Gets merged header changes, with higher-priority and later rules winning conflicts.</summary>
-        public IReadOnlyDictionary<string, string> Headers { get; }
-        /// <summary>Gets the authentication username.</summary>
-        public string Username { get; }
-        /// <summary>Gets the authentication password.</summary>
-        public string Password { get; }
+        /// <summary>Gets an optional rule error.</summary>
+        public string Description { get; }
     }
 
-    /// <summary>Owns a web request rule or listener registration.</summary>
+    /// <summary>Owns a host-side registration; this is never exposed to userscripts.</summary>
     public interface IWebRequestRegistration : IDisposable
     {
-        /// <summary>Gets the service-local registration identifier.</summary>
+        /// <summary>Gets the host-local identity.</summary>
         string Id { get; }
     }
 
-    /// <summary>Evaluates request events synchronously and manages rules and listeners.</summary>
+    /// <summary>Owns precompiled scoped rule sets and request observers.</summary>
     public interface IWebRequestService
     {
-        /// <summary>Adds a rule and returns its owned registration.</summary>
-        IWebRequestRegistration AddRule(WebRequestRule rule);
-        /// <summary>Removes a rule by service-local identifier.</summary>
-        bool RemoveRule(string id);
-        /// <summary>Lists rules in descending priority and then registration order.</summary>
-        IReadOnlyList<WebRequestRule> ListRules();
-        /// <summary>Adds a synchronous observer that must not block Chromium callbacks.</summary>
+        /// <summary>Atomically replaces one owner's rules and listener. Empty rules revoke that owner.</summary>
+        IWebRequestRegistration SetRules(string owner, IReadOnlyList<WebRequestRule> rules,
+            Func<WebRequestEvent, bool> scope, Action<WebRequestRule, WebRequestEvent, WebRequestDecision> listener = null,
+            Func<WebRequestEvent, CancellationToken, Task<bool>> authorize = null, string installationId = null, bool isStatic = false);
+        /// <summary>Adds a host-only lifecycle observer.</summary>
         IWebRequestRegistration AddListener(WebRequestFilter filter, EventHandler<WebRequestEvent> listener);
-        /// <summary>Evaluates matching listeners and rules synchronously.</summary>
+        /// <summary>Evaluates rules whose authorization completes synchronously; never waits on a policy.</summary>
         WebRequestDecision Evaluate(WebRequestEvent request);
+    }
+
+    /// <summary>Allows Chromium to defer an intercepted request while host authorization completes.</summary>
+    public interface IAsyncWebRequestService : IWebRequestService
+    {
+        /// <summary>Awaits policy decisions, then performs bounded synchronous rule evaluation.</summary>
+        Task<WebRequestDecision> EvaluateAsync(WebRequestEvent request, CancellationToken cancellationToken);
     }
 
     /// <summary>Adapts an execution-isolated <see cref="IWebRequestService"/> to <c>GM.webRequest</c>.</summary>
     public sealed class WebRequestApiProvider : IUserScriptApiProvider, IUserScriptNotificationSource, IUserScriptExecutionObserver, IDisposable
     {
         private readonly IWebRequestService _service;
+        private readonly IUserScriptRepository _repository;
+        private readonly Dictionary<string, ScriptKey> _executionScripts = new Dictionary<string, ScriptKey>();
         private readonly object _sync = new object();
         private readonly Dictionary<string, IWebRequestRegistration> _registrations = new Dictionary<string, IWebRequestRegistration>(StringComparer.Ordinal);
-        private readonly HashSet<string> _pendingRegistrations = new HashSet<string>(StringComparer.Ordinal);
-        private readonly HashSet<string> _endedPendingRegistrations = new HashSet<string>(StringComparer.Ordinal);
         private bool _disposed;
         /// <summary>Initializes a provider over an application-owned request service.</summary>
-        public WebRequestApiProvider(IWebRequestService service)
+        public WebRequestApiProvider(IWebRequestService service, IUserScriptRepository repository = null)
         {
             _service = service ?? throw new ArgumentNullException(nameof(service));
+            _repository = repository;
+            if (repository != null) repository.Changed += RepositoryChanged;
         }
         /// <inheritdoc />
         public event EventHandler<ApiNotificationEventArgs> Notification;
@@ -271,80 +223,40 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             if (operation == "register")
             {
                 var rulesValue = ProviderParameters.RequiredProperty(context.Parameters, "rules");
-                if (rulesValue.ValueKind != JsonValueKind.Array)
-                    throw ProviderParameters.Invalid("rules must be an array.");
-                var parsed = new List<WebRequestRule>();
-                foreach (var item in rulesValue.EnumerateArray())
-                {
-                    var value = ProviderParameters.RequireObject(item, "rules[]");
-                    var selector = ProviderParameters.RequiredProperty(value, "selector", "rules[].selector");
-                    var action = ProviderParameters.RequiredProperty(value, "action", "rules[].action");
-                    parsed.Add(new WebRequestRule(
-                        Guid.NewGuid().ToString("D"),
-                        ReadSelector(selector),
-                        WebRequestPhase.OnBeforeRequest,
-                        parsed.Count,
-                        ReadTampermonkeyAction(action, context.Installation)));
-                }
+                var parsed = CompileRules(rulesValue, context.Installation);
                 var listenerId = 0;
-                if (context.Parameters.TryGetProperty("listenerId", out var listenerValue))
+                if (context.Parameters.TryGetProperty("listenerId", out var listenerValue) &&
+                    (listenerValue.ValueKind != JsonValueKind.Number || !listenerValue.TryGetInt32(out listenerId) || listenerId <= 0))
+                    throw ProviderParameters.Invalid("listenerId must be a positive integer.");
+                var key = context.ExecutionId + ":registration";
+                lock (_sync)
                 {
-                    if (listenerValue.ValueKind != JsonValueKind.Number || !listenerValue.TryGetInt32(out listenerId) || listenerId <= 0)
-                        throw ProviderParameters.Invalid("listenerId must be a positive integer.");
-                }
-                if (parsed.Count == 0 && listenerId == 0)
-                    throw ProviderParameters.Invalid("At least one rule or listener is required.");
-                var id = Guid.NewGuid().ToString("D");
-                var registrationKey = context.ExecutionId + ":registration:" + id;
-                Register(registrationKey, () =>
-                {
-                    var registrations = new List<IWebRequestRegistration>();
-                    try
-                    {
-                        foreach (var rule in parsed)
-                            registrations.Add(_service.AddRule(rule));
-                        if (listenerId != 0)
+                    ThrowIfDisposed();
+                    if (_registrations.TryGetValue(key, out var old)) { _registrations.Remove(key); old.Dispose(); }
+                    _executionScripts[context.ExecutionId] = context.Installation.ScriptKey;
+                    _registrations[key] = _service.SetRules(key, parsed,
+                        item => item.Frame != null && item.Frame.BrowserSessionId == context.Frame.BrowserSessionId &&
+                            item.Frame.FrameId == context.Frame.FrameId && item.Frame.DocumentId == context.Frame.DocumentId,
+                        listenerId == 0 ? (Action<WebRequestRule, WebRequestEvent, WebRequestDecision>)null : (rule, item, decision) =>
                         {
-                            var listenerRules = parsed.ToArray();
-                            registrations.Add(_service.AddListener(new WebRequestFilter(), (_, item) =>
-                            {
-                                var terminal = listenerRules
-                                    .Where(rule => rule.Filter.Matches(item))
-                                    .OrderByDescending(rule => rule.Priority)
-                                    .Select(rule => rule.Action)
-                                    .FirstOrDefault(action => action.Kind == WebRequestActionKind.Block || action.Kind == WebRequestActionKind.Redirect);
-                                if (terminal == null) return;
-                                var message = terminal.Kind == WebRequestActionKind.Block ? "cancel" : "redirect";
-                                var target = terminal.Kind == WebRequestActionKind.Redirect ? terminal.ResolveRedirect(item.Url) : null;
-                                Notification?.Invoke(this, new ApiNotificationEventArgs(
-                                    context.Installation.ScriptKey, context.ExecutionId, "webrequest-result",
-                                    JsonSerializer.Serialize(new
-                                    {
-                                        listenerId,
-                                        info = new { requestId = item.RequestId, url = item.Url, method = item.Method, type = item.ResourceType },
-                                        message,
-                                        details = new { phase = item.Phase.ToString(), redirectUrl = target, error = item.Error }
-                                    })));
-                            }));
-                        }
-                        return new CompositeRegistration(id, registrations);
-                    }
-                    catch
-                    {
-                        foreach (var registration in registrations) registration.Dispose();
-                        throw;
-                    }
-                }, "The webRequest registration is already registered.");
-                return Task.FromResult(ApiResult.FromValue(new { id, listenerId = listenerId == 0 ? (int?)null : listenerId }));
-            }
-            if (operation == "remove")
-            {
-                var id = ProviderParameters.RequiredString(context.Parameters, "id");
-                var registration = RemoveRegistration(context.ExecutionId + ":registration:" + id);
-                registration?.Dispose();
-                return Task.FromResult(ApiResult.FromValue(registration != null));
+                            lock (_sync) if (_disposed || !_registrations.ContainsKey(key)) return;
+                            Notification?.Invoke(this, new ApiNotificationEventArgs(context.Installation.ScriptKey, context.ExecutionId,
+                                "webrequest-result", JsonSerializer.Serialize(new { listenerId,
+                                    info = rule.Cancel ? "cancel" : "redirect", message = decision.Description == null ? "ok" : "error",
+                                    details = new { rule = rule.Value, url = item.Url, redirect_url = decision.RedirectUrl, description = decision.Description } })));
+                        }, authorize: context.AuthorizeTargetAsync == null ? (Func<WebRequestEvent, CancellationToken, Task<bool>>)null :
+                            (request, token) => context.AuthorizeTargetAsync(request.Url, token),
+                        installationId: context.Frame.BrowserSessionId + ":" + context.Installation.ScriptKey);
+                }
+                return Task.FromResult(ApiResult.Undefined);
             }
             throw ProviderParameters.Invalid("Unknown webRequest operation.");
+        }
+        private void RepositoryChanged(object sender, UserScriptRepositoryChangedEventArgs args)
+        {
+            string[] executions;
+            lock (_sync) executions = _executionScripts.Where(item => item.Value.Equals(args.Installation.ScriptKey)).Select(item => item.Key).ToArray();
+            foreach (var execution in executions) OnExecutionEnded(execution);
         }
         /// <inheritdoc />
         public void OnExecutionEnded(string executionId)
@@ -353,20 +265,19 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             var prefix = executionId + ":";
             lock (_sync)
             {
+                _executionScripts.Remove(executionId);
                 var keys = _registrations.Keys
                     .Where(item => item.StartsWith(prefix, StringComparison.Ordinal))
                     .ToArray();
                 registrations = keys.Select(item => _registrations[item]).ToArray();
                 foreach (var key in keys) _registrations.Remove(key);
-                foreach (var key in _pendingRegistrations.Where(item =>
-                    item.StartsWith(prefix, StringComparison.Ordinal)))
-                    _endedPendingRegistrations.Add(key);
             }
             foreach (var registration in registrations) registration.Dispose();
         }
         /// <inheritdoc />
         public void Dispose()
         {
+            if (_repository != null) _repository.Changed -= RepositoryChanged;
             IWebRequestRegistration[] registrations;
             lock (_sync)
             {
@@ -374,66 +285,9 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 _disposed = true;
                 registrations = _registrations.Values.ToArray();
                 _registrations.Clear();
-                _endedPendingRegistrations.Clear();
+                _executionScripts.Clear();
             }
             foreach (var registration in registrations) registration.Dispose();
-        }
-        private void Register(
-            string key,
-            Func<IWebRequestRegistration> factory,
-            string duplicateMessage)
-        {
-            lock (_sync)
-            {
-                ThrowIfDisposed();
-                if (_registrations.ContainsKey(key) || !_pendingRegistrations.Add(key))
-                    throw ProviderParameters.Invalid(duplicateMessage);
-            }
-            IWebRequestRegistration registration = null;
-            try
-            {
-                registration = factory();
-                if (registration == null || string.IsNullOrEmpty(registration.Id))
-                    throw new InvalidOperationException("The webRequest service returned no registration.");
-                bool disposed;
-                bool executionEnded;
-                lock (_sync)
-                {
-                    _pendingRegistrations.Remove(key);
-                    disposed = _disposed;
-                    executionEnded = _endedPendingRegistrations.Remove(key);
-                    if (!disposed && !executionEnded)
-                        _registrations.Add(key, registration);
-                }
-                if (disposed || executionEnded)
-                {
-                    registration.Dispose();
-                    registration = null;
-                    if (disposed) throw new ObjectDisposedException(nameof(WebRequestApiProvider));
-                    throw new OperationCanceledException(
-                        "The script execution ended while registering a webRequest operation.");
-                }
-            }
-            catch
-            {
-                lock (_sync)
-                {
-                    _pendingRegistrations.Remove(key);
-                    _endedPendingRegistrations.Remove(key);
-                }
-                registration?.Dispose();
-                throw;
-            }
-        }
-        private IWebRequestRegistration RemoveRegistration(string key)
-        {
-            lock (_sync)
-            {
-                ThrowIfDisposed();
-                if (!_registrations.TryGetValue(key, out var registration)) return null;
-                _registrations.Remove(key);
-                return registration;
-            }
         }
         private void ThrowIfDisposed()
         {
@@ -476,23 +330,8 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         {
             if (string.IsNullOrWhiteSpace(value))
                 throw ProviderParameters.Invalid(path + " cannot contain an empty pattern.");
-            if (value.Length > 2 && value[0] == '/' && value[value.Length - 1] == '/')
-            {
-                try
-                {
-                    var expression = new Regex(value.Substring(1, value.Length - 2), RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-                    return url => expression.IsMatch(url ?? string.Empty);
-                }
-                catch (ArgumentException exception)
-                {
-                    throw ProviderParameters.Invalid(path + " contains an invalid regular expression: " + exception.Message);
-                }
-            }
-            if (MatchPatternCompiler.TryCompile(value, out var matchPattern, out _))
-                return url => Uri.TryCreate(url, UriKind.Absolute, out var uri) && matchPattern.IsMatch(uri);
-            var glob = new Regex("^" + Regex.Escape(value).Replace("\\*", ".*").Replace("\\?", ".") + "$",
-                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-            return url => glob.IsMatch(url ?? string.Empty);
+            try { var expression = UserScriptUrlPattern.Compile(value); return url => expression.IsMatch(url ?? string.Empty); }
+            catch (ArgumentException error) { throw ProviderParameters.Invalid(path + ": " + error.Message); }
         }
 
         private static List<string> ReadStringValues(JsonElement value, string name, string path)
@@ -515,225 +354,203 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             return result;
         }
 
-        private static WebRequestAction ReadTampermonkeyAction(JsonElement value, UserScriptInstallation installation)
+        /// <summary>Validates and compiles the official selector/action array.</summary>
+        public static IReadOnlyList<WebRequestRule> CompileRules(JsonElement rules, UserScriptInstallation installation)
         {
-            if (value.ValueKind == JsonValueKind.String)
-            {
-                var action = value.GetString();
-                if (string.Equals(action, "cancel", StringComparison.OrdinalIgnoreCase))
-                    return new WebRequestAction(WebRequestActionKind.Block);
-                var target = RequireRedirectTarget(action, installation, "action");
-                return new WebRequestAction(WebRequestActionKind.Redirect, target,
-                    redirectAllowed: uri => new UserScriptMatcher().IsMatch(installation.Definition.Metadata, uri));
-            }
-            if (value.ValueKind != JsonValueKind.Object)
-                throw ProviderParameters.Invalid("action must be a string or object.");
-            var from = ProviderParameters.RequiredString(value, "from", "action.from");
-            var to = ProviderParameters.RequiredString(value, "to", "action.to");
-            return new WebRequestAction(WebRequestActionKind.Redirect, from: from, to: to,
-                redirectAllowed: uri => new UserScriptMatcher().IsMatch(installation.Definition.Metadata, uri));
+            if (rules.ValueKind != JsonValueKind.Array) throw ProviderParameters.Invalid("rules must be an array.");
+            return rules.EnumerateArray().Select(value => CompileRule(value, installation.Definition.Metadata)).ToArray();
         }
 
-        private static string RequireRedirectTarget(string value, UserScriptInstallation installation, string path)
+        internal static WebRequestRule CompileRule(JsonElement value, UserScriptMetadata metadata)
+        {
+            ProviderParameters.RequireObject(value, "rule");
+            var selector = ReadSelector(ProviderParameters.RequiredProperty(value, "selector"));
+            var action = ProviderParameters.RequiredProperty(value, "action");
+            var cancel = action.ValueKind == JsonValueKind.String && action.GetString() == "cancel";
+            JsonElement redirect = default(JsonElement);
+            if (!cancel)
+            {
+                if (action.ValueKind != JsonValueKind.Object) throw ProviderParameters.Invalid("action must be cancel or an action object.");
+                cancel = action.TryGetProperty("cancel", out var flag) && flag.ValueKind == JsonValueKind.True;
+                if (!cancel && !action.TryGetProperty("redirect", out redirect)) throw ProviderParameters.Invalid("action requires cancel:true or redirect.");
+            }
+            Func<string, string> resolve = null;
+            if (!cancel)
+            {
+                if (redirect.ValueKind == JsonValueKind.String)
+                {
+                    var target = redirect.GetString();
+                    if (metadata != null) target = RequireRedirectTarget(target, metadata, "action.redirect");
+                    else if (!Uri.TryCreate(target, UriKind.Absolute, out var uri) || (uri.Scheme != "http" && uri.Scheme != "https"))
+                        throw ProviderParameters.Invalid("action.redirect requires an absolute HTTP(S) URL.");
+                    resolve = _ => target;
+                }
+                else
+                {
+                    ProviderParameters.RequireObject(redirect, "action.redirect");
+                    var from = ProviderParameters.RequiredString(redirect, "from");
+                    var to = ProviderParameters.RequiredString(redirect, "to");
+                    Regex expression;
+                    try
+                    {
+                        var validated = UserScriptUrlPattern.Compile("/" + from + "/");
+                        expression = new Regex(validated.ToString(), RegexOptions.ECMAScript | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
+                    }
+                    catch (ArgumentException error) { throw ProviderParameters.Invalid(error.Message); }
+                    resolve = url => ReplaceCapture(expression, url, to);
+                }
+            }
+            return new WebRequestRule(value, url => selector.Matches(new WebRequestEvent(WebRequestPhase.OnBeforeRequest, 0, url)), cancel,
+                resolve, uri => metadata == null || UserScriptUrlRules.Compile(metadata).IsMatch(uri));
+        }
+
+        // JavaScript replacement tokens differ from .NET ($0, $+, $_, ${name}).
+        private static string ReplaceCapture(Regex expression, string url, string replacement)
+        {
+            var match = expression.Match(url);
+            if (!match.Success) return url;
+            var result = new System.Text.StringBuilder();
+            for (var index = 0; index < replacement.Length; index++)
+            {
+                var ch = replacement[index];
+                if (ch != '$' || index + 1 == replacement.Length) { result.Append(ch); continue; }
+                var token = replacement[index + 1];
+                if (token == '$') { result.Append('$'); index++; }
+                else if (token == '&') { result.Append(match.Value); index++; }
+                else if (token == '`') { result.Append(url.Substring(0, match.Index)); index++; }
+                else if (token == '\'') { result.Append(url.Substring(match.Index + match.Length)); index++; }
+                else if (token >= '1' && token <= '9' && token - '0' < match.Groups.Count)
+                {
+                    var group = token - '0'; index++;
+                    if (index + 1 < replacement.Length && char.IsDigit(replacement[index + 1]) &&
+                        group * 10 + replacement[index + 1] - '0' < match.Groups.Count) group = group * 10 + replacement[++index] - '0';
+                    result.Append(match.Groups[group].Value);
+                }
+                else result.Append('$');
+            }
+            return url.Substring(0, match.Index) + result + url.Substring(match.Index + match.Length);
+        }
+
+        private static string RequireRedirectTarget(string value, UserScriptMetadata metadata, string path)
         {
             if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) ||
                 (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) ||
-                !new UserScriptMatcher().IsMatch(installation.Definition.Metadata, uri))
+                !new UserScriptMatcher().IsMatch(metadata, uri))
                 throw new BridgeProtocolException(BridgeErrorCodes.PermissionDenied,
                     path + " redirect target is not allowed by the script URL rules.");
             return uri.AbsoluteUri;
         }
 
-        private sealed class CompositeRegistration : IWebRequestRegistration
-        {
-            private readonly IReadOnlyList<IWebRequestRegistration> _registrations;
-            private int _disposed;
-            public CompositeRegistration(string id, IReadOnlyList<IWebRequestRegistration> registrations)
-            {
-                Id = id;
-                _registrations = registrations;
-            }
-            public string Id { get; }
-            public void Dispose()
-            {
-                if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
-                foreach (var registration in _registrations) registration.Dispose();
-            }
-        }
 
     }
 
-    /// <summary>
-    /// Provides a thread-safe in-memory rule engine. Listener callbacks run synchronously and
-    /// cannot change the decision. Higher-priority rules win terminal and conflicting header
-    /// decisions; rules with equal priority use registration order, with later header edits winning.
-    /// </summary>
-    public sealed class InMemoryWebRequestService : IWebRequestService, IDisposable
+    /// <summary>Evaluates immutable scoped rule sets; userscript listeners run outside network callbacks.</summary>
+    public sealed class InMemoryWebRequestService : IAsyncWebRequestService, IDisposable
     {
         private readonly object _sync = new object();
-        private readonly List<Tuple<WebRequestRule, long, IWebRequestRegistration>> _rules = new List<Tuple<WebRequestRule, long, IWebRequestRegistration>>();
-        private readonly List<Tuple<WebRequestFilter, EventHandler<WebRequestEvent>, IWebRequestRegistration>> _listeners = new List<Tuple<WebRequestFilter, EventHandler<WebRequestEvent>, IWebRequestRegistration>>();
-        private long _sequence;
+        private readonly List<RuleSet> _sets = new List<RuleSet>();
+        private readonly List<Tuple<WebRequestFilter, EventHandler<WebRequestEvent>>> _observers = new List<Tuple<WebRequestFilter, EventHandler<WebRequestEvent>>>();
         private bool _disposed;
         /// <inheritdoc />
-        public IWebRequestRegistration AddRule(WebRequestRule rule)
+        public IWebRequestRegistration SetRules(string owner, IReadOnlyList<WebRequestRule> rules, Func<WebRequestEvent, bool> scope,
+            Action<WebRequestRule, WebRequestEvent, WebRequestDecision> listener = null,
+            Func<WebRequestEvent, CancellationToken, Task<bool>> authorize = null, string installationId = null, bool isStatic = false)
         {
-            if (rule == null) throw new ArgumentNullException(nameof(rule));
+            if (string.IsNullOrEmpty(owner)) throw new ArgumentException("An owner is required.", nameof(owner));
+            var set = new RuleSet { Owner = owner, Rules = rules.ToArray(), Scope = scope ?? throw new ArgumentNullException(nameof(scope)), Listener = listener, Authorize = authorize, InstallationId = installationId, IsStatic = isStatic };
             lock (_sync)
             {
-                ThrowIfDisposed();
-                var r = new Registration(rule.Id, () => RemoveRule(rule.Id));
-                _rules.Add(Tuple.Create(rule, ++_sequence, (IWebRequestRegistration)r));
-                return r;
+                if (_disposed) throw new ObjectDisposedException(nameof(InMemoryWebRequestService));
+                foreach (var old in _sets.Where(item => item.Owner == owner)) old.Active = false;
+                _sets.RemoveAll(item => item.Owner == owner);
+                _sets.Add(set);
             }
-        }
-        /// <inheritdoc />
-        public bool RemoveRule(string id)
-        {
-            lock (_sync)
-            {
-                var item = _rules.FirstOrDefault(x => x.Item1.Id == id);
-                if (item == null) return false;
-                _rules.Remove(item);
-                item.Item3.Dispose();
-                return true;
-            }
-        }
-
-        /// <inheritdoc />
-        public IReadOnlyList<WebRequestRule> ListRules()
-        {
-            lock (_sync)
-            {
-                return new ReadOnlyCollection<WebRequestRule>(_rules
-                    .OrderByDescending(x => x.Item1.Priority)
-                    .ThenBy(x => x.Item2)
-                    .Select(x => x.Item1)
-                    .ToList());
-            }
+            return new Registration(owner, () => { lock (_sync) { set.Active = false; _sets.Remove(set); } });
         }
         /// <inheritdoc />
         public IWebRequestRegistration AddListener(WebRequestFilter filter, EventHandler<WebRequestEvent> listener)
         {
-            if (listener == null) throw new ArgumentNullException(nameof(listener));
-            lock (_sync)
-            {
-                ThrowIfDisposed();
-                Registration registration = null;
-                registration = new Registration(Guid.NewGuid().ToString("D"), () =>
-                {
-                    lock (_sync) _listeners.RemoveAll(x => ReferenceEquals(x.Item3, registration));
-                });
-                _listeners.Add(Tuple.Create(filter, listener, (IWebRequestRegistration)registration));
-                return registration;
-            }
+            var observer = Tuple.Create(filter, listener);
+            lock (_sync) _observers.Add(observer);
+            return new Registration(Guid.NewGuid().ToString(), () => { lock (_sync) _observers.Remove(observer); });
         }
         /// <inheritdoc />
-        public WebRequestDecision Evaluate(WebRequestEvent request)
+        public WebRequestDecision Evaluate(WebRequestEvent request) => EvaluateCoreAsync(request, CancellationToken.None, false).GetAwaiter().GetResult();
+        /// <inheritdoc />
+        public Task<WebRequestDecision> EvaluateAsync(WebRequestEvent request, CancellationToken cancellationToken) => EvaluateCoreAsync(request, cancellationToken, true);
+        private async Task<WebRequestDecision> EvaluateCoreAsync(WebRequestEvent request, CancellationToken token, bool canWait)
         {
-            Tuple<WebRequestRule, long, IWebRequestRegistration>[] rules;
-            Tuple<WebRequestFilter, EventHandler<WebRequestEvent>, IWebRequestRegistration>[] listeners;
-            lock (_sync)
+            RuleSet[] sets;
+            Tuple<WebRequestFilter, EventHandler<WebRequestEvent>>[] observers;
+            lock (_sync) { if (_disposed) return new WebRequestDecision(); sets = _sets.ToArray(); observers = _observers.ToArray(); }
+            foreach (var observer in observers) try { if (observer.Item1.Matches(request)) observer.Item2(this, request); } catch { }
+            if (request.Phase != WebRequestPhase.OnBeforeRequest || request.Frame == null ||
+                !new[] { "sub_frame", "script", "xhr", "websocket" }.Contains(request.ResourceType)) return new WebRequestDecision();
+            foreach (var set in sets)
             {
-                ThrowIfDisposed();
-                rules = _rules
-                    .Where(x => x.Item1.Phase == request.Phase && x.Item1.Filter.Matches(request))
-                    .OrderByDescending(x => x.Item1.Priority)
-                    .ThenBy(x => x.Item2)
-                    .ToArray();
-                listeners = _listeners.Where(x => x.Item1.Matches(request)).ToArray();
-            }
-            foreach (var listener in listeners)
-            {
-                // Observers must never be able to delay or change the host's
-                // synchronous network decision.
-                try { listener.Item2(this, request); }
-                catch { }
-            }
-            var headers = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            var kind = WebRequestActionKind.Allow;
-            string redirect = null;
-            string user = null;
-            string password = null;
-            foreach (var item in rules)
-            {
-                var action = item.Item1.Action;
-                if (action.Kind == WebRequestActionKind.Block || action.Kind == WebRequestActionKind.Redirect)
+                token.ThrowIfCancellationRequested();
+                if (!set.Active || !set.Scope(request)) continue;
+                if (set.IsStatic && sets.Any(other => other.Active && !other.IsStatic && other.InstallationId == set.InstallationId && other.Scope(request))) continue;
+                foreach (var rule in set.Rules)
                 {
-                    redirect = action.ResolveRedirect(request.Url);
-                    if (action.Kind == WebRequestActionKind.Redirect && action.RedirectAllowed != null &&
-                        (!Uri.TryCreate(redirect, UriKind.Absolute, out var redirectUri) || !action.RedirectAllowed(redirectUri)))
+                    WebRequestDecision decision;
+                    try
                     {
-                        kind = WebRequestActionKind.Block;
-                        redirect = null;
+                        if (!rule.Matches(request.Url)) continue;
+                        decision = rule.Decide(request.Url);
+                        if (set.Authorize != null)
+                        {
+                            var permission = set.Authorize(request, token);
+                            if (!canWait && !permission.IsCompleted)
+                                return new WebRequestDecision(WebRequestActionKind.Block, description: "Asynchronous policy cannot run in a synchronous redirect callback.");
+                            if (!await permission.ConfigureAwait(false)) return new WebRequestDecision(WebRequestActionKind.Block, description: "Host policy denied this rule.");
+                            if (decision.Kind == WebRequestActionKind.Redirect)
+                            {
+                                var redirected = new WebRequestEvent(request.Phase, request.RequestId, decision.RedirectUrl,
+                                    request.Method, request.ResourceType, frame: request.Frame);
+                                permission = set.Authorize(redirected, token);
+                                if (!canWait && !permission.IsCompleted)
+                                    return new WebRequestDecision(WebRequestActionKind.Block, description: "Asynchronous redirect authorization is unavailable.");
+                                if (!await permission.ConfigureAwait(false))
+                                    decision = new WebRequestDecision(WebRequestActionKind.Block, description: "Host policy denied the expanded redirect target.");
+                            }
+                        }
+                        if (!set.Active) break;
                     }
-                    else
-                        kind = action.Kind;
-                    break;
-                }
-                if (action.Kind == WebRequestActionKind.AuthResponse)
-                {
-                    kind = action.Kind;
-                    user = action.Username;
-                    password = action.Password;
-                    break;
+                    catch (RegexMatchTimeoutException) { decision = new WebRequestDecision(WebRequestActionKind.Block, description: "Rule regular expression timed out."); }
+                    if (set.Listener != null)
+                    {
+                        lock (_sync)
+                            set.PendingNotifications = set.PendingNotifications.ContinueWith(_ =>
+                            {
+                                if (set.Active) try { set.Listener(rule, request, decision); } catch { }
+                            }, CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
+                    }
+                    return decision;
                 }
             }
-            foreach (var item in rules
-                .OrderBy(x => x.Item1.Priority)
-                .ThenBy(x => x.Item2))
-            {
-                // Header mutations are phase-specific. Keeping this filtering in
-                // the service prevents a request rule from accidentally changing
-                // response headers (and vice versa) for every adapter.
-                var isRequestPhase = request.Phase == WebRequestPhase.OnBeforeRequest ||
-                    request.Phase == WebRequestPhase.OnBeforeSendHeaders;
-                var isResponsePhase = request.Phase == WebRequestPhase.OnHeadersReceived;
-                if ((isRequestPhase && item.Item1.Action.Kind == WebRequestActionKind.ModifyRequestHeaders) ||
-                    (isResponsePhase && item.Item1.Action.Kind == WebRequestActionKind.ModifyResponseHeaders))
-                    foreach (var h in item.Item1.Action.Headers) headers[h.Key] = h.Value;
-            }
-            return new WebRequestDecision(kind, redirect, headers, user, password);
+            return new WebRequestDecision();
         }
         /// <inheritdoc />
-        public void Dispose()
+        public void Dispose() { lock (_sync) { _disposed = true; foreach (var set in _sets) set.Active = false; _sets.Clear(); _observers.Clear(); } }
+        private sealed class RuleSet
         {
-            IWebRequestRegistration[] rules;
-            IWebRequestRegistration[] listeners;
-            lock (_sync)
-            {
-                if (_disposed) return;
-                rules = _rules.Select(item => item.Item3).ToArray();
-                listeners = _listeners.Select(item => item.Item3).ToArray();
-                _rules.Clear();
-                _listeners.Clear();
-                _disposed = true;
-            }
-            foreach (var registration in rules) registration.Dispose();
-            foreach (var registration in listeners) registration.Dispose();
-        }
-        private void ThrowIfDisposed()
-        {
-            if (_disposed) throw new ObjectDisposedException(nameof(InMemoryWebRequestService));
+            public string Owner;
+            public string InstallationId;
+            public bool IsStatic;
+            public WebRequestRule[] Rules;
+            public Func<WebRequestEvent, bool> Scope;
+            public Action<WebRequestRule, WebRequestEvent, WebRequestDecision> Listener;
+            public Func<WebRequestEvent, CancellationToken, Task<bool>> Authorize;
+            public volatile bool Active = true;
+            public Task PendingNotifications = Task.CompletedTask;
         }
         private sealed class Registration : IWebRequestRegistration
         {
-            private readonly Action _dispose;
-            private int _disposed;
-
-            public Registration(string id, Action dispose)
-            {
-                Id = id;
-                _dispose = dispose;
-            }
-
+            private Action _dispose;
+            public Registration(string id, Action dispose) { Id = id; _dispose = dispose; }
             public string Id { get; }
-
-            public void Dispose()
-            {
-                if (Interlocked.Exchange(ref _disposed, 1) == 0)
-                    _dispose();
-            }
+            public void Dispose() => Interlocked.Exchange(ref _dispose, null)?.Invoke();
         }
     }
 }

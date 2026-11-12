@@ -18,7 +18,8 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         private static readonly IReadOnlyCollection<string> SupportedMethods =
             new ReadOnlyCollection<string>(new[]
             {
-                "GM.log", "GM.getValue", "GM.setValue", "GM.deleteValue", "GM.listValues"
+                "GM.log", "GM.getValue", "GM.setValue", "GM.deleteValue", "GM.listValues",
+                "GM.getValues", "GM.setValues", "GM.deleteValues"
             });
 
         private readonly IUserScriptValueStore _store;
@@ -57,43 +58,104 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 case "GM.getValue":
                     var getKey = ReadKey(context.Parameters);
                     var stored = await _store.GetAsync(scriptKey, getKey, cancellationToken).ConfigureAwait(false);
-                    if (stored.Exists)
-                        return ApiResult.FromJson(stored.JsonValue);
-                    return context.Parameters.TryGetProperty("defaultValue", out var defaultValue)
-                        ? ApiResult.FromJson(defaultValue.GetRawText())
-                        : ApiResult.Undefined;
+                    return ApiResult.FromValue(new { exists = stored.Exists, value = stored.Value?.EncodedValue });
 
                 case "GM.setValue":
                     var setKey = ReadKey(context.Parameters);
                     if (!context.Parameters.TryGetProperty("value", out var value))
                         throw InvalidParams("The value parameter is required.");
-                    await _store.SetAsync(scriptKey, setKey, value.GetRawText(), cancellationToken).ConfigureAwait(false);
-                    return ApiResult.Undefined;
+                    return CommitResult(await _store.ApplyAsync(scriptKey, new[] { new UserScriptValueMutation(setKey, ReadValue(value)) }, Origin(context), cancellationToken).ConfigureAwait(false));
 
                 case "GM.deleteValue":
-                    return ApiResult.FromValue(await _store.DeleteAsync(
-                        scriptKey,
-                        ReadKey(context.Parameters),
-                        cancellationToken).ConfigureAwait(false));
+                    return CommitResult(await _store.ApplyAsync(scriptKey, new[] { new UserScriptValueMutation(ReadKey(context.Parameters), null) }, Origin(context), cancellationToken).ConfigureAwait(false));
 
                 case "GM.listValues":
                     EnsureObject(context.Parameters);
                     return ApiResult.FromValue(await _store.ListKeysAsync(scriptKey, cancellationToken).ConfigureAwait(false));
+
+                case "GM.getValues":
+                    return await GetValuesAsync(scriptKey, context.Parameters, cancellationToken).ConfigureAwait(false);
+
+                case "GM.setValues":
+                    var values = ReadValues(context.Parameters, "values").ToDictionary(
+                        item => item.Key, item => ReadValue(item.Value), StringComparer.Ordinal);
+                    return CommitResult(await _store.ApplyAsync(scriptKey, values.Select(item => new UserScriptValueMutation(item.Key, item.Value)), Origin(context), cancellationToken).ConfigureAwait(false));
+
+                case "GM.deleteValues":
+                    var keys = ReadKeys(context.Parameters);
+                    return CommitResult(await _store.ApplyAsync(scriptKey, keys.Select(key => new UserScriptValueMutation(key, null)), Origin(context), cancellationToken).ConfigureAwait(false));
 
                 default:
                     throw new UnsupportedApiException("The API '" + context.Method + "' is not supported.");
             }
         }
 
-        private static string ReadKey(JsonElement parameters)
+        private async Task<ApiResult> GetValuesAsync(
+            string scriptKey, JsonElement parameters, CancellationToken cancellationToken)
+        {
+            EnsureObject(parameters);
+            var all = !parameters.TryGetProperty("keys", out var requested) || requested.ValueKind == JsonValueKind.Null;
+            IReadOnlyList<string> keys = all ? null : ReadKeys(parameters);
+            var snapshot = await _store.GetSnapshotAsync(scriptKey, cancellationToken).ConfigureAwait(false);
+            if (all) return ApiResult.FromValue(snapshot.ToDictionary(item => item.Key, item => item.Value.EncodedValue, StringComparer.Ordinal));
+            var available = snapshot.ToDictionary(item => item.Key, item => item.Value.EncodedValue, StringComparer.Ordinal);
+            var result = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var key in keys)
+            {
+                if (available.TryGetValue(key, out var encoded)) result[key] = encoded;
+            }
+            return ApiResult.FromValue(result);
+        }
+
+        private static ApiResult CommitResult(UserScriptValueCommit commit) => ApiResult.FromValue(new { sequence = commit.Sequence });
+
+        private static UserScriptValueMutationOrigin Origin(ApiInvocationContext context) =>
+            new UserScriptValueMutationOrigin(context.RequestId, context.ExecutionId, context.Method);
+
+        private static Dictionary<string, JsonElement> ReadValues(JsonElement parameters, string name)
+        {
+            EnsureObject(parameters);
+            if (!parameters.TryGetProperty(name, out var values) || values.ValueKind != JsonValueKind.Object)
+                throw InvalidParams("The " + name + " parameter must be an object.");
+            var result = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
+            foreach (var item in values.EnumerateObject())
+            {
+                result[item.Name] = item.Value;
+            }
+            return result;
+        }
+
+        private static IReadOnlyList<string> ReadKeys(JsonElement parameters)
+        {
+            EnsureObject(parameters);
+            if (!parameters.TryGetProperty("keys", out var keys) || keys.ValueKind != JsonValueKind.Array)
+                throw InvalidParams("The keys parameter must be an array of strings.");
+            var result = new List<string>();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var key in keys.EnumerateArray())
+            {
+                if (key.ValueKind != JsonValueKind.String)
+                    throw InvalidParams("Storage keys must be strings.");
+                if (seen.Add(key.GetString())) result.Add(key.GetString());
+            }
+            return result;
+        }
+
+        internal static string ReadKey(JsonElement parameters)
         {
             EnsureObject(parameters);
             if (!parameters.TryGetProperty("key", out var key) || key.ValueKind != JsonValueKind.String)
                 throw InvalidParams("The key parameter must be a string.");
             var value = key.GetString();
-            if (string.IsNullOrEmpty(value))
-                throw InvalidParams("The key parameter cannot be empty.");
             return value;
+        }
+
+        private static UserScriptValue ReadValue(JsonElement value)
+        {
+            if (value.ValueKind != JsonValueKind.String) throw InvalidParams("A typed storage value is required.");
+            try { return UserScriptValue.FromEncoded(value.GetString()); }
+            catch (Exception exception) when (exception is FormatException || exception is JsonException || exception is OverflowException)
+            { throw InvalidParams("Invalid storage value encoding."); }
         }
 
         private static void EnsureObject(JsonElement parameters)

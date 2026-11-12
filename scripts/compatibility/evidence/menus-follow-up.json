@@ -1,0 +1,1107 @@
+{
+  "schemaVersion": 1,
+  "caseId": "menus-follow-up",
+  "date": "2026-11-11",
+  "baseCommit": "11290bd199c9a0cd514ffa75f1fd55f287369a0e",
+  "status": "scoped-implementation;full-menu-acceptance-incomplete",
+  "runs": [
+    {
+      "path": "artifacts/p1-follow-up/step30/84-x64/results.jsonl",
+      "summary": {
+        "type": "smoke-summary",
+        "success": false,
+        "compatibility": {
+          "prepared": true,
+          "conditions": true,
+          "isolated": true,
+          "replay": true,
+          "csp": true,
+          "pageHelpers": false,
+          "binary": true,
+          "permissions": true,
+          "frames": true,
+          "spaUrl": true,
+          "download": true,
+          "cookie": true,
+          "webRequest": true,
+          "audio": true,
+          "partitions": true
+        },
+        "fixtureResult": {
+          "mainFrame": true,
+          "storageBefore": 0,
+          "storageAfter": 1,
+          "xhr": [
+            "progress",
+            "load"
+          ],
+          "apis": {
+            "xmlhttpExtended": true,
+            "notification": true,
+            "tab": true,
+            "download": true,
+            "cookie": true,
+            "webRequest": true
+          },
+          "cookieList": 1,
+          "cookieReadback": true,
+          "notificationClicked": true,
+          "notificationDone": true,
+          "tab": {
+            "closed": true,
+            "onclose": null
+          },
+          "extended": {
+            "echo": true,
+            "cookies": true,
+            "auth": true,
+            "redirect": true,
+            "binary": true,
+            "large": true,
+            "headers": true,
+            "stream": true,
+            "timeout": true,
+            "abort": true
+          },
+          "downloadProgress": true,
+          "downloadCompleted": true,
+          "responseText": "legacy xhr ok",
+          "done": true
+        },
+        "storageMirror": true,
+        "xhr": true,
+        "xhrExtended": true,
+        "notification": true,
+        "tab": true,
+        "download": true,
+        "cookie": true,
+        "webRequest": true,
+        "mainFrameLoads": 24,
+        "childFrameLoads": 10,
+        "navigation": true,
+        "contextCreated": 42,
+        "contextReleased": 42,
+        "hostAttachedAfterDetach": false
+      },
+      "isolated": {
+        "type": "compatibility-case",
+        "caseId": "isolated",
+        "success": true,
+        "checks": {
+          "world": true,
+          "perScriptGlobals": true,
+          "pageIsolation": true,
+          "unsafeWindow": true,
+          "synchronousData": true,
+          "xhr": true,
+          "nativeProofScope": true,
+          "rawRunsOnce": true,
+          "nativeIdentity": true,
+          "urlchange": true,
+          "isolatedUrlOptions": true,
+          "childFrame": true,
+          "childRawRunsOnce": true,
+          "about:blank": true,
+          "about:srcdoc": true,
+          "contextRevocation": true
+        },
+        "error": null,
+        "frameId": "17179869193",
+        "documentId": "6e9d0c78-1085-43c2-a272-c7de255efe73",
+        "url": "about:srcdoc",
+        "state": "true"
+      }
+    },
+    {
+      "path": "artifacts/p1-follow-up/step30/84-final/results.jsonl",
+      "summary": {
+        "type": "smoke-summary",
+        "success": false,
+        "compatibility": {
+          "prepared": true,
+          "conditions": true,
+          "isolated": false,
+          "replay": true,
+          "csp": true,
+          "pageHelpers": true,
+          "binary": true,
+          "permissions": true,
+          "frames": true,
+          "spaUrl": true,
+          "download": true,
+          "cookie": true,
+          "webRequest": true,
+          "audio": true,
+          "partitions": true
+        },
+        "fixtureResult": {
+          "mainFrame": true,
+          "storageBefore": 0,
+          "storageAfter": 1,
+          "xhr": [
+            "progress",
+            "load"
+          ],
+          "apis": {
+            "xmlhttpExtended": true,
+            "notification": true,
+            "tab": true,
+            "download": true,
+            "cookie": true,
+            "webRequest": true
+          },
+          "cookieList": 1,
+          "cookieReadback": true,
+          "notificationClicked": true,
+          "notificationDone": true,
+          "tab": {
+            "closed": true,
+            "onclose": null
+          },
+          "extended": {
+            "echo": true,
+            "cookies": true,
+            "auth": true,
+            "redirect": true,
+            "binary": true,
+            "large": true,
+            "headers": true,
+            "stream": true,
+            "timeout": true,
+            "abort": true
+          },
+          "downloadProgress": true,
+          "downloadCompleted": true,
+          "responseText": "legacy xhr ok",
+          "done": true
+        },
+        "storageMirror": true,
+        "xhr": true,
+        "xhrExtended": true,
+        "notification": true,
+        "tab": true,
+        "download": true,
+        "cookie": true,
+        "webRequest": true,
+        "mainFrameLoads": 23,
+        "childFrameLoads": 7,
+        "navigation": true,
+        "contextCreated": 35,
+        "contextReleased": 35,
+        "hostAttachedAfterDetach": false
+      },
+      "isolated": {
+        "type": "compatibility-case",
+        "caseId": "isolated",
+        "success": false,
+        "checks": {
+          "world": true,
+          "perScriptGlobals": true,
+          "pageIsolation": true,
+          "unsafeWindow": true,
+          "synchronousData": true,
+          "xhr": true,
+          "nativeProofScope": true,
+          "rawRunsOnce": true,
+          "nativeIdentity": false
+        },
+        "error": "System.InvalidOperationException: Compatibility assertion failed: nativeIdentity\r\n   在 Mzying2001.MonkeySharp.CefSharp.SmokeHost.CompatibilitySuite.Check(String name, Boolean passed)\r\n   在 Mzying2001.MonkeySharp.CefSharp.SmokeHost.CompatibilitySuite.<IsolatedAsync>d__22.MoveNext()\r\n--- 引发异常的上一位置中堆栈跟踪的末尾 ---\r\n   在 System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\n   在 System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task)\r\n   在 Mzying2001.MonkeySharp.CefSharp.SmokeHost.CompatibilitySuite.<RunCaseAsync>d__17.MoveNext()",
+        "frameId": "17179869185",
+        "documentId": "9566da4e-7b74-4e9a-b97d-6e353c1bd24d",
+        "url": "http://127.0.0.1:56620/compat/isolated",
+        "state": "true"
+      }
+    },
+    {
+      "path": "artifacts/p1-follow-up/step30/84-map-retry/results.jsonl",
+      "summary": {
+        "type": "smoke-summary",
+        "success": true,
+        "compatibility": {
+          "prepared": true,
+          "conditions": true,
+          "isolated": true,
+          "replay": true,
+          "csp": true,
+          "pageHelpers": true,
+          "binary": true,
+          "permissions": true,
+          "frames": true,
+          "spaUrl": true,
+          "download": true,
+          "cookie": true,
+          "webRequest": true,
+          "audio": true,
+          "partitions": true
+        },
+        "fixtureResult": {
+          "mainFrame": true,
+          "storageBefore": 0,
+          "storageAfter": 1,
+          "xhr": [
+            "progress",
+            "load"
+          ],
+          "apis": {
+            "xmlhttpExtended": true,
+            "notification": true,
+            "tab": true,
+            "download": true,
+            "cookie": true,
+            "webRequest": true
+          },
+          "cookieList": 1,
+          "cookieReadback": true,
+          "notificationClicked": true,
+          "notificationDone": true,
+          "tab": {
+            "closed": true,
+            "onclose": null
+          },
+          "extended": {
+            "echo": true,
+            "cookies": true,
+            "auth": true,
+            "redirect": true,
+            "binary": true,
+            "large": true,
+            "headers": true,
+            "stream": true,
+            "timeout": true,
+            "abort": true
+          },
+          "downloadProgress": true,
+          "downloadCompleted": true,
+          "responseText": "legacy xhr ok",
+          "done": true
+        },
+        "storageMirror": true,
+        "xhr": true,
+        "xhrExtended": true,
+        "notification": true,
+        "tab": true,
+        "download": true,
+        "cookie": true,
+        "webRequest": true,
+        "mainFrameLoads": 24,
+        "childFrameLoads": 11,
+        "navigation": true,
+        "contextCreated": 48,
+        "contextReleased": 48,
+        "hostAttachedAfterDetach": false
+      },
+      "isolated": {
+        "type": "compatibility-case",
+        "caseId": "isolated",
+        "success": true,
+        "checks": {
+          "world": true,
+          "perScriptGlobals": true,
+          "pageIsolation": true,
+          "unsafeWindow": true,
+          "synchronousData": true,
+          "xhr": true,
+          "nativeProofScope": true,
+          "rawRunsOnce": true,
+          "nativeIdentity": true,
+          "urlchange": true,
+          "isolatedUrlOptions": true,
+          "childFrame": true,
+          "childRawRunsOnce": true,
+          "nativeChildMenuMapping": true,
+          "isolatedChildManualExecution": true,
+          "staleChildMenuRejected": true,
+          "about:blank": true,
+          "about:srcdoc": true,
+          "contextRevocation": true
+        },
+        "error": null,
+        "frameId": "17179869193",
+        "documentId": "10b27ccd-d1ff-49c1-b24b-7bbeb236e5fa",
+        "url": "about:srcdoc",
+        "state": "true"
+      }
+    },
+    {
+      "path": "artifacts/p1-follow-up/step30/121-final/results.jsonl",
+      "summary": {
+        "type": "smoke-summary",
+        "success": false,
+        "compatibility": {
+          "prepared": true,
+          "conditions": true,
+          "isolated": false,
+          "replay": true,
+          "csp": true,
+          "pageHelpers": true,
+          "binary": true,
+          "permissions": true,
+          "frames": true,
+          "spaUrl": true,
+          "download": true,
+          "cookie": true,
+          "webRequest": true,
+          "audio": true,
+          "partitions": true
+        },
+        "fixtureResult": {
+          "mainFrame": true,
+          "storageBefore": 0,
+          "storageAfter": 1,
+          "xhr": [
+            "progress",
+            "load"
+          ],
+          "apis": {
+            "xmlhttpExtended": true,
+            "notification": true,
+            "tab": true,
+            "download": true,
+            "cookie": true,
+            "webRequest": true
+          },
+          "cookieList": 1,
+          "cookieReadback": true,
+          "notificationClicked": true,
+          "notificationDone": true,
+          "tab": {
+            "closed": true,
+            "onclose": null
+          },
+          "extended": {
+            "echo": true,
+            "cookies": true,
+            "auth": true,
+            "redirect": true,
+            "binary": true,
+            "large": true,
+            "headers": true,
+            "stream": true,
+            "timeout": true,
+            "abort": true
+          },
+          "downloadProgress": true,
+          "downloadCompleted": true,
+          "responseText": "legacy xhr ok",
+          "done": true
+        },
+        "storageMirror": true,
+        "xhr": true,
+        "xhrExtended": true,
+        "notification": true,
+        "tab": true,
+        "download": true,
+        "cookie": true,
+        "webRequest": true,
+        "mainFrameLoads": 23,
+        "childFrameLoads": 8,
+        "navigation": true,
+        "contextCreated": 39,
+        "contextReleased": 39,
+        "hostAttachedAfterDetach": false
+      },
+      "isolated": {
+        "type": "compatibility-case",
+        "caseId": "isolated",
+        "success": false,
+        "checks": {
+          "world": true,
+          "perScriptGlobals": true,
+          "pageIsolation": true,
+          "unsafeWindow": true,
+          "synchronousData": true,
+          "xhr": true,
+          "nativeProofScope": true,
+          "rawRunsOnce": true,
+          "nativeIdentity": true,
+          "urlchange": true,
+          "isolatedUrlOptions": true,
+          "childFrame": true,
+          "childRawRunsOnce": true
+        },
+        "error": "System.TimeoutException: Compatibility condition timed out. Last state: true\r\n   在 Mzying2001.MonkeySharp.CefSharp.SmokeHost.CompatibilitySuite.<WaitAsync>d__30.MoveNext()\r\n--- 引发异常的上一位置中堆栈跟踪的末尾 ---\r\n   在 System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\n   在 Mzying2001.MonkeySharp.CefSharp.SmokeHost.CompatibilitySuite.<IsolatedAsync>d__22.MoveNext()\r\n--- 引发异常的上一位置中堆栈跟踪的末尾 ---\r\n   在 System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\n   在 System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task)\r\n   在 Mzying2001.MonkeySharp.CefSharp.SmokeHost.CompatibilitySuite.<RunCaseAsync>d__17.MoveNext()",
+        "frameId": "21474836487",
+        "documentId": "d3efcd92-71db-42db-b9cf-b2168eba5aa1",
+        "url": "http://127.0.0.1:57417/compat/isolated-child",
+        "state": "true"
+      }
+    },
+    {
+      "path": "artifacts/p1-follow-up/step30/121-map-diagnostic/results.jsonl",
+      "summary": {
+        "type": "smoke-summary",
+        "success": false,
+        "compatibility": {
+          "prepared": true,
+          "conditions": true,
+          "isolated": false,
+          "replay": true,
+          "csp": true,
+          "pageHelpers": true,
+          "binary": true,
+          "permissions": true,
+          "frames": true,
+          "spaUrl": true,
+          "download": true,
+          "cookie": true,
+          "webRequest": true,
+          "audio": true,
+          "partitions": true
+        },
+        "fixtureResult": {
+          "mainFrame": true,
+          "storageBefore": 0,
+          "storageAfter": 1,
+          "xhr": [
+            "progress",
+            "load"
+          ],
+          "apis": {
+            "xmlhttpExtended": true,
+            "notification": true,
+            "tab": true,
+            "download": true,
+            "cookie": true,
+            "webRequest": true
+          },
+          "cookieList": 1,
+          "cookieReadback": true,
+          "notificationClicked": true,
+          "notificationDone": true,
+          "tab": {
+            "closed": true,
+            "onclose": null
+          },
+          "extended": {
+            "echo": true,
+            "cookies": true,
+            "auth": true,
+            "redirect": true,
+            "binary": true,
+            "large": true,
+            "headers": true,
+            "stream": true,
+            "timeout": true,
+            "abort": true
+          },
+          "downloadProgress": true,
+          "downloadCompleted": true,
+          "responseText": "legacy xhr ok",
+          "done": true
+        },
+        "storageMirror": true,
+        "xhr": true,
+        "xhrExtended": true,
+        "notification": true,
+        "tab": true,
+        "download": true,
+        "cookie": true,
+        "webRequest": true,
+        "mainFrameLoads": 23,
+        "childFrameLoads": 8,
+        "navigation": true,
+        "contextCreated": 39,
+        "contextReleased": 39,
+        "hostAttachedAfterDetach": false
+      },
+      "isolated": {
+        "type": "compatibility-case",
+        "caseId": "isolated",
+        "success": false,
+        "checks": {
+          "world": true,
+          "perScriptGlobals": true,
+          "pageIsolation": true,
+          "unsafeWindow": true,
+          "synchronousData": true,
+          "xhr": true,
+          "nativeProofScope": true,
+          "rawRunsOnce": true,
+          "nativeIdentity": true,
+          "urlchange": true,
+          "isolatedUrlOptions": true,
+          "childFrame": true,
+          "childRawRunsOnce": true
+        },
+        "error": "System.TimeoutException: Compatibility condition timed out. Last state: true\r\n   在 Mzying2001.MonkeySharp.CefSharp.SmokeHost.CompatibilitySuite.<WaitAsync>d__31.MoveNext()\r\n--- 引发异常的上一位置中堆栈跟踪的末尾 ---\r\n   在 System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\n   在 Mzying2001.MonkeySharp.CefSharp.SmokeHost.CompatibilitySuite.<IsolatedAsync>d__23.MoveNext()\r\n--- 引发异常的上一位置中堆栈跟踪的末尾 ---\r\n   在 System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\n   在 System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task)\r\n   在 Mzying2001.MonkeySharp.CefSharp.SmokeHost.CompatibilitySuite.<RunCaseAsync>d__18.MoveNext()",
+        "frameId": "21474836487",
+        "documentId": "7ef64e69-783d-45db-bb37-66e621c12388",
+        "url": "http://127.0.0.1:57767/compat/isolated-child",
+        "state": "true"
+      }
+    },
+    {
+      "path": "artifacts/p1-follow-up/step30/151-verified-retry/results.jsonl",
+      "summary": {
+        "type": "smoke-summary",
+        "success": true,
+        "compatibility": {
+          "prepared": true,
+          "conditions": true,
+          "isolated": true,
+          "replay": true,
+          "csp": true,
+          "pageHelpers": true,
+          "binary": true,
+          "permissions": true,
+          "frames": true,
+          "spaUrl": true,
+          "download": true,
+          "cookie": true,
+          "webRequest": true,
+          "audio": true,
+          "partitions": true
+        },
+        "fixtureResult": {
+          "mainFrame": true,
+          "storageBefore": 0,
+          "storageAfter": 1,
+          "xhr": [
+            "progress",
+            "load"
+          ],
+          "apis": {
+            "xmlhttpExtended": true,
+            "notification": true,
+            "tab": true,
+            "download": true,
+            "cookie": true,
+            "webRequest": true
+          },
+          "cookieList": 1,
+          "cookieReadback": true,
+          "notificationClicked": true,
+          "notificationDone": true,
+          "tab": {
+            "closed": true,
+            "onclose": null
+          },
+          "extended": {
+            "echo": true,
+            "cookies": true,
+            "auth": true,
+            "redirect": true,
+            "binary": true,
+            "large": true,
+            "headers": true,
+            "stream": true,
+            "timeout": true,
+            "abort": true
+          },
+          "downloadProgress": true,
+          "responseText": "legacy xhr ok",
+          "downloadCompleted": true,
+          "done": true
+        },
+        "storageMirror": true,
+        "xhr": true,
+        "xhrExtended": true,
+        "notification": true,
+        "tab": true,
+        "download": true,
+        "cookie": true,
+        "webRequest": true,
+        "mainFrameLoads": 24,
+        "childFrameLoads": 10,
+        "navigation": true,
+        "contextCreated": 44,
+        "contextReleased": 44,
+        "hostAttachedAfterDetach": false
+      },
+      "isolated": {
+        "type": "compatibility-case",
+        "caseId": "isolated",
+        "success": true,
+        "checks": {
+          "world": true,
+          "perScriptGlobals": true,
+          "pageIsolation": true,
+          "unsafeWindow": true,
+          "synchronousData": true,
+          "xhr": true,
+          "nativeProofScope": true,
+          "rawRunsOnce": true,
+          "nativeIdentity": true,
+          "urlchange": true,
+          "isolatedUrlOptions": true,
+          "childFrame": true,
+          "childRawRunsOnce": true,
+          "childMenuNativeProofUnavailable": true,
+          "about:blank": true,
+          "about:srcdoc": true,
+          "contextRevocation": true
+        },
+        "error": null,
+        "frameId": "8-FE32231FA66044BC5BA76C0178C714EA",
+        "documentId": "7184f8bf-e048-49d4-9612-2cd4e2b731d2",
+        "url": "about:srcdoc",
+        "state": "true"
+      }
+    },
+    {
+      "path": "artifacts/p1-follow-up/step30/121-verified/results.jsonl",
+      "summary": {
+        "type": "smoke-summary",
+        "success": true,
+        "compatibility": {
+          "prepared": true,
+          "conditions": true,
+          "isolated": true,
+          "replay": true,
+          "csp": true,
+          "pageHelpers": true,
+          "binary": true,
+          "permissions": true,
+          "frames": true,
+          "spaUrl": true,
+          "download": true,
+          "cookie": true,
+          "webRequest": true,
+          "audio": true,
+          "partitions": true
+        },
+        "fixtureResult": {
+          "mainFrame": true,
+          "storageBefore": 0,
+          "storageAfter": 1,
+          "xhr": [
+            "progress",
+            "load"
+          ],
+          "apis": {
+            "xmlhttpExtended": true,
+            "notification": true,
+            "tab": true,
+            "download": true,
+            "cookie": true,
+            "webRequest": true
+          },
+          "cookieList": 1,
+          "cookieReadback": true,
+          "notificationClicked": true,
+          "notificationDone": true,
+          "tab": {
+            "closed": true,
+            "onclose": null
+          },
+          "extended": {
+            "echo": true,
+            "cookies": true,
+            "auth": true,
+            "redirect": true,
+            "binary": true,
+            "large": true,
+            "headers": true,
+            "stream": true,
+            "timeout": true,
+            "abort": true
+          },
+          "downloadProgress": true,
+          "downloadCompleted": true,
+          "responseText": "legacy xhr ok",
+          "done": true
+        },
+        "storageMirror": true,
+        "xhr": true,
+        "xhrExtended": true,
+        "notification": true,
+        "tab": true,
+        "download": true,
+        "cookie": true,
+        "webRequest": true,
+        "mainFrameLoads": 24,
+        "childFrameLoads": 10,
+        "navigation": true,
+        "contextCreated": 44,
+        "contextReleased": 44,
+        "hostAttachedAfterDetach": false
+      },
+      "isolated": {
+        "type": "compatibility-case",
+        "caseId": "isolated",
+        "success": true,
+        "checks": {
+          "world": true,
+          "perScriptGlobals": true,
+          "pageIsolation": true,
+          "unsafeWindow": true,
+          "synchronousData": true,
+          "xhr": true,
+          "nativeProofScope": true,
+          "rawRunsOnce": true,
+          "nativeIdentity": true,
+          "urlchange": true,
+          "isolatedUrlOptions": true,
+          "childFrame": true,
+          "childRawRunsOnce": true,
+          "childMenuNativeProofUnavailable": true,
+          "about:blank": true,
+          "about:srcdoc": true,
+          "contextRevocation": true
+        },
+        "error": null,
+        "frameId": "21474836489",
+        "documentId": "a1d8151c-2da3-4f58-97c4-1bbc572f218a",
+        "url": "about:srcdoc",
+        "state": "true"
+      }
+    },
+    {
+      "path": "artifacts/p1-follow-up/step30/84-verified/results.jsonl",
+      "summary": {
+        "type": "smoke-summary",
+        "success": true,
+        "compatibility": {
+          "prepared": true,
+          "conditions": true,
+          "isolated": true,
+          "replay": true,
+          "csp": true,
+          "pageHelpers": true,
+          "binary": true,
+          "permissions": true,
+          "frames": true,
+          "spaUrl": true,
+          "download": true,
+          "cookie": true,
+          "webRequest": true,
+          "audio": true,
+          "partitions": true
+        },
+        "fixtureResult": {
+          "mainFrame": true,
+          "storageBefore": 0,
+          "storageAfter": 1,
+          "xhr": [
+            "progress",
+            "load"
+          ],
+          "apis": {
+            "xmlhttpExtended": true,
+            "notification": true,
+            "tab": true,
+            "download": true,
+            "cookie": true,
+            "webRequest": true
+          },
+          "cookieList": 1,
+          "cookieReadback": true,
+          "notificationClicked": true,
+          "notificationDone": true,
+          "tab": {
+            "closed": true,
+            "onclose": null
+          },
+          "extended": {
+            "echo": true,
+            "cookies": true,
+            "auth": true,
+            "redirect": true,
+            "binary": true,
+            "large": true,
+            "headers": true,
+            "stream": true,
+            "timeout": true,
+            "abort": true
+          },
+          "downloadProgress": true,
+          "downloadCompleted": true,
+          "responseText": "legacy xhr ok",
+          "done": true
+        },
+        "storageMirror": true,
+        "xhr": true,
+        "xhrExtended": true,
+        "notification": true,
+        "tab": true,
+        "download": true,
+        "cookie": true,
+        "webRequest": true,
+        "mainFrameLoads": 24,
+        "childFrameLoads": 11,
+        "navigation": true,
+        "contextCreated": 48,
+        "contextReleased": 48,
+        "hostAttachedAfterDetach": false
+      },
+      "isolated": {
+        "type": "compatibility-case",
+        "caseId": "isolated",
+        "success": true,
+        "checks": {
+          "world": true,
+          "perScriptGlobals": true,
+          "pageIsolation": true,
+          "unsafeWindow": true,
+          "synchronousData": true,
+          "xhr": true,
+          "nativeProofScope": true,
+          "rawRunsOnce": true,
+          "nativeIdentity": true,
+          "urlchange": true,
+          "isolatedUrlOptions": true,
+          "childFrame": true,
+          "childRawRunsOnce": true,
+          "clickedFrameAttestation": true,
+          "nativeChildMenuMapping": true,
+          "isolatedChildManualExecution": true,
+          "staleClickedFrameRejected": true,
+          "staleChildMenuRejected": true,
+          "about:blank": true,
+          "about:srcdoc": true,
+          "contextRevocation": true
+        },
+        "error": null,
+        "frameId": "17179869193",
+        "documentId": "6fe883c2-f5ca-41f7-9f62-3da59d36d062",
+        "url": "about:srcdoc",
+        "state": "true"
+      }
+    }
+  ],
+  "probes": [
+    {
+      "path": "artifacts/p1-follow-up/step30/mapping-frame-lifetime-121/cdp-probe.jsonl",
+      "records": [
+        {
+          "type": "debug-menu-frame-lifetime",
+          "messageType": "System.String",
+          "disposed": true
+        },
+        {
+          "type": "debug-menu-121-root",
+          "delivered": false
+        },
+        {
+          "type": "debug-menu-frame-lifetime",
+          "messageType": "System.String",
+          "disposed": true
+        },
+        {
+          "type": "cdp-probe",
+          "status": "failed",
+          "checks": {
+            "preparedNavigation": true,
+            "pageBeforeFirstInline": true,
+            "isolatedBeforeFirstInline": true,
+            "realGmEventuallyReady": true,
+            "nativeFrameIdentity": true,
+            "perScriptWorld": true
+          },
+          "error": "System.TimeoutException: CDP probe condition did not become true.\r\n   在 Mzying2001.MonkeySharp.CefSharp.SmokeHost.CdpProbe.ProbeForm.<WaitAsync>d__16.MoveNext()\r\n--- 引发异常的上一位置中堆栈跟踪的末尾 ---\r\n   在 System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\n   在 System.Runtime.CompilerServices.TaskAwaiter.HandleNonSuccessAndDebuggerNotification(Task task)\r\n   在 System.Runtime.CompilerServices.TaskAwaiter.GetResult()\r\n   在 Mzying2001.MonkeySharp.CefSharp.SmokeHost.CdpProbe.ProbeForm.<ExecuteAsync>d__12.MoveNext()"
+        }
+      ]
+    },
+    {
+      "path": "artifacts/p1-follow-up/step30/mapping-151-final/cdp-probe.jsonl",
+      "records": [
+        {
+          "type": "cdp-probe",
+          "status": "passed",
+          "cefSharpVersion": "151.3.240.0",
+          "platform": "x64",
+          "browser": {
+            "protocolVersion": "1.3",
+            "product": "Chrome/151.0.7922.174",
+            "revision": "@39c51c70dd5feca6b6aba5bb7997b595011c553d",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/151.0.0.0 Safari/537.36",
+            "jsVersion": "15.1.206.23"
+          },
+          "checks": {
+            "preparedNavigation": true,
+            "pageBeforeFirstInline": true,
+            "isolatedBeforeFirstInline": true,
+            "realGmEventuallyReady": true,
+            "nativeFrameIdentity": true,
+            "perScriptWorld": true,
+            "nativeMenuFrameFailsClosed": true,
+            "contextIdBinding": true,
+            "cookieEngineAccepted": true,
+            "cookieReadback": true,
+            "cookieHttpEffect": true,
+            "cookieDeleted": true,
+            "observerCoexistence": true,
+            "commandTimeout": true,
+            "commandCancellation": true,
+            "contextRevocation": true
+          },
+          "firstInline": {
+            "page": true,
+            "isolatedA": "A",
+            "isolatedB": "B",
+            "gm": null
+          },
+          "nativeMenuMapping": {
+            "cef": "undefined",
+            "post": "missing"
+          },
+          "nativeMenuFrame": {
+            "cef": null,
+            "cdp": "585322ADE15DDEF5DE53DB5DF893B140",
+            "main": false,
+            "disposed": false,
+            "proven": false,
+            "childPostAvailable": false
+          },
+          "strictGm": "blocked",
+          "timingReason": "current-host-bootstrap-asynchronous",
+          "limitation": "Preinjection works; the current asynchronous GM bootstrap does not guarantee readiness before the first inline. No isolated privileged executor is enabled.",
+          "eventCount": 33,
+          "remainingContextCount": 3
+        }
+      ]
+    },
+    {
+      "path": "artifacts/p1-follow-up/step30/84-verified/cdp-probe.jsonl",
+      "records": [
+        {
+          "type": "cdp-probe",
+          "status": "passed",
+          "cefSharpVersion": "84.4.10.0",
+          "platform": "x64",
+          "browser": {
+            "protocolVersion": "1.3",
+            "product": "Chrome/84.0.4147.105",
+            "revision": "@a6b12dfad6663f13a7e16e9a42a6a4975374096b",
+            "userAgent": "Mozilla/5.0 (Windows NT 6.2; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/84.0.4147.105 Safari/537.36",
+            "jsVersion": "8.4.371.22"
+          },
+          "checks": {
+            "preparedNavigation": true,
+            "pageBeforeFirstInline": true,
+            "isolatedBeforeFirstInline": true,
+            "realGmEventuallyReady": true,
+            "nativeFrameIdentity": true,
+            "perScriptWorld": true,
+            "nativeMenuProofObserved": true,
+            "nativeMenuFrameFailsClosed": true,
+            "contextIdBinding": true,
+            "cookieEngineAccepted": true,
+            "cookieReadback": true,
+            "cookieHttpEffect": true,
+            "cookieDeleted": true,
+            "observerCoexistence": true,
+            "commandTimeout": true,
+            "commandCancellation": true,
+            "contextRevocation": true
+          },
+          "firstInline": {
+            "page": true,
+            "isolatedA": "A",
+            "isolatedB": "B",
+            "gm": null
+          },
+          "nativeMenuMapping": {
+            "cef": "object",
+            "post": "function"
+          },
+          "nativeMenuFrame": {
+            "cef": "17179869188",
+            "cdp": "0EA89B626ED1C4980C6B4B980B6F019E",
+            "main": false,
+            "disposed": false,
+            "proven": true,
+            "childPostAvailable": true
+          },
+          "strictGm": "blocked",
+          "timingReason": "current-host-bootstrap-asynchronous",
+          "limitation": "Preinjection works; the current asynchronous GM bootstrap does not guarantee readiness before the first inline. No isolated privileged executor is enabled.",
+          "eventCount": 35,
+          "remainingContextCount": 3
+        }
+      ]
+    },
+    {
+      "path": "artifacts/p1-follow-up/step30/121-verified/cdp-probe.jsonl",
+      "records": [
+        {
+          "type": "cdp-probe",
+          "status": "passed",
+          "cefSharpVersion": "121.3.70.0",
+          "platform": "x64",
+          "browser": {
+            "protocolVersion": "1.3",
+            "product": "Chrome/121.0.6167.160",
+            "revision": "@8e23a63b5dead78825bec5ef48f4aeb5698ce21a",
+            "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+            "jsVersion": "12.1.285.28"
+          },
+          "checks": {
+            "preparedNavigation": true,
+            "pageBeforeFirstInline": true,
+            "isolatedBeforeFirstInline": true,
+            "realGmEventuallyReady": true,
+            "nativeFrameIdentity": true,
+            "perScriptWorld": true,
+            "nativeMenuProofObserved": true,
+            "nativeMenuFrameFailsClosed": true,
+            "contextIdBinding": true,
+            "cookieEngineAccepted": true,
+            "cookieReadback": true,
+            "cookieHttpEffect": true,
+            "cookieDeleted": true,
+            "observerCoexistence": true,
+            "commandTimeout": true,
+            "commandCancellation": true,
+            "contextRevocation": true
+          },
+          "firstInline": {
+            "page": true,
+            "isolatedA": "A",
+            "isolatedB": "B",
+            "gm": null
+          },
+          "nativeMenuMapping": {
+            "cef": "object",
+            "post": "function"
+          },
+          "nativeMenuFrame": {
+            "cef": null,
+            "cdp": "95B34C6CD01BFC3DD9383FD8F536FBF9",
+            "main": false,
+            "disposed": true,
+            "proven": false
+          },
+          "strictGm": "blocked",
+          "timingReason": "current-host-bootstrap-asynchronous",
+          "limitation": "Preinjection works; the current asynchronous GM bootstrap does not guarantee readiness before the first inline. No isolated privileged executor is enabled.",
+          "eventCount": 31,
+          "remainingContextCount": 3
+        }
+      ]
+    }
+  ],
+  "wpfReport": "artifacts/demo-smoke/smoke-1eca9113c63d45d5a085475c16ce44b0.json",
+  "tests": {
+    "core": 305,
+    "adapter": 61,
+    "demo": 49,
+    "javascript": 129
+  },
+  "remaining": [
+    "121/151 isolated child native identity mapping",
+    "Pinned beta native clickedFrame, mixed options and input parity"
+  ],
+  "referenceAttempt": {
+    "fixture": "scripts/compatibility/fixtures/menus.user.js",
+    "fixtureSha256": "1cb86c215c4afca80fb016039fbf3e9bbb2659143ad82c75744785598dc57dfb",
+    "status": "blocked",
+    "reason": "Computer Use native pipe unavailable after retry and reset; no native selection; only the isolated test process tree was stopped"
+  },
+  "retainedBuildAttempts": [
+    "151 GetFrame rename fixed using shared adapter lookup",
+    "builder CefSharp namespace qualification fixed",
+    "WPF OutputDirectory parameter unsupported, rerun with documented CLI"
+  ],
+  "sourceFindings": [
+    "CefSharp 121 ClientAdapter.cpp passes a stack CefFrameWrapper to JavascriptMessageReceivedEventArgs; ChromiumWebBrowser.Partial.cs schedules the event through Task.Run; frame disposed on arrival",
+    "CefSharp 151 native probe childPostAvailable=false; no identity inferred"
+  ],
+  "implemented": [
+    "IMenuService Action<MenuCommandInvocation>",
+    "native keyboard/mouse fields with generic unknown event",
+    "per-registration generations and document-targeted cleanup",
+    "host ResolveMenuFrame current-document check",
+    "84 one-shot private challenge for isolated same-process native menu frames"
+  ]
+}

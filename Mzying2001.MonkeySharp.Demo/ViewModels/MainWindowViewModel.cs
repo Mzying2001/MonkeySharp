@@ -1,3 +1,4 @@
+using Mzying2001.MonkeySharp.Demo.Localization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using System;
@@ -70,13 +71,17 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
         [RelayCommand]
         private void CreateNewTab() => NewTab();
 
+        [RelayCommand]
+        private void CreatePrivateTab() => NewTab(incognito: true);
+
         public BrowserTabViewModel NewTab(string address = "about:blank", bool active = true,
-            BrowserTabViewModel origin = null, bool insert = false, bool setParent = false)
+            BrowserTabViewModel origin = null, bool insert = false, bool setParent = false, int? insertIndex = null, bool? incognito = null)
         {
             if (_closing) throw new InvalidOperationException("The browser is closing.");
-            var tab = new BrowserTabViewModel(address) { ParentTabId = setParent ? origin?.TabId : null };
+            var tab = new BrowserTabViewModel(address, incognito ?? origin?.IsIncognito ?? false) { ParentTabId = setParent ? origin?.TabId : null };
             tab.PropertyChanged += TabPropertyChanged;
-            if (insert && origin != null && Tabs.Contains(origin)) Tabs.Insert(Tabs.IndexOf(origin) + 1, tab);
+            if (insertIndex.HasValue) Tabs.Insert(Math.Max(0, Math.Min(insertIndex.Value, Tabs.Count)), tab);
+            else if (insert && origin != null && Tabs.Contains(origin)) Tabs.Insert(Tabs.IndexOf(origin) + 1, tab);
             else Tabs.Add(tab);
             if (active || SelectedTab == null) SelectedTab = tab;
             return tab;
@@ -122,7 +127,7 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
             if (!text.Contains("://")) text = "https://" + text;
             if (!Uri.TryCreate(text, UriKind.Absolute, out var uri) ||
                 (uri.Scheme != "http" && uri.Scheme != "https") || string.IsNullOrEmpty(uri.Host))
-                throw new ArgumentException("请输入 HTTP(S) 地址，或 about:blank。");
+                throw new ArgumentException(Strings.Get("InvalidAddress"));
             return uri.AbsoluteUri;
         }
 

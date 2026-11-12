@@ -1,0 +1,1227 @@
+{
+  "schemaVersion": 1,
+  "manager": "monkeysharp",
+  "results": [
+    {
+      "schemaVersion": 1,
+      "caseId": "dom-decoration",
+      "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+      "actionHash": "6b4fbb571a56791b75e431f590a1c820a08f70239c92b978f531c17f1bc5a549",
+      "contractSource": [
+        "https://raw.githubusercontent.com/fastnow/UserJs/4e58ac92f3acc409e05fcb156afca3237454f777/SiteAssetDL.user.js"
+      ],
+      "environment": {
+        "manager": "MonkeySharp",
+        "managerVersion": "3.0.0",
+        "chromiumVersion": "84.0.4147.105",
+        "manifestVersion": null,
+        "cefSharpVersion": "84.4.10.0",
+        "platform": "x64",
+        "menuInput": "WinForms ToolStripMenuItem.PerformClick; no trusted DOM activation claimed",
+        "commit": "cfb7c42e7017308d1cb00e97f7ef22dfbc34d56d",
+        "world": "raw",
+        "capabilities": {},
+        "settings": {
+          "trustedPageWorld": true,
+          "testCookiesOnly": true
+        }
+      },
+      "immediateReturn": {},
+      "events": [
+        {
+          "kind": "open",
+          "name": null
+        },
+        {
+          "kind": "assert",
+          "name": "assetToolbar"
+        },
+        {
+          "kind": "wait",
+          "name": null
+        },
+        {
+          "kind": "evaluate",
+          "name": null
+        },
+        {
+          "kind": "assert",
+          "name": "resourceCollected"
+        },
+        {
+          "kind": "assert",
+          "name": "computedStyle"
+        },
+        {
+          "kind": "evaluate",
+          "name": null
+        },
+        {
+          "kind": "wait",
+          "name": null
+        },
+        {
+          "kind": "assert",
+          "name": "singleDecoration"
+        }
+      ],
+      "promise": {},
+      "effects": {
+        "observations": {
+          "engineFeatures": {
+            "replaceAll": "undefined",
+            "compressionStream": "function",
+            "saveFilePicker": "undefined"
+          }
+        },
+        "checks": {
+          "assetToolbar": true,
+          "resourceCollected": true,
+          "computedStyle": true,
+          "singleDecoration": true
+        },
+        "files": [],
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/corpus",
+            "host": "127.0.0.1:51385",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:51385",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:51386",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          }
+        ],
+        "diagnostics": [
+          "MSR100_DOCUMENT_START_BEST_EFFORT: The script is running with best-effort document-start timing.",
+          "MSR200_UNVERIFIED_BRIDGE: TrustedPageWorld exposes capabilities to page-world code.",
+          "MSC201_NOTIFICATION_DELIVERY_FAILED: A bridge notification could not be delivered."
+        ],
+        "failedAction": null
+      },
+      "status": "passed"
+    },
+    {
+      "schemaVersion": 1,
+      "caseId": "dom-decoration-csp",
+      "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+      "actionHash": "f8f2486275f22a146d6f63cb8cb864d00c484d09bd1e0c9fbcb23d4a230c9885",
+      "contractSource": [
+        "https://raw.githubusercontent.com/fastnow/UserJs/4e58ac92f3acc409e05fcb156afca3237454f777/SiteAssetDL.user.js"
+      ],
+      "environment": {
+        "manager": "MonkeySharp",
+        "managerVersion": "3.0.0",
+        "chromiumVersion": "84.0.4147.105",
+        "manifestVersion": null,
+        "cefSharpVersion": "84.4.10.0",
+        "platform": "x64",
+        "menuInput": "WinForms ToolStripMenuItem.PerformClick; no trusted DOM activation claimed",
+        "commit": "cfb7c42e7017308d1cb00e97f7ef22dfbc34d56d",
+        "world": "raw",
+        "capabilities": {},
+        "settings": {
+          "trustedPageWorld": true,
+          "testCookiesOnly": true
+        }
+      },
+      "immediateReturn": {},
+      "events": [
+        {
+          "kind": "open",
+          "name": null
+        },
+        {
+          "kind": "assert",
+          "name": "nodeCreatedUnderCsp"
+        },
+        {
+          "kind": "evaluate",
+          "name": "styleApplied"
+        },
+        {
+          "kind": "assert",
+          "name": "singleCspDecoration"
+        }
+      ],
+      "promise": {},
+      "effects": {
+        "observations": {
+          "engineFeatures": {
+            "replaceAll": "undefined",
+            "compressionStream": "function",
+            "saveFilePicker": "undefined"
+          },
+          "styleApplied": false
+        },
+        "checks": {
+          "nodeCreatedUnderCsp": true,
+          "singleCspDecoration": true
+        },
+        "files": [],
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/corpus",
+            "host": "127.0.0.1:51385",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200,
+            "contentSecurityPolicy": "style-src 'self'"
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:51385",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:51386",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          }
+        ],
+        "diagnostics": [
+          "MSR100_DOCUMENT_START_BEST_EFFORT: The script is running with best-effort document-start timing.",
+          "MSR200_UNVERIFIED_BRIDGE: TrustedPageWorld exposes capabilities to page-world code.",
+          "MSC201_NOTIFICATION_DELIVERY_FAILED: A bridge notification could not be delivered."
+        ],
+        "failedAction": null
+      },
+      "status": "expected-engine-limitation",
+      "reason": "Source created its live DOM toolbar, but page style-src blocked its inline styles.",
+      "reasonCategory": "engine-csp"
+    },
+    {
+      "schemaVersion": 1,
+      "caseId": "page-hook",
+      "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+      "actionHash": "bb61e48782e9d693e2667aef5ddab7831623e5f0afaf75ee42001af82a8628a4",
+      "contractSource": [
+        "https://raw.githubusercontent.com/fastnow/UserJs/4e58ac92f3acc409e05fcb156afca3237454f777/SiteAssetDL.user.js"
+      ],
+      "environment": {
+        "manager": "MonkeySharp",
+        "managerVersion": "3.0.0",
+        "chromiumVersion": "84.0.4147.105",
+        "manifestVersion": null,
+        "cefSharpVersion": "84.4.10.0",
+        "platform": "x64",
+        "menuInput": "WinForms ToolStripMenuItem.PerformClick; no trusted DOM activation claimed",
+        "commit": "cfb7c42e7017308d1cb00e97f7ef22dfbc34d56d",
+        "world": "raw",
+        "capabilities": {},
+        "settings": {
+          "trustedPageWorld": true,
+          "testCookiesOnly": true
+        }
+      },
+      "immediateReturn": {},
+      "events": [
+        {
+          "kind": "open",
+          "name": null
+        },
+        {
+          "kind": "assert",
+          "name": "assetToolbar"
+        },
+        {
+          "kind": "wait",
+          "name": null
+        },
+        {
+          "kind": "evaluate",
+          "name": null
+        },
+        {
+          "kind": "assert",
+          "name": "resourceCollected"
+        },
+        {
+          "kind": "evaluate",
+          "name": "hookBeforeFirstInline"
+        },
+        {
+          "kind": "assert",
+          "name": "historyHookInstalled"
+        },
+        {
+          "kind": "evaluate",
+          "name": null
+        },
+        {
+          "kind": "wait",
+          "name": null
+        },
+        {
+          "kind": "assert",
+          "name": "hookRefreshesResources"
+        }
+      ],
+      "promise": {},
+      "effects": {
+        "observations": {
+          "engineFeatures": {
+            "replaceAll": "undefined",
+            "compressionStream": "function",
+            "saveFilePicker": "undefined"
+          },
+          "hookBeforeFirstInline": false
+        },
+        "checks": {
+          "assetToolbar": true,
+          "resourceCollected": true,
+          "historyHookInstalled": true,
+          "hookRefreshesResources": true
+        },
+        "files": [],
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/corpus",
+            "host": "127.0.0.1:51385",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:51385",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:51386",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/second.png",
+            "host": "127.0.0.1:51385",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          }
+        ],
+        "diagnostics": [
+          "MSR100_DOCUMENT_START_BEST_EFFORT: The script is running with best-effort document-start timing.",
+          "MSR200_UNVERIFIED_BRIDGE: TrustedPageWorld exposes capabilities to page-world code.",
+          "MSC201_NOTIFICATION_DELIVERY_FAILED: A bridge notification could not be delivered."
+        ],
+        "failedAction": null
+      },
+      "status": "expected-engine-limitation",
+      "reason": "History hook works after startup but was not installed before first inline.",
+      "reasonCategory": "engine-timing"
+    },
+    {
+      "schemaVersion": 1,
+      "caseId": "authenticated-xhr",
+      "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+      "actionHash": "1e7747ca4b536c1a75e55c0051f55177c3efc8f13da059d9f5645bdf33b40d98",
+      "contractSource": [
+        "https://raw.githubusercontent.com/fastnow/UserJs/4e58ac92f3acc409e05fcb156afca3237454f777/SiteAssetDL.user.js"
+      ],
+      "environment": {
+        "manager": "MonkeySharp",
+        "managerVersion": "3.0.0",
+        "chromiumVersion": "84.0.4147.105",
+        "manifestVersion": null,
+        "cefSharpVersion": "84.4.10.0",
+        "platform": "x64",
+        "menuInput": "WinForms ToolStripMenuItem.PerformClick; no trusted DOM activation claimed",
+        "commit": "cfb7c42e7017308d1cb00e97f7ef22dfbc34d56d",
+        "world": "raw",
+        "capabilities": {},
+        "settings": {
+          "trustedPageWorld": true,
+          "testCookiesOnly": true
+        }
+      },
+      "immediateReturn": {},
+      "events": [
+        {
+          "kind": "open",
+          "name": null
+        },
+        {
+          "kind": "assert",
+          "name": "assetToolbar"
+        },
+        {
+          "kind": "wait",
+          "name": null
+        },
+        {
+          "kind": "evaluate",
+          "name": null
+        },
+        {
+          "kind": "assert",
+          "name": "resourceCollected"
+        },
+        {
+          "kind": "evaluate",
+          "name": null
+        },
+        {
+          "kind": "wait",
+          "name": null
+        },
+        {
+          "kind": "evaluate",
+          "name": "probeResponseUi"
+        },
+        {
+          "kind": "evaluate",
+          "name": null
+        },
+        {
+          "kind": "files",
+          "name": "authenticatedBytesPacked"
+        }
+      ],
+      "promise": {},
+      "effects": {
+        "observations": {
+          "engineFeatures": {
+            "replaceAll": "undefined",
+            "compressionStream": "function",
+            "saveFilePicker": "undefined"
+          },
+          "probeResponseUi": {
+            "status": "探测完成（1 项）",
+            "cards": [
+              "↓\n       ⧉\n       ◎\n       ↗redirect.png\n       1×1 · 70 B"
+            ]
+          }
+        },
+        "checks": {
+          "assetToolbar": true,
+          "resourceCollected": true,
+          "authenticatedBytesPacked": true
+        },
+        "files": [
+          {
+            "name": "Corpus fixture_2026-11-10-14-18-20.zip",
+            "bytes": 192,
+            "sha256": "c7da266028e2ab7de56e9cfbc0b31542d10bdeeadeb64864bb5b74da9c0fca72",
+            "entries": [
+              {
+                "name": "redirect.png",
+                "bytes": 70,
+                "sha256": "2640059609118b695c139804676372eca75c30d30e5906775902d13e44f5356c"
+              }
+            ]
+          }
+        ],
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/corpus",
+            "host": "127.0.0.1:51385",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:51385",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:51386",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "HEAD",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:51385",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "HEAD",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:51386",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:51385",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:51386",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          }
+        ],
+        "diagnostics": [
+          "MSR100_DOCUMENT_START_BEST_EFFORT: The script is running with best-effort document-start timing.",
+          "MSR200_UNVERIFIED_BRIDGE: TrustedPageWorld exposes capabilities to page-world code.",
+          "MSC201_NOTIFICATION_DELIVERY_FAILED: A bridge notification could not be delivered."
+        ],
+        "failedAction": null
+      },
+      "status": "passed"
+    },
+    {
+      "schemaVersion": 1,
+      "caseId": "download",
+      "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+      "actionHash": "48b2f535bc97737a452e0f67f964cbf3e52199e9bc7a7f4cd01c00ae7efc26c3",
+      "contractSource": [
+        "https://raw.githubusercontent.com/fastnow/UserJs/4e58ac92f3acc409e05fcb156afca3237454f777/SiteAssetDL.user.js"
+      ],
+      "environment": {
+        "manager": "MonkeySharp",
+        "managerVersion": "3.0.0",
+        "chromiumVersion": "84.0.4147.105",
+        "manifestVersion": null,
+        "cefSharpVersion": "84.4.10.0",
+        "platform": "x64",
+        "menuInput": "WinForms ToolStripMenuItem.PerformClick; no trusted DOM activation claimed",
+        "commit": "cfb7c42e7017308d1cb00e97f7ef22dfbc34d56d",
+        "world": "raw",
+        "capabilities": {},
+        "settings": {
+          "trustedPageWorld": true,
+          "testCookiesOnly": true
+        }
+      },
+      "immediateReturn": {},
+      "events": [
+        {
+          "kind": "open",
+          "name": null
+        },
+        {
+          "kind": "assert",
+          "name": "assetToolbar"
+        },
+        {
+          "kind": "wait",
+          "name": null
+        },
+        {
+          "kind": "evaluate",
+          "name": null
+        },
+        {
+          "kind": "assert",
+          "name": "resourceCollected"
+        },
+        {
+          "kind": "evaluate",
+          "name": null
+        },
+        {
+          "kind": "files",
+          "name": "fileSaved"
+        }
+      ],
+      "promise": {},
+      "effects": {
+        "observations": {
+          "engineFeatures": {
+            "replaceAll": "undefined",
+            "compressionStream": "function",
+            "saveFilePicker": "undefined"
+          }
+        },
+        "checks": {
+          "assetToolbar": true,
+          "resourceCollected": true,
+          "fileSaved": true
+        },
+        "files": [
+          {
+            "name": "redirect.png",
+            "bytes": 70,
+            "sha256": "2640059609118b695c139804676372eca75c30d30e5906775902d13e44f5356c"
+          }
+        ],
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/corpus",
+            "host": "127.0.0.1:51385",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:51385",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:51386",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:51385",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:51386",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          }
+        ],
+        "diagnostics": [
+          "MSR100_DOCUMENT_START_BEST_EFFORT: The script is running with best-effort document-start timing.",
+          "MSR200_UNVERIFIED_BRIDGE: TrustedPageWorld exposes capabilities to page-world code.",
+          "MSC201_NOTIFICATION_DELIVERY_FAILED: A bridge notification could not be delivered."
+        ],
+        "failedAction": null
+      },
+      "status": "passed"
+    },
+    {
+      "schemaVersion": 1,
+      "caseId": "download-cancel",
+      "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+      "actionHash": "fc2d1513c4be2b16f4e4b3a9346485293b5e7b7bee156646bbb8ed14655c637f",
+      "contractSource": [
+        "https://raw.githubusercontent.com/fastnow/UserJs/4e58ac92f3acc409e05fcb156afca3237454f777/SiteAssetDL.user.js"
+      ],
+      "environment": {
+        "manager": "MonkeySharp",
+        "managerVersion": "3.0.0",
+        "chromiumVersion": "84.0.4147.105",
+        "manifestVersion": null,
+        "cefSharpVersion": "84.4.10.0",
+        "platform": "x64",
+        "menuInput": "WinForms ToolStripMenuItem.PerformClick; no trusted DOM activation claimed",
+        "commit": "cfb7c42e7017308d1cb00e97f7ef22dfbc34d56d",
+        "world": "raw",
+        "capabilities": {},
+        "settings": {
+          "trustedPageWorld": true,
+          "testCookiesOnly": true
+        }
+      },
+      "immediateReturn": {},
+      "events": [
+        {
+          "kind": "open",
+          "name": null
+        },
+        {
+          "kind": "assert",
+          "name": "assetToolbar"
+        },
+        {
+          "kind": "wait",
+          "name": null
+        },
+        {
+          "kind": "evaluate",
+          "name": null
+        },
+        {
+          "kind": "assert",
+          "name": "resourceCollected"
+        },
+        {
+          "kind": "evaluate",
+          "name": null
+        },
+        {
+          "kind": "wait",
+          "name": null
+        },
+        {
+          "kind": "evaluate",
+          "name": "cancelStatus"
+        },
+        {
+          "kind": "files",
+          "name": "cancellationLeavesNoFile"
+        }
+      ],
+      "promise": {},
+      "effects": {
+        "observations": {
+          "engineFeatures": {
+            "replaceAll": "undefined",
+            "compressionStream": "function",
+            "saveFilePicker": "undefined"
+          },
+          "cancelStatus": {
+            "url": "http://127.0.0.1:51385/corpus",
+            "status": null
+          }
+        },
+        "checks": {
+          "assetToolbar": true,
+          "resourceCollected": true,
+          "cancellationLeavesNoFile": true
+        },
+        "files": [],
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/corpus",
+            "host": "127.0.0.1:51385",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:51385",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:51386",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:51385",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:51386",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          }
+        ],
+        "diagnostics": [
+          "MSR100_DOCUMENT_START_BEST_EFFORT: The script is running with best-effort document-start timing.",
+          "MSR200_UNVERIFIED_BRIDGE: TrustedPageWorld exposes capabilities to page-world code.",
+          "MSC201_NOTIFICATION_DELIVERY_FAILED: A bridge notification could not be delivered."
+        ],
+        "failedAction": null
+      },
+      "status": "passed"
+    },
+    {
+      "schemaVersion": 1,
+      "caseId": "authenticated-xhr-denied",
+      "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+      "actionHash": "0ce41a8593f87ed7e72149bf3deac8be7d552553ea77ec00debd2417b809aa3a",
+      "contractSource": [
+        "https://raw.githubusercontent.com/fastnow/UserJs/4e58ac92f3acc409e05fcb156afca3237454f777/SiteAssetDL.user.js"
+      ],
+      "environment": {
+        "manager": "MonkeySharp",
+        "managerVersion": "3.0.0",
+        "chromiumVersion": "84.0.4147.105",
+        "manifestVersion": null,
+        "cefSharpVersion": "84.4.10.0",
+        "platform": "x64",
+        "menuInput": "WinForms ToolStripMenuItem.PerformClick; no trusted DOM activation claimed",
+        "commit": "cfb7c42e7017308d1cb00e97f7ef22dfbc34d56d",
+        "world": "raw",
+        "capabilities": {},
+        "settings": {
+          "trustedPageWorld": true,
+          "testCookiesOnly": true
+        }
+      },
+      "immediateReturn": {},
+      "events": [
+        {
+          "kind": "open",
+          "name": null
+        },
+        {
+          "kind": "assert",
+          "name": "assetToolbar"
+        },
+        {
+          "kind": "wait",
+          "name": null
+        },
+        {
+          "kind": "evaluate",
+          "name": null
+        },
+        {
+          "kind": "assert",
+          "name": "resourceCollected"
+        },
+        {
+          "kind": "evaluate",
+          "name": null
+        },
+        {
+          "kind": "wait",
+          "name": null
+        },
+        {
+          "kind": "evaluate",
+          "name": null
+        },
+        {
+          "kind": "assert",
+          "name": "deniedRequestShowsFailure"
+        },
+        {
+          "kind": "files",
+          "name": "denialLeavesNoFile"
+        }
+      ],
+      "promise": {},
+      "effects": {
+        "observations": {
+          "engineFeatures": {
+            "replaceAll": "undefined",
+            "compressionStream": "function",
+            "saveFilePicker": "undefined"
+          }
+        },
+        "checks": {
+          "assetToolbar": true,
+          "resourceCollected": true,
+          "deniedRequestShowsFailure": true,
+          "denialLeavesNoFile": true
+        },
+        "files": [],
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/corpus",
+            "host": "127.0.0.1:51385",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:51385",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:51386",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "POST",
+            "path": "/phase/denial-start",
+            "host": "127.0.0.1:51385",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          }
+        ],
+        "diagnostics": [
+          "MSR100_DOCUMENT_START_BEST_EFFORT: The script is running with best-effort document-start timing.",
+          "MSR200_UNVERIFIED_BRIDGE: TrustedPageWorld exposes capabilities to page-world code.",
+          "MSC201_NOTIFICATION_DELIVERY_FAILED: A bridge notification could not be delivered."
+        ],
+        "failedAction": null
+      },
+      "status": "passed"
+    },
+    {
+      "schemaVersion": 1,
+      "caseId": "storage-listener",
+      "fixtureHash": "476400193285d5ed26a0e92a8173919feaa5748141600c955da44e146eceed4f",
+      "actionHash": "e3dd5c518b3ab5ca7e3866bcd76f94433f4c6e556523235605b8f7fc772cb15f",
+      "contractSource": [
+        "https://raw.githubusercontent.com/utags/userscripts/5b6c8bbc379fcf8caf8f5e07d3dffe2de80387f9/find-scripts-for-this-site/find-scripts-for-this-site.user.js"
+      ],
+      "environment": {
+        "manager": "MonkeySharp",
+        "managerVersion": "3.0.0",
+        "chromiumVersion": "84.0.4147.105",
+        "manifestVersion": null,
+        "cefSharpVersion": "84.4.10.0",
+        "platform": "x64",
+        "menuInput": "WinForms ToolStripMenuItem.PerformClick; no trusted DOM activation claimed",
+        "commit": "cfb7c42e7017308d1cb00e97f7ef22dfbc34d56d",
+        "world": "raw",
+        "capabilities": {},
+        "settings": {
+          "trustedPageWorld": true,
+          "testCookiesOnly": true
+        }
+      },
+      "immediateReturn": {},
+      "events": [
+        {
+          "kind": "open",
+          "name": null
+        },
+        {
+          "kind": "menu",
+          "name": null
+        }
+      ],
+      "promise": {},
+      "effects": {
+        "observations": {
+          "engineFeatures": {
+            "replaceAll": "undefined",
+            "compressionStream": "function",
+            "saveFilePicker": "undefined"
+          }
+        },
+        "checks": {},
+        "files": [],
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/settings-a",
+            "host": "127.0.0.1:51385",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:51385",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:51386",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          }
+        ],
+        "diagnostics": [
+          "MSR200_UNVERIFIED_BRIDGE: TrustedPageWorld exposes capabilities to page-world code.",
+          "console: [MonkeySharp] menu callback failed TypeError: str.replaceAll is not a function",
+          "MSR300_SCRIPT_EXCEPTION: menu callback failed: str.replaceAll is not a function",
+          "MSC201_NOTIFICATION_DELIVERY_FAILED: A bridge notification could not be delivered."
+        ],
+        "failedAction": {
+          "kind": "assert",
+          "name": "settingsPanel",
+          "expression": "document.querySelector('[data-fsfts-host]')?.shadowRoot?.querySelector('input[type=checkbox]') != null"
+        }
+      },
+      "status": "failed",
+      "reason": "System.TimeoutException: Corpus action did not meet its functional assertion.\r\n   在 MonkeySharp.Compatibility.CorpusHost.<Until>d__2.MoveNext()\r\n--- 引发异常的上一位置中堆栈跟踪的末尾 ---\r\n   在 System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\n   在 MonkeySharp.Compatibility.CorpusHost.<>c__DisplayClass0_1.<<Run>b__0>d.MoveNext()",
+      "reasonCategory": "runtime-or-host"
+    },
+    {
+      "schemaVersion": 1,
+      "caseId": "menu-configuration",
+      "fixtureHash": "476400193285d5ed26a0e92a8173919feaa5748141600c955da44e146eceed4f",
+      "actionHash": "18ba3b3df28fdbbf961c5a0c168a7bb20b70c8ff6b228c55f2e445269c3daff7",
+      "contractSource": [
+        "https://raw.githubusercontent.com/utags/userscripts/5b6c8bbc379fcf8caf8f5e07d3dffe2de80387f9/find-scripts-for-this-site/find-scripts-for-this-site.user.js"
+      ],
+      "environment": {
+        "manager": "MonkeySharp",
+        "managerVersion": "3.0.0",
+        "chromiumVersion": "84.0.4147.105",
+        "manifestVersion": null,
+        "cefSharpVersion": "84.4.10.0",
+        "platform": "x64",
+        "menuInput": "WinForms ToolStripMenuItem.PerformClick; no trusted DOM activation claimed",
+        "commit": "cfb7c42e7017308d1cb00e97f7ef22dfbc34d56d",
+        "world": "raw",
+        "capabilities": {},
+        "settings": {
+          "trustedPageWorld": true,
+          "testCookiesOnly": true
+        }
+      },
+      "immediateReturn": {},
+      "events": [
+        {
+          "kind": "open",
+          "name": null
+        },
+        {
+          "kind": "wait",
+          "name": null
+        },
+        {
+          "kind": "assertMenu",
+          "name": "initialDomainMenu"
+        },
+        {
+          "kind": "menu",
+          "name": null
+        }
+      ],
+      "promise": {},
+      "effects": {
+        "observations": {
+          "engineFeatures": {
+            "replaceAll": "undefined",
+            "compressionStream": "function",
+            "saveFilePicker": "undefined"
+          }
+        },
+        "checks": {
+          "initialDomainMenu": true
+        },
+        "files": [],
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/settings-menu",
+            "host": "127.0.0.1:51385",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:51385",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/corpus-child",
+            "host": "127.0.0.1:51385",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:51386",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:51385",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:51386",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          }
+        ],
+        "diagnostics": [
+          "MSR200_UNVERIFIED_BRIDGE: TrustedPageWorld exposes capabilities to page-world code.",
+          "console: [MonkeySharp] menu callback failed TypeError: str.replaceAll is not a function",
+          "MSR300_SCRIPT_EXCEPTION: menu callback failed: str.replaceAll is not a function",
+          "MSC201_NOTIFICATION_DELIVERY_FAILED: A bridge notification could not be delivered."
+        ],
+        "failedAction": {
+          "kind": "assert",
+          "name": "settingsPanel",
+          "expression": "document.querySelector('[data-fsfts-host]')?.shadowRoot?.querySelector('input[type=checkbox]') != null"
+        }
+      },
+      "status": "failed",
+      "reason": "System.TimeoutException: Corpus action did not meet its functional assertion.\r\n   在 MonkeySharp.Compatibility.CorpusHost.<Until>d__2.MoveNext()\r\n--- 引发异常的上一位置中堆栈跟踪的末尾 ---\r\n   在 System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw()\r\n   在 MonkeySharp.Compatibility.CorpusHost.<>c__DisplayClass0_1.<<Run>b__0>d.MoveNext()",
+      "reasonCategory": "runtime-or-host"
+    },
+    {
+      "schemaVersion": 1,
+      "caseId": "iframe-spa",
+      "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+      "actionHash": "e18d3f186a7225aa2aa8bdb40c87f70aa7b6e1c694246df6661127bb2d6a5003",
+      "contractSource": [
+        "https://raw.githubusercontent.com/fastnow/UserJs/4e58ac92f3acc409e05fcb156afca3237454f777/SiteAssetDL.user.js"
+      ],
+      "environment": {
+        "manager": "MonkeySharp",
+        "managerVersion": "3.0.0",
+        "chromiumVersion": "84.0.4147.105",
+        "manifestVersion": null,
+        "cefSharpVersion": "84.4.10.0",
+        "platform": "x64",
+        "menuInput": "WinForms ToolStripMenuItem.PerformClick; no trusted DOM activation claimed",
+        "commit": "cfb7c42e7017308d1cb00e97f7ef22dfbc34d56d",
+        "world": "raw",
+        "capabilities": {},
+        "settings": {
+          "trustedPageWorld": true,
+          "testCookiesOnly": true
+        }
+      },
+      "immediateReturn": {},
+      "events": [
+        {
+          "kind": "open",
+          "name": null
+        },
+        {
+          "kind": "assert",
+          "name": "assetToolbar"
+        },
+        {
+          "kind": "wait",
+          "name": null
+        },
+        {
+          "kind": "evaluate",
+          "name": null
+        },
+        {
+          "kind": "assert",
+          "name": "resourceCollected"
+        },
+        {
+          "kind": "assert",
+          "name": "sameProcessFrameDecoration"
+        },
+        {
+          "kind": "evaluate",
+          "name": null
+        },
+        {
+          "kind": "wait",
+          "name": null
+        },
+        {
+          "kind": "assert",
+          "name": "spaNoDuplicate"
+        },
+        {
+          "kind": "evaluate",
+          "name": "excludedScopes"
+        }
+      ],
+      "promise": {},
+      "effects": {
+        "observations": {
+          "engineFeatures": {
+            "replaceAll": "undefined",
+            "compressionStream": "function",
+            "saveFilePicker": "undefined"
+          },
+          "excludedScopes": {
+            "oopif": "not-proven-by-same-process-frame",
+            "bfcache": "not-proven-by-history-update"
+          }
+        },
+        "checks": {
+          "assetToolbar": true,
+          "resourceCollected": true,
+          "sameProcessFrameDecoration": true,
+          "spaNoDuplicate": true
+        },
+        "files": [],
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/corpus",
+            "host": "127.0.0.1:51385",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:51385",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/corpus-child",
+            "host": "127.0.0.1:51385",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:51386",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:51385",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:51386",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:51385",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:51386",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          }
+        ],
+        "diagnostics": [
+          "MSR100_DOCUMENT_START_BEST_EFFORT: The script is running with best-effort document-start timing.",
+          "MSR200_UNVERIFIED_BRIDGE: TrustedPageWorld exposes capabilities to page-world code.",
+          "MSR100_DOCUMENT_START_BEST_EFFORT: The script is running with best-effort document-start timing.",
+          "MSR200_UNVERIFIED_BRIDGE: TrustedPageWorld exposes capabilities to page-world code.",
+          "MSC201_NOTIFICATION_DELIVERY_FAILED: A bridge notification could not be delivered.",
+          "MSC201_NOTIFICATION_DELIVERY_FAILED: A bridge notification could not be delivered."
+        ],
+        "failedAction": null
+      },
+      "status": "passed"
+    }
+  ],
+  "artifactPath": "artifacts/corpus/native-84-v2-all/results.json"
+}

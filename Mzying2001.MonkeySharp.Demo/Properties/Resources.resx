@@ -1,0 +1,180 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype"><value>text/microsoft-resx</value></resheader>
+  <resheader name="version"><value>2.0</value></resheader>
+  <resheader name="reader"><value>System.Resources.ResXResourceReader, System.Windows.Forms</value></resheader>
+  <resheader name="writer"><value>System.Resources.ResXResourceWriter, System.Windows.Forms</value></resheader>
+  <data name="BrowserTitle" xml:space="preserve"><value>MonkeySharp · Userscript Browser</value></data>
+  <data name="NewTab" xml:space="preserve"><value>New tab</value></data>
+  <data name="NewTabTooltip" xml:space="preserve"><value>New tab Ctrl+T</value></data>
+  <data name="PrivateTabButton" xml:space="preserve"><value>Private +</value></data>
+  <data name="PrivateTabTooltip" xml:space="preserve"><value>New private tab</value></data>
+  <data name="PrivateLabel" xml:space="preserve"><value>Private </value></data>
+  <data name="CloseTab" xml:space="preserve"><value>Close tab</value></data>
+  <data name="Back" xml:space="preserve"><value>Back</value></data>
+  <data name="Forward" xml:space="preserve"><value>Forward</value></data>
+  <data name="Reload" xml:space="preserve"><value>Reload</value></data>
+  <data name="Stop" xml:space="preserve"><value>Stop</value></data>
+  <data name="Permissions" xml:space="preserve"><value>Permissions</value></data>
+  <data name="ScriptManager" xml:space="preserve"><value>Script manager</value></data>
+  <data name="ScriptMenu" xml:space="preserve"><value>Script menu</value></data>
+  <data name="Tools" xml:space="preserve"><value>Tools</value></data>
+  <data name="DiagnosticsDownloads" xml:space="preserve"><value>Diagnostics and downloads</value></data>
+  <data name="DevTools" xml:space="preserve"><value>Developer tools</value></data>
+  <data name="OpenDataDirectory" xml:space="preserve"><value>Open data folder</value></data>
+  <data name="OpenDownloadsDirectory" xml:space="preserve"><value>Open downloads folder</value></data>
+  <data name="BrowserStatus" xml:space="preserve"><value>A MonkeySharp host per tab · Shared browser cookies / cache · Ctrl+L Address bar · F12 Developer tools</value></data>
+  <data name="Diagnostics" xml:space="preserve"><value>Diagnostics</value></data>
+  <data name="GmDownloads" xml:space="preserve"><value>GM downloads</value></data>
+  <data name="Cancel" xml:space="preserve"><value>Cancel</value></data>
+  <data name="Close" xml:space="preserve"><value>Close</value></data>
+  <data name="ShutdownFailed" xml:space="preserve"><value>Shutdown failed</value></data>
+  <data name="StartupFailed" xml:space="preserve"><value>Startup failed. Check that the application folder is writable, no other instance is using Data, and the x64 Visual C++ runtime is installed.
+
+{0}</value></data>
+  <data name="LanguageMenu" xml:space="preserve"><value>Language (restart required)</value></data>
+  <data name="LanguageSaved" xml:space="preserve"><value>Language saved. Close and reopen the application to apply it.</value></data>
+  <data name="LanguageSaveFailed" xml:space="preserve"><value>Could not save the language preference.</value></data>
+  <data name="InvalidAddress" xml:space="preserve"><value>Enter an HTTP(S) address or about:blank.</value></data>
+  <data name="ManagerTitle" xml:space="preserve"><value>MonkeySharp · Script manager</value></data>
+  <data name="Userscripts" xml:space="preserve"><value>Userscripts</value></data>
+  <data name="New" xml:space="preserve"><value>New</value></data>
+  <data name="ImportFile" xml:space="preserve"><value>Import file</value></data>
+  <data name="Delete" xml:space="preserve"><value>Delete</value></data>
+  <data name="CheckUpdates" xml:space="preserve"><value>Check and install updates</value></data>
+  <data name="InstallSave" xml:space="preserve"><value>Install / Save</value></data>
+  <data name="LoadUrlDraft" xml:space="preserve"><value>Load draft from URL</value></data>
+  <data name="ScriptUrlHint" xml:space="preserve"><value>HTTP(S) .user.js URL</value></data>
+  <data name="UnsavedChanges" xml:space="preserve"><value>Unsaved source changes · Ctrl+S to save</value></data>
+  <data name="ToggleSort" xml:space="preserve"><value>Reverse name sort order</value></data>
+  <data name="SearchHint" xml:space="preserve"><value>Search name, description, namespace or source</value></data>
+  <data name="MatchCount" xml:space="preserve"><value>{0} matches</value></data>
+  <data name="NoScripts" xml:space="preserve"><value>No scripts yet</value></data>
+  <data name="NoScriptsHint" xml:space="preserve"><value>Choose New, import a file or load a draft from a URL.</value></data>
+  <data name="NoResults" xml:space="preserve"><value>No matching results</value></data>
+  <data name="NoResultsHint" xml:space="preserve"><value>Adjust the search text or status filter.</value></data>
+  <data name="SourceEditor" xml:space="preserve"><value>Source editor</value></data>
+  <data name="MetadataPermissions" xml:space="preserve"><value>Metadata / Permissions / Diagnostics</value></data>
+  <data name="Identity" xml:space="preserve"><value>Basic information</value></data>
+  <data name="Name" xml:space="preserve"><value>Name</value></data>
+  <data name="Version" xml:space="preserve"><value>Version</value></data>
+  <data name="Namespace" xml:space="preserve"><value>Namespace</value></data>
+  <data name="Author" xml:space="preserve"><value>Author</value></data>
+  <data name="Description" xml:space="preserve"><value>Description</value></data>
+  <data name="RunAt" xml:space="preserve"><value>Run at</value></data>
+  <data name="SourceOrigin" xml:space="preserve"><value>Source</value></data>
+  <data name="MatchingRules" xml:space="preserve"><value>Matching rules</value></data>
+  <data name="Excludes" xml:space="preserve"><value>Exclude</value></data>
+  <data name="PermissionsNetwork" xml:space="preserve"><value>Permissions and network</value></data>
+  <data name="DependenciesResources" xml:space="preserve"><value>Dependencies and resources</value></data>
+  <data name="CompatibilityStatus" xml:space="preserve"><value>Compatibility status</value></data>
+  <data name="CompatibilityHint" xml:space="preserve"><value>These statuses describe the current MonkeySharp contract and host boundaries; metadata errors are reported separately.</value></data>
+  <data name="ScriptConfirmationTitle" xml:space="preserve"><value>Script permissions and changes</value></data>
+  <data name="ScriptFileFilter" xml:space="preserve"><value>Userscript (*.user.js;*.js)|*.user.js;*.js|All files|*.*</value></data>
+  <data name="PermissionsTitle" xml:space="preserve"><value>MonkeySharp permissions</value></data>
+  <data name="RememberedPermissions" xml:space="preserve"><value>Remembered script permissions</value></data>
+  <data name="RevokeScriptPermissions" xml:space="preserve"><value>Revoke remembered decisions for this script</value></data>
+  <data name="NoRememberedPermissions" xml:space="preserve"><value>No remembered decisions.</value></data>
+  <data name="PrivatePermissionHint" xml:space="preserve"><value>Private session: remembered decisions are cleared when the last private tab closes.</value></data>
+  <data name="PermissionHint" xml:space="preserve"><value>Allow once covers only the current coalesced requests. Remembered decisions apply only to this installation, permission and target. Navigation cancels stale requests.</value></data>
+  <data name="AllowOnce" xml:space="preserve"><value>Allow once</value></data>
+  <data name="RememberAllow" xml:space="preserve"><value>Remember allow</value></data>
+  <data name="RememberDeny" xml:space="preserve"><value>Deny and remember</value></data>
+  <data name="PrivatePermissionTitle" xml:space="preserve"><value>MonkeySharp private permission request</value></data>
+  <data name="PermissionTitle" xml:space="preserve"><value>MonkeySharp permission request</value></data>
+  <data name="NotificationClick" xml:space="preserve"><value>View / Click notification</value></data>
+  <data name="SaveDownloadTitle" xml:space="preserve"><value>Save userscript download</value></data>
+  <data name="WaitingDownload" xml:space="preserve"><value>Waiting</value></data>
+  <data name="Downloading" xml:space="preserve"><value>Downloading</value></data>
+  <data name="DownloadComplete" xml:space="preserve"><value>Complete</value></data>
+  <data name="DownloadCanceled" xml:space="preserve"><value>Canceled</value></data>
+  <data name="DownloadTimeout" xml:space="preserve"><value>Timed out</value></data>
+  <data name="DownloadFailed" xml:space="preserve"><value>Failed</value></data>
+  <data name="BrowserDownloadComplete" xml:space="preserve"><value>Browser download complete: {0}</value></data>
+  <data name="TrustWarning" xml:space="preserve"><value>TrustedPageWorld demo: pages may observe and use the bridge capabilities granted to scripts. Only run trusted scripts and visit trusted sites; this is not a security sandbox.</value></data>
+  <data name="ScriptsChanged" xml:space="preserve"><value>Scripts changed ({0}): open tabs reloaded.</value></data>
+  <data name="All" xml:space="preserve"><value>All</value></data>
+  <data name="Enabled" xml:space="preserve"><value>Enabled</value></data>
+  <data name="Disabled" xml:space="preserve"><value>Disabled</value></data>
+  <data name="Unavailable" xml:space="preserve"><value>Unavailable</value></data>
+  <data name="Enable" xml:space="preserve"><value>Enable</value></data>
+  <data name="Disable" xml:space="preserve"><value>Disable</value></data>
+  <data name="NoVersion" xml:space="preserve"><value>No version</value></data>
+  <data name="NoDescription" xml:space="preserve"><value>No description provided</value></data>
+  <data name="SortAscending" xml:space="preserve"><value>Name ascending</value></data>
+  <data name="SortDescending" xml:space="preserve"><value>Name descending</value></data>
+  <data name="DiscardChanges" xml:space="preserve"><value>Discard unsaved source changes?</value></data>
+  <data name="NewScriptDraft" xml:space="preserve"><value>New script. Permissions will be shown before saving.</value></data>
+  <data name="ImportedDraft" xml:space="preserve"><value>Draft imported. Review permissions and choose Install / Save.</value></data>
+  <data name="DownloadedDraft" xml:space="preserve"><value>Draft downloaded, not installed yet. Review the source and choose Install / Save.</value></data>
+  <data name="UpdateNotConfigured" xml:space="preserve"><value>This script has no version or update URL configured.</value></data>
+  <data name="UpdateDisabled" xml:space="preserve"><value>This script disables update checks with @downloadURL none.</value></data>
+  <data name="UpToDate" xml:space="preserve"><value>This script is up to date (v{0}).</value></data>
+  <data name="ConfirmUpdate" xml:space="preserve"><value>Script update: v{0} → v{1}. Download and replace this script?
+
+Download URL: {2}</value></data>
+  <data name="UpdateCanceled" xml:space="preserve"><value>Update installation canceled.</value></data>
+  <data name="UpdateInstalled" xml:space="preserve"><value>Installed update v{0} and reloaded browser tabs.</value></data>
+  <data name="SourceTooLarge" xml:space="preserve"><value>Source exceeds the 10 MiB limit.</value></data>
+  <data name="InvalidMetadata" xml:space="preserve"><value>Invalid metadata; the previous script is unchanged.</value></data>
+  <data name="ConfirmInstall" xml:space="preserve"><value>Allow this script to run on matching sites with its declared permissions?
+
+{0}</value></data>
+  <data name="ScriptSaved" xml:space="preserve"><value>Saved and reloaded browser tabs.</value></data>
+  <data name="ScriptEnabled" xml:space="preserve"><value>Enabled: {0}</value></data>
+  <data name="ScriptDisabled" xml:space="preserve"><value>Disabled: {0}</value></data>
+  <data name="ConfirmDelete" xml:space="preserve"><value>Delete this script, its source file and its GM storage data?</value></data>
+  <data name="ScriptDeleted" xml:space="preserve"><value>Script deleted.</value></data>
+  <data name="OperationCanceled" xml:space="preserve"><value>Operation canceled.</value></data>
+  <data name="ManagerError" xml:space="preserve"><value>Script manager: {0}</value></data>
+  <data name="MetadataNotParsed" xml:space="preserve"><value>Script metadata has not been parsed.</value></data>
+  <data name="Unrecognized" xml:space="preserve"><value>Unrecognized</value></data>
+  <data name="NotProvided" xml:space="preserve"><value>Not provided</value></data>
+  <data name="NoMetadata" xml:space="preserve"><value>No valid metadata found.</value></data>
+  <data name="ValidMetadata" xml:space="preserve"><value>Valid metadata; the script can be enabled.</value></data>
+  <data name="MetadataErrors" xml:space="preserve"><value>Metadata contains errors; the script cannot be enabled.</value></data>
+  <data name="ConfirmationDetails" xml:space="preserve"><value>{0}  v{1}
+Author: {2}
+{3}
+Match: {4}
+Include: {5}
+Exclude: {6}
+Grant: {7}
+Connect: {8}
+Require: {9}
+Resource: {10}
+Compatibility: {11}
+Diagnostics: {12}</value></data>
+  <data name="CoreImplemented" xml:space="preserve"><value>Implemented in Core</value></data>
+  <data name="CoreImplementedHint" xml:space="preserve"><value>Metadata parsing, the permission bridge and basic GM facade are included in the current runtime contract.</value></data>
+  <data name="TampermonkeyDifferences" xml:space="preserve"><value>Differs from Tampermonkey</value></data>
+  <data name="TampermonkeyDifferencesHint" xml:space="preserve"><value>Scripts execute in a MonkeySharp wrapper in the page world; unsafeWindow is not a security isolation boundary.</value></data>
+  <data name="HostResourcesHint" xml:space="preserve"><value>@require/@resource need dependency or resource services from the host.</value></data>
+  <data name="HostCapabilitiesHint" xml:space="preserve"><value>These capabilities depend on host services: {0}.</value></data>
+  <data name="HostServicesRequired" xml:space="preserve"><value>Host services required</value></data>
+  <data name="SandboxUnsupported" xml:space="preserve"><value>Unsupported @sandbox execution environment</value></data>
+  <data name="UnwrapUnsupported" xml:space="preserve"><value>@unwrap execution is rejected</value></data>
+  <data name="InjectIntoUnsupported" xml:space="preserve"><value>Unsupported @inject-into execution environment</value></data>
+  <data name="RunInUnsupported" xml:space="preserve"><value>@run-in container selection is unavailable</value></data>
+  <data name="XhrUnsupported" xml:space="preserve"><value>XHR input contains unsupported options or options with different semantics: {0}</value></data>
+  <data name="Unsupported" xml:space="preserve"><value>Intentionally degraded / Unsupported</value></data>
+  <data name="StaticWebRequestHint" xml:space="preserve"><value> Static @webRequest is installed before navigation; only sub_frame/script/xhr/websocket are intercepted, subject to host authorization and version limits.</value></data>
+  <data name="None" xml:space="preserve"><value>None</value></data>
+  <data name="EditorDescription" xml:space="preserve"><value>{0}  v{1}
+Author: {2}
+{3}
+Match: {4}
+Include: {5}
+Exclude: {6}
+Grant: {7}
+Connect: {8}
+Require: {9}
+Resource: {10}
+{11}</value></data>
+  <data name="EditorUndo" xml:space="preserve"><value>Undo</value></data>
+  <data name="EditorRedo" xml:space="preserve"><value>Redo</value></data>
+  <data name="EditorCut" xml:space="preserve"><value>Cut</value></data>
+  <data name="EditorCopy" xml:space="preserve"><value>Copy</value></data>
+  <data name="EditorPaste" xml:space="preserve"><value>Paste</value></data>
+  <data name="EditorSelectAll" xml:space="preserve"><value>Select all</value></data>
+</root>

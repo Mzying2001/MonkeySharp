@@ -1,3 +1,18 @@
+function Assert-CdpProbeRecords {
+    param([object[]]$Records, [string]$Platform, [string]$CefSharpVersion)
+    $probes = @($Records | Where-Object { $_.type -eq 'cdp-probe' })
+    if ($probes.Count -ne 1 -or $probes[0].status -ne 'passed') { throw 'Exactly one successful CDP probe is required.' }
+    $probe = $probes[0]
+    if ($probe.platform -ne $Platform) { throw 'CDP probe process architecture mismatch.' }
+    $actual = [version]$probe.cefSharpVersion
+    $expected = [version]$CefSharpVersion
+    if ($actual.Major -ne $expected.Major -or $actual.Minor -ne $expected.Minor -or $actual.Build -ne $expected.Build) { throw 'CDP probe CefSharp version mismatch.' }
+    foreach ($name in @('preparedNavigation', 'pageBeforeFirstInline', 'isolatedBeforeFirstInline', 'realGmEventuallyReady', 'nativeFrameIdentity', 'perScriptWorld', 'contextIdBinding', 'cookieEngineAccepted', 'cookieReadback', 'cookieHttpEffect', 'cookieDeleted', 'observerCoexistence', 'commandTimeout', 'commandCancellation', 'contextRevocation')) {
+        if ($probe.checks.$name -isnot [bool] -or !$probe.checks.$name) { throw "CDP assertion missing or failed: $name." }
+    }
+    if ($probe.strictGm -notin @('blocked', 'observed-in-this-run-only')) { throw 'GM timing limitation must be explicit.' }
+}
+
 function Assert-SmokeRecords {
     param([object[]]$Records, [string]$Platform, [string]$CefSharpVersion, [int]$RunExitCode = 0)
 
@@ -23,8 +38,8 @@ function Assert-SmokeRecords {
         if ($fixtures.Count -ne 1 -or $fixtures[0].success -isnot [bool] -or !$fixtures[0].success) { throw "Legacy fixture failed or missing: $phase." }
     }
     $cases = @($Records | Where-Object { $_.type -eq 'compatibility-case' })
-    if ($cases.Count -ne 5) { throw 'Exactly five compatibility cases are required.' }
-    foreach ($id in @('frames', 'spaUrl', 'download', 'cookie', 'webRequest')) {
+    if ($cases.Count -ne 15) { throw 'Exactly fifteen compatibility cases are required.' }
+    foreach ($id in @('prepared', 'conditions', 'isolated', 'replay', 'csp', 'permissions', 'binary', 'pageHelpers', 'frames', 'spaUrl', 'download', 'cookie', 'webRequest', 'audio', 'partitions')) {
         $matches = @($cases | Where-Object { $_.caseId -eq $id })
         if ($matches.Count -ne 1 -or $matches[0].success -isnot [bool] -or !$matches[0].success -or $matches[0].error) { throw "Compatibility case failed or missing: $id." }
         $checks = @($matches[0].checks.PSObject.Properties)

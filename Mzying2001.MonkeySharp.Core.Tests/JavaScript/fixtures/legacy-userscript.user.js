@@ -76,13 +76,13 @@ GM_notification({
     ondone: function () { globalThis.__legacyFixtureState.modernNotificationDone = true; }
 });
 
-globalThis.__legacyFixtureState.webRequest = GM_webRequest({
+globalThis.__legacyFixtureState.webRequest = GM_webRequest([{
     selector: {
         include: "https://example.com/*",
         exclude: ["https://example.com/blocked/*"]
     },
     action: { redirect: { from: "/old", to: "/new" } }
-}, function (info, message, details) {
+}], function (info, message, details) {
     globalThis.__legacyFixtureState.webRequestEvent = { info: info, message: message, details: details };
 });
 

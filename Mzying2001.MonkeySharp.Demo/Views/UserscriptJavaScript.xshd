@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<SyntaxDefinition name="Userscript JavaScript" extensions=".js" xmlns="http://icsharpcode.net/sharpdevelop/syntaxdefinition/2008">
+    <Color name="Keyword" foreground="Blue" />
+    <Color name="TemplateString" foreground="Sienna" />
+    <RuleSet>
+        <Keywords color="Keyword">
+            <Word>async</Word>
+            <Word>await</Word>
+            <Word>yield</Word>
+            <Word>of</Word>
+        </Keywords>
+        <Span color="TemplateString" multiline="true">
+            <Begin>`</Begin>
+            <End>`</End>
+            <RuleSet>
+                <Span begin="\\" end="." />
+            </RuleSet>
+        </Span>
+        <Import ruleSet="JavaScript/" />
+    </RuleSet>
+</SyntaxDefinition>

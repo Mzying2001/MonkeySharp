@@ -54,7 +54,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         [Fact]
         public void UnsupportedAlgorithmWarnsButSupportedDeclarationCanVerify()
         {
-            var result = Parse("// @require https://cdn.example/lib.js#sha384=unsupported,sha256=" + HelloSha256);
+            var result = Parse("// @require https://cdn.example/lib.js#sha999=unsupported,sha256=" + HelloSha256);
 
             Assert.True(result.CanEnable);
             Assert.Contains(result.Diagnostics, diagnostic =>

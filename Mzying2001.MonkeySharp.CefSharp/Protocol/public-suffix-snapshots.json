@@ -1,0 +1,18 @@
+[
+  {
+    "chromiumVersion": "121.0.6167.160",
+    "source": "https://github.com/chromium/chromium/blob/121.0.6167.160/net/base/registry_controlled_domains/effective_tld_names.dat",
+    "gitBlob": "dbc8184ee2e88563984c7bc3c5274f792a24cb45",
+    "sha256": "9d7391ad8b7a777ce46cc003ad72c27f2e1c0eb9a7cc644d32c0f9596a452516",
+    "compressedSha256": "9e48f30da625361ee4b832a042d27694647a00a9b9fcf511a327cdf1519532ad",
+    "license": "MPL-2.0"
+  },
+  {
+    "chromiumVersion": "151.0.7922.174",
+    "source": "https://github.com/chromium/chromium/blob/151.0.7922.174/net/base/registry_controlled_domains/effective_tld_names.dat",
+    "gitBlob": "5eabc92d51226369bf800473de55787951809886",
+    "sha256": "4155611645690529d1bbea0cfe653b0c45f63b028e0ba039de29a97edc3204ca",
+    "compressedSha256": "639919365a55a3f4433498caeca4b4df33a09e8e33b84f8e84b134ed204aba0a",
+    "license": "MPL-2.0"
+  }
+]

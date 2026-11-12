@@ -1,0 +1,8 @@
+{
+  "channel": "stable",
+  "version": "5.5.1",
+  "manifestVersion": 3,
+  "extensionId": "iikmkjmpaadaobahmlepeloendndfphd",
+  "contentSha256": "8d03dfa6e2bff063425d652aa1ef7d6c22b9df01dd0732861969d7e1510fc95b",
+  "settings": { "downloadMode": "fresh-profile-default", "privateStorage": "split; no incognito access unless private-tabs fixture" }
+}

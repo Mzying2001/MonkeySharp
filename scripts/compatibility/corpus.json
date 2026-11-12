@@ -1,0 +1,265 @@
+{
+  "schemaVersion": 1,
+  "entries": [
+    {
+      "category": "dom-decoration",
+      "status": "ready",
+      "reason": "Pinned licensed unmodified source; functional actions in corpus/scenarios.cjs. Runtime results are recorded separately.",
+      "script": "site-asset-dl",
+      "scenario": "dom-decoration"
+    },
+    {
+      "category": "page-hook",
+      "status": "ready",
+      "reason": "Pinned licensed unmodified source; functional actions in corpus/scenarios.cjs. Runtime results are recorded separately.",
+      "script": "site-asset-dl",
+      "scenario": "page-hook"
+    },
+    {
+      "category": "authenticated-xhr",
+      "status": "ready",
+      "reason": "Pinned licensed unmodified source; functional actions in corpus/scenarios.cjs. Runtime results are recorded separately.",
+      "script": "site-asset-dl",
+      "scenario": "authenticated-xhr"
+    },
+    {
+      "category": "download",
+      "status": "ready",
+      "reason": "Pinned licensed unmodified source; functional actions in corpus/scenarios.cjs. Runtime results are recorded separately.",
+      "script": "site-asset-dl",
+      "scenario": "download"
+    },
+    {
+      "category": "storage-listener",
+      "status": "ready",
+      "reason": "Pinned licensed unmodified source; functional actions in corpus/scenarios.cjs. Runtime results are recorded separately.",
+      "script": "find-scripts",
+      "scenario": "storage-listener"
+    },
+    {
+      "category": "menu-configuration",
+      "status": "ready",
+      "reason": "Pinned licensed unmodified source; functional actions in corpus/scenarios.cjs. Runtime results are recorded separately.",
+      "script": "find-scripts",
+      "scenario": "menu-configuration"
+    },
+    {
+      "category": "iframe-spa",
+      "status": "ready",
+      "reason": "Pinned licensed unmodified source; functional actions in corpus/scenarios.cjs. Runtime results are recorded separately.",
+      "script": "site-asset-dl",
+      "scenario": "iframe-spa"
+    }
+  ],
+  "localOriginal": {
+    "category": [
+      "dom-decoration",
+      "storage"
+    ],
+    "status": "passed",
+    "sourcePath": "local-notes/Userscripts/about-blank-search.user.js",
+    "name": "MonkeySharp Blank Page Search",
+    "version": "1.0.0",
+    "sha256": "d1faa1b36fa600f413b4e310b6a574f8586b97e3b0c450a36c4fd024ec8b816f",
+    "license": "User-provided local source; redistribution license not declared; source not committed",
+    "sourceModified": false,
+    "scenario": [
+      "about:blank DOM",
+      "engine choice persistence",
+      "empty submit without external navigation",
+      "full navigation retaining choice"
+    ],
+    "evidence": "evidence/delivery.json",
+    "packageConsumerRuns": 6
+  },
+  "scripts": {
+    "site-asset-dl": {
+      "name": "SiteAssetDL",
+      "version": "1.0.0",
+      "sourcePath": "scripts/compatibility/corpus/site-asset-dl/source.user.js",
+      "sourceUrl": "https://raw.githubusercontent.com/fastnow/UserJs/4e58ac92f3acc409e05fcb156afca3237454f777/SiteAssetDL.user.js",
+      "commit": "4e58ac92f3acc409e05fcb156afca3237454f777",
+      "license": "MIT",
+      "licensePath": "scripts/compatibility/corpus/site-asset-dl/LICENSE",
+      "sha256": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+      "sourceModified": false,
+      "requires": [],
+      "resources": [],
+      "metadata": {
+        "name": [
+          "SiteAssetDL"
+        ],
+        "namespace": [
+          "https://github.com/fastnow/SiteAssetDL"
+        ],
+        "version": [
+          "1.0.0"
+        ],
+        "description": [
+          "嗅探页面图片/视频/音频/字体/字幕资源。懒加载深度扫描、并发批量下载、流式直写硬盘、原生压缩打包、多格式导出。悬浮按钮与窗口可拖动，适配触摸与桌面设备。"
+        ],
+        "author": [
+          "FastNow Studio"
+        ],
+        "homepage": [
+          "https://github.com/fastnow/UserJs"
+        ],
+        "supportURL": [
+          "https://github.com/fastnow/UserJs/issues"
+        ],
+        "updateURL": [
+          "https://fastly.jsdelivr.net/gh/fastnow/UserJs@main/SiteAssetDL.user.js"
+        ],
+        "downloadURL": [
+          "https://fastly.jsdelivr.net/gh/fastnow/UserJs@main/SiteAssetDL.user.js"
+        ],
+        "license": [
+          "MIT"
+        ],
+        "match": [
+          "*://*/*"
+        ],
+        "grant": [
+          "GM_download",
+          "GM_xmlhttpRequest",
+          "GM_setValue",
+          "GM_getValue",
+          "GM_setClipboard",
+          "GM_notification",
+          "unsafeWindow",
+          "window.onurlchange"
+        ],
+        "connect": [
+          "*"
+        ],
+        "run-at": [
+          "document-start"
+        ]
+      },
+      "world": "raw/default",
+      "preconditions": "Controlled HTTP loopback page; fresh profile; test cookie corpus-auth=fixture-only; no personal credentials or external navigation.",
+      "licenseSha256": "93d2a6957f088a8848527414bc188fbcfecd4857493fab7343d4659a73ded7af",
+      "licenseUrl": "https://raw.githubusercontent.com/fastnow/UserJs/4e58ac92f3acc409e05fcb156afca3237454f777/LICENSE"
+    },
+    "find-scripts": {
+      "name": "Find Scripts For This Site",
+      "version": "0.4.3",
+      "sourcePath": "scripts/compatibility/corpus/find-scripts/source.user.js",
+      "sourceUrl": "https://raw.githubusercontent.com/utags/userscripts/5b6c8bbc379fcf8caf8f5e07d3dffe2de80387f9/find-scripts-for-this-site/find-scripts-for-this-site.user.js",
+      "commit": "5b6c8bbc379fcf8caf8f5e07d3dffe2de80387f9",
+      "license": "MIT",
+      "licensePath": "scripts/compatibility/corpus/find-scripts/LICENSE",
+      "sha256": "476400193285d5ed26a0e92a8173919feaa5748141600c955da44e146eceed4f",
+      "sourceModified": false,
+      "requires": [],
+      "resources": [],
+      "metadata": {
+        "name": [
+          "Find Scripts For This Site"
+        ],
+        "name:zh-CN": [
+          "查找适用于当前网站的脚本"
+        ],
+        "name:zh-TW": [
+          "查找適用於當前網站的腳本"
+        ],
+        "name:ja": [
+          "このサイト用のスクリプトを探す"
+        ],
+        "name:ko": [
+          "이 사이트용 스크립트 찾기"
+        ],
+        "name:es": [
+          "Buscar scripts para este sitio"
+        ],
+        "name:fr": [
+          "Trouver des scripts pour ce site"
+        ],
+        "name:de": [
+          "Skripte für diese Website finden"
+        ],
+        "name:ru": [
+          "Найти скрипты для этого сайта"
+        ],
+        "namespace": [
+          "https://github.com/utags"
+        ],
+        "homepageURL": [
+          "https://github.com/utags/userscripts#readme"
+        ],
+        "supportURL": [
+          "https://github.com/utags/userscripts/issues"
+        ],
+        "version": [
+          "0.4.3"
+        ],
+        "description": [
+          "Find userscripts for the current website from popular script repositories"
+        ],
+        "description:zh-CN": [
+          "查找适用于当前网站的用户脚本，支持多个脚本仓库"
+        ],
+        "description:zh-TW": [
+          "查找適用於當前網站的用戶腳本，支持多個腳本倉庫"
+        ],
+        "description:ja": [
+          "人気のスクリプトリポジトリから現在のウェブサイト用のユーザースクリプトを見つける"
+        ],
+        "description:ko": [
+          "인기 스크립트 저장소에서 현재 웹사이트용 사용자 스크립트 찾기"
+        ],
+        "description:es": [
+          "Encuentra userscripts para el sitio web actual desde repositorios populares"
+        ],
+        "description:fr": [
+          "Trouvez des scripts utilisateur pour le site Web actuel à partir de référentiels de scripts populaires"
+        ],
+        "description:de": [
+          "Finden Sie Benutzerskripte für die aktuelle Website aus beliebten Skript-Repositories"
+        ],
+        "description:ru": [
+          "Найдите пользовательские скрипты для текущего веб-сайта из популярных репозиториев скриптов"
+        ],
+        "author": [
+          "Pipecraft"
+        ],
+        "license": [
+          "MIT"
+        ],
+        "match": [
+          "*://*/*"
+        ],
+        "exclude": [
+          "*://challenges.cloudflare.com/*"
+        ],
+        "icon": [
+          "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%20fill%3D%22none%22%3E%3Ctext%20x%3D%2232%22%20y%3D%2232%22%20text-anchor%3D%22middle%22%20dominant-baseline%3D%22middle%22%20font-family%3D%22Menlo%2C%20Monaco%2C%20Consolas%2C%20Courier%20New%2C%20monospace%22%20font-size%3D%2242%22%20font-weight%3D%22700%22%20fill%3D%22%231f2937%22%3E%7B%7D%3C/text%3E%3C/svg%3E"
+        ],
+        "noframes": [
+          "// @grant                GM_registerMenuCommand"
+        ],
+        "grant": [
+          "GM_unregisterMenuCommand",
+          "GM_openInTab",
+          "GM.info",
+          "GM.addValueChangeListener",
+          "GM.getValue",
+          "GM.deleteValue",
+          "GM.setValue"
+        ]
+      },
+      "world": "raw/default",
+      "preconditions": "Controlled HTTP loopback page; fresh profile; test cookie corpus-auth=fixture-only; no personal credentials or external navigation.",
+      "licenseSha256": "db61ff2215afa764ff75e4a370c25c292bc1027018c25ba9279b5c889e100268",
+      "licenseUrl": "https://raw.githubusercontent.com/utags/userscripts/5b6c8bbc379fcf8caf8f5e07d3dffe2de80387f9/LICENSE",
+      "engineRequirements": [
+        "String.prototype.replaceAll; absent on the tested Chromium 84 engine, present on tested 121/151"
+      ]
+    }
+  },
+  "boundaries": {
+    "oopif": "Not established by the same-process iframe scenario; native child-target routing remains unsupported.",
+    "bfcache": "Not established by SPA history changes; transparent restoration remains unsupported.",
+    "strictDocumentStart": "The first inline canary is observed separately from later hook function."
+  }
+}

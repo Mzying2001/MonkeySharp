@@ -1,0 +1,99 @@
+{
+  "schemaVersion": 1,
+  "caseId": "stream-body",
+  "immediateReturn": {
+    "promise": "function"
+  },
+  "promise": {
+    "locked": {
+      "state": "rejected",
+      "error": "TypeError: Failed to execute 'getReader' on 'ReadableStream': ReadableStreamDefaultReader constructor can only accept readable streams that are not yet locked to a reader"
+    },
+    "disturbed": {
+      "state": "pending"
+    },
+    "producer": {
+      "state": "pending"
+    }
+  },
+  "events": [
+    {
+      "name": "returned"
+    },
+    {
+      "name": "pull"
+    },
+    {
+      "name": "pull"
+    },
+    {
+      "name": "pull"
+    },
+    {
+      "name": "pull"
+    }
+  ],
+  "effects": {
+    "expectedHash": "184721a480231afe16a8f242c1415c0f1bee49585f96f715b43139a4f35f7ee3",
+    "upload": {
+      "length": 150003,
+      "sha256": "184721a480231afe16a8f242c1415c0f1bee49585f96f715b43139a4f35f7ee3",
+      "method": "POST"
+    },
+    "locked": true,
+    "redirectError": {
+      "status": 408,
+      "statusText": "Failed to execute 'fetch' on 'WorkerGlobalScope': The provided ReadableStream is disturbed"
+    },
+    "empty": {
+      "length": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "method": "POST"
+    },
+    "tabsBefore": 4,
+    "tabsAfter": 4
+  },
+  "fixtureHash": "f8af250206b2de43e89634dbed20f809c7bd46d7916754bed345f2fe04b20d16",
+  "contractSource": [
+    "https://www.tampermonkey.net/documentation.php?locale=en",
+    "Tampermonkey 5.6.6242/beta/MV3 runtime"
+  ],
+  "environment": {
+    "manager": "Tampermonkey",
+    "managerVersion": "5.6.6242",
+    "chromiumVersion": "Edg/157.0.4341.42",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/157.0.0.0 Safari/537.36 Edg/157.0.0.0",
+    "manifestVersion": 3,
+    "channel": "beta",
+    "extensionId": "gcalenpjmijncebpfijmoaglllgpjagf",
+    "contentSha256": "6936ae52a79fa581044553cf8dbd7a54c18ea03efcad10070fefa31b810fce15",
+    "minimumChromeVersion": "120",
+    "settings": {
+      "downloadMode": "fresh-profile-default",
+      "privateStorage": "split; no incognito access unless private-tabs fixture",
+      "headless": true,
+      "userScriptsAccess": true,
+      "freshProfile": true,
+      "ignoreLoopbackCertificateErrors": true,
+      "legacyPfxProvider": true
+    },
+    "commit": "e2b8351d31827e351a4eb9e1ba9b286e46e5d860",
+    "sourcePatchSha256": "1561af52e56d7a7001c19a0cc2a95daa59c8a56f9da292b9d6e154367f6e6fbc",
+    "runnerSha256": "7ac982ffc2fb2b80b1f605456ee11b6bd6dd119369b0f2b20948d675083f924b",
+    "platform": "x64",
+    "capabilities": {
+      "referenceReturnProbe": true
+    },
+    "world": "manager-selected"
+  },
+  "checks": {
+    "noError": true,
+    "exactBytes": true,
+    "previewRedirectRefusesDisturbedReplay": true,
+    "previewReaderRemainsLocked": true,
+    "lockedRejected": true,
+    "disturbedAndProducerPendingWithinProbe": true,
+    "emptyBody": true
+  },
+  "status": "passed"
+}

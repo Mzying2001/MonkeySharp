@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
+using Mzying2001.MonkeySharp.Core.Runtime;
 
 namespace Mzying2001.MonkeySharp.Core.Bridge
 {
@@ -17,7 +18,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                 {
                     writer.WriteStartObject();
                     writer.WriteString("type", "response");
-                    writer.WriteNumber("protocol", 1);
+                    writer.WriteNumber("protocol", InjectionPlan.CurrentProtocolVersion);
                     writer.WriteString("requestId", requestId ?? string.Empty);
                     writer.WriteBoolean("ok", true);
                     writer.WritePropertyName("result");
@@ -37,7 +38,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                 {
                     writer.WriteStartObject();
                     writer.WriteString("type", hello ? "hello-result" : "response");
-                    writer.WriteNumber("protocol", 1);
+                    writer.WriteNumber("protocol", InjectionPlan.CurrentProtocolVersion);
                     if (!hello)
                         writer.WriteString("requestId", requestId ?? string.Empty);
                     writer.WriteBoolean("ok", false);
@@ -61,13 +62,14 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             var payload = new Dictionary<string, object>
             {
                 ["type"] = "hello-result",
-                ["protocol"] = 1,
+                ["protocol"] = InjectionPlan.CurrentProtocolVersion,
                 ["ok"] = true,
                 ["limits"] = new Dictionary<string, object>
                 {
                     ["requestBytes"] = options.MaxRequestBytes,
                     ["responseBytes"] = options.MaxResponseBytes,
                     ["resourceBytes"] = options.MaxResourceBytes,
+                    ["binaryTransferBytes"] = options.MaxBinaryTransferBytes,
                     ["timeoutMilliseconds"] = (long)options.RequestTimeout.TotalMilliseconds,
                     ["pendingRequests"] = options.MaxPendingRequestsPerDocument,
                     ["replayRequestsPerExecution"] = options.MaxReplayEntriesPerExecution
@@ -82,11 +84,12 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
         public static string ValueChangeData(
             int listenerId,
             string key,
-            string oldJson,
-            string newJson,
+            string oldEncoded,
+            string newEncoded,
             string mutationId = null,
             string originExecutionId = null,
-            long? sequence = null)
+            long? sequence = null,
+            string mutationMethod = null)
         {
             using (var stream = new MemoryStream())
             {
@@ -96,12 +99,16 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                     writer.WriteNumber("listenerId", listenerId);
                     writer.WriteString("key", key);
                     writer.WritePropertyName("oldValue");
-                    WriteOptionalValue(writer, oldJson);
+                    WriteStoredValue(writer, oldEncoded);
                     writer.WritePropertyName("newValue");
-                    WriteOptionalValue(writer, newJson);
+                    WriteStoredValue(writer, newEncoded);
+                    writer.WriteBoolean("oldValueExists", oldEncoded != null);
+                    writer.WriteBoolean("newValueExists", newEncoded != null);
                     writer.WriteBoolean("remote", true);
                     if (mutationId != null)
                         writer.WriteString("mutationId", mutationId);
+                    if (mutationMethod != null)
+                        writer.WriteString("mutationMethod", mutationMethod);
                     if (originExecutionId != null)
                         writer.WriteString("originExecutionId", originExecutionId);
                     if (sequence.HasValue)
@@ -112,17 +119,10 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             }
         }
 
-        private static void WriteOptionalValue(Utf8JsonWriter writer, string json)
+        private static void WriteStoredValue(Utf8JsonWriter writer, string encoded)
         {
-            if (json == null)
-            {
-                writer.WriteStartObject();
-                writer.WriteString("$monkeySharpType", "undefined");
-                writer.WriteEndObject();
-                return;
-            }
-            using (var value = JsonDocument.Parse(json))
-                value.RootElement.WriteTo(writer);
+            if (encoded == null) writer.WriteNullValue();
+            else writer.WriteStringValue(encoded);
         }
     }
 }

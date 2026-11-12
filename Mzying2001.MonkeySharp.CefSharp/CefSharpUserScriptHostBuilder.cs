@@ -1,7 +1,6 @@
-using CefSharp;
+﻿using CefSharp;
 using Mzying2001.MonkeySharp.Core.Apis;
 using Mzying2001.MonkeySharp.Core.Bridge;
-using Mzying2001.MonkeySharp.Core.Compatibility;
 using Mzying2001.MonkeySharp.Core.Permissions;
 using Mzying2001.MonkeySharp.Core.Repository;
 using Mzying2001.MonkeySharp.Core.Runtime;
@@ -22,18 +21,18 @@ namespace Mzying2001.MonkeySharp.CefSharp
         private IUserScriptPermissionPolicy _permissionPolicy;
         private Action<UserScriptLogEntry> _log;
         private CefSharpHostOptions _options = new CefSharpHostOptions();
-        private IResourceProvider _resources;
         private IHttpRequestService _http;
         private IMenuService _menu;
         private INotificationService _notifications;
         private IClipboardService _clipboard;
         private ITabService _tabs;
         private IDownloadService _downloads;
+        private Func<IHttpRequestService, IDownloadService> _downloadFactory;
         private ITabStateService _tabState;
         private IUserScriptWindowService _window;
         private ICookieService _cookies;
         private IWebRequestService _webRequests;
-        private IUserScriptDependencyProvider _dependencies;
+        private ITabAudioService _audio;
         private bool _built;
 
         /// <summary>Initializes a host builder.</summary>
@@ -70,30 +69,12 @@ namespace Mzying2001.MonkeySharp.CefSharp
             return this;
         }
 
-        /// <summary>Enables resource GM APIs with a host resource provider.</summary>
-        /// <param name="resources">The resource provider to use.</param>
-        /// <returns>This builder.</returns>
-        public CefSharpUserScriptHostBuilder UseResourceProvider(IResourceProvider resources)
-        {
-            _resources = resources ?? throw new ArgumentNullException(nameof(resources));
-            return this;
-        }
-
         /// <summary>Enables <c>GM.xmlHttpRequest</c> with a host HTTP service.</summary>
         /// <param name="http">The HTTP request service to use.</param>
         /// <returns>This builder.</returns>
         public CefSharpUserScriptHostBuilder UseHttpRequestService(IHttpRequestService http)
         {
             _http = http ?? throw new ArgumentNullException(nameof(http));
-            return this;
-        }
-
-        /// <summary>Enables <c>@require</c> dependency loading.</summary>
-        /// <param name="dependencies">The dependency provider to use.</param>
-        /// <returns>This builder.</returns>
-        public CefSharpUserScriptHostBuilder UseDependencyProvider(IUserScriptDependencyProvider dependencies)
-        {
-            _dependencies = dependencies ?? throw new ArgumentNullException(nameof(dependencies));
             return this;
         }
 
@@ -139,6 +120,14 @@ namespace Mzying2001.MonkeySharp.CefSharp
         public CefSharpUserScriptHostBuilder UseDownloadService(IDownloadService downloads)
         {
             _downloads = downloads ?? throw new ArgumentNullException(nameof(downloads));
+            _downloadFactory = null;
+            return this;
+        }
+
+        /// <summary>Creates downloads using this host's actual shared HTTP service and request context.</summary>
+        public CefSharpUserScriptHostBuilder UseDownloadServiceFactory(Func<IHttpRequestService, IDownloadService> factory)
+        {
+            _downloadFactory = factory ?? throw new ArgumentNullException(nameof(factory));
             return this;
         }
 
@@ -167,6 +156,10 @@ namespace Mzying2001.MonkeySharp.CefSharp
             return this;
         }
 
+        /// <summary>Uses an application-owned service for the current tab's audio.</summary>
+        public CefSharpUserScriptHostBuilder UseTabAudioService(ITabAudioService audio)
+        { _audio = audio ?? throw new ArgumentNullException(nameof(audio)); return this; }
+
         /// <summary>Enables <c>GM.webRequest</c> with a host web request service.</summary>
         public CefSharpUserScriptHostBuilder UseWebRequestService(IWebRequestService webRequests)
         {
@@ -189,8 +182,6 @@ namespace Mzying2001.MonkeySharp.CefSharp
         public CefSharpUserScriptHostBuilder Configure(CefSharpHostOptions options)
         {
             _options = options ?? throw new ArgumentNullException(nameof(options));
-            if (_options.Compatibility == null)
-                _options.Compatibility = new UserScriptCompatibilityOptions();
             return this;
         }
 
@@ -204,23 +195,32 @@ namespace Mzying2001.MonkeySharp.CefSharp
             _built = true;
             var ownsStore = _store == null;
             var store = _store ?? new InMemoryUserScriptValueStore();
+            var contextAccessor = new CefSharpRequestContextAccessor();
+            CefSharpUserScriptHost builtHost = null;
             var engine = new UserScriptEngine(
                 _repository,
                 options: new UserScriptEngineOptions
                 {
                     RequireGuaranteedDocumentStart = _options.RequireGuaranteedDocumentStart,
                     RequireVerifiedBridge = true,
-                    Compatibility = _options.Compatibility
-                },
-                sourceResolver: _dependencies == null
-                    ? null
-                    : new ResourceScriptSourceResolver(
-                        _dependencies,
-                        _options.Bridge?.MaxResourceBytes ?? 10 * 1024 * 1024));
+                    SupportsIsolatedWorlds = true,
+                    EnvironmentProvider = frame => new UserScriptExecutionEnvironment(
+                        _downloads?.DownloadMode ?? "disabled",
+                        _options.IsIncognito?.Invoke(contextAccessor.Current),
+                        _options.AutomaticallyUpdatesScripts,
+                        unavailableCapabilities: _options.EnableDefaultNetworkServices ? null : new Dictionary<string, string>
+                        {
+                            ["GM.xmlHttpRequest"] = "policy-disabled", ["GM.cookie"] = "policy-disabled", ["GM.webRequest"] = "policy-disabled"
+                        }, capabilityStatus: CapabilityStatus())
+                });
             var ownedServices = new List<IDisposable>();
             try
             {
-                var contextAccessor = new CefSharpRequestContextAccessor();
+                if (_audio == null && _options.EnableDefaultAudioService)
+                {
+                    _audio = new CefSharpTabAudioService(() => builtHost?.GetAudioBrowserHost());
+                    ownedServices.Add((IDisposable)_audio);
+                }
                 var effectiveWebRequests = _webRequests;
                 if (effectiveWebRequests == null && _options.EnableDefaultNetworkServices)
                 {
@@ -238,20 +238,20 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 }
 
                 var effectiveCookies = _cookies;
+                if (_downloadFactory != null)
+                {
+                    if (effectiveHttp == null) throw new InvalidOperationException("The download factory requires an HTTP request service.");
+                    _downloads = _downloadFactory(effectiveHttp) ?? throw new InvalidOperationException("The download factory returned no service.");
+                    if (_downloads is IDisposable downloadOwner) ownedServices.Add(downloadOwner);
+                }
                 if (effectiveCookies == null && _options.EnableDefaultNetworkServices)
                 {
-                    effectiveCookies = new CefSharpCookieService(() => contextAccessor.Current);
+                    effectiveCookies = new CefSharpCookieService(token => builtHost.GetCdpSessionAsync(token));
                     ownedServices.Add((IDisposable)effectiveCookies);
                 }
 
                 var providers = new List<IUserScriptApiProvider>(_providers);
-                if (_resources != null || effectiveHttp != null)
-                {
-                    providers.Add(new ResourceAndNetworkApiProvider(
-                        _resources,
-                        effectiveHttp,
-                        _options.Bridge));
-                }
+                providers.Add(new ResourceAndNetworkApiProvider(http: effectiveHttp, options: _options.Bridge));
                 if (_menu != null || _notifications != null || _clipboard != null || _tabs != null ||
                     _downloads != null || _tabState != null || _window != null)
                 {
@@ -262,12 +262,13 @@ namespace Mzying2001.MonkeySharp.CefSharp
                         _tabs,
                         _downloads,
                         _tabState,
-                        _window));
+                        _window, _options.Bridge));
                 }
+                if (_audio != null) providers.Add(new TabAudioApiProvider(_audio));
                 if (effectiveCookies != null)
                     providers.Add(new CookieApiProvider(effectiveCookies));
                 if (effectiveWebRequests != null)
-                    providers.Add(new WebRequestApiProvider(effectiveWebRequests));
+                    providers.Add(new WebRequestApiProvider(effectiveWebRequests, _repository));
                 var gateway = new UserScriptBridgeGateway(
                     engine,
                     store,
@@ -275,14 +276,15 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     providers,
                     _options.Bridge ?? throw new InvalidOperationException("Bridge options are required."),
                     _log);
-                return new CefSharpUserScriptHost(
+                builtHost = new CefSharpUserScriptHost(
                     engine,
                     gateway,
                     _options,
                     ownsStore ? store as IDisposable : null,
                     effectiveWebRequests,
                     contextAccessor,
-                    ownedServices);
+                    ownedServices, _repository, _permissionPolicy);
+                return builtHost;
             }
             catch
             {
@@ -293,6 +295,33 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     ownedServices[index].Dispose();
                 throw;
             }
+        }
+
+        private IReadOnlyDictionary<string, string> CapabilityStatus()
+        {
+            var status = new Dictionary<string, string>
+            {
+                ["execution.documentStart"] = "best-effort",
+                ["execution.oopif"] = "isolated:child-target-sessions",
+                ["execution.bfcache"] = "fresh-navigation-required",
+                ["execution.contextMenuFrame"] = typeof(global::CefSharp.Cef).Assembly.GetName().Version.Major == 84 ? "same-process;oopif-unsupported" : "main-only;child-native-proof-unavailable",
+                ["GM.xmlHttpRequest.cookiePartition"] = "unsupported",
+                ["GM.registerMenuCommand.clickedFrame"] = "host-attested-document-required;unknown-frame-suppressed"
+            };
+            if (_http is CefSharpHttpRequestService || _http == null && _options.EnableDefaultNetworkServices)
+                status["GM.xmlHttpRequest.cookie"] = "unsupported:cef-urlrequest";
+            if (_cookies is CefSharpCookieService || _cookies == null && _options.EnableDefaultNetworkServices)
+            {
+                var major = typeof(Cef).Assembly.GetName().Version.Major;
+                status["GM.cookie.partitionKey"] = major == 121 ? "available:without-ancestor-dimension" :
+                    major == 151 ? "available:serializable-keys" : major == 84 ? "unsupported:engine-version" : "unsupported:unverified-engine";
+            }
+            if (_audio != null && !_audio.SupportsAudible)
+            {
+                status["GM.audio"] = "partial:mute-only;audible-unavailable";
+                status["GM.audio.audible"] = "unsupported:source-unavailable";
+            }
+            return status;
         }
     }
 }

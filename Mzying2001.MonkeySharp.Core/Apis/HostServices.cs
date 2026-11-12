@@ -1,10 +1,11 @@
-using Mzying2001.MonkeySharp.Core.Domain;
+﻿using Mzying2001.MonkeySharp.Core.Domain;
 using Mzying2001.MonkeySharp.Core.Runtime;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -54,23 +55,37 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         /// <param name="bytes">The resource bytes.</param>
         /// <param name="mediaType">The media type used for generated data URLs.</param>
         /// <param name="text">An optional host-decoded text representation.</param>
-        public ResourceContent(byte[] bytes, string mediaType = "application/octet-stream", string text = null)
+        /// <param name="charset">The optional declared character encoding.</param>
+        public ResourceContent(byte[] bytes, string mediaType = "application/octet-stream", string text = null, string charset = null)
         {
-            Bytes = bytes != null ? (byte[])bytes.Clone() : throw new ArgumentNullException(nameof(bytes));
+            _bytes = bytes != null ? (byte[])bytes.Clone() : throw new ArgumentNullException(nameof(bytes));
             MediaType = string.IsNullOrWhiteSpace(mediaType) ? "application/octet-stream" : mediaType;
             if (MediaType.IndexOfAny(new[] { '\r', '\n' }) >= 0)
                 throw new ArgumentException("The media type cannot contain line breaks.", nameof(mediaType));
             Text = text;
+            Charset = charset;
         }
 
+        private readonly byte[] _bytes;
+
         /// <summary>Gets a copy of the resource bytes supplied at construction.</summary>
-        public byte[] Bytes { get; }
+        public byte[] Bytes => (byte[])_bytes.Clone();
+
+        internal int ByteLength => _bytes.Length;
 
         /// <summary>Gets the resource media type.</summary>
         public string MediaType { get; }
 
         /// <summary>Gets the host-decoded text representation, if available.</summary>
         public string Text { get; }
+
+        /// <summary>Gets the declared character encoding, if available.</summary>
+        public string Charset { get; }
+
+        /// <summary>Decodes text using the provider's representation, declared charset or UTF-8.</summary>
+        public string DecodeText() => Text ?? (string.IsNullOrWhiteSpace(Charset)
+            ? Encoding.UTF8 : CodePagesEncodingProvider.Instance.GetEncoding(Charset.Trim('"')) ??
+                Encoding.GetEncoding(Charset.Trim('"'))).GetString(_bytes).TrimStart('\uFEFF');
     }
 
     /// <summary>
@@ -120,7 +135,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
     {
         /// <summary>Gets or sets whether a string request body uses low-byte binary encoding.</summary>
         public bool Binary { get; set; }
-        /// <summary>Gets or sets cookies appended to the outgoing Cookie header.</summary>
+        /// <summary>Gets or sets explicit cookies for a backend supporting verified name-based merging. The default CefSharp backend rejects this option.</summary>
         public string Cookie { get; set; }
 
         /// <summary>Gets or sets the user name supplied to an HTTP authentication challenge.</summary>
@@ -163,7 +178,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             TimeSpan? timeout,
             long? maxResponseBytes,
             Func<Uri, CancellationToken, Task<bool>> redirectAllowed,
-            UserScriptHttpRequestOptions options = null)
+            UserScriptHttpRequestOptions options = null, DocumentFrame originFrame = null)
         {
             if (string.IsNullOrWhiteSpace(method)) throw new ArgumentException("The HTTP method is required.", nameof(method));
             if (maxResponseBytes.HasValue && maxResponseBytes.Value <= 0)
@@ -176,6 +191,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             Timeout = timeout;
             MaxResponseBytes = maxResponseBytes;
             RedirectAllowed = redirectAllowed ?? throw new ArgumentNullException(nameof(redirectAllowed));
+            OriginFrame = originFrame;
             Options = options ?? new UserScriptHttpRequestOptions();
         }
 
@@ -202,6 +218,8 @@ namespace Mzying2001.MonkeySharp.Core.Apis
 
         /// <summary>Gets optional request controls.</summary>
         public UserScriptHttpRequestOptions Options { get; }
+        /// <summary>Gets trusted ownership supplied by Core, never by script parameters.</summary>
+        public DocumentFrame OriginFrame { get; }
     }
 
     /// <summary>Contains HTTP response metadata returned by a userscript host service.</summary>
@@ -299,13 +317,20 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         /// <param name="scriptKey">The script installation that owns the command.</param>
         /// <param name="name">The command label.</param>
         /// <param name="accessKey">The optional keyboard access key.</param>
-        public MenuCommandRequest(ScriptKey scriptKey, string name, string accessKey)
+        /// <param name="title">The tooltip.</param>
+        /// <param name="autoClose">Whether the popup closes on selection.</param>
+        /// <param name="originFrame">The authenticated subscribing document/frame.</param>
+        /// <param name="clickedFrame">Whether invocation requires the host-attested subscribing frame.</param>
+        public MenuCommandRequest(ScriptKey scriptKey, string name, string accessKey, string title = null, bool autoClose = true,
+            DocumentFrame originFrame = null, bool clickedFrame = false)
         {
             ScriptKey = scriptKey;
             Name = !string.IsNullOrWhiteSpace(name)
                 ? name
                 : throw new ArgumentException("The menu command name is required.", nameof(name));
             AccessKey = accessKey;
+            Title = title; AutoClose = autoClose;
+            OriginFrame = originFrame; ClickedFrame = clickedFrame;
         }
 
         /// <summary>Gets the script installation that owns the command.</summary>
@@ -316,6 +341,37 @@ namespace Mzying2001.MonkeySharp.Core.Apis
 
         /// <summary>Gets the optional keyboard access key.</summary>
         public string AccessKey { get; }
+        /// <summary>Gets the menu tooltip.</summary>
+        public string Title { get; }
+        /// <summary>Gets whether the popup closes after invocation.</summary>
+        public bool AutoClose { get; }
+        /// <summary>Gets the authenticated subscribing document/frame.</summary>
+        public DocumentFrame OriginFrame { get; }
+        /// <summary>Gets whether an invocation requires host-attested frame identity.</summary>
+        public bool ClickedFrame { get; }
+    }
+
+    /// <summary>Contains facts observed by the native menu host. Omit unavailable fields; never use page-supplied frame identity.</summary>
+    public sealed class MenuCommandInvocation
+    {
+        /// <summary>Gets or sets mouse, keyboard, or unknown input provenance.</summary>
+        public string Kind { get; set; } = "unknown";
+        /// <summary>Gets or sets the host-attested current document/frame, or null when the entry point cannot identify it.</summary>
+        public DocumentFrame Frame { get; set; }
+        /// <summary>Gets or sets the observed Control modifier.</summary>
+        public bool? CtrlKey { get; set; }
+        /// <summary>Gets or sets the observed Shift modifier.</summary>
+        public bool? ShiftKey { get; set; }
+        /// <summary>Gets or sets the observed Alt modifier.</summary>
+        public bool? AltKey { get; set; }
+        /// <summary>Gets or sets the observed system modifier.</summary>
+        public bool? MetaKey { get; set; }
+        /// <summary>Gets or sets the DOM mouse button number, if known.</summary>
+        public int? Button { get; set; }
+        /// <summary>Gets or sets the observed DOM keyboard key, if known.</summary>
+        public string Key { get; set; }
+        /// <summary>Gets or sets the observed DOM keyboard code, if known.</summary>
+        public string Code { get; set; }
     }
 
     /// <summary>
@@ -337,7 +393,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         /// <returns>A registration whose disposal removes the command.</returns>
         Task<IMenuRegistration> RegisterAsync(
             MenuCommandRequest request,
-            Action invoked,
+            Action<MenuCommandInvocation> invoked,
             CancellationToken cancellationToken);
     }
 
@@ -354,6 +410,8 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         /// <param name="highlight">Whether the current tab should be highlighted.</param>
         /// <param name="silent">Whether the notification should avoid sound.</param>
         /// <param name="timeout">Optional timeout in milliseconds.</param>
+        /// <param name="tag">The script-scoped replacement tag.</param>
+        /// <param name="url">The default click navigation URL.</param>
         public UserScriptNotificationRequest(
             ScriptKey scriptKey,
             string title,
@@ -361,7 +419,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             string imageUrl,
             bool highlight,
             bool silent,
-            int? timeout)
+            int? timeout, string tag = null, Uri url = null)
         {
             ScriptKey = scriptKey;
             Title = title;
@@ -370,6 +428,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             Highlight = highlight;
             Silent = silent;
             Timeout = timeout;
+            Tag = tag; Url = url;
         }
 
         /// <summary>Gets the requesting script installation.</summary>
@@ -392,6 +451,10 @@ namespace Mzying2001.MonkeySharp.Core.Apis
 
         /// <summary>Gets the optional timeout in milliseconds.</summary>
         public int? Timeout { get; }
+        /// <summary>Gets the script-scoped notification replacement tag.</summary>
+        public string Tag { get; }
+        /// <summary>Gets the default click navigation URL.</summary>
+        public Uri Url { get; }
     }
 
     /// <summary>
@@ -399,16 +462,20 @@ namespace Mzying2001.MonkeySharp.Core.Apis
     /// </summary>
     public interface INotificationService
     {
-        /// <summary>Displays a notification and returns its lifecycle handle.</summary>
+        /// <summary>Creates an unstarted notification; no UI/events before Start.</summary>
         /// <param name="request">The notification to display.</param>
         /// <param name="cancellationToken">A token that cancels the operation.</param>
         /// <returns>A handle that reports click, close, and completion state.</returns>
-        INotificationHandle ShowAsync(UserScriptNotificationRequest request, CancellationToken cancellationToken);
+        INotificationHandle Create(UserScriptNotificationRequest request, CancellationToken cancellationToken);
     }
 
     /// <summary>Represents a host notification and its lifecycle.</summary>
     public interface INotificationHandle : IDisposable
     {
+        /// <summary>Starts UI after subscriptions are attached. Repeated calls have no effect.</summary>
+        void Start();
+        /// <summary>Resolves a click after the script callback, then closes the notification.</summary>
+        void ResolveClick(bool preventDefault);
         /// <summary>Completes when the notification is closed or otherwise finished.</summary>
         Task Completion { get; }
 
@@ -438,16 +505,21 @@ namespace Mzying2001.MonkeySharp.Core.Apis
     public sealed class OpenTabRequest
     {
         /// <summary>Initializes an open-tab request.</summary>
-        /// <param name="url">The absolute HTTP or HTTPS URL to open.</param>
+        /// <param name="url">The absolute HTTP(S) or about:blank URL to open.</param>
         /// <param name="active">Whether the new tab should become active.</param>
         /// <param name="insert">Whether to insert the tab next to the current tab.</param>
         /// <param name="setParent">Whether to associate the current tab as the parent.</param>
-        public OpenTabRequest(Uri url, bool active, bool insert, bool setParent)
+        /// <param name="insertIndex">An optional absolute tab-strip position, overriding adjacent insertion.</param>
+        /// <param name="incognito">An explicit privacy context, or null to inherit the source tab.</param>
+        public OpenTabRequest(Uri url, bool active, bool insert, bool setParent, int? insertIndex = null, bool? incognito = null)
         {
             Url = url ?? throw new ArgumentNullException(nameof(url));
             Active = active;
             Insert = insert;
             SetParent = setParent;
+            if (insertIndex < 0) throw new ArgumentOutOfRangeException(nameof(insertIndex));
+            InsertIndex = insertIndex;
+            Incognito = incognito;
         }
 
         /// <summary>Gets the absolute URL to open.</summary>
@@ -459,8 +531,13 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         /// <summary>Gets whether to insert the tab next to the current tab.</summary>
         public bool Insert { get; }
 
+        /// <summary>Gets the requested absolute tab-strip position, or null for boolean insertion.</summary>
+        public int? InsertIndex { get; }
+
         /// <summary>Gets whether to associate the current tab as the parent.</summary>
         public bool SetParent { get; }
+        /// <summary>Gets an explicit privacy context, or null to inherit the originating tab.</summary>
+        public bool? Incognito { get; }
     }
 
     /// <summary>
@@ -484,6 +561,8 @@ namespace Mzying2001.MonkeySharp.Core.Apis
     /// </summary>
     public interface ITabService
     {
+        /// <summary>Gets whether this host creates genuine private browsing contexts.</summary>
+        bool SupportsIncognito { get; }
         /// <summary>Opens a browser tab and returns a lifecycle handle.</summary>
         /// <param name="request">The tab request.</param>
         /// <param name="cancellationToken">A token that cancels the operation.</param>
@@ -524,14 +603,19 @@ namespace Mzying2001.MonkeySharp.Core.Apis
     {
         /// <summary>Initializes a download request.</summary>
         /// <param name="scriptKey">The requesting script installation.</param>
-        /// <param name="url">The absolute HTTP or HTTPS download URL.</param>
+        /// <param name="url">The absolute HTTP(S) URL or renderer blob source identifier.</param>
         /// <param name="name">The optional suggested file name.</param>
         /// <param name="saveAs">Whether the host should prompt for a destination.</param>
         /// <param name="headers">Optional HTTP request headers.</param>
         /// <param name="conflictAction">The conflict policy: uniquify, overwrite, or prompt.</param>
         /// <param name="timeout">An optional download timeout.</param>
+        /// <param name="anonymous">Whether to omit browser credentials.</param>
+        /// <param name="redirectAllowed">Authorization checked before following each redirect.</param>
+        /// <param name="body">Renderer-provided bytes for a Blob/File download, owned by the provider until its terminal event.</param>
         public DownloadRequest(ScriptKey scriptKey, Uri url, string name, bool saveAs,
-            IDictionary<string, string> headers = null, string conflictAction = "uniquify", TimeSpan? timeout = null)
+            IDictionary<string, string> headers = null, string conflictAction = "uniquify", TimeSpan? timeout = null,
+            bool anonymous = false, Func<Uri, CancellationToken, Task<bool>> redirectAllowed = null,
+            IUserScriptHttpBody body = null)
         {
             ScriptKey = scriptKey;
             Url = url ?? throw new ArgumentNullException(nameof(url));
@@ -541,7 +625,15 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 headers ?? new Dictionary<string, string>(), StringComparer.OrdinalIgnoreCase));
             ConflictAction = string.IsNullOrEmpty(conflictAction) ? "uniquify" : conflictAction;
             Timeout = timeout;
+            if (timeout.HasValue && (timeout.Value <= TimeSpan.Zero || timeout.Value.TotalMilliseconds > int.MaxValue))
+                throw new ArgumentOutOfRangeException(nameof(timeout));
+            Anonymous = anonymous;
+            RedirectAllowed = redirectAllowed ?? ((target, token) => Task.FromResult(true));
+            Body = body;
         }
+
+        /// <summary>Gets renderer-provided bytes for a Blob/File download; null means network transfer.</summary>
+        public IUserScriptHttpBody Body { get; }
 
         /// <summary>Gets the requesting script installation.</summary>
         public ScriptKey ScriptKey { get; }
@@ -560,6 +652,10 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         public string ConflictAction { get; }
         /// <summary>Gets the optional operation timeout.</summary>
         public TimeSpan? Timeout { get; }
+        /// <summary>Gets whether browser credentials are omitted.</summary>
+        public bool Anonymous { get; }
+        /// <summary>Gets the authorization callback invoked before every redirect.</summary>
+        public Func<Uri, CancellationToken, Task<bool>> RedirectAllowed { get; }
     }
 
     /// <summary>
@@ -569,13 +665,23 @@ namespace Mzying2001.MonkeySharp.Core.Apis
     {
         /// <summary>Initializes a download result.</summary>
         /// <param name="downloadId">The host-defined download identifier.</param>
-        public DownloadResult(string downloadId)
+        /// <param name="finalUrl">The final network URL.</param>
+        /// <param name="name">The committed file name.</param>
+        /// <param name="bytesReceived">The number of committed bytes.</param>
+        public DownloadResult(string downloadId, Uri finalUrl = null, string name = null, long bytesReceived = 0)
         {
             DownloadId = downloadId;
+            FinalUrl = finalUrl; Name = name; BytesReceived = bytesReceived;
         }
 
         /// <summary>Gets the host-defined download identifier.</summary>
         public string DownloadId { get; }
+        /// <summary>Gets the final network URL.</summary>
+        public Uri FinalUrl { get; }
+        /// <summary>Gets the committed file name without a local directory.</summary>
+        public string Name { get; }
+        /// <summary>Gets the number of bytes committed to the file.</summary>
+        public long BytesReceived { get; }
     }
 
     /// <summary>
@@ -583,16 +689,24 @@ namespace Mzying2001.MonkeySharp.Core.Apis
     /// </summary>
     public interface IDownloadService
     {
-        /// <summary>Starts a file download and returns its lifecycle operation.</summary>
+        /// <summary>Gets the implemented Tampermonkey download mode: native, browser, or disabled.</summary>
+        string DownloadMode { get; }
+
+        /// <summary>Creates an unstarted operation. Only Start may begin UI or network work.</summary>
         /// <param name="request">The download request.</param>
         /// <param name="cancellationToken">A token that cancels the operation.</param>
-        /// <returns>The running download operation.</returns>
-        Task<IDownloadOperation> DownloadAsync(DownloadRequest request, CancellationToken cancellationToken);
+        /// <returns>An unstarted download operation; subscribe before calling Start.</returns>
+        Task<IDownloadOperation> CreateAsync(DownloadRequest request, CancellationToken cancellationToken);
     }
 
     /// <summary>Represents a running userscript download.</summary>
     public interface IDownloadOperation : IDisposable
     {
+        /// <summary>Starts work after all event subscriptions have been installed. Repeated calls have no effect.</summary>
+        void Start();
+
+        /// <summary>Gets committed file details after successful completion.</summary>
+        DownloadResult Result { get; }
         /// <summary>Gets the host-defined download identifier.</summary>
         string DownloadId { get; }
 
@@ -646,6 +760,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
     /// <summary>
     /// Persists JSON tab state scoped to a userscript installation.
     /// </summary>
+    /// <remarks>Bind to a stable host tab identity across navigations and scope all values by ScriptKey.</remarks>
     public interface ITabStateService
     {
         /// <summary>Gets the state associated with the current tab.</summary>

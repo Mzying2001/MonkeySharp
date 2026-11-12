@@ -1,5 +1,4 @@
-using Mzying2001.MonkeySharp.Core.Domain;
-using Mzying2001.MonkeySharp.Core.Compatibility;
+﻿using Mzying2001.MonkeySharp.Core.Domain;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -67,6 +66,9 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
         /// <param name="isMainFrame">Whether this is the browser's main frame.</param>
         /// <param name="timingGuarantee">The document-start timing guarantee.</param>
         /// <param name="bridgeIntegrity">The bridge integrity guarantee.</param>
+        /// <param name="executionWorld">The native world owning this context.</param>
+        /// <param name="scriptScope">The installation owning a per-script context.</param>
+        /// <param name="revisionScope">The revision captured when that native context was prepared.</param>
         public DocumentFrame(
             string browserSessionId,
             string documentId,
@@ -74,7 +76,8 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
             Uri url,
             bool isMainFrame,
             TimingGuarantee timingGuarantee,
-            BridgeIntegrityGuarantee bridgeIntegrity = BridgeIntegrityGuarantee.Unverified)
+            BridgeIntegrityGuarantee bridgeIntegrity = BridgeIntegrityGuarantee.Unverified,
+            string executionWorld = "page", ScriptKey? scriptScope = null, Guid? revisionScope = null)
         {
             BrowserSessionId = Require(browserSessionId, nameof(browserSessionId));
             DocumentId = Require(documentId, nameof(documentId));
@@ -83,7 +86,18 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
             IsMainFrame = isMainFrame;
             TimingGuarantee = timingGuarantee;
             BridgeIntegrity = bridgeIntegrity;
+            if (executionWorld != "page" && executionWorld != "isolated") throw new ArgumentException("Unknown execution world.", nameof(executionWorld));
+            ExecutionWorld = executionWorld;
+            ScriptScope = scriptScope;
+            RevisionScope = revisionScope;
         }
+
+        /// <summary>Gets the native execution world that owns this descriptor.</summary>
+        public string ExecutionWorld { get; }
+        /// <summary>Gets the installation owning a per-script native context, if applicable.</summary>
+        public ScriptKey? ScriptScope { get; }
+        /// <summary>Gets the immutable revision owning the native context.</summary>
+        public Guid? RevisionScope { get; }
 
         /// <summary>Gets the containing browser session identifier.</summary>
         public string BrowserSessionId { get; }
@@ -130,6 +144,9 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
 
         /// <summary>The DOM content loaded event occurred.</summary>
         DomContentLoaded,
+
+        /// <summary>The document-idle scheduling point after DOMContentLoaded was reached.</summary>
+        DocumentIdle,
 
         /// <summary>The document load event occurred.</summary>
         Load,
@@ -179,8 +196,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
             GrantDeclarationState grantDeclarationState,
             string serializedInfo,
             string capability,
-            string deliveryToken,
-            ScriptCompatibilityDescriptor compatibility)
+            string deliveryToken)
         {
             ExecutionId = executionId;
             ScriptKey = scriptKey;
@@ -191,7 +207,6 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
             SerializedInfo = serializedInfo;
             Capability = capability;
             DeliveryToken = deliveryToken;
-            Compatibility = compatibility;
         }
 
         /// <summary>Gets the unique execution identifier.</summary>
@@ -221,38 +236,6 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
         /// <summary>Gets the token used to route notifications to this execution.</summary>
         public string DeliveryToken { get; }
 
-        /// <summary>Gets the compatibility behavior used by this execution.</summary>
-        public ScriptCompatibilityDescriptor Compatibility { get; }
-    }
-
-    /// <summary>Describes compatibility behavior serialized with one script invocation.</summary>
-    public sealed class ScriptCompatibilityDescriptor
-    {
-        internal ScriptCompatibilityDescriptor(UserScriptCompatibilityOptions options)
-        {
-            if (options == null)
-                throw new ArgumentNullException(nameof(options));
-            Profile = options.Profile;
-            Strict = options.Strict;
-            LegacyGlobals = options.LegacyGlobalsEnabled;
-            SynchronousStorageMirror = options.EnableSynchronousStorageMirror;
-            SynchronousResourceSnapshot = options.EnableSynchronousResourceSnapshot;
-        }
-
-        /// <summary>Gets the selected compatibility profile.</summary>
-        public UserScriptCompatibilityProfile Profile { get; }
-
-        /// <summary>Gets whether the wrapper uses strict JavaScript semantics.</summary>
-        public bool Strict { get; }
-
-        /// <summary>Gets whether legacy global API names other than GM_info are available.</summary>
-        public bool LegacyGlobals { get; }
-
-        /// <summary>Gets whether synchronous storage mirror bootstrap is enabled.</summary>
-        public bool SynchronousStorageMirror { get; }
-
-        /// <summary>Gets whether synchronous resource snapshot bootstrap is enabled.</summary>
-        public bool SynchronousResourceSnapshot { get; }
     }
 
     /// <summary>
@@ -261,7 +244,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
     public sealed class InjectionPlan
     {
         /// <summary>The bridge protocol version emitted by this runtime.</summary>
-        public const int CurrentProtocolVersion = 1;
+        public const int CurrentProtocolVersion = 2;
 
         internal InjectionPlan(DocumentFrame frame, UserScriptRunAt runAt, IEnumerable<ScriptInvocation> invocations)
         {
@@ -294,18 +277,6 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
         /// <param name="cancellationToken">A token that cancels request processing.</param>
         /// <returns>The serialized JSON response.</returns>
         Task<string> DispatchAsync(string requestJson, CancellationToken cancellationToken);
-    }
-
-    /// <summary>
-    /// Resolves the complete executable source for an installed userscript.
-    /// </summary>
-    public interface IUserScriptSourceResolver
-    {
-        /// <summary>Resolves dependencies and source for an installation.</summary>
-        /// <param name="installation">The userscript installation to resolve.</param>
-        /// <param name="cancellationToken">A token that cancels source resolution.</param>
-        /// <returns>The complete JavaScript source in execution order.</returns>
-        Task<string> ResolveSourceAsync(UserScriptInstallation installation, CancellationToken cancellationToken);
     }
 
     /// <summary>
@@ -363,8 +334,37 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
         /// <summary>Gets or sets whether scripts requiring privileged APIs need a verified bridge.</summary>
         public bool RequireVerifiedBridge { get; set; } = true;
 
-        /// <summary>Gets or sets the userscript compatibility options.</summary>
-        public UserScriptCompatibilityOptions Compatibility { get; set; } =
-            new UserScriptCompatibilityOptions();
+        /// <summary>Gets or sets whether the host supplies context-authenticated per-script isolated execution.</summary>
+        public bool SupportsIsolatedWorlds { get; set; }
+
+        /// <summary>Gets or sets the actual execution environment reported by the host.</summary>
+        public Func<DocumentFrame, UserScriptExecutionEnvironment> EnvironmentProvider { get; set; }
+    }
+
+    /// <summary>Reports host facts; unknown private/update state remains unspecified.</summary>
+    public sealed class UserScriptExecutionEnvironment
+    {
+        /// <summary>Initializes an environment snapshot from actual host services and context.</summary>
+        public UserScriptExecutionEnvironment(string downloadMode = "disabled", bool? isIncognito = null,
+            bool? scriptWillUpdate = null,
+            IReadOnlyDictionary<string, string> unavailableCapabilities = null, IReadOnlyDictionary<string, string> capabilityStatus = null)
+        {
+            if (downloadMode != "disabled" && downloadMode != "native" && downloadMode != "browser")
+                throw new ArgumentException("Unknown download mode.", nameof(downloadMode));
+            CapabilityStatus = new ReadOnlyDictionary<string, string>(capabilityStatus == null ? new Dictionary<string, string>() : capabilityStatus.ToDictionary(item => item.Key, item => item.Value));
+            DownloadMode = downloadMode; IsIncognito = isIncognito; ScriptWillUpdate = scriptWillUpdate;
+            UnavailableCapabilities = new ReadOnlyDictionary<string, string>(unavailableCapabilities == null
+                ? new Dictionary<string, string>() : unavailableCapabilities.ToDictionary(item => item.Key, item => item.Value));
+        }
+        /// <summary>Gets the implemented download backend mode.</summary>
+        public string DownloadMode { get; }
+        /// <summary>Gets private-context state, or null when the host cannot identify it.</summary>
+        public bool? IsIncognito { get; }
+        /// <summary>Gets automatic update policy, or null when unknown.</summary>
+        public bool? ScriptWillUpdate { get; }
+        /// <summary>Gets explicit engine or policy reasons for unavailable capabilities.</summary>
+        public IReadOnlyDictionary<string, string> UnavailableCapabilities { get; }
+        /// <summary>Gets truthful API and subfeature status descriptions supplied by the host. Keys are preserved in GM.info.compatibility.capabilities.</summary>
+        public IReadOnlyDictionary<string, string> CapabilityStatus { get; }
     }
 }

@@ -33,6 +33,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             new Dictionary<string, IUserScriptApiProvider>(StringComparer.Ordinal);
         private readonly HashSet<IUserScriptApiProvider> _providerInstances =
             new HashSet<IUserScriptApiProvider>();
+        private readonly Dictionary<string, StorageTransfer> _storageSnapshots = new Dictionary<string, StorageTransfer>(StringComparer.Ordinal);
         private readonly object _stateLock = new object();
         private readonly Dictionary<string, PendingRequest> _pending =
             new Dictionary<string, PendingRequest>(StringComparer.Ordinal);
@@ -41,8 +42,6 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             new Dictionary<string, Queue<string>>(StringComparer.Ordinal);
         private readonly Dictionary<string, Dictionary<int, ValueListener>> _listeners =
             new Dictionary<string, Dictionary<int, ValueListener>>(StringComparer.Ordinal);
-        private readonly Dictionary<string, Queue<MutationOrigin>> _mutationOrigins =
-            new Dictionary<string, Queue<MutationOrigin>>(StringComparer.Ordinal);
         private int _activeDispatches;
         private bool _providerResourcesDisposed;
         private bool _disposed;
@@ -73,6 +72,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                     RegisterProvider(provider);
             }
             _store.ValueChanged += StoreValueChanged;
+            _engine.SetHostCapabilities(SupportedApis());
             _engine.ExecutionEnded += EngineExecutionEnded;
         }
 
@@ -136,7 +136,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                         return Limit(ProtocolJson.Error(
                             ReadOptionalString(root, "requestId"),
                             BridgeErrorCodes.ProtocolVersion,
-                            "Only bridge protocol 1 is supported.",
+                            "Only bridge protocol " + InjectionPlan.CurrentProtocolVersion + " is supported.",
                             type == "hello"));
                     }
 
@@ -189,7 +189,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                 _seenRequests.Clear();
                 _seenRequestOrder.Clear();
                 _listeners.Clear();
-                _mutationOrigins.Clear();
+                _storageSnapshots.Clear();
                 if (_activeDispatches == 0 && !_providerResourcesDisposed)
                 {
                     _providerResourcesDisposed = true;
@@ -251,15 +251,26 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                     true));
             }
 
-            var grants = execution.Installation.Definition.Metadata.Grants;
-            var supported = SupportedApis().Where(api => api == "GM.info" || grants.Contains(api));
-            var compatibility = new Dictionary<string, object>
+            if (!await _engine.IsInstallationActiveAsync(execution.Installation, cancellationToken).ConfigureAwait(false))
             {
-                ["profile"] = execution.Invocation.Compatibility.Profile.ToString(),
-                ["strict"] = execution.Invocation.Compatibility.Strict,
-                ["legacyGlobals"] = execution.Invocation.Compatibility.LegacyGlobals
-            };
-            if (execution.Invocation.Compatibility.SynchronousStorageMirror && HasStorageCapability(grants))
+                await _engine.InvalidateExecutionAsync(execution.Invocation.ExecutionId, CancellationToken.None).ConfigureAwait(false);
+                return Limit(ProtocolJson.Error(null, BridgeErrorCodes.SessionExpired, "The installation changed or was disabled.", true));
+            }
+            var grants = execution.Installation.Definition.Metadata.Capabilities;
+            var supported = SupportedApis().Where(api => (api == "GM.info" || grants.Contains(api)) &&
+                !(execution.Frame.ExecutionWorld == "isolated" && api == "GM.webRequest"));
+            var compatibility = new Dictionary<string, object>();
+            using (var authorizationLifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, execution.Cancellation.Token))
+            {
+                var bootstrapMethods = new List<string>();
+                if (HasStorageCapability(grants)) bootstrapMethods.Add("GM.getValues");
+                if (HasResourceCapability(grants)) bootstrapMethods.Add("GM.getResourceText");
+                foreach (var method in bootstrapMethods)
+                    if (await AuthorizeAsync(new ApiAuthorizationRequest(execution.Installation, execution.Frame, method, null,
+                        "execution bootstrap", SupportedApis()), authorizationLifetime.Token).ConfigureAwait(false) != PermissionDecision.Allow)
+                        return Limit(ProtocolJson.Error(null, BridgeErrorCodes.PermissionDenied, "The host denied execution data preparation.", true));
+            }
+            if (HasStorageCapability(grants))
             {
                 try
                 {
@@ -289,7 +300,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                         execution);
                 }
             }
-            if (execution.Invocation.Compatibility.SynchronousResourceSnapshot && HasResourceCapability(grants))
+            if (HasResourceCapability(grants))
             {
                 try
                 {
@@ -327,102 +338,72 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             CancellationToken cancellationToken)
         {
             var scriptKey = execution.Installation.ScriptKey.ToString();
-            IReadOnlyDictionary<string, string> snapshot;
-            if (_store is IUserScriptValueSnapshotProvider provider)
+            var snapshot = await _store.GetSnapshotAsync(scriptKey, cancellationToken).ConfigureAwait(false);
+            var json = JsonSerializer.Serialize(new
             {
-                snapshot = await provider.GetSnapshotAsync(scriptKey, cancellationToken).ConfigureAwait(false);
+                complete = true, sequence = snapshot.Sequence,
+                entries = snapshot.Select(item => new[] { item.Key, item.Value.EncodedValue }).ToArray()
+            });
+            if (Encoding.UTF8.GetByteCount(json) > _options.MaxCompatibilityBootstrapBytes)
+                throw new BridgeProtocolException(BridgeErrorCodes.PayloadTooLarge, "The complete storage snapshot exceeds MaxCompatibilityBootstrapBytes.");
+            var transfer = new StorageTransfer(Guid.NewGuid().ToString("D"), json);
+            lock (_stateLock)
+            {
+                execution.Cancellation.Token.ThrowIfCancellationRequested();
+                _storageSnapshots[execution.Invocation.ExecutionId] = transfer;
             }
-            else
+            if (Encoding.UTF8.GetByteCount(json) <= _options.MaxResponseBytes / 4)
             {
-                var values = new Dictionary<string, string>(StringComparer.Ordinal);
-                var keys = await _store.ListKeysAsync(scriptKey, cancellationToken).ConfigureAwait(false);
-                foreach (var key in keys)
-                {
-                    var value = await _store.GetAsync(scriptKey, key, cancellationToken).ConfigureAwait(false);
-                    if (value.Exists)
-                        values[key] = value.JsonValue;
-                }
-                snapshot = values;
-                EmitDiagnostic(
-                    "MSC411_COMPATIBILITY_SNAPSHOT_DEGRADED",
-                    "The value store does not provide an atomic snapshot.",
-                    null,
-                    execution);
+                using (var document = JsonDocument.Parse(json)) return document.RootElement.Clone();
             }
-
-            var jsonValues = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
-            foreach (var item in snapshot)
-            {
-                using (var value = JsonDocument.Parse(item.Value))
-                    jsonValues[item.Key] = value.RootElement.Clone();
-            }
-            var result = new Dictionary<string, object>
-            {
-                ["complete"] = true,
-                ["values"] = jsonValues
-            };
-            if (Encoding.UTF8.GetByteCount(JsonSerializer.Serialize(result)) > _options.MaxCompatibilityBootstrapBytes)
-            {
-                EmitDiagnostic(
-                    "MSC412_COMPATIBILITY_BOOTSTRAP_LIMIT",
-                    "The compatibility storage snapshot exceeds the configured limit.",
-                    null,
-                    execution);
-                return new Dictionary<string, object> { ["complete"] = false, ["values"] = new Dictionary<string, object>() };
-            }
-            return result;
+            return new { complete = false, snapshotId = transfer.Id, sequence = snapshot.Sequence,
+                chunkCount = (json.Length + BootstrapChunkSize - 1) / BootstrapChunkSize, jsonLength = json.Length };
         }
+
+        private int BootstrapChunkSize => Math.Max(1, (_options.MaxResponseBytes - 512) / 6);
 
         private static bool HasStorageCapability(IReadOnlyList<string> grants)
         {
             return grants.Contains("GM.getValue") || grants.Contains("GM.setValue") ||
+                grants.Contains("GM.getValues") || grants.Contains("GM.setValues") || grants.Contains("GM.deleteValues") ||
                 grants.Contains("GM.deleteValue") || grants.Contains("GM.listValues") ||
                 grants.Contains("GM.addValueChangeListener") || grants.Contains("GM.removeValueChangeListener");
         }
 
         private static bool HasResourceCapability(IReadOnlyList<string> grants)
         {
-            return grants.Contains("GM.getResourceText") || grants.Contains("GM.getResourceURL");
+            return grants.Contains("GM.getResourceText") || grants.Contains("GM.getResourceUrl");
         }
 
-        private async Task<object> BuildResourceBootstrapAsync(
+        private Task<object> BuildResourceBootstrapAsync(
             UserScriptEngine.ExecutionRecord execution,
             CancellationToken cancellationToken)
         {
-            var resources = new Dictionary<string, object>(StringComparer.Ordinal);
-            foreach (var provider in _providerInstances.OfType<IUserScriptCompatibilityBootstrapProvider>())
+            cancellationToken.ThrowIfCancellationRequested();
+            var json = ResourcePackage(execution);
+            if (Encoding.UTF8.GetByteCount(json) <= _options.MaxResponseBytes / 4)
             {
-                var contribution = await provider.PrepareAsync(
-                    execution.Installation,
-                    execution.Frame,
-                    execution.Installation.Definition.Metadata.Grants,
-                    cancellationToken).ConfigureAwait(false);
-                if (contribution == null)
-                    continue;
-                foreach (var item in contribution)
-                {
-                    resources[item.Key] = new Dictionary<string, object>
-                    {
-                        ["text"] = item.Value.Text,
-                        ["url"] = item.Value.Url
-                    };
-                }
+                using (var document = JsonDocument.Parse(json)) return Task.FromResult<object>(document.RootElement.Clone());
             }
-            var result = new Dictionary<string, object>
+            var chunkSize = Math.Max(1, (_options.MaxResponseBytes - 512) / 6);
+            return Task.FromResult<object>(new Dictionary<string, object>
             {
-                ["complete"] = true,
-                ["values"] = resources
-            };
-            if (Encoding.UTF8.GetByteCount(JsonSerializer.Serialize(result)) > _options.MaxCompatibilityBootstrapBytes)
-            {
-                EmitDiagnostic(
-                    "MSC412_COMPATIBILITY_BOOTSTRAP_LIMIT",
-                    "The compatibility resource snapshot exceeds the configured limit.",
-                    null,
-                    execution);
-                return new Dictionary<string, object> { ["complete"] = false, ["values"] = new Dictionary<string, object>() };
-            }
-            return result;
+                ["complete"] = false, ["chunkCount"] = (json.Length + chunkSize - 1) / chunkSize,
+                ["jsonLength"] = json.Length
+            });
+        }
+
+        private string ResourcePackage(UserScriptEngine.ExecutionRecord execution)
+        {
+            foreach (var content in execution.Installation.PreparedRevision.Resources.Values)
+                if (content.ByteLength > _options.MaxResourceBytes ||
+                    content.Text != null && Encoding.UTF8.GetByteCount(content.Text) > _options.MaxResourceBytes)
+                    throw new BridgeProtocolException(BridgeErrorCodes.PayloadTooLarge, "A prepared resource exceeds MaxResourceBytes.");
+            var json = execution.Installation.PreparedRevision.ResourcePackageJson;
+            if (Encoding.UTF8.GetByteCount(json) > _options.MaxCompatibilityBootstrapBytes)
+                throw new BridgeProtocolException(BridgeErrorCodes.PayloadTooLarge,
+                    "MSR411_PREPARED_REVISION_LIMIT: increase MaxCompatibilityBootstrapBytes for this complete resource package.");
+            return json;
         }
 
         private async Task<string> HandleRequestAsync(JsonElement root, CancellationToken cancellationToken)
@@ -432,7 +413,14 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                 return Limit(ProtocolJson.Error(requestId, BridgeErrorCodes.MalformedMessage, "requestId must be a UUID."));
             if (!TryReadExecution(root, out var execution))
                 return Limit(ProtocolJson.Error(requestId, BridgeErrorCodes.SessionExpired, "The script execution session is not active."));
+            if (!await _engine.IsInstallationActiveAsync(execution.Installation, cancellationToken).ConfigureAwait(false))
+            {
+                await _engine.InvalidateExecutionAsync(execution.Invocation.ExecutionId, CancellationToken.None).ConfigureAwait(false);
+                return Limit(ProtocolJson.Error(requestId, BridgeErrorCodes.SessionExpired, "The installation changed or was disabled."));
+            }
             var method = ReadRequiredString(root, "method");
+            if (execution.Frame.ExecutionWorld == "isolated" && method == "GM.webRequest")
+                return Limit(ProtocolJson.Error(requestId, BridgeErrorCodes.NotSupported, "Historical webRequest page-frame interception is not implemented for isolated contexts."));
             if (!root.TryGetProperty("params", out var parameters))
                 return Limit(ProtocolJson.Error(requestId, BridgeErrorCodes.MalformedMessage, "The params field is required."));
             parameters = parameters.Clone();
@@ -441,16 +429,69 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                 return Limit(ProtocolJson.Error(requestId, beginError, "The request cannot be started."));
 
             var longRunningHttp = IsLongRunningHttpExecute(method, parameters);
-            using (var timeout = longRunningHttp ? null : new CancellationTokenSource(_options.RequestTimeout))
+            using (var timeout = longRunningHttp ? null : new CancellationTokenSource())
             using (var linked = CancellationTokenSource.CreateLinkedTokenSource(
                 RequestTokens(method, execution, pending, cancellationToken, timeout)))
             {
                 try
                 {
+                    if (method.StartsWith("runtime.", StringComparison.Ordinal)) timeout?.CancelAfter(_options.RequestTimeout);
                     if (method == "runtime.reportError")
                     {
                         HandleRuntimeError(execution, requestId, parameters);
                         return Limit(ProtocolJson.Success(requestId, ApiResult.Undefined.Json));
+                    }
+
+                    if (method == "runtime.getResourceChunk")
+                    {
+                        if (!HasResourceCapability(execution.Installation.Definition.Metadata.Capabilities))
+                            throw new BridgeProtocolException(BridgeErrorCodes.GrantDenied, "Resource access is not granted.");
+                        var json = ResourcePackage(execution);
+                        var chunkSize = Math.Max(1, (_options.MaxResponseBytes - 512) / 6);
+                        var index = ReadRequiredInt32(parameters, "index");
+                        if (index < 0 || (long)index * chunkSize >= json.Length)
+                            throw ProviderParameters.Invalid("Invalid resource chunk index.");
+                        var offset = index * chunkSize;
+                        return Limit(ProtocolJson.Success(requestId, JsonSerializer.Serialize(new
+                        { index, chunk = json.Substring(offset, Math.Min(chunkSize, json.Length - offset)) })));
+                    }
+
+                    if (method == "runtime.getStorageChunk" || method == "runtime.getStorageChanges" || method == "runtime.getStorageSnapshot")
+                        if (!HasStorageCapability(execution.Installation.Definition.Metadata.Capabilities))
+                            throw new BridgeProtocolException(BridgeErrorCodes.GrantDenied, "Storage access is not granted.");
+                    if (method == "runtime.getStorageChunk")
+                    {
+                        StorageTransfer transfer;
+                        lock (_stateLock) _storageSnapshots.TryGetValue(execution.Invocation.ExecutionId, out transfer);
+                        if (transfer == null || transfer.Id != ReadRequiredString(parameters, "snapshotId"))
+                            throw new BridgeProtocolException(BridgeErrorCodes.SessionExpired, "The storage snapshot transfer expired; capture a new snapshot.");
+                        var index = ReadRequiredInt32(parameters, "index");
+                        if (index < 0 || (long)index * BootstrapChunkSize >= transfer.Json.Length)
+                            throw ProviderParameters.Invalid("Invalid storage chunk index.");
+                        var offset = index * BootstrapChunkSize;
+                        return Limit(ProtocolJson.Success(requestId, JsonSerializer.Serialize(new
+                        { index, snapshotId = transfer.Id, chunk = transfer.Json.Substring(offset, Math.Min(BootstrapChunkSize, transfer.Json.Length - offset)) })));
+                    }
+                    if (method == "runtime.getStorageChanges")
+                    {
+                        if (!parameters.TryGetProperty("afterSequence", out var watermark) ||
+                            watermark.ValueKind != JsonValueKind.Number || !watermark.TryGetInt64(out var after) || after < 0)
+                            throw ProviderParameters.Invalid("afterSequence must be a nonnegative integer.");
+                        var replay = await _store.GetChangesAsync(execution.Installation.ScriptKey.ToString(), after, linked.Token).ConfigureAwait(false);
+                        var changes = replay.Changes.Select(change => JsonDocument.Parse(ProtocolJson.ValueChangeData(
+                            0, change.Key, change.OldValue.Value?.EncodedValue, change.NewValue.Value?.EncodedValue,
+                            change.MutationId, change.OriginExecutionId, change.Sequence, change.MutationMethod))).ToArray();
+                        try
+                        {
+                            var json = JsonSerializer.Serialize(new { complete = replay.Complete, sequence = replay.Sequence,
+                                changes = changes.Select(document => document.RootElement.Clone()).ToArray() });
+                            if (!replay.Complete || Encoding.UTF8.GetByteCount(json) > _options.MaxResponseBytes / 2)
+                                EmitDiagnostic("MSC414_STORAGE_REPLAY_RESET", "Storage replay requires a new snapshot; listener events outside retained or transferable history cannot be reconstructed.", null, execution, requestId);
+                            if (Encoding.UTF8.GetByteCount(json) > _options.MaxResponseBytes / 2)
+                                json = JsonSerializer.Serialize(new { complete = false, sequence = replay.Sequence });
+                            return Limit(ProtocolJson.Success(requestId, json));
+                        }
+                        finally { foreach (var document in changes) document.Dispose(); }
                     }
 
                     if (method == "runtime.getStorageSnapshot")
@@ -460,7 +501,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                         return Limit(ProtocolJson.Success(requestId, JsonSerializer.Serialize(snapshot)));
                     }
 
-                    if (!execution.Installation.Definition.Metadata.Grants.Contains(method))
+                    if (!execution.Installation.Definition.Metadata.Capabilities.Contains(method))
                         return Limit(ProtocolJson.Error(requestId, BridgeErrorCodes.GrantDenied, "The script did not declare '" + method + "'."));
 
                     var authorization = new ApiAuthorizationRequest(
@@ -470,10 +511,18 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                         ReadTarget(method, parameters, execution.Frame.Url),
                         Summarize(parameters),
                         SupportedApis());
-                    var decision = await _permissionPolicy.AuthorizeAsync(authorization, linked.Token).ConfigureAwait(false);
+                    PermissionDecision decision;
+                    using (var authorizationLifetime = CancellationTokenSource.CreateLinkedTokenSource(linked.Token, execution.Cancellation.Token))
+                    {
+                        decision = await AuthorizeAsync(authorization, authorizationLifetime.Token).ConfigureAwait(false);
+                        authorizationLifetime.Token.ThrowIfCancellationRequested();
+                    }
                     if (decision != PermissionDecision.Allow)
                         return Limit(ProtocolJson.Error(requestId, BridgeErrorCodes.PermissionDenied, "The host permission policy denied the request."));
+                    if (!await _engine.IsInstallationActiveAsync(execution.Installation, linked.Token).ConfigureAwait(false))
+                        return Limit(ProtocolJson.Error(requestId, BridgeErrorCodes.SessionExpired, "The installation changed while authorization was pending."));
 
+                    timeout?.CancelAfter(_options.RequestTimeout);
                     ApiResult result;
                     if (method == "GM.addValueChangeListener")
                         result = AddValueListener(execution, parameters);
@@ -481,26 +530,9 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                         result = RemoveValueListener(execution, parameters);
                     else if (_providers.TryGetValue(method, out var provider))
                     {
-                        var mutation = IsValueMutation(method)
-                            ? BeginMutation(execution, parameters)
-                            : null;
-                        try
-                        {
-                            result = await provider.InvokeAsync(new ApiInvocationContext(
-                                execution.Installation,
-                                execution.Frame,
-                                execution.Invocation.ExecutionId,
-                                requestId,
-                                method,
-                                parameters,
-                                (target, token) => ReauthorizeTargetAsync(
-                                    execution, method, parameters, target, token)), linked.Token).ConfigureAwait(false);
-                        }
-                        finally
-                        {
-                            if (mutation != null)
-                                RemovePendingMutation(mutation);
-                        }
+                        result = await provider.InvokeAsync(new ApiInvocationContext(
+                            execution.Installation, execution.Frame, execution.Invocation.ExecutionId, requestId, method, parameters,
+                            (target, token) => ReauthorizeTargetAsync(execution, method, parameters, target, token)), linked.Token).ConfigureAwait(false);
                     }
                     else
                     {
@@ -565,18 +597,25 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             string target,
             CancellationToken cancellationToken)
         {
-            if (execution.Cancellation.IsCancellationRequested ||
-                !execution.Installation.Definition.Metadata.Grants.Contains(method))
+            if ((method != "GM.download" && execution.Cancellation.IsCancellationRequested) ||
+                !execution.Installation.Definition.Metadata.Capabilities.Contains(method))
                 return false;
-            var authorization = new ApiAuthorizationRequest(
-                execution.Installation,
-                execution.Frame,
-                method,
-                target,
-                Summarize(parameters),
-                SupportedApis());
-            return await _permissionPolicy.AuthorizeAsync(authorization, cancellationToken)
-                .ConfigureAwait(false) == PermissionDecision.Allow;
+            if (!await _engine.IsInstallationActiveAsync(execution.Installation, cancellationToken).ConfigureAwait(false)) return false;
+            var canPrompt = !execution.Cancellation.IsCancellationRequested;
+            var authorization = new ApiAuthorizationRequest(execution.Installation, execution.Frame, method, target,
+                Summarize(parameters), SupportedApis(), canPrompt);
+            if (!canPrompt) return await AuthorizeAsync(authorization, cancellationToken).ConfigureAwait(false) == PermissionDecision.Allow;
+            using (var lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, execution.Cancellation.Token))
+                return await AuthorizeAsync(authorization, lifetime.Token).ConfigureAwait(false) == PermissionDecision.Allow;
+        }
+
+        private async Task<PermissionDecision> AuthorizeAsync(ApiAuthorizationRequest request, CancellationToken token)
+        {
+            if (!UserScriptPermissionTargets.IsDeclared(request)) return PermissionDecision.Deny;
+            var decision = await _permissionPolicy.AuthorizeAsync(request, token).ConfigureAwait(false);
+            if (decision == PermissionDecision.Prompt)
+                throw new BridgeProtocolException(BridgeErrorCodes.NotSupported, "The host must configure InteractiveUserScriptPermissionPolicy with a prompt or an explicit RejectUserScriptPermissionPrompt.");
+            return decision;
         }
 
         private static bool IsLongRunningHttpExecute(string method, JsonElement parameters)
@@ -586,7 +625,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                 !parameters.TryGetProperty("operation", out var operation) ||
                 operation.ValueKind != JsonValueKind.String)
                 return false;
-            return string.Equals(operation.GetString(), "execute", StringComparison.Ordinal);
+            return operation.GetString() == "execute" || operation.GetString() == "readBody";
         }
 
         private string HandleCancel(JsonElement root)
@@ -678,8 +717,8 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
         {
             EnsureObject(parameters);
             var listenerId = ReadRequiredInt32(parameters, "listenerId");
-            var key = ReadRequiredString(parameters, "key");
-            if (listenerId <= 0 || key.Length == 0)
+            var key = BasicApiProvider.ReadKey(parameters);
+            if (listenerId <= 0)
                 throw new BridgeProtocolException(BridgeErrorCodes.InvalidParams, "listenerId and key are invalid.");
             lock (_stateLock)
             {
@@ -711,10 +750,9 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
         {
             if (!ScriptKey.TryParse(args.ScriptKey, out var scriptKey))
                 return;
-            var mutation = TakeMutation(args.ScriptKey, args.Key);
-            var originExecutionId = args.OriginExecutionId ?? mutation?.OriginExecutionId;
-            var mutationId = args.MutationId ?? mutation?.MutationId;
-            var executions = _engine.GetExecutionsForScript(scriptKey).ToList();
+            var originExecutionId = args.OriginExecutionId;
+            var mutationId = args.MutationId;
+            var executions = _engine.GetExecutionsForScript(scriptKey).Where(execution => HasStorageCapability(execution.Installation.Definition.Metadata.Capabilities)).ToList();
             var deliveries = new List<Tuple<UserScriptEngine.ExecutionRecord, ValueListener>>();
             lock (_stateLock)
             {
@@ -732,11 +770,12 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             var data = ProtocolJson.ValueChangeData(
                 0,
                 args.Key,
-                args.OldValue.Exists ? args.OldValue.JsonValue : null,
-                args.NewValue.Exists ? args.NewValue.JsonValue : null,
+                args.OldValue.Exists ? args.OldValue.Value.EncodedValue : null,
+                args.NewValue.Exists ? args.NewValue.Value.EncodedValue : null,
                 mutationId,
                 originExecutionId,
-                args.Sequence);
+                args.Sequence,
+                args.MutationMethod);
             foreach (var execution in executions)
             {
                 Notification?.Invoke(this, new BridgeNotificationEventArgs(
@@ -760,54 +799,8 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
 
         private static bool IsValueMutation(string method)
         {
-            return method == "GM.setValue" || method == "GM.deleteValue";
-        }
-
-        private MutationOrigin BeginMutation(UserScriptEngine.ExecutionRecord execution, JsonElement parameters)
-        {
-            var key = ReadRequiredString(parameters, "key");
-            var mutation = new MutationOrigin(
-                Guid.NewGuid().ToString("D"), execution.Invocation.ExecutionId, execution.Installation.ScriptKey.ToString(), key);
-            lock (_stateLock)
-            {
-                var bucketKey = mutation.ScriptKey + ":" + mutation.Key;
-                if (!_mutationOrigins.TryGetValue(bucketKey, out var queue))
-                {
-                    queue = new Queue<MutationOrigin>();
-                    _mutationOrigins.Add(bucketKey, queue);
-                }
-                queue.Enqueue(mutation);
-            }
-            return mutation;
-        }
-
-        private MutationOrigin TakeMutation(string scriptKey, string key)
-        {
-            lock (_stateLock)
-            {
-                var bucketKey = scriptKey + ":" + key;
-                if (!_mutationOrigins.TryGetValue(bucketKey, out var queue) || queue.Count == 0)
-                    return null;
-                var mutation = queue.Dequeue();
-                if (queue.Count == 0)
-                    _mutationOrigins.Remove(bucketKey);
-                return mutation;
-            }
-        }
-
-        private void RemovePendingMutation(MutationOrigin mutation)
-        {
-            lock (_stateLock)
-            {
-                var bucketKey = mutation.ScriptKey + ":" + mutation.Key;
-                if (!_mutationOrigins.TryGetValue(bucketKey, out var queue))
-                    return;
-                var remaining = queue.Where(item => item.MutationId != mutation.MutationId).ToList();
-                if (remaining.Count == 0)
-                    _mutationOrigins.Remove(bucketKey);
-                else
-                    _mutationOrigins[bucketKey] = new Queue<MutationOrigin>(remaining);
-            }
+            return method == "GM.setValue" || method == "GM.deleteValue" ||
+                method == "GM.setValues" || method == "GM.deleteValues";
         }
 
         private static string ReplaceListenerId(string data, int listenerId)
@@ -821,10 +814,14 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
                     ["key"] = root.GetProperty("key").GetString(),
                     ["oldValue"] = root.GetProperty("oldValue").Clone(),
                     ["newValue"] = root.GetProperty("newValue").Clone(),
+                    ["oldValueExists"] = root.GetProperty("oldValueExists").GetBoolean(),
+                    ["newValueExists"] = root.GetProperty("newValueExists").GetBoolean(),
                     ["remote"] = true
                 };
                 if (root.TryGetProperty("mutationId", out var mutationId))
                     values["mutationId"] = mutationId.GetString();
+                if (root.TryGetProperty("mutationMethod", out var mutationMethod))
+                    values["mutationMethod"] = mutationMethod.GetString();
                 if (root.TryGetProperty("originExecutionId", out var origin))
                     values["originExecutionId"] = origin.GetString();
                 if (root.TryGetProperty("sequence", out var sequence))
@@ -873,9 +870,16 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
 
         private void EngineExecutionEnded(UserScriptEngine.ExecutionRecord execution)
         {
+            var handlers = Notification;
+            if (handlers != null)
+                foreach (EventHandler<BridgeNotificationEventArgs> handler in handlers.GetInvocationList())
+                    try { handler(this, new BridgeNotificationEventArgs(execution.Frame, execution.Invocation.ExecutionId,
+                        execution.Invocation.DeliveryToken, "execution-ended", "{}")); }
+                    catch (Exception exception) { System.Diagnostics.Trace.TraceError(exception.ToString()); }
             lock (_stateLock)
             {
                 _listeners.Remove(execution.Invocation.ExecutionId);
+                _storageSnapshots.Remove(execution.Invocation.ExecutionId);
                 if (_seenRequestOrder.TryGetValue(execution.Invocation.ExecutionId, out var order))
                 {
                     foreach (var key in order)
@@ -963,6 +967,8 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
         {
             if (parameters.ValueKind != JsonValueKind.Object)
                 return null;
+            if (method == "GM.download" && parameters.TryGetProperty("operation", out var downloadOperation) && downloadOperation.ValueKind == JsonValueKind.String &&
+                downloadOperation.GetString() == "createBody") return frameUrl?.AbsoluteUri;
             if (string.Equals(method, "GM.cookie", StringComparison.Ordinal))
             {
                 if (parameters.TryGetProperty("details", out var details) &&
@@ -1051,20 +1057,11 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             public string Key { get; }
         }
 
-        private sealed class MutationOrigin
+        private sealed class StorageTransfer
         {
-            public MutationOrigin(string mutationId, string originExecutionId, string scriptKey, string key)
-            {
-                MutationId = mutationId;
-                OriginExecutionId = originExecutionId;
-                ScriptKey = scriptKey;
-                Key = key;
-            }
-
-            public string MutationId { get; }
-            public string OriginExecutionId { get; }
-            public string ScriptKey { get; }
-            public string Key { get; }
+            public StorageTransfer(string id, string json) { Id = id; Json = json; }
+            public string Id { get; }
+            public string Json { get; }
         }
     }
 }

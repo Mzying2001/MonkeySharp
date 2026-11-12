@@ -21,51 +21,23 @@ namespace Mzying2001.MonkeySharp.Core.Tests
     public sealed class AdvancedApiProviderTests
     {
         [Fact]
-        public async Task ResourceApisRequireDeclaredNameAndEnforceSize()
+        public async Task PreparedResourceApisCheckDeclarationAndResponseBudget()
         {
-            var installation = await InstallAsync(
-                "// @grant GM.getResourceText\n// @grant GM.getResourceURL\n" +
-                "// @resource logo https://cdn.example/logo.txt");
-            var resources = new FakeResourceProvider(new ResourceContent(
-                Encoding.UTF8.GetBytes("hello"), "text/plain", "hello"));
-            var provider = new ResourceAndNetworkApiProvider(resources, options: new BridgeOptions(maxResourceBytes: 8));
-
-            var text = await provider.InvokeAsync(Context(installation, "GM.getResourceText", new { name = "logo" }), CancellationToken.None);
-            var url = await provider.InvokeAsync(Context(installation, "GM.getResourceURL", new { name = "logo" }), CancellationToken.None);
-
-            Assert.Equal("hello", Json(text.Json).GetString());
-            Assert.StartsWith("data:text/plain;base64,", Json(url.Json).GetString());
-            await Assert.ThrowsAsync<BridgeProtocolException>(() => provider.InvokeAsync(
-                Context(installation, "GM.getResourceText", new { name = "missing" }), CancellationToken.None));
-
-            var oversized = new ResourceAndNetworkApiProvider(
-                new FakeResourceProvider(new ResourceContent(new byte[9])),
-                options: new BridgeOptions(maxResourceBytes: 8));
-            var exception = await Assert.ThrowsAsync<BridgeProtocolException>(() => oversized.InvokeAsync(
-                Context(installation, "GM.getResourceURL", new { name = "logo" }), CancellationToken.None));
-            Assert.Equal(BridgeErrorCodes.PayloadTooLarge, exception.Code);
-
-            var oversizedText = new ResourceAndNetworkApiProvider(
-                new FakeResourceProvider(new ResourceContent(new byte[0], text: "123456789")),
-                options: new BridgeOptions(maxResourceBytes: 8));
-            exception = await Assert.ThrowsAsync<BridgeProtocolException>(() => oversizedText.InvokeAsync(
-                Context(installation, "GM.getResourceText", new { name = "logo" }), CancellationToken.None));
-            Assert.Equal(BridgeErrorCodes.PayloadTooLarge, exception.Code);
-        }
-
-        [Fact]
-        public async Task ResourceApiRejectsContentThatFailsDeclaredIntegrity()
-        {
-            var installation = await InstallAsync(
-                "// @grant GM.getResourceText\n" +
-                "// @resource logo https://cdn.example/logo.txt#sha256=2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824");
-            var provider = new ResourceAndNetworkApiProvider(new FakeResourceProvider(new ResourceContent(
-                Encoding.UTF8.GetBytes("tampered"), "text/plain", "tampered")));
-
-            var exception = await Assert.ThrowsAsync<ResourceIntegrityException>(() => provider.InvokeAsync(
-                Context(installation, "GM.getResourceText", new { name = "logo" }), CancellationToken.None));
-
-            Assert.Equal("MSR410_RESOURCE_INTEGRITY_FAILED", exception.Code);
+            var resources = new FakeResourceProvider(new ResourceContent(Encoding.UTF8.GetBytes("hello"), "text/plain", "hello"));
+            var repository = new InMemoryUserScriptRepository(preparer: new UserScriptPreparer(resources: resources));
+            var installation = await repository.InstallAsync(MetadataAndMatchingTests.Script(
+                "// @name resources\n// @match https://example.com/*\n// @resource logo https://cdn.example/logo.txt"), "test", true, CancellationToken.None);
+            using (var provider = new ResourceAndNetworkApiProvider(options: new BridgeOptions(maxResourceBytes: 8)))
+            {
+                Assert.Equal("hello", Json((await provider.InvokeAsync(Context(installation, "GM.getResourceText", new { name = "logo" }), CancellationToken.None)).Json).GetString());
+                Assert.Equal("data:text/plain;base64,aGVsbG8=", Json((await provider.InvokeAsync(Context(installation, "GM.getResourceUrl", new { name = "logo" }), CancellationToken.None)).Json).GetString());
+                await Assert.ThrowsAsync<BridgeProtocolException>(() => provider.InvokeAsync(Context(installation, "GM.getResourceText", new { name = "missing" }), CancellationToken.None));
+            }
+            using (var limited = new ResourceAndNetworkApiProvider(options: new BridgeOptions(maxResourceBytes: 4)))
+            {
+                var exception = await Assert.ThrowsAsync<BridgeProtocolException>(() => limited.InvokeAsync(Context(installation, "GM.getResourceText", new { name = "logo" }), CancellationToken.None));
+                Assert.Equal(BridgeErrorCodes.PayloadTooLarge, exception.Code);
+            }
         }
 
         [Fact]
@@ -271,31 +243,39 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             Assert.Equal(BridgeErrorCodes.NotSupported, unsupported.Code);
         }
 
-        [Fact]
-        public async Task HttpRedirectsRecheckConnectAndHostPermissionPolicy()
+        [Theory]
+        [InlineData("https://example.com/start", "https://api.example.com/next", "https://api.example.com/final")]
+        [InlineData("https://api.example.com/start", "https://example.com/next", "https://api.example.com/final")]
+        [InlineData("https://api.example.com/start", "https://api.example.com/next", "https://example.com/final")]
+        public async Task HttpRedirectsRecheckConnectAndHostPermissionPolicy(string initialUrl, string redirectUrl, string finalUrl)
         {
             var installation = await InstallAsync("// @grant GM.xmlHttpRequest\n// @connect *.example.com");
             var response = new UserScriptHttpResponse(
-                200, "OK", new Uri("https://api.example.com/"),
-                new Dictionary<string, string>(), string.Empty, null, null);
+                200, "OK", new Uri(finalUrl),
+                new Dictionary<string, string>(), string.Empty, null, null, new[] { new Uri(redirectUrl) });
             var service = new FakeHttpService(response, null);
             var provider = new ResourceAndNetworkApiProvider(http: service);
             var authorized = new List<string>();
             var created = await provider.InvokeAsync(Context(
                 installation,
                 "GM.xmlHttpRequest",
-                new { operation = "create", xhrId = 16, url = "https://api.example.com/" },
+                new { operation = "create", xhrId = 16, url = initialUrl },
                 (target, _) =>
                 {
                     authorized.Add(target);
                     return Task.FromResult(!target.Contains("denied"));
                 }), CancellationToken.None);
             var sessionId = Json(created.Json).GetProperty("sessionId").GetString();
-            await provider.InvokeAsync(Context(installation, "GM.xmlHttpRequest", new
+            var result = await provider.InvokeAsync(Context(installation, "GM.xmlHttpRequest", new
             {
                 operation = "execute", sessionId
             }), CancellationToken.None);
 
+            Assert.Equal(finalUrl, Json(result.Json).GetProperty("finalUrl").GetString());
+            Assert.True(await service.Request.RedirectAllowed(
+                new Uri("https://example.com/next"), CancellationToken.None));
+            Assert.False(await service.Request.RedirectAllowed(
+                new Uri("https://example.com/denied"), CancellationToken.None));
             Assert.True(await service.Request.RedirectAllowed(
                 new Uri("https://allowed.example.com/next"), CancellationToken.None));
             Assert.False(await service.Request.RedirectAllowed(
@@ -304,6 +284,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 new Uri("https://outside.test/next"), CancellationToken.None));
             Assert.Equal(new[]
             {
+                "https://example.com/next", "https://example.com/denied",
                 "https://allowed.example.com/next", "https://denied.example.com/next"
             }, authorized);
         }
@@ -313,12 +294,18 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         [InlineData("example.com", "https://api.example.com/path", true)]
         [InlineData("example.com", "https://badexample.com/path", false)]
         [InlineData("*.example.com", "https://api.example.com/path", true)]
-        [InlineData("*.example.com", "https://example.com/path", false)]
+        [InlineData("*.example.com", "https://example.com/path", true)]
+        [InlineData("*.example.com", "https://a.b.example.com/path", true)]
+        [InlineData("*.EXAMPLE.COM", "https://EXAMPLE.com/path", true)]
+        [InlineData("*.example.com", "https://badexample.com/path", false)]
+        [InlineData("*.example.com", "https://example.com.evil.test/path", false)]
         [InlineData("localhost", "http://localhost:8080/path", true)]
         [InlineData("localhost", "http://api.localhost/path", false)]
         [InlineData("127.0.0.1", "http://127.0.0.1:8080/path", true)]
         [InlineData("127.0.0.1", "http://127.0.0.2:8080/path", false)]
         [InlineData("例子.测试", "https://api.xn--fsqu00a.xn--0zwm56d/path", true)]
+        [InlineData("*.例子.测试", "https://xn--fsqu00a.xn--0zwm56d/path", true)]
+        [InlineData("*.例子.测试", "https://api.xn--fsqu00a.xn--0zwm56d/path", true)]
         [InlineData("https://example.com:8443", "https://api.example.com:8443/path", true)]
         [InlineData("https://example.com:8443", "https://api.example.com/path", false)]
         public void ConnectHostRulesNormalizeDomainsAndPorts(string declaration, string target, bool expected)
@@ -328,7 +315,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Fact]
-        public async Task HttpStreamPublishesRawChunksAndCompletesWithoutBuffering()
+        public async Task HttpStreamUsesBoundedPullChunksAndCompletesIndependentlyOfConsumption()
         {
             var installation = await InstallAsync("// @grant GM.xmlHttpRequest\n// @connect api.example.com");
             var response = new UserScriptHttpResponse(
@@ -355,10 +342,63 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             var deadline = DateTime.UtcNow.AddSeconds(1);
             while (!notifications.Any(item => item.EventName == "xhr-complete") && DateTime.UtcNow < deadline)
                 await Task.Delay(1);
-            var chunk = Assert.Single(notifications, item => item.EventName == "xhr-chunk");
-            Assert.Equal("stream body", Encoding.UTF8.GetString(Convert.FromBase64String(
-                Json(chunk.DataJson).GetProperty("chunk").GetString())));
+            Assert.DoesNotContain(notifications, item => item.EventName == "xhr-chunk");
+            var chunk = await provider.InvokeAsync(Context(installation, "GM.xmlHttpRequest", new { operation = "readBody", sessionId, offset = 0 }), CancellationToken.None);
+            Assert.Equal("stream body", Encoding.UTF8.GetString(Convert.FromBase64String(Json(chunk.Json).GetProperty("chunk").GetString())));
+            Assert.True(Json(chunk.Json).GetProperty("done").GetBoolean());
             Assert.Single(notifications, item => item.EventName == "xhr-complete");
+        }
+
+        [Fact]
+        public async Task IncrementalTextPullWaitsForDataAndEnforcesOffsetsWithoutPushProgress()
+        {
+            var installation = await InstallAsync("// @grant GM.xmlHttpRequest\n// @connect api.example.com");
+            var response = new UserScriptHttpResponse(200, "OK", new Uri("https://api.example.com/"),
+                new Dictionary<string, string>(), "", "text/plain", "utf-8");
+            var service = new ControlledHttpService(response);
+            using (var provider = new ResourceAndNetworkApiProvider(http: service))
+            {
+                var events = new ConcurrentQueue<ApiNotificationEventArgs>();
+                provider.Notification += (_, item) => events.Enqueue(item);
+                var created = await provider.InvokeAsync(Context(installation, "GM.xmlHttpRequest", new
+                { operation = "create", xhrId = 19, url = "https://api.example.com/", incremental = true }), CancellationToken.None);
+                var sessionId = Json(created.Json).GetProperty("sessionId").GetString();
+                var headers = await provider.InvokeAsync(Context(installation, "GM.xmlHttpRequest", new
+                { operation = "execute", sessionId }), CancellationToken.None);
+                Assert.True(Json(headers.Json).GetProperty("streaming").GetBoolean());
+                Assert.False(service.Completed.Task.IsCompleted);
+                var read = provider.InvokeAsync(Context(installation, "GM.xmlHttpRequest", new
+                { operation = "readBody", sessionId, offset = 0 }), CancellationToken.None);
+                Assert.False(read.IsCompleted);
+                var bytes = new byte[70000];
+                service.Observer.OnResponseData(bytes, 0, bytes.Length);
+                service.Observer.OnDownloadProgress(bytes.Length, null);
+                var part = Json((await read).Json);
+                Assert.Equal(65536, Convert.FromBase64String(part.GetProperty("chunk").GetString()).Length);
+                Assert.False(part.GetProperty("done").GetBoolean());
+                await Assert.ThrowsAsync<BridgeProtocolException>(() => provider.InvokeAsync(Context(installation, "GM.xmlHttpRequest", new
+                { operation = "readBody", sessionId, offset = 0 }), CancellationToken.None));
+                Assert.DoesNotContain(events, item => item.EventName == "xhr-progress");
+                service.Completed.SetResult(response);
+                await provider.InvokeAsync(Context(installation, "GM.xmlHttpRequest", new
+                { operation = "readBody", sessionId, offset = 65536 }), CancellationToken.None);
+                var final = await provider.InvokeAsync(Context(installation, "GM.xmlHttpRequest", new
+                { operation = "readBody", sessionId, offset = 70000 }), CancellationToken.None);
+                Assert.True(Json(final.Json).GetProperty("done").GetBoolean());
+            }
+        }
+
+        private sealed class ControlledHttpService : IHttpRequestService, IHttpRequestOperation
+        {
+            private readonly UserScriptHttpResponse _response;
+            public ControlledHttpService(UserScriptHttpResponse response) { _response = response; }
+            public IUserScriptHttpObserver Observer { get; private set; }
+            public TaskCompletionSource<UserScriptHttpResponse> Completed { get; } =
+                new TaskCompletionSource<UserScriptHttpResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
+            public Task<UserScriptHttpResponse> Completion => Completed.Task;
+            public void Abort() => Completed.TrySetCanceled();
+            public IHttpRequestOperation SendAsync(UserScriptHttpRequest request, IUserScriptHttpObserver observer, CancellationToken token)
+            { Observer = observer; observer.OnResponseStarted(_response); return this; }
         }
 
         [Fact]
@@ -388,41 +428,30 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Fact]
-        public async Task DependencyResolverPreservesRequireOrderAndLimit()
+        public async Task MenuClicksRequireCurrentHostFrameAndDiscardReleasedRegistrations()
         {
-            var installation = await InstallAsync(
-                "// @grant none\n// @require https://cdn.example/one.js\n// @require https://cdn.example/two.js");
-            var dependencies = new FakeDependencyProvider(new Dictionary<string, string>
+            var installation = await InstallAsync("// @grant GM.registerMenuCommand\n// @grant GM.unregisterMenuCommand");
+            var service = new FakeHostServices();
+            using (var provider = new HostInteractionApiProvider(menu: service))
             {
-                ["https://cdn.example/one.js"] = "const one = 1;",
-                ["https://cdn.example/two.js"] = "const two = 2;"
-            });
-            var resolver = new ResourceScriptSourceResolver(dependencies, 100);
-
-            var source = await resolver.ResolveSourceAsync(installation, CancellationToken.None);
-
-            Assert.True(source.IndexOf("const one", StringComparison.Ordinal) < source.IndexOf("const two", StringComparison.Ordinal));
-            Assert.EndsWith(installation.Definition.Source, source);
-            await Assert.ThrowsAsync<InvalidOperationException>(() =>
-                new ResourceScriptSourceResolver(dependencies, 5)
-                    .ResolveSourceAsync(installation, CancellationToken.None));
-        }
-
-        [Fact]
-        public async Task DependencyResolverRejectsContentThatFailsDeclaredIntegrity()
-        {
-            var installation = await InstallAsync(
-                "// @grant none\n" +
-                "// @require https://cdn.example/lib.js#sha256=2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824");
-            var dependencies = new FakeDependencyProvider(new Dictionary<string, string>
-            {
-                ["https://cdn.example/lib.js"] = "tampered"
-            });
-
-            var exception = await Assert.ThrowsAsync<ResourceIntegrityException>(() =>
-                new ResourceScriptSourceResolver(dependencies, 100).ResolveSourceAsync(installation, CancellationToken.None));
-
-            Assert.Equal("MSR410_RESOURCE_INTEGRITY_FAILED", exception.Code);
+                var events = new List<ApiNotificationEventArgs>();
+                provider.Notification += (_, item) => events.Add(item);
+                var context = Context(installation, "GM.registerMenuCommand", new
+                { commandId = 31, name = "frame only", clickedFrame = true, generation = "first" });
+                await provider.InvokeAsync(context, CancellationToken.None);
+                service.InvokeMenu();
+                service.InvokeMenu(new MenuCommandInvocation { Frame = new DocumentFrame("browser", "next-document", "main",
+                    new Uri("https://example.com/"), true, TimingGuarantee.BestEffortDocumentStart) });
+                Assert.Empty(events);
+                service.InvokeMenu(new MenuCommandInvocation { Frame = context.Frame, Kind = "keyboard", Key = "s", CtrlKey = true });
+                var value = Json(Assert.Single(events).DataJson);
+                Assert.Equal("first", value.GetProperty("generation").GetString());
+                Assert.Equal("keyboard", value.GetProperty("input").GetProperty("kind").GetString());
+                Assert.True(value.GetProperty("input").GetProperty("ctrlKey").GetBoolean());
+                await provider.InvokeAsync(Context(installation, "GM.unregisterMenuCommand", new { commandId = 31 }), CancellationToken.None);
+                service.InvokeMenu(new MenuCommandInvocation { Frame = context.Frame });
+                Assert.Single(events);
+            }
         }
 
         [Fact]
@@ -436,7 +465,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 services, services, services, services, services))
             {
                 ApiNotificationEventArgs notification = null;
-                provider.Notification += (_, item) => notification = item;
+                provider.Notification += (_, item) => { if (item.EventName == "menu-command") notification = item; };
                 var registered = await provider.InvokeAsync(Context(
                     installation,
                     "GM.registerMenuCommand",
@@ -447,7 +476,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                     "GM.notification",
                     new
                     {
-                        title = "Title", text = "Text", imageUrl = "https://example.com/notification.png",
+                        clientId = Guid.NewGuid().ToString(), title = "Title", text = "Text", imageUrl = "https://example.com/notification.png",
                         highlight = true, silent = true, timeout = 300
                     }), CancellationToken.None);
                 await provider.InvokeAsync(Context(
@@ -463,6 +492,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                     "GM.download",
                     new
                     {
+                        clientId = Guid.NewGuid().ToString("D"),
                         url = "https://example.com/file",
                         name = "file",
                         saveAs = true,
@@ -489,12 +519,12 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 Assert.Equal("Bearer test", services.Download.Headers["Authorization"]);
                 Assert.Equal("overwrite", services.Download.ConflictAction);
                 Assert.Equal(TimeSpan.FromMilliseconds(2500), services.Download.Timeout);
-                Assert.True(Json(removed.Json).GetBoolean());
+                Assert.Equal("undefined", Json(removed.Json).GetProperty("$monkeySharpType").GetString());
                 Assert.True(services.MenuRegistration.Disposed);
 
                 await provider.InvokeAsync(Context(installation, "GM.notification", new
                 {
-                    highlight = true, silent = true, timeout = 0
+                    clientId = Guid.NewGuid().ToString(), highlight = true, silent = true, timeout = 0
                 }), CancellationToken.None);
                 Assert.Null(services.Notification.Text);
                 Assert.True(services.Notification.Highlight);
@@ -539,7 +569,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                     installation,
                     "GM.unregisterMenuCommand",
                     new { commandId = 3 }), CancellationToken.None);
-                Assert.False(Json(removed.Json).GetBoolean());
+                Assert.Equal("undefined", Json(removed.Json).GetProperty("$monkeySharpType").GetString());
             }
         }
 
@@ -557,13 +587,87 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 Assert.True(Json(closed.Json).GetBoolean());
                 Assert.False(Json(repeatedClose.Json).GetBoolean());
 
-                var download = await provider.InvokeAsync(Context(installation, "GM.download", new { url = "https://example.com/file" }), CancellationToken.None);
-                var aborted = await provider.InvokeAsync(Context(installation, "GM.download", new { operation = "abort", downloadId = "download" }), CancellationToken.None);
-                var repeatedAbort = await provider.InvokeAsync(Context(installation, "GM.download", new { operation = "abort", downloadId = "download" }), CancellationToken.None);
+                var clientId = Guid.NewGuid().ToString("D");
+                var download = await provider.InvokeAsync(Context(installation, "GM.download", new { url = "https://example.com/file", clientId }), CancellationToken.None);
+                var aborted = await provider.InvokeAsync(Context(installation, "GM.download", new { operation = "abort", clientId }), CancellationToken.None);
+                var repeatedAbort = await provider.InvokeAsync(Context(installation, "GM.download", new { operation = "abort", clientId }), CancellationToken.None);
                 Assert.Equal("download", Json(download.Json).GetProperty("id").GetString());
-                Assert.True(Json(aborted.Json).GetBoolean());
-                Assert.False(Json(repeatedAbort.Json).GetBoolean());
+                Assert.True(Json(aborted.Json).GetProperty("accepted").GetBoolean());
+                Assert.False(Json(repeatedAbort.Json).GetProperty("accepted").GetBoolean());
             }
+        }
+
+        [Fact]
+        public async Task DownloadSubscribesBeforeSynchronousCompletionAndIgnoresDuplicateTerminals()
+        {
+            var installation = await InstallAsync("// @grant GM.download");
+            var service = new ControlledDownloadService { CompleteOnStart = true };
+            using var provider = new HostInteractionApiProvider(downloads: service);
+            var events = new List<string>();
+            provider.Notification += (_, value) => events.Add(value.EventName);
+            await provider.InvokeAsync(Context(installation, "GM.download", new { url = "https://example.com/file", clientId = Guid.NewGuid().ToString() }), CancellationToken.None);
+            service.Operation.Complete();
+            Assert.Equal(new[] { "download-complete" }, events);
+            Assert.True(service.Operation.Disposed);
+        }
+
+        [Fact]
+        public async Task DownloadCanBeCanceledWhileHostIsStillCreatingOperation()
+        {
+            var installation = await InstallAsync("// @grant GM.download");
+            var service = new ControlledDownloadService { DelayCreation = true };
+            using var provider = new HostInteractionApiProvider(downloads: service);
+            var events = new List<string>();
+            provider.Notification += (_, value) => events.Add(value.EventName);
+            var clientId = Guid.NewGuid().ToString();
+            var starting = provider.InvokeAsync(Context(installation, "GM.download", new { url = "https://example.com/file", clientId }), CancellationToken.None);
+            await provider.InvokeAsync(Context(installation, "GM.download", new { operation = "abort", clientId }), CancellationToken.None);
+            service.Created.SetResult(service.Operation);
+            await starting;
+            Assert.True(service.Operation.WasAborted);
+            Assert.Equal(new[] { "download-aborted" }, events);
+        }
+
+        [Theory]
+        [InlineData("unsupported", "not_supported")]
+        [InlineData("permission", "not_permitted")]
+        [InlineData("io", "not_succeeded")]
+        public async Task DownloadFailuresPreserveTheirCauseAndTerminateOnce(string kind, string reason)
+        {
+            var installation = await InstallAsync("// @grant GM.download");
+            var service = new ControlledDownloadService();
+            using var provider = new HostInteractionApiProvider(downloads: service);
+            var events = new List<ApiNotificationEventArgs>();
+            provider.Notification += (_, value) => events.Add(value);
+            await provider.InvokeAsync(Context(installation, "GM.download", new { url = "https://example.com/file", clientId = Guid.NewGuid().ToString() }), CancellationToken.None);
+            Exception error = kind == "unsupported" ? new UnsupportedApiException("unsupported cookie input") :
+                kind == "permission" ? new BridgeProtocolException(BridgeErrorCodes.PermissionDenied, "redirect denied") :
+                new IOException("disk failed");
+            service.Operation.Fail(error); service.Operation.Fail(error);
+            var notification = Assert.Single(events);
+            Assert.Equal("download-error", notification.EventName);
+            Assert.Equal(reason, Json(notification.DataJson).GetProperty("error").GetString());
+            Assert.Equal(error.Message, Json(notification.DataJson).GetProperty("details").GetString());
+        }
+
+        [Fact]
+        public async Task DocumentEndMutesDownloadCallbacksButHostDisposalCancelsTasks()
+        {
+            var installation = await InstallAsync("// @grant GM.download");
+            var service = new ControlledDownloadService();
+            using var provider = new HostInteractionApiProvider(downloads: service);
+            var events = new List<string>();
+            provider.Notification += (_, value) => events.Add(value.EventName);
+            await provider.InvokeAsync(Context(installation, "GM.download", new { url = "https://example.com/file", clientId = Guid.NewGuid().ToString() }), CancellationToken.None);
+            provider.OnExecutionEnded("execution");
+            Assert.False(service.Operation.WasAborted);
+            service.Operation.Complete();
+            Assert.Empty(events);
+            service.Operation = new ControlledDownload();
+            await provider.InvokeAsync(Context(installation, "GM.download", new { url = "https://example.com/file", clientId = Guid.NewGuid().ToString() }), CancellationToken.None);
+            provider.Dispose();
+            Assert.True(service.Operation.WasAborted);
+            Assert.Empty(events);
         }
 
         [Fact]
@@ -598,6 +702,70 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             Assert.False(result.CanEnable);
             Assert.Contains(result.Diagnostics, item => item.Code == "MSM051_DUPLICATE_RESOURCE");
             Assert.Contains(result.Diagnostics, item => item.Code == "MSM052_INVALID_CONNECT");
+        }
+
+        [Fact]
+        public async Task TabCreationCorrelatesClosureBeforeAcknowledgementAndPreservesNumericInsertion()
+        {
+            var installation = await InstallAsync("// @grant GM.openInTab");
+            var services = new FakeHostServices { CloseTabOnOpen = true };
+            using var provider = new HostInteractionApiProvider(tabs: services);
+            var events = new List<ApiNotificationEventArgs>();
+            provider.Notification += (_, value) => events.Add(value);
+            var id = Guid.NewGuid().ToString();
+            var result = await provider.InvokeAsync(Context(installation, "GM.openInTab", new { url = "about:blank", insert = 0, clientId = id }), CancellationToken.None);
+            Assert.True(Json(result.Json).GetProperty("closed").GetBoolean());
+            Assert.Equal(id, Json(Assert.Single(events).DataJson).GetProperty("clientId").GetString());
+            Assert.Equal(0, services.OpenedTab.InsertIndex);
+            Assert.False(services.OpenedTab.Active);
+        }
+
+        [Fact]
+        public async Task BinaryDownloadStagesContiguousBoundedBytesAndTransfersOwnershipUntilTerminal()
+        {
+            var installation = await InstallAsync("// @grant GM.download");
+            var downloads = new ControlledDownloadService();
+            using var provider = new HostInteractionApiProvider(downloads: downloads, options: new BridgeOptions(maxBinaryTransferBytes: 400000));
+            var id = Guid.NewGuid().ToString();
+            Task<ApiResult> Invoke(object value) => provider.InvokeAsync(Context(installation, "GM.download", value), CancellationToken.None);
+            await Invoke(new { operation = "createBody", clientId = id, url = "blob:https://example.com/source", length = 300001 });
+            await Assert.ThrowsAsync<BridgeProtocolException>(() => Invoke(new { operation = "startBody", clientId = id, name = "file" }));
+            var bytes = Enumerable.Range(0, 300001).Select(i => (byte)(i % 251)).ToArray();
+            for (var offset = 0; offset < bytes.Length; offset += 65536)
+                await Invoke(new { operation = "appendBody", clientId = id, offset, chunk = Convert.ToBase64String(bytes.Skip(offset).Take(65536).ToArray()) });
+            await Assert.ThrowsAsync<BridgeProtocolException>(() => Invoke(new { operation = "appendBody", clientId = id, offset = 0, chunk = "AQ==" }));
+            await Invoke(new { operation = "startBody", clientId = id, name = "file" });
+            var spool = Assert.IsType<HttpSpoolingBuffer>(downloads.Request.Body);
+            Assert.True(spool.IsFileBacked);
+            var temporary = spool.TemporaryPath;
+            using (var read = spool.OpenRead()) using (var copy = new MemoryStream()) { await read.CopyToAsync(copy); Assert.Equal(bytes, copy.ToArray()); }
+            provider.OnExecutionEnded("execution");
+            Assert.True(File.Exists(temporary));
+            downloads.Operation.Complete();
+            Assert.False(File.Exists(temporary));
+            var next = Guid.NewGuid().ToString();
+            await Invoke(new { operation = "createBody", clientId = next, url = "blob:https://example.com/source", length = 10 });
+            provider.OnExecutionEnded("execution");
+            await Assert.ThrowsAsync<BridgeProtocolException>(() => Invoke(new { operation = "startBody", clientId = next, name = "file" }));
+            await Assert.ThrowsAsync<BridgeProtocolException>(() => Invoke(new { operation = "createBody", clientId = next, url = "blob:https://example.com/source", length = 400001 }));
+        }
+
+        [Fact]
+        public async Task PrivateTabOptionRequiresHostSupportAndIsNeverDropped()
+        {
+            var installation = await InstallAsync("// @grant GM_openInTab");
+            var services = new FakeHostServices();
+            using (var provider = new HostInteractionApiProvider(tabs: services))
+            {
+                await Assert.ThrowsAsync<UnsupportedApiException>(() => provider.InvokeAsync(Context(installation,
+                    "GM.openInTab", new { url = "https://example.com/private", incognito = true }), CancellationToken.None));
+                Assert.Null(services.OpenTab);
+                services.SupportsIncognito = true;
+                await provider.InvokeAsync(Context(installation, "GM.openInTab", new { url = "https://example.com/private", incognito = true }), CancellationToken.None);
+                Assert.True(services.OpenTab.Incognito);
+                await provider.InvokeAsync(Context(installation, "GM.openInTab", new { url = "https://example.com/normal", incognito = false }), CancellationToken.None);
+                Assert.False(services.OpenTab.Incognito);
+            }
         }
 
         private static async Task<UserScriptInstallation> InstallAsync(string extraMetadata)
@@ -687,7 +855,11 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         private sealed class FakeHostServices :
             IMenuService, INotificationService, IClipboardService, ITabService, IDownloadService, IUserScriptWindowService
         {
-            private Action _menuCallback;
+            public bool SupportsIncognito { get; set; }
+            public string DownloadMode => "browser";
+            public bool CloseTabOnOpen;
+            public OpenTabRequest OpenedTab;
+            private Action<MenuCommandInvocation> _menuCallback;
             public FakeMenuRegistration MenuRegistration { get; } = new FakeMenuRegistration();
             public string ClipboardText { get; private set; }
             public OpenTabRequest OpenTab { get; private set; }
@@ -696,13 +868,13 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             public int CloseCalls { get; private set; }
             public int FocusCalls { get; private set; }
 
-            public Task<IMenuRegistration> RegisterAsync(MenuCommandRequest request, Action invoked, CancellationToken cancellationToken)
+            public Task<IMenuRegistration> RegisterAsync(MenuCommandRequest request, Action<MenuCommandInvocation> invoked, CancellationToken cancellationToken)
             {
                 _menuCallback = invoked;
                 return Task.FromResult<IMenuRegistration>(MenuRegistration);
             }
-            public void InvokeMenu() => _menuCallback();
-            public INotificationHandle ShowAsync(UserScriptNotificationRequest request, CancellationToken cancellationToken)
+            public void InvokeMenu(MenuCommandInvocation input = null) => _menuCallback(input ?? new MenuCommandInvocation());
+            public INotificationHandle Create(UserScriptNotificationRequest request, CancellationToken cancellationToken)
             {
                 Notification = request;
                 return new FakeNotificationHandle();
@@ -715,9 +887,12 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             public Task<ITabHandle> OpenAsync(OpenTabRequest request, CancellationToken cancellationToken)
             {
                 OpenTab = request;
-                return Task.FromResult<ITabHandle>(new FakeTabHandle("tab"));
+                OpenedTab = request;
+                var handle = new FakeTabHandle("tab");
+                if (CloseTabOnOpen) handle.CloseAsync(cancellationToken).GetAwaiter().GetResult();
+                return Task.FromResult<ITabHandle>(handle);
             }
-            public Task<IDownloadOperation> DownloadAsync(DownloadRequest request, CancellationToken cancellationToken)
+            public Task<IDownloadOperation> CreateAsync(DownloadRequest request, CancellationToken cancellationToken)
             {
                 Download = request;
                 return Task.FromResult<IDownloadOperation>(new FakeDownloadOperation("download"));
@@ -736,6 +911,8 @@ namespace Mzying2001.MonkeySharp.Core.Tests
 
         private sealed class FakeNotificationHandle : INotificationHandle
         {
+        public void Start() { }
+        public void ResolveClick(bool preventDefault) { }
             public Task Completion { get; } = Task.CompletedTask;
             public event EventHandler Clicked { add { } remove { } }
             public event EventHandler Closed { add { } remove { } }
@@ -758,6 +935,8 @@ namespace Mzying2001.MonkeySharp.Core.Tests
 
         private sealed class FakeDownloadOperation : IDownloadOperation
         {
+            public void Start() { }
+            public DownloadResult Result => new DownloadResult(DownloadId);
             public FakeDownloadOperation(string id) { DownloadId = id; }
             public string DownloadId { get; }
             public Task Completion { get; } = Task.CompletedTask;
@@ -768,6 +947,38 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             public event EventHandler TimedOut { add { } remove { } }
             public void Abort() { Aborted?.Invoke(this, EventArgs.Empty); }
             public void Dispose() { }
+        }
+
+        private sealed class ControlledDownloadService : IDownloadService
+        {
+            public string DownloadMode => "browser";
+            public bool CompleteOnStart, DelayCreation;
+            public ControlledDownload Operation = new ControlledDownload();
+            public DownloadRequest Request;
+            public TaskCompletionSource<IDownloadOperation> Created = new TaskCompletionSource<IDownloadOperation>();
+            public Task<IDownloadOperation> CreateAsync(DownloadRequest request, CancellationToken cancellationToken)
+            {
+                Operation.CompleteOnStart = CompleteOnStart;
+                Request = request;
+                return DelayCreation ? Created.Task : Task.FromResult<IDownloadOperation>(Operation);
+            }
+        }
+        private sealed class ControlledDownload : IDownloadOperation
+        {
+            public string DownloadId => "controlled";
+            public DownloadResult Result => new DownloadResult(DownloadId, name: "empty.bin");
+            private readonly TaskCompletionSource<object> _completion = new TaskCompletionSource<object>();
+            public Task Completion => _completion.Task;
+            public bool CompleteOnStart, WasAborted, Disposed;
+            public event EventHandler<UserScriptDownloadProgress> Progress { add { } remove { } }
+            public event EventHandler<UserScriptDownloadFailure> Failed;
+            public event EventHandler TimedOut { add { } remove { } }
+            public event EventHandler Completed, Aborted;
+            public void Start() { if (WasAborted) Aborted?.Invoke(this, EventArgs.Empty); else if (CompleteOnStart) Complete(); }
+            public void Complete() { Completed?.Invoke(this, EventArgs.Empty); _completion.TrySetResult(null); }
+            public void Fail(Exception error) { Failed?.Invoke(this, new UserScriptDownloadFailure(error)); _completion.TrySetException(error); }
+            public void Abort() { WasAborted = true; Aborted?.Invoke(this, EventArgs.Empty); _completion.TrySetCanceled(); }
+            public void Dispose() { Disposed = true; }
         }
 
         private sealed class FakeMenuRegistration : IMenuRegistration

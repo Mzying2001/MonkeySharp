@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net462</TargetFramework>
@@ -7,15 +7,17 @@
     <Platforms>x64</Platforms>
     <PlatformTarget>x64</PlatformTarget>
     <RootNamespace>Mzying2001.MonkeySharp.Demo</RootNamespace>
-    <AssemblyName>Mzying2001.MonkeySharp.Demo</AssemblyName>
+    <AssemblyName>MonkeySharpDemo</AssemblyName>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
-    <CefSharpVersion Condition="'$(CefSharpVersion)' == ''">121.3.70</CefSharpVersion>
+    <CefSharpVersion Condition="'$(CefSharpVersion)' == ''">151.3.240</CefSharpVersion>
+    <CefSharpTargetDir>CefSharp\</CefSharpTargetDir>
     <DefineConstants Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(CefSharpVersion)', '100.0.0'))">$(DefineConstants);CEF_SHARP_HAS_CURSOR_CHANGE</DefineConstants>
     <DefineConstants Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(CefSharpVersion)', '125.0.0'))">$(DefineConstants);CEF_SHARP_BOOLEAN_DOWNLOAD</DefineConstants>
     <DefineConstants Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(CefSharpVersion)', '100.0.0'))">$(DefineConstants);CEF_SHARP_HAS_DOWNLOAD_CAN_DOWNLOAD</DefineConstants>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="AvalonEdit" Version="6.3.1.120" />
     <PackageReference Include="CefSharp.Common" Version="$(CefSharpVersion)" />
     <PackageReference Include="CefSharp.Wpf" Version="$(CefSharpVersion)" />
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
@@ -24,5 +26,11 @@
   <ItemGroup>
     <ProjectReference Include="..\Mzying2001.MonkeySharp.Core\Mzying2001.MonkeySharp.Core.csproj" />
     <ProjectReference Include="..\Mzying2001.MonkeySharp.CefSharp\Mzying2001.MonkeySharp.CefSharp.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Update="Properties\Resources*.resx">
+      <SubType>Designer</SubType>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Views\UserscriptJavaScript.xshd" />
   </ItemGroup>
 </Project>

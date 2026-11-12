@@ -1,6 +1,8 @@
+using Mzying2001.MonkeySharp.Demo.Localization;
 using Mzying2001.MonkeySharp.Demo.Runtime;
 using Mzying2001.MonkeySharp.Demo.ViewModels;
 using Mzying2001.MonkeySharp.Demo.Views;
+using Mzying2001.MonkeySharp.Core.Apis;
 using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
@@ -24,37 +26,104 @@ namespace Mzying2001.MonkeySharp.Demo
         public MainWindow(DemoRuntime runtime)
         {
             InitializeComponent();
-            _runtime = runtime; DataContext = runtime.MainWindow;
+            _runtime = runtime;
+            ShowLanguageSelection(UiLanguage.CurrentCulture.Name);
+            DataContext = runtime.MainWindow;
             TrustWarning.Text = DemoRuntime.TrustWarning;
             runtime.MainWindow.Tabs.CollectionChanged += TabsChanged;
             runtime.MainWindow.PropertyChanged += ModelChanged;
             runtime.MainWindow.ScriptManagerRequested += OpenManager;
             Closing += WindowClosing;
-            PreviewKeyDown += (sender, args) => { if (args.Key == Key.L && Keyboard.Modifiers == ModifierKeys.Control) { AddressBar.Focus(); AddressBar.SelectAll(); args.Handled = true; } };
-            PreviewKeyDown += (sender, args) =>
+            PreviewKeyDown += WindowPreviewKeyDown;
+        }
+
+        private void WindowPreviewKeyDown(object sender, KeyEventArgs args)
+        {
+            if (args.Key == Key.L && Keyboard.Modifiers == ModifierKeys.Control)
             {
-                if (Keyboard.Modifiers != ModifierKeys.Alt) return;
-                var key = (args.Key == Key.System ? args.SystemKey : args.Key).ToString();
-                var command = runtime.MainWindow.SelectedTab?.MenuCommands.FirstOrDefault(item => string.Equals(item.AccessKey, key, StringComparison.OrdinalIgnoreCase));
-                if (command != null) { command.InvokeCommand.Execute(null); args.Handled = true; }
+                AddressBar.Focus();
+                AddressBar.SelectAll();
+                args.Handled = true;
+                return;
+            }
+
+            if (Keyboard.Modifiers != ModifierKeys.Alt) return;
+            var key = (args.Key == Key.System ? args.SystemKey : args.Key).ToString();
+            var command = _runtime.MainWindow.SelectedTab?.MenuCommands.FirstOrDefault(
+                item => string.Equals(item.AccessKey, key, StringComparison.OrdinalIgnoreCase));
+            if (command == null) return;
+            command.InvokeCommand.Execute(MenuKeyboardInput(args));
+            args.Handled = true;
+        }
+
+        private static MenuCommandInvocation MenuModifiers(string kind)
+        {
+            var modifiers = Keyboard.Modifiers;
+            return new MenuCommandInvocation
+            {
+                Kind = kind,
+                CtrlKey = modifiers.HasFlag(ModifierKeys.Control),
+                ShiftKey = modifiers.HasFlag(ModifierKeys.Shift),
+                AltKey = modifiers.HasFlag(ModifierKeys.Alt),
+                MetaKey = modifiers.HasFlag(ModifierKeys.Windows)
             };
+        }
+        private static MenuCommandInvocation MenuKeyboardInput(KeyEventArgs args)
+        {
+            var input = MenuModifiers("keyboard");
+            var key = args.Key == Key.System ? args.SystemKey : args.Key;
+            if (key >= Key.A && key <= Key.Z)
+            {
+                input.Code = "Key" + key;
+                input.Key = (input.ShiftKey == true ^ Keyboard.IsKeyToggled(Key.CapsLock)) ? key.ToString() : key.ToString().ToLowerInvariant();
+            }
+            else if (key == Key.Return)
+            {
+                input.Key = "Enter";
+                input.Code = "Enter";
+            }
+            else if (key == Key.Space)
+            {
+                input.Key = " ";
+                input.Code = "Space";
+            }
+            return input;
+        }
+        private void ScriptMenuKeyDown(object sender, KeyEventArgs args)
+        {
+            if (sender is MenuItem item) item.Tag = MenuKeyboardInput(args);
+        }
+        private void ScriptMenuMouseUp(object sender, MouseButtonEventArgs args)
+        {
+            if (!(sender is MenuItem item)) return;
+            var input = MenuModifiers("mouse");
+            input.Button = args.ChangedButton == MouseButton.Left ? 0 : args.ChangedButton == MouseButton.Middle ? 1 : args.ChangedButton == MouseButton.Right ? 2 : (int?)null;
+            item.Tag = input;
         }
 
         private async void TabsChanged(object sender, NotifyCollectionChangedEventArgs args)
         {
             foreach (var tab in _views.Keys.Where(tab => !_runtime.MainWindow.Tabs.Contains(tab)).ToArray())
             {
-                var view = _views[tab]; _views.Remove(tab); BrowserPanels.Children.Remove(view);
-                try { await view.DisposeAsync(); } catch (Exception exception) { _runtime.MainWindow.Diagnostics.Report(exception.ToString()); }
+                var view = _views[tab];
+                _views.Remove(tab);
+                BrowserPanels.Children.Remove(view);
+                try { await view.DisposeAsync(); }
+                catch (Exception exception) { _runtime.MainWindow.Diagnostics.Report(exception.ToString()); }
             }
             foreach (var tab in _runtime.MainWindow.Tabs.Where(tab => !_views.ContainsKey(tab)).ToArray())
             {
                 try
                 {
                     var view = new BrowserTabView(_runtime, tab);
-                    _views.Add(tab, view); BrowserPanels.Children.Add(view);
+                    _views.Add(tab, view);
+                    BrowserPanels.Children.Add(view);
                 }
-                catch (Exception exception) { tab.Error = exception.Message; _runtime.MainWindow.Diagnostics.Report(exception.ToString()); }
+                catch (Exception exception)
+                {
+                    tab.Error = exception.Message;
+                    _runtime.MainWindow.Diagnostics.Report(exception.ToString());
+                }
             }
             UpdateSelection();
         }
@@ -74,8 +143,19 @@ namespace Mzying2001.MonkeySharp.Demo
             }
             else _manager.Activate();
         }
+
+        private async void OpenPermissions(object sender, RoutedEventArgs args)
+        {
+            var window = new PermissionsWindow(_runtime.PermissionDecisions, _runtime.RevokePermissionsAsync) { Owner = this };
+            await window.LoadAsync();
+            window.Show();
+        }
         private void AddressKeyDown(object sender, KeyEventArgs args)
-        { if (args.Key == Key.Enter) { _runtime.MainWindow.NavigateCommand.Execute(null); args.Handled = true; } }
+        {
+            if (args.Key != Key.Enter) return;
+            _runtime.MainWindow.NavigateCommand.Execute(null);
+            args.Handled = true;
+        }
         private void BrowserTabsPreviewMouseDown(object sender, MouseButtonEventArgs args)
         {
             if (args.ChangedButton != MouseButton.Middle) return;
@@ -112,6 +192,27 @@ namespace Mzying2001.MonkeySharp.Demo
         }
         private void OpenDataDirectory(object sender, RoutedEventArgs args) => OpenDirectory(_runtime.Paths.DataDirectory);
         private void OpenDownloadsDirectory(object sender, RoutedEventArgs args) => OpenDirectory(_runtime.Paths.DownloadsDirectory);
+        private void ShowLanguageSelection(string language)
+        {
+            EnglishLanguage.IsChecked = language == "en";
+            ChineseLanguage.IsChecked = language == "zh-CN";
+        }
+        private void SelectLanguage(object sender, RoutedEventArgs args)
+        {
+            try
+            {
+                var language = (string)((MenuItem)sender).Tag;
+                UiLanguage.Save(_runtime.Paths.BaseDirectory, language);
+                ShowLanguageSelection(language);
+                MessageBox.Show(this, Strings.Get("LanguageSaved"), Strings.Get("LanguageMenu"), MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception exception)
+            {
+                ShowLanguageSelection(UiLanguage.Resolve(new string[0], _runtime.Paths.BaseDirectory));
+                MessageBox.Show(this, Strings.Get("LanguageSaveFailed") + "\n\n" + exception.Message,
+                    Strings.Get("LanguageMenu"), MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
         private void OpenDirectory(string path)
         {
             try { Process.Start(new ProcessStartInfo(path) { UseShellExecute = true }); }
@@ -123,23 +224,34 @@ namespace Mzying2001.MonkeySharp.Demo
             args.Cancel = true;
             if (_closing) return;
             if (_manager != null && !_manager.CanClose()) return;
-            _closing = true; IsEnabled = false;
+            _closing = true;
+            IsEnabled = false;
             _manager?.Close();
             try { await _runtime.ShutdownAsync(); }
-            catch (Exception exception) { MessageBox.Show(exception.Message, "关闭失败"); }
-            _runtime.MainWindow.Tabs.CollectionChanged -= TabsChanged;
-            _runtime.MainWindow.PropertyChanged -= ModelChanged;
-            _runtime.MainWindow.ScriptManagerRequested -= OpenManager;
-            Closing -= WindowClosing;
-            Close(); Application.Current.Shutdown();
+            catch (Exception exception) { MessageBox.Show(exception.Message, Strings.Get("ShutdownFailed")); }
+            DetachWindowEvents();
+            Close();
+            Application.Current.Shutdown();
         }
 
         internal async Task CloseForSmokeAsync(int exitCode)
         {
             _closing = true;
-            await _runtime.ShutdownAsync();
+            try { await _runtime.ShutdownAsync(); }
+            // Failure has already been recorded; a cached shutdown failure must still allow exit(1).
+            catch when (exitCode != 0) { }
+            DetachWindowEvents();
+            Close();
+            Application.Current.Shutdown(exitCode);
+        }
+
+        private void DetachWindowEvents()
+        {
+            _runtime.MainWindow.Tabs.CollectionChanged -= TabsChanged;
+            _runtime.MainWindow.PropertyChanged -= ModelChanged;
+            _runtime.MainWindow.ScriptManagerRequested -= OpenManager;
+            PreviewKeyDown -= WindowPreviewKeyDown;
             Closing -= WindowClosing;
-            Close(); Application.Current.Shutdown(exitCode);
         }
     }
 }

@@ -1,4 +1,4 @@
-using CefSharp;
+﻿using CefSharp;
 using Mzying2001.MonkeySharp.Core.Apis;
 using Mzying2001.MonkeySharp.Core.Bridge;
 using Mzying2001.MonkeySharp.Core.Domain;
@@ -50,7 +50,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
         IUserScriptDiagnosticSource,
         IDisposable
     {
-        private const string HttpResourceType = "XHR";
+        private const string HttpResourceType = "xhr";
         private static readonly HashSet<string> RestrictedRequestHeaders = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "Host", "Content-Length", "Connection", "Proxy-Connection",
@@ -107,6 +107,11 @@ namespace Mzying2001.MonkeySharp.CefSharp
             if (observer == null) throw new ArgumentNullException(nameof(observer));
             ThrowIfDisposed();
             cancellationToken.ThrowIfCancellationRequested();
+            // Native URLRequest replaces/strips Cookie even when explicitly supplied.
+            // Do not silently send different authentication state or mutate the shared jar.
+            if (request.Options.Cookie != null || request.Headers.Keys.Any(name =>
+                string.Equals(name, "Cookie", StringComparison.OrdinalIgnoreCase)))
+                throw new UnsupportedApiException("Explicit Cookie headers and the cookie option are not supported by CefSharp URLRequest. Use the actual RequestContext cookie jar or a host HTTP backend with verified explicit-cookie support.");
             var operation = new Operation(this, request, observer, cancellationToken, _contextAccessor, _webRequestService);
             lock (_sync)
             {
@@ -187,7 +192,8 @@ namespace Mzying2001.MonkeySharp.CefSharp
             private IUrlRequest _urlRequest;
             private IRequest _cefRequest;
             private Uri _currentUrl;
-            private Timer _timeout;
+            private PausableRequestTimeout _timeout;
+            private CancellationTokenRegistration _timeoutRegistration;
             private CancellationTokenRegistration _cancellationRegistration;
             private int _redirectCount;
             private int _completed;
@@ -195,6 +201,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             private long _downloaded;
             private string _currentMethod;
             private bool _sendBody;
+            private string _uploadPath;
             private bool _allowExplicitCredentials;
 
             public Operation(CefSharpHttpRequestService owner, UserScriptHttpRequest request,
@@ -221,9 +228,12 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 _cancellationRegistration = _cancellation.Token.Register(() =>
                     Fail(new OperationCanceledException(_cancellation.Token), true));
                 if (_request.Timeout.HasValue)
-                    _timeout = new Timer(_ => Fail(new BridgeProtocolException(
-                        BridgeErrorCodes.Timeout, "The HTTP request timed out."), true), null,
-                        _request.Timeout.Value, Timeout.InfiniteTimeSpan);
+                {
+                    _timeout = new PausableRequestTimeout(_request.Timeout.Value);
+                    _timeoutRegistration = _timeout.Token.Register(() => Fail(new BridgeProtocolException(
+                        BridgeErrorCodes.Timeout, "The HTTP request timed out."), true));
+                    _timeout.Start();
+                }
                 QueueUi(() => BeginOnUi(_request.Url));
             }
 
@@ -260,34 +270,32 @@ namespace Mzying2001.MonkeySharp.CefSharp
                             (_allowExplicitCredentials || !string.Equals(header.Key, "Authorization", StringComparison.OrdinalIgnoreCase)))
                             cefRequest.SetHeaderByName(header.Key, header.Value, true);
                     }
-                    if (_allowExplicitCredentials)
-                    {
-                        _request.Headers.TryGetValue("Cookie", out var cookieHeader);
-                        var cookie = string.Join("; ", new[] { cookieHeader, _request.Options.Cookie }
-                            .Where(value => !string.IsNullOrEmpty(value)));
-                        if (cookie.Length != 0) cefRequest.SetHeaderByName("Cookie", cookie, true);
-                    }
                     if (_sendBody)
                     {
                         cefRequest.InitializePostData();
-                        using (var body = _request.Body.OpenRead())
-                        {
-                            var buffer = new byte[64 * 1024];
-                            int count;
-                            while ((count = body.Read(buffer, 0, buffer.Length)) > 0)
-                            {
-                                IPostDataElement element;
+                        // CefURLRequest accepts a single bytes/file element, not a list of byte chunks.
+                        IPostDataElement element;
 #if CEF_SHARP_LEGACY_REQUEST_FACTORY
-                                element = new PostDataElement();
+                        element = new PostDataElement();
 #else
-                                element = PostDataElement.Create();
+                        element = PostDataElement.Create();
 #endif
-                                var bytes = new byte[count];
-                                Buffer.BlockCopy(buffer, 0, bytes, 0, count);
-                                element.Bytes = bytes;
-                                cefRequest.PostData.AddElement(element);
-                            }
+                        if (_request.Body.Length <= 64 * 1024)
+                        {
+                            using (var body = _request.Body.OpenRead())
+                            using (var bytes = new MemoryStream()) { body.CopyTo(bytes); element.Bytes = bytes.ToArray(); }
                         }
+                        else
+                        {
+                            if (_uploadPath == null)
+                            {
+                                _uploadPath = Path.GetTempFileName();
+                                using (var body = _request.Body.OpenRead())
+                                using (var file = File.OpenWrite(_uploadPath)) body.CopyTo(file, 64 * 1024);
+                            }
+                            element.File = _uploadPath;
+                        }
+                        cefRequest.PostData.AddElement(element);
                     }
 
                     if (_webRequests != null)
@@ -302,18 +310,8 @@ namespace Mzying2001.MonkeySharp.CefSharp
                             FollowRedirectOnUi(redirect, cefRequest);
                             return;
                         }
-                        ApplyHeaders(cefRequest, before.Headers);
-                        var headers = _webRequests.Evaluate(CreateEvent(WebRequestPhase.OnBeforeSendHeaders, url, cefRequest));
-                        if (headers.Kind == WebRequestActionKind.Block)
-                            throw new BridgeProtocolException(BridgeErrorCodes.PermissionDenied,
-                                "The HTTP request was blocked by a webRequest rule.");
-                        if (headers.Kind == WebRequestActionKind.Redirect && !string.IsNullOrEmpty(headers.RedirectUrl))
-                        {
-                            var redirect = Resolve(url, headers.RedirectUrl);
-                            FollowRedirectOnUi(redirect, cefRequest);
-                            return;
-                        }
-                        ApplyHeaders(cefRequest, headers.Headers);
+
+
                     }
 
                     _urlRequest = new global::CefSharp.UrlRequest(cefRequest, this, context);
@@ -331,12 +329,14 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 if (target == null || (target.Scheme != Uri.UriSchemeHttp && target.Scheme != Uri.UriSchemeHttps))
                     throw new BridgeProtocolException(BridgeErrorCodes.PermissionDenied, "The redirect target is invalid.");
                 Task<bool> authorization;
+                var waiting = _timeout?.Pause();
                 try { authorization = _request.RedirectAllowed(target, _cancellation.Token); }
-                catch (Exception exception) { throw MapException(exception); }
+                catch (Exception exception) { waiting?.Dispose(); throw MapException(exception); }
                 if (authorization == null)
                     throw new InvalidOperationException("The redirect authorization callback returned no task.");
                 authorization.ContinueWith(task => QueueUi(() =>
                 {
+                    waiting?.Dispose();
                     if (IsCompleted) return;
                     if (task.IsCanceled)
                     {
@@ -374,14 +374,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     callback.Continue(_request.Options.Username, _request.Options.Password ?? string.Empty);
                     return true;
                 }
-                if (_webRequests == null) return false;
-                var url = _currentUrl?.AbsoluteUri ?? _request.Url.AbsoluteUri;
-                var requestId = responseIdentifier(null);
-                var decision = _webRequests.Evaluate(new WebRequestEvent(
-                    WebRequestPhase.OnAuthRequired, requestId, url, _currentMethod, HttpResourceType));
-                if (decision.Kind != WebRequestActionKind.AuthResponse) return false;
-                callback.Continue(decision.Username, decision.Password);
-                return true;
+                return false;
             }
 
             public void OnUploadProgress(IUrlRequest request, long current, long total)
@@ -477,11 +470,6 @@ namespace Mzying2001.MonkeySharp.CefSharp
                         var headersDecision = _webRequests.Evaluate(new WebRequestEvent(
                             WebRequestPhase.OnHeadersReceived, responseIdentifier(request), _currentUrl.AbsoluteUri,
                             _currentMethod, HttpResourceType, responseHeaders, response.StatusCode));
-                        if (headersDecision.Kind == WebRequestActionKind.Block)
-                            throw new BridgeProtocolException(BridgeErrorCodes.PermissionDenied,
-                                "The HTTP response was blocked by a webRequest rule.");
-                        foreach (var header in headersDecision.Headers)
-                            responseHeaders[header.Key] = header.Value;
                         _webRequests.Evaluate(new WebRequestEvent(
                             WebRequestPhase.OnResponseStarted, responseIdentifier(request), _currentUrl.AbsoluteUri,
                             _currentMethod, HttpResourceType, responseHeaders, response.StatusCode));
@@ -543,12 +531,14 @@ namespace Mzying2001.MonkeySharp.CefSharp
             private void Fail(Exception exception, bool abort)
             {
                 if (Interlocked.Exchange(ref _completed, 1) != 0) return;
+                _timeoutRegistration.Dispose();
                 _timeout?.Dispose();
                 _cancellationRegistration.Dispose();
                 _cancellation.Dispose();
                 PublishError(exception);
                 if (abort)
                     QueueUi(() => DisposeRequestOnUi(_cefRequest, _urlRequest));
+                QueueUi(CleanupUpload);
                 _completion.TrySetException(exception);
                 _owner.Remove(this);
             }
@@ -556,11 +546,21 @@ namespace Mzying2001.MonkeySharp.CefSharp
             private void Complete(UserScriptHttpResponse response)
             {
                 if (Interlocked.Exchange(ref _completed, 1) != 0) return;
+                _timeoutRegistration.Dispose();
                 _timeout?.Dispose();
                 _cancellationRegistration.Dispose();
                 _cancellation.Dispose();
+                CleanupUpload();
                 _completion.TrySetResult(response);
                 _owner.Remove(this);
+            }
+
+            private void CleanupUpload()
+            {
+                if (_uploadPath == null) return;
+                try { File.Delete(_uploadPath); _uploadPath = null; }
+                catch (IOException exception) { _owner.ReportCallbackFailure("upload cleanup", exception); }
+                catch (UnauthorizedAccessException exception) { _owner.ReportCallbackFailure("upload cleanup", exception); }
             }
 
             private bool IsCompleted => Interlocked.CompareExchange(ref _completed, 0, 0) != 0;
@@ -581,7 +581,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             private WebRequestEvent CreateEvent(WebRequestPhase phase, Uri url, IRequest request)
             {
                 return new WebRequestEvent(phase, request.Identifier, url.AbsoluteUri, request.Method,
-                    HttpResourceType, ToHeaders(request));
+                    HttpResourceType, ToHeaders(request), frame: _request.OriginFrame);
             }
 
             private static void ApplyHeaders(IRequest request, IReadOnlyDictionary<string, string> headers)

@@ -1,4 +1,4 @@
-using CefSharp;
+﻿using CefSharp;
 using Moq;
 using Mzying2001.MonkeySharp.Core.Apis;
 using Mzying2001.MonkeySharp.Core.Bridge;
@@ -22,12 +22,14 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
     public sealed class CefSharpUserScriptHostTests
     {
         [Fact]
-        public async Task AttachRequiresAnUninitializedBrowserAndFreeHandlerSlot()
+        public async Task AttachMarksInitializedBrowsersAndRequiresFreeHandlerSlots()
         {
             using (var host = await CreateHostAsync(Script("none", "document-start")))
             {
                 var initialized = new BrowserFixture(initialized: true);
-                Assert.Throws<InvalidOperationException>(() => host.Attach(initialized.Browser.Object));
+                host.Attach(initialized.Browser.Object);
+                Assert.True(host.IsLateAttach);
+                await host.DetachAsync(CancellationToken.None);
 
                 var occupied = new BrowserFixture();
                 occupied.Browser.Object.RenderProcessMessageHandler = Mock.Of<IRenderProcessMessageHandler>();
@@ -104,6 +106,51 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
 
             Assert.Equal(1, failures);
             following.Verify(item => item.OnContextCreated(browser, cefBrowser, frame), Times.Once);
+        }
+
+        [Fact]
+        public async Task DetachReleasesRendererExecutionsUsingTheCapturedDocumentIdentity()
+        {
+            using (var host = await CreateHostAsync(Script("none", "document-start")))
+            {
+                var browser = new BrowserFixture();
+                browser.Browser.Setup(item => item.GetBrowser()).Returns(browser.CefBrowser.Object);
+#if CEF_SHARP_STRING_FRAME_IDS
+                browser.CefBrowser.Setup(item => item.GetFrameByIdentifier("42")).Returns(browser.Frame.Object);
+#else
+                browser.CefBrowser.Setup(item => item.GetFrame(42)).Returns(browser.Frame.Object);
+#endif
+                string documentId = null;
+                host.DocumentLifecycle += (_, args) => documentId = args.Frame.DocumentId;
+                host.Attach(browser.Browser.Object);
+                browser.CreateContext();
+                await browser.WaitForScriptCountAsync(1);
+                Assert.NotNull(documentId);
+                await host.DetachAsync(CancellationToken.None);
+                Assert.Contains(browser.Scripts, script => script.Contains("endDocument(" + JsonSerializer.Serialize(documentId) + ")"));
+            }
+        }
+
+        [Fact]
+        public async Task PageBindingRejectsAValidIsolatedExecutionProof()
+        {
+            var repository = new InMemoryUserScriptRepository();
+            var script = await repository.InstallAsync("// ==UserScript==\n// @name native proof\n// @match https://example.com/*\n// @sandbox DOM\n// @grant GM_getValue\n// @run-at document-end\n// ==/UserScript==", "test", true, CancellationToken.None);
+            using (var host = new CefSharpUserScriptHostBuilder(repository).Build())
+            {
+                var browser = new BrowserFixture();
+                host.Attach(browser.Browser.Object);
+                var frame = new DocumentFrame("browser", "isolated-document", "cdp:native-frame", new Uri("https://example.com/"), true,
+                    TimingGuarantee.BestEffortDocumentStart, BridgeIntegrityGuarantee.Verified, "isolated", script.ScriptKey, script.RevisionId);
+                var invocation = Assert.Single((await host.Engine.ProcessLifecycleAsync(new DocumentLifecycleEventArgs(DocumentLifecycleKind.DomContentLoaded, frame), CancellationToken.None)).Invocations);
+                var request = JsonSerializer.Serialize(new { protocol = 2, type = "hello", documentId = frame.DocumentId, scriptKey = script.ScriptKey.ToString(), capability = invocation.Capability });
+                using (var native = JsonDocument.Parse(await host.Gateway.DispatchAsync(request, CancellationToken.None))) Assert.True(native.RootElement.GetProperty("ok").GetBoolean());
+                using (var page = JsonDocument.Parse(await browser.DispatchFromPageAsync(request)))
+                {
+                    Assert.False(page.RootElement.GetProperty("ok").GetBoolean());
+                    Assert.Equal(BridgeErrorCodes.SessionExpired, page.RootElement.GetProperty("error").GetProperty("code").GetString());
+                }
+            }
         }
 
         [Fact]
@@ -217,6 +264,69 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
             }
         }
 
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public async Task LocationProbeDisposalOnlySkipsInitializationFaultForRetiredFrames(bool retired)
+        {
+            using (var host = await CreateHostAsync(Script("none", "document-start")))
+            {
+                var browser = new BrowserFixture();
+                browser.Frame.Setup(item => item.EvaluateScriptAsync(
+                    "location.href", It.IsAny<string>(), It.IsAny<int>(), It.IsAny<TimeSpan?>()
+#if !CEF_SHARP_LEGACY_EVALUATION
+                    , false
+#endif
+                    )).Returns(() =>
+                    {
+                        browser.Frame.SetupGet(item => item.IsDisposed).Returns(retired);
+                        throw new ObjectDisposedException("native location probe");
+                    });
+                var diagnostics = new ConcurrentQueue<UserScriptDiagnostic>();
+                host.Diagnostic += (_, item) => diagnostics.Enqueue(item);
+                host.Attach(browser.Browser.Object);
+                browser.CreateContext();
+                browser.ReleaseContext();
+                await host.DetachAsync(CancellationToken.None);
+                Assert.Empty(browser.Scripts);
+                Assert.Equal(!retired, diagnostics.Any(item => item.Code == "MSC101_CONTEXT_INITIALIZATION_FAILED"));
+                browser.Frame.Verify(item => item.EvaluateScriptAsync(
+                    "location.href", It.IsAny<string>(), It.IsAny<int>(), It.IsAny<TimeSpan?>()
+#if !CEF_SHARP_LEGACY_EVALUATION
+                    , false
+#endif
+                    ), Times.Once);
+            }
+        }
+
+        [Fact]
+        public async Task FrameRetiredAfterLocationResolutionDoesNotInjectOrReportAnInitializationFault()
+        {
+            using (var host = await CreateHostAsync(Script("none", "document-start")))
+            {
+                var browser = new BrowserFixture();
+                browser.Frame.Setup(item => item.EvaluateScriptAsync(
+                    "location.href", It.IsAny<string>(), It.IsAny<int>(), It.IsAny<TimeSpan?>()
+#if !CEF_SHARP_LEGACY_EVALUATION
+                    , false
+#endif
+                    )).Returns(() =>
+                    {
+                        browser.Frame.SetupGet(item => item.IsDisposed).Returns(true);
+                        browser.Frame.SetupGet(item => item.IsValid).Throws(new ObjectDisposedException("retired callback frame"));
+                        return Task.FromResult(new JavascriptResponse { Success = true, Result = "https://example.com/current" });
+                    });
+                var diagnostics = new ConcurrentQueue<UserScriptDiagnostic>();
+                host.Diagnostic += (_, item) => diagnostics.Enqueue(item);
+                host.Attach(browser.Browser.Object);
+                browser.CreateContext();
+                browser.ReleaseContext();
+                await host.DetachAsync(CancellationToken.None);
+                Assert.Empty(browser.Scripts);
+                Assert.DoesNotContain(diagnostics, item => item.Code == "MSC101_CONTEXT_INITIALIZATION_FAILED");
+            }
+        }
+
         [Fact]
         public async Task FailedRendererLocationResolutionSkipsInjection()
         {
@@ -231,6 +341,87 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
                 Assert.Same(diagnostic.Task, await Task.WhenAny(diagnostic.Task, Task.Delay(5000)));
                 browser.RaiseFrameLoadEnd();
                 await host.DetachAsync(CancellationToken.None);
+                Assert.Empty(browser.Scripts);
+            }
+        }
+
+        [Fact]
+        public async Task CanceledLocationProbeRetriesBeforeInitializingTheSameDocument()
+        {
+            using (var host = await CreateHostAsync(Script("none", "document-start")))
+            {
+                var browser = new BrowserFixture();
+                var attempts = 0;
+                browser.SetRendererLocation(() => Interlocked.Increment(ref attempts) == 1
+                    ? Task.FromCanceled<JavascriptResponse>(new CancellationToken(true))
+                    : Task.FromResult(new JavascriptResponse { Success = true, Result = "https://example.com/current" }));
+                var lifecycle = new ConcurrentQueue<DocumentLifecycleEventArgs>();
+                host.DocumentLifecycle += (_, item) => lifecycle.Enqueue(item);
+                host.Attach(browser.Browser.Object);
+                browser.CreateContext();
+                await browser.WaitForScriptCountAsync(1);
+
+                Assert.Equal(2, attempts);
+                Assert.Single(lifecycle, item => item.Kind == DocumentLifecycleKind.ContextCreated);
+                Assert.All(lifecycle, item => Assert.Equal("https://example.com/current", item.Frame.Url.AbsoluteUri));
+                Assert.Contains("runtime.install(payload)", Assert.Single(browser.Scripts));
+            }
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public async Task CanceledLocationProbeStopsWhenItsDocumentEnds(bool replaced)
+        {
+            using (var host = await CreateHostAsync(Script("none", "document-start")))
+            {
+                var browser = new BrowserFixture();
+                var firstProbe = new TaskCompletionSource<JavascriptResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
+                var replacementProbe = new TaskCompletionSource<JavascriptResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
+                var attempts = 0;
+                browser.SetRendererLocation(() => Interlocked.Increment(ref attempts) == 1 ? firstProbe.Task : replacementProbe.Task);
+                var lifecycle = new ConcurrentQueue<DocumentLifecycleEventArgs>();
+                host.DocumentLifecycle += (_, item) => lifecycle.Enqueue(item);
+                host.Attach(browser.Browser.Object);
+                browser.CreateContext();
+                if (replaced) browser.CreateContext();
+                else browser.ReleaseContext();
+                firstProbe.SetCanceled();
+                replacementProbe.SetResult(new JavascriptResponse { Success = true, Result = "https://example.com/next" });
+                if (replaced) await browser.WaitForScriptCountAsync(1);
+                await host.DetachAsync(CancellationToken.None);
+
+                Assert.Equal(replaced ? 2 : 1, attempts);
+                Assert.Equal(replaced ? 1 : 0, browser.Scripts.Count);
+                Assert.All(lifecycle.Where(item => item.Kind == DocumentLifecycleKind.ContextCreated),
+                    item => Assert.Equal("https://example.com/next", item.Frame.Url.AbsoluteUri));
+            }
+        }
+
+        [Fact]
+        public async Task CanceledLocationProbeDoesNotRetryARetiredNativeFrame()
+        {
+            using (var host = await CreateHostAsync(Script("none", "document-start")))
+            {
+                var browser = new BrowserFixture();
+                var attempts = 0;
+                var retirementObserved = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                browser.SetRendererLocation(() =>
+                {
+                    Interlocked.Increment(ref attempts);
+                    browser.Frame.SetupGet(item => item.IsDisposed).Returns(() =>
+                    {
+                        retirementObserved.TrySetResult(true);
+                        return true;
+                    });
+                    return Task.FromCanceled<JavascriptResponse>(new CancellationToken(true));
+                });
+                host.Attach(browser.Browser.Object);
+                browser.CreateContext();
+                Assert.Same(retirementObserved.Task, await Task.WhenAny(retirementObserved.Task, Task.Delay(5000)));
+                await host.DetachAsync(CancellationToken.None);
+
+                Assert.Equal(1, attempts);
                 Assert.Empty(browser.Scripts);
             }
         }
@@ -295,6 +486,34 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
 
                 Assert.DoesNotContain(diagnostics, item => item.Code == "MSC103_LOAD_FALLBACK_FAILED");
                 Assert.Contains(browser.Scripts, script => script.Contains("__MonkeySharpRuntime"));
+            }
+        }
+
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public async Task DispatchDisposalCancelsOnlyWhenTheNativeFrameWasRetired(bool retired)
+        {
+            using (var host = await CreateHostAsync(Script("none", "document-start")))
+            {
+                var browser = new BrowserFixture();
+                DocumentFrame target = null;
+                host.DocumentLifecycle += (_, item) => target = item.Frame;
+                host.Attach(browser.Browser.Object);
+                browser.CreateContext();
+                await browser.WaitForScriptCountAsync(1);
+                browser.Frame.Setup(item => item.ExecuteJavaScriptAsync("dispatch-race", It.IsAny<string>(), It.IsAny<int>()))
+                    .Callback(() =>
+                    {
+                        browser.Frame.SetupGet(item => item.IsDisposed).Returns(retired);
+                        throw new ObjectDisposedException("native frame retired during dispatch");
+                    });
+
+                if (retired)
+                    await Assert.ThrowsAnyAsync<OperationCanceledException>(() => host.ExecuteAsync(target, "dispatch-race", CancellationToken.None));
+                else
+                    await Assert.ThrowsAsync<ObjectDisposedException>(() => host.ExecuteAsync(target, "dispatch-race", CancellationToken.None));
+                Assert.Single(browser.Scripts);
             }
         }
 
@@ -379,10 +598,11 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
         [Fact]
         public async Task BuilderServicesBecomeHelloCapabilitiesAndResolveDependencies()
         {
-            var repository = new InMemoryUserScriptRepository();
+            var services = new AllHostServices();
+            var repository = new InMemoryUserScriptRepository(preparer: new UserScriptPreparer(services, services));
             var grants = new[]
             {
-                "GM.getResourceText", "GM.getResourceURL", "GM.xmlHttpRequest",
+                "GM.getResourceText", "GM.getResourceUrl", "GM.xmlHttpRequest",
                 "GM.registerMenuCommand", "GM.unregisterMenuCommand", "GM.notification",
                 "GM.setClipboard", "GM.openInTab", "GM.download", "GM.getTab", "GM.saveTab", "GM.getTabs"
             };
@@ -392,10 +612,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
                 "// @resource template https://cdn.example/template.txt\n" +
                 "// @require https://cdn.example/dependency.js\n" + metadata + "\n// ==/UserScript==\nwindow.mainLoaded = true;";
             await repository.InstallAsync(source, "test", true, CancellationToken.None);
-            var services = new AllHostServices();
             using (var host = new CefSharpUserScriptHostBuilder(repository)
-                .UseDependencyProvider(services)
-                .UseResourceProvider(services)
                 .UseHttpRequestService(services)
                 .UseMenuService(services)
                 .UseNotificationService(services)
@@ -413,12 +630,12 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
                     new DocumentLifecycleEventArgs(DocumentLifecycleKind.DomContentLoaded, frame),
                     CancellationToken.None);
                 var invocation = Assert.Single(plan.Invocations);
-                Assert.StartsWith("window.dependencyLoaded = true;", invocation.Source);
+                Assert.StartsWith("// @require https://cdn.example/dependency.js\nwindow.dependencyLoaded = true;\n;\n", invocation.Source);
 
                 var responseJson = await host.Gateway.DispatchAsync(JsonSerializer.Serialize(new
                 {
                     type = "hello",
-                    protocol = 1,
+                    protocol = 2,
                     documentId = frame.DocumentId,
                     scriptKey = invocation.ScriptKey.ToString(),
                     capability = invocation.Capability
@@ -457,7 +674,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
                     var invocation = Assert.Single(plan.Invocations);
                     var json = await host.Gateway.DispatchAsync(JsonSerializer.Serialize(new
                     {
-                        type = "hello", protocol = 1, documentId = frame.DocumentId,
+                        type = "hello", protocol = 2, documentId = frame.DocumentId,
                         scriptKey = invocation.ScriptKey.ToString(), capability = invocation.Capability
                     }), CancellationToken.None);
                     using (var response = JsonDocument.Parse(json))
@@ -526,8 +743,10 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
                 });
                 using (var handler = new CefSharpWebRequestHandler(service.Object))
                 {
-                    var evaluation = Task.Run(() => handler.GetAuthCredentials(null, null, "https://example.test/",
-                        false, "example.test", 443, "realm", "basic", null));
+                    var request = CreateWebRequest();
+                    var disabled = false;
+                    var resource = handler.GetResourceRequestHandler(null, null, null, request.Object, false, false, "", ref disabled);
+                    var evaluation = Task.Run(() => resource.OnBeforeResourceLoad(null, null, null, request.Object, null));
                     Task disposal = null;
                     try
                     {
@@ -544,7 +763,8 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
                     }
                     Assert.False(handler.GetAuthCredentials(null, null, "https://example.test/", false,
                         "example.test", 443, "realm", "basic", null));
-                    service.Verify(item => item.Evaluate(It.IsAny<WebRequestEvent>()), Times.Once);
+                    service.Verify(item => item.Evaluate(It.IsAny<WebRequestEvent>()), Times.AtLeastOnce);
+                    resource.Dispose();
                 }
             }
         }
@@ -576,6 +796,28 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
                         service.Verify(item => item.Evaluate(It.IsAny<WebRequestEvent>()), Times.Exactly(2));
                     }
                 }
+            }
+        }
+
+        [Fact]
+        public void LateResourceCallbacksKeepTheOriginalOwnershipSnapshot()
+        {
+            var original = new DocumentFrame("browser", "original-document", "frame", new Uri("https://example.test/"), true, TimingGuarantee.BestEffortDocumentStart);
+            var resolutions = 0;
+            var snapshots = new List<WebRequestEvent>();
+            var service = new Mock<IWebRequestService>();
+            service.Setup(item => item.Evaluate(It.IsAny<WebRequestEvent>())).Returns<WebRequestEvent>(item => { snapshots.Add(item); return new WebRequestDecision(); });
+            using (var handler = new CefSharpWebRequestHandler(service.Object, (_, __) => { resolutions++; if (resolutions > 1) throw new InvalidOperationException("Native frame has gone."); return original; }))
+            {
+                var request = CreateWebRequest();
+                var disabled = false;
+                using (var resource = handler.GetResourceRequestHandler(null, null, null, request.Object, false, false, "", ref disabled))
+                {
+                    resource.OnBeforeResourceLoad(null, null, null, request.Object, null);
+                    resource.OnResourceLoadComplete(null, null, null, request.Object, null, UrlRequestStatus.Canceled, 0);
+                }
+                Assert.Equal(1, resolutions);
+                Assert.All(snapshots, snapshot => Assert.Same(original, snapshot.Frame));
             }
         }
 
@@ -672,6 +914,23 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
                 new Uri("https://example.com/"), new Uri("http://example.com/")));
             Assert.False(CefSharpHttpRequestPolicy.SameOrigin(
                 new Uri("https://example.com/"), new Uri("https://example.com:444/")));
+        }
+
+        [Theory]
+        [InlineData(false, false)]
+        [InlineData(false, true)]
+        [InlineData(true, false)]
+        [InlineData(true, true)]
+        public void ExplicitCookiesFailBeforeResolvingContextOrStartingNetwork(bool header, bool anonymous)
+        {
+            using (var service = new CefSharpHttpRequestService(() => throw new InvalidOperationException("No native context may be touched.")))
+            {
+                var headers = new Dictionary<string, string>();
+                if (header) headers.Add("cOoKiE", "same=header; empty=; equals=a=b");
+                var request = new UserScriptHttpRequest("GET", new Uri("https://example.com/"), headers, null, null, null, (_, __) => Task.FromResult(true),
+                    options: new UserScriptHttpRequestOptions { Anonymous = anonymous, Cookie = header ? null : "same=details" });
+                Assert.Throws<UnsupportedApiException>(() => service.SendAsync(request, Mock.Of<IUserScriptHttpObserver>(), CancellationToken.None));
+            }
         }
 
         [Fact]
@@ -856,6 +1115,11 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
 
             public void SetRendererLocation(Task<JavascriptResponse> response)
             {
+                SetRendererLocation(() => response);
+            }
+
+            public void SetRendererLocation(Func<Task<JavascriptResponse>> response)
+            {
                 Frame.Setup(item => item.EvaluateScriptAsync(
                     "location.href", It.IsAny<string>(), It.IsAny<int>(), It.IsAny<TimeSpan?>()
 #if !CEF_SHARP_LEGACY_EVALUATION
@@ -945,6 +1209,8 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
             IDownloadService,
             ITabStateService
         {
+            public bool SupportsIncognito => false;
+            public string DownloadMode => "native";
             public Task<ResourceContent> GetScriptAsync(
                 UserScriptInstallation installation,
                 UserScriptDependencyDeclaration dependency,
@@ -973,11 +1239,11 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
 
             public Task<IMenuRegistration> RegisterAsync(
                 MenuCommandRequest request,
-                Action invoked,
+                Action<MenuCommandInvocation> invoked,
                 CancellationToken cancellationToken)
                 => Task.FromResult<IMenuRegistration>(new NoopMenuRegistration());
 
-            public INotificationHandle ShowAsync(UserScriptNotificationRequest request, CancellationToken cancellationToken)
+            public INotificationHandle Create(UserScriptNotificationRequest request, CancellationToken cancellationToken)
                 => new NoopNotificationHandle();
 
             public Task SetTextAsync(string text, string mediaType, CancellationToken cancellationToken)
@@ -986,7 +1252,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
             public Task<ITabHandle> OpenAsync(OpenTabRequest request, CancellationToken cancellationToken)
                 => Task.FromResult<ITabHandle>(new NoopTabHandle("tab"));
 
-            public Task<IDownloadOperation> DownloadAsync(DownloadRequest request, CancellationToken cancellationToken)
+            public Task<IDownloadOperation> CreateAsync(DownloadRequest request, CancellationToken cancellationToken)
                 => Task.FromResult<IDownloadOperation>(new NoopDownloadOperation("download"));
 
             public Task<string> GetAsync(
@@ -1027,6 +1293,8 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
 #pragma warning disable CS0067
         private sealed class NoopNotificationHandle : INotificationHandle
         {
+        public void Start() { }
+        public void ResolveClick(bool preventDefault) { }
             public Task Completion { get; } = Task.CompletedTask;
             public event EventHandler Clicked;
             public event EventHandler Closed;
@@ -1045,6 +1313,8 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
 
         private sealed class NoopDownloadOperation : IDownloadOperation
         {
+            public void Start() { }
+            public DownloadResult Result => new DownloadResult(DownloadId);
             public NoopDownloadOperation(string id) { DownloadId = id; }
             public string DownloadId { get; }
             public Task Completion { get; } = Task.CompletedTask;

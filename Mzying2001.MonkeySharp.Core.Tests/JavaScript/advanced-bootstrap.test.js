@@ -1,11 +1,11 @@
+const completePlan = require("./test-plan");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const vm = require("node:vm");
 
-const template = fs.readFileSync(
-    path.resolve(__dirname, "../../Mzying2001.MonkeySharp.Core/Js/Init.js"), "utf8");
+const template = require("./bootstrap-template");
 
 function waitFor(predicate) {
     return new Promise((resolve, reject) => {
@@ -25,7 +25,7 @@ function waitFor(predicate) {
 test("advanced APIs use promises, progress notifications, and capability discovery", async () => {
     let xhrId;
     const payload = {
-        protocol: 1,
+        protocol: 2,
         documentId: "advanced-document",
         frameId: "main",
         runAt: "DocumentEnd",
@@ -60,10 +60,11 @@ test("advanced APIs use promises, progress notifications, and capability discove
             if (request.type === "hello") {
                 return JSON.stringify({
                     type: "hello-result",
-                    protocol: 1,
+                    protocol: 2,
                     ok: true,
                     limits: {},
-                    apis: ["GM.getResourceText", "GM.xmlHttpRequest", "GM.registerMenuCommand"]
+                    apis: ["GM.getResourceText", "GM.xmlHttpRequest", "GM.registerMenuCommand"],
+                    compatibility: { resources: { complete: true, values: { template: { text: "resource text", url: "data:text/plain,resource" } } } }
                 });
             }
             let result = { $monkeySharpType: "undefined" };
@@ -75,7 +76,7 @@ test("advanced APIs use promises, progress notifications, and capability discove
                 } else if (request.params.operation === "execute") {
                     globalThis.__MonkeySharpRuntime.receive({
                         type: "notification",
-                        protocol: 1,
+                        protocol: 2,
                         executionId: "advanced-execution",
                         deliveryToken: "advanced-delivery",
                         event: "xhr-progress",
@@ -89,7 +90,7 @@ test("advanced APIs use promises, progress notifications, and capability discove
             if (request.method === "GM.registerMenuCommand") result = request.params.commandId;
             return JSON.stringify({
                 type: "response",
-                protocol: 1,
+                protocol: 2,
                 requestId: request.requestId,
                 ok: true,
                 result
@@ -104,7 +105,7 @@ test("advanced APIs use promises, progress notifications, and capability discove
         removeEventListener: () => { globalThis.__signalRemoves += 1; }
     };
 
-    const encoded = Buffer.from(JSON.stringify(payload), "utf8").toString("base64");
+    const encoded = Buffer.from(JSON.stringify(completePlan(payload)), "utf8").toString("base64");
     vm.runInThisContext(template.replace("__MONKEYSHARP_PAYLOAD_BASE64__", encoded));
     await waitFor(() => globalThis.__advancedPromise);
     await globalThis.__advancedPromise;
@@ -122,7 +123,7 @@ test("advanced APIs use promises, progress notifications, and capability discove
 
     assert.equal(globalThis.__MonkeySharpRuntime.receive({
         type: "notification",
-        protocol: 1,
+        protocol: 2,
         executionId: "advanced-execution",
         deliveryToken: "advanced-delivery",
         event: "menu-command",

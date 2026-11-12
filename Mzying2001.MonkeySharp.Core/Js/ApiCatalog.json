@@ -1,0 +1,219 @@
+[
+  {
+    "capability": "GM.info",
+    "legacy": "GM_info",
+    "modernReturn": "value",
+    "legacyReturn": "value",
+    "family": "GM.info"
+  },
+  {
+    "capability": "GM.log",
+    "legacy": "GM_log",
+    "modernReturn": "promise",
+    "legacyReturn": "void",
+    "family": "GM.log"
+  },
+  {
+    "capability": "GM.getValue",
+    "legacy": "GM_getValue",
+    "modernReturn": "promise",
+    "legacyReturn": "value",
+    "family": "storage"
+  },
+  {
+    "capability": "GM.setValue",
+    "legacy": "GM_setValue",
+    "modernReturn": "promise",
+    "legacyReturn": "void",
+    "family": "storage"
+  },
+  {
+    "capability": "GM.deleteValue",
+    "legacy": "GM_deleteValue",
+    "modernReturn": "promise",
+    "legacyReturn": "void",
+    "family": "storage"
+  },
+  {
+    "capability": "GM.getValues",
+    "legacy": "GM_getValues",
+    "modernReturn": "promise",
+    "legacyReturn": "value",
+    "family": "storage"
+  },
+  {
+    "capability": "GM.setValues",
+    "legacy": "GM_setValues",
+    "modernReturn": "promise",
+    "legacyReturn": "void",
+    "family": "storage"
+  },
+  {
+    "capability": "GM.deleteValues",
+    "legacy": "GM_deleteValues",
+    "modernReturn": "promise",
+    "legacyReturn": "void",
+    "family": "storage"
+  },
+  {
+    "capability": "GM.listValues",
+    "legacy": "GM_listValues",
+    "modernReturn": "promise",
+    "legacyReturn": "value",
+    "family": "storage"
+  },
+  {
+    "capability": "GM.addValueChangeListener",
+    "legacy": "GM_addValueChangeListener",
+    "modernReturn": "promise",
+    "legacyReturn": "value",
+    "family": "storage"
+  },
+  {
+    "capability": "GM.removeValueChangeListener",
+    "legacy": "GM_removeValueChangeListener",
+    "modernReturn": "promise",
+    "legacyReturn": "void",
+    "family": "storage"
+  },
+  {
+    "capability": "GM.addStyle",
+    "legacy": "GM_addStyle",
+    "modernReturn": "promise",
+    "legacyReturn": "node",
+    "family": "GM.addStyle"
+  },
+  {
+    "capability": "GM.addElement",
+    "legacy": "GM_addElement",
+    "modernReturn": "promise",
+    "legacyReturn": "node",
+    "family": "GM.addElement"
+  },
+  {
+    "capability": "GM.getResourceText",
+    "legacy": "GM_getResourceText",
+    "modernReturn": "promise",
+    "legacyReturn": "value",
+    "family": "resources"
+  },
+  {
+    "capability": "GM.getResourceUrl",
+    "legacy": "GM_getResourceURL",
+    "modernReturn": "promise",
+    "legacyReturn": "value",
+    "family": "resources"
+  },
+  {
+    "capability": "GM.xmlHttpRequest",
+    "legacy": "GM_xmlhttpRequest",
+    "modernReturn": "abortable-promise",
+    "legacyReturn": "abort-handle",
+    "family": "GM.xmlHttpRequest"
+  },
+  {
+    "capability": "GM.registerMenuCommand",
+    "legacy": "GM_registerMenuCommand",
+    "modernReturn": "promise",
+    "legacyReturn": "value",
+    "family": "menus"
+  },
+  {
+    "capability": "GM.unregisterMenuCommand",
+    "legacy": "GM_unregisterMenuCommand",
+    "modernReturn": "promise",
+    "legacyReturn": "void",
+    "family": "menus"
+  },
+  {
+    "capability": "GM.notification",
+    "legacy": "GM_notification",
+    "modernReturn": "promise",
+    "legacyReturn": "void",
+    "family": "GM.notification"
+  },
+  {
+    "capability": "GM.setClipboard",
+    "legacy": "GM_setClipboard",
+    "modernReturn": "promise",
+    "legacyReturn": "void",
+    "family": "GM.setClipboard"
+  },
+  {
+    "capability": "GM.openInTab",
+    "legacy": "GM_openInTab",
+    "modernReturn": "promise",
+    "legacyReturn": "tab-handle",
+    "family": "GM.openInTab"
+  },
+  {
+    "capability": "GM.download",
+    "legacy": "GM_download",
+    "modernReturn": "abortable-promise",
+    "legacyReturn": "abort-handle",
+    "family": "GM.download"
+  },
+  {
+    "capability": "GM.getTab",
+    "legacy": "GM_getTab",
+    "modernReturn": "promise",
+    "legacyReturn": "callback",
+    "family": "tab-state"
+  },
+  {
+    "capability": "GM.saveTab",
+    "legacy": "GM_saveTab",
+    "modernReturn": "promise",
+    "legacyReturn": "void",
+    "family": "tab-state"
+  },
+  {
+    "capability": "GM.getTabs",
+    "legacy": "GM_getTabs",
+    "modernReturn": "promise",
+    "legacyReturn": "callback",
+    "family": "tab-state"
+  },
+  {
+    "capability": "GM.cookie",
+    "legacy": "GM_cookie",
+    "modernReturn": "promise",
+    "legacyReturn": "callback",
+    "family": "GM.cookie"
+  },
+  {
+    "capability": "GM.webRequest",
+    "legacy": "GM_webRequest",
+    "modernReturn": "void",
+    "legacyReturn": "void",
+    "family": "GM.webRequest"
+  },
+  {
+    "capability": "window.close",
+    "legacy": null,
+    "modernReturn": "void",
+    "legacyReturn": "void",
+    "family": "window.close"
+  },
+  {
+    "capability": "window.focus",
+    "legacy": null,
+    "modernReturn": "void",
+    "legacyReturn": "void",
+    "family": "window.focus"
+  },
+  {
+    "capability": "window.onurlchange",
+    "legacy": null,
+    "modernReturn": "value",
+    "legacyReturn": "void",
+    "family": "window.onurlchange"
+  },
+  {
+    "capability": "GM.audio",
+    "legacy": "GM_audio",
+    "modernReturn": "namespace",
+    "legacyReturn": "namespace",
+    "family": "GM.audio"
+  }
+]

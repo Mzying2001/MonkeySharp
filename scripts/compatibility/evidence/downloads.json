@@ -1,0 +1,253 @@
+{
+  "date": "2026-11-06",
+  "fixture": "Mzying2001.MonkeySharp.CefSharp.SmokeHost/Fixtures/04-download.user.js",
+  "fixtureSha256": "e7e4241c91b098fb3035c0018945da02675a557c9fe8b1e94564dfd1f599d330",
+  "runs": [
+    {
+      "cefSharpVersion": "84.4.10",
+      "platform": "x64",
+      "case": {
+        "type": "compatibility-case",
+        "caseId": "download",
+        "success": true,
+        "checks": {
+          "promise": true,
+          "handle": true,
+          "completed": true,
+          "canceled": true,
+          "timeout": true,
+          "failure": true,
+          "singleTerminal": true,
+          "loginRedirect": true,
+          "anonymous": true,
+          "empty": true,
+          "earlyCancel": true,
+          "diskFailure": true,
+          "modernBytes": true,
+          "legacyBytes": true,
+          "authenticatedBytes": true,
+          "emptyFile": true,
+          "partialCleanup": true,
+          "realRequests": true,
+          "credentialAndEarlyFailureRequests": true,
+          "navigationTaskContinues": true
+        },
+        "error": null,
+        "frameId": "17179869185",
+        "documentId": "f5afbd78-f568-49e4-a8ac-8b490445a1b5",
+        "url": "http://127.0.0.1:58263/compat/download",
+        "state": "true"
+      },
+      "file": {
+        "type": "download-file-evidence",
+        "sha256": "09fed9cbfb98b6ab0f3e8ff63b7b1f9b0e07d58b225295c78fdc023cc4985a72",
+        "bytes": 32768
+      }
+    },
+    {
+      "cefSharpVersion": "84.4.10",
+      "platform": "x86",
+      "case": {
+        "type": "compatibility-case",
+        "caseId": "download",
+        "success": true,
+        "checks": {
+          "promise": true,
+          "handle": true,
+          "completed": true,
+          "canceled": true,
+          "timeout": true,
+          "failure": true,
+          "singleTerminal": true,
+          "loginRedirect": true,
+          "anonymous": true,
+          "empty": true,
+          "earlyCancel": true,
+          "diskFailure": true,
+          "modernBytes": true,
+          "legacyBytes": true,
+          "authenticatedBytes": true,
+          "emptyFile": true,
+          "partialCleanup": true,
+          "realRequests": true,
+          "credentialAndEarlyFailureRequests": true,
+          "navigationTaskContinues": true
+        },
+        "error": null,
+        "frameId": "17179869185",
+        "documentId": "c279c129-f8d9-4e04-a39f-796e4a58b429",
+        "url": "http://127.0.0.1:58590/compat/download",
+        "state": "true"
+      },
+      "file": {
+        "type": "download-file-evidence",
+        "sha256": "09fed9cbfb98b6ab0f3e8ff63b7b1f9b0e07d58b225295c78fdc023cc4985a72",
+        "bytes": 32768
+      }
+    },
+    {
+      "cefSharpVersion": "121.3.70",
+      "platform": "x64",
+      "case": {
+        "type": "compatibility-case",
+        "caseId": "download",
+        "success": true,
+        "checks": {
+          "promise": true,
+          "handle": true,
+          "completed": true,
+          "canceled": true,
+          "timeout": true,
+          "failure": true,
+          "singleTerminal": true,
+          "loginRedirect": true,
+          "anonymous": true,
+          "empty": true,
+          "earlyCancel": true,
+          "diskFailure": true,
+          "modernBytes": true,
+          "legacyBytes": true,
+          "authenticatedBytes": true,
+          "emptyFile": true,
+          "partialCleanup": true,
+          "realRequests": true,
+          "credentialAndEarlyFailureRequests": true,
+          "navigationTaskContinues": true
+        },
+        "error": null,
+        "frameId": "21474836481",
+        "documentId": "500e8363-8b3a-497d-b40a-7ee9a5f4ddd7",
+        "url": "http://127.0.0.1:58717/compat/download",
+        "state": "true"
+      },
+      "file": {
+        "type": "download-file-evidence",
+        "sha256": "09fed9cbfb98b6ab0f3e8ff63b7b1f9b0e07d58b225295c78fdc023cc4985a72",
+        "bytes": 32768
+      }
+    },
+    {
+      "cefSharpVersion": "121.3.70",
+      "platform": "x86",
+      "case": {
+        "type": "compatibility-case",
+        "caseId": "download",
+        "success": true,
+        "checks": {
+          "promise": true,
+          "handle": true,
+          "completed": true,
+          "canceled": true,
+          "timeout": true,
+          "failure": true,
+          "singleTerminal": true,
+          "loginRedirect": true,
+          "anonymous": true,
+          "empty": true,
+          "earlyCancel": true,
+          "diskFailure": true,
+          "modernBytes": true,
+          "legacyBytes": true,
+          "authenticatedBytes": true,
+          "emptyFile": true,
+          "partialCleanup": true,
+          "realRequests": true,
+          "credentialAndEarlyFailureRequests": true,
+          "navigationTaskContinues": true
+        },
+        "error": null,
+        "frameId": "21474836481",
+        "documentId": "823e888e-80d6-45c3-ac4b-e26f5b84e505",
+        "url": "http://127.0.0.1:58848/compat/download",
+        "state": "true"
+      },
+      "file": {
+        "type": "download-file-evidence",
+        "sha256": "09fed9cbfb98b6ab0f3e8ff63b7b1f9b0e07d58b225295c78fdc023cc4985a72",
+        "bytes": 32768
+      }
+    },
+    {
+      "cefSharpVersion": "151.3.240",
+      "platform": "x64",
+      "case": {
+        "type": "compatibility-case",
+        "caseId": "download",
+        "success": true,
+        "checks": {
+          "promise": true,
+          "handle": true,
+          "completed": true,
+          "canceled": true,
+          "timeout": true,
+          "failure": true,
+          "singleTerminal": true,
+          "loginRedirect": true,
+          "anonymous": true,
+          "empty": true,
+          "earlyCancel": true,
+          "diskFailure": true,
+          "modernBytes": true,
+          "legacyBytes": true,
+          "authenticatedBytes": true,
+          "emptyFile": true,
+          "partialCleanup": true,
+          "realRequests": true,
+          "credentialAndEarlyFailureRequests": true,
+          "navigationTaskContinues": true
+        },
+        "error": null,
+        "frameId": "8-0782E9597DA0EEA09C2F48AD670F1AF6",
+        "documentId": "f4f4d137-552b-4df0-9be3-c258f4f596f5",
+        "url": "http://127.0.0.1:58970/compat/download",
+        "state": "true"
+      },
+      "file": {
+        "type": "download-file-evidence",
+        "sha256": "09fed9cbfb98b6ab0f3e8ff63b7b1f9b0e07d58b225295c78fdc023cc4985a72",
+        "bytes": 32768
+      }
+    },
+    {
+      "cefSharpVersion": "151.3.240",
+      "platform": "x86",
+      "case": {
+        "type": "compatibility-case",
+        "caseId": "download",
+        "success": true,
+        "checks": {
+          "promise": true,
+          "handle": true,
+          "completed": true,
+          "canceled": true,
+          "timeout": true,
+          "failure": true,
+          "singleTerminal": true,
+          "loginRedirect": true,
+          "anonymous": true,
+          "empty": true,
+          "earlyCancel": true,
+          "diskFailure": true,
+          "modernBytes": true,
+          "legacyBytes": true,
+          "authenticatedBytes": true,
+          "emptyFile": true,
+          "partialCleanup": true,
+          "realRequests": true,
+          "credentialAndEarlyFailureRequests": true,
+          "navigationTaskContinues": true
+        },
+        "error": null,
+        "frameId": "8-AF16F26974A7E80A3F3409574FF7DB4A",
+        "documentId": "2c99b0ee-cd63-4af7-98f6-7064f19dc56d",
+        "url": "http://127.0.0.1:59119/compat/download",
+        "state": "true"
+      },
+      "file": {
+        "type": "download-file-evidence",
+        "sha256": "09fed9cbfb98b6ab0f3e8ff63b7b1f9b0e07d58b225295c78fdc023cc4985a72",
+        "bytes": 32768
+      }
+    }
+  ]
+}

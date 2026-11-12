@@ -4,7 +4,7 @@
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
     <Platforms>x64;x86</Platforms>
-    <CefSharpVersion Condition="'$(CefSharpVersion)' == ''">121.3.70</CefSharpVersion>
+    <CefSharpVersion Condition="'$(CefSharpVersion)' == ''">151.3.240</CefSharpVersion>
     <DefineConstants Condition="$([MSBuild]::VersionLessThan('$(CefSharpVersion)', '100.0.0'))">$(DefineConstants);CEF_SHARP_LEGACY_EVALUATION</DefineConstants>
     <DefineConstants Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(CefSharpVersion)', '143.0.0'))">$(DefineConstants);CEF_SHARP_STRING_FRAME_IDS</DefineConstants>
   </PropertyGroup>
@@ -25,6 +25,8 @@
     </PackageReference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="..\Mzying2001.MonkeySharp.CefSharp.SmokeHost\SmokeLifecycleAssertions.cs" Link="SmokeLifecycleAssertions.cs" />
+    <Compile Include="..\Mzying2001.MonkeySharp.CefSharp.SmokeHost\NativeFrameProbe.cs" Link="NativeFrameProbe.cs" />
     <ProjectReference Include="..\Mzying2001.MonkeySharp.CefSharp\Mzying2001.MonkeySharp.CefSharp.csproj" />
   </ItemGroup>
 </Project>

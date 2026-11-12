@@ -1,0 +1,1 @@
+'use strict'; var shared = 1 // comment without terminator

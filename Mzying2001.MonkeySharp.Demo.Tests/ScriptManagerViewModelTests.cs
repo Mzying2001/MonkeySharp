@@ -7,6 +7,8 @@ using Mzying2001.MonkeySharp.Demo.Persistence;
 using Mzying2001.MonkeySharp.Demo.Services;
 using Mzying2001.MonkeySharp.Demo.ViewModels;
 using System.Linq;
+using System.IO;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Threading;
@@ -26,14 +28,16 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
             Assert.Equal("Manager sample", item.Name);
             Assert.Equal("v1.2.0", item.Version);
             Assert.Equal("A script used by manager tests.", item.Description);
-            Assert.Equal("已启用", item.StatusLabel);
-            Assert.Equal("停用", item.ToggleLabel);
+            Assert.Equal("Enabled", item.StatusLabel);
+            Assert.Equal("Disable", item.ToggleLabel);
+            Assert.Equal("Disable script", item.ToggleAutomationName);
             Assert.True(item.CanToggle);
 
             item.Update(await repository.SetEnabledAsync(installation.ScriptKey, false, CancellationToken.None));
 
-            Assert.Equal("已停用", item.StatusLabel);
-            Assert.Equal("启用", item.ToggleLabel);
+            Assert.Equal("Disabled", item.StatusLabel);
+            Assert.Equal("Enable", item.ToggleLabel);
+            Assert.Equal("Enable script", item.ToggleAutomationName);
             Assert.True(item.CanToggle);
         }
 
@@ -83,9 +87,9 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
             Assert.Contains("https://example.com/lib.js", details.Requires);
             Assert.Contains("badge = https://example.com/badge.png", details.Resources);
             Assert.Equal("https://example.com/script.user.js", details.SourceOrigin);
-            Assert.Contains(details.CompatibilityStatuses, item => item.Category == "Core 已实现");
-            Assert.Contains(details.CompatibilityStatuses, item => item.Category == "需要宿主 service");
-            Assert.Contains(details.CompatibilityStatuses, item => item.Category == "与 Tampermonkey 有差异");
+            Assert.Contains(details.CompatibilityStatuses, item => item.Category == "Implemented in Core");
+            Assert.Contains(details.CompatibilityStatuses, item => item.Category == "Host services required");
+            Assert.Contains(details.CompatibilityStatuses, item => item.Category == "Differs from Tampermonkey");
             Assert.Contains("Details", details.ToConfirmationText());
         }
 
@@ -104,10 +108,11 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
             var details = new ScriptDetailsViewModel();
             details.Update(new UserScriptMetadataParser().Parse(source), "fixture://compatibility.user.js", source);
 
-            Assert.Contains(details.CompatibilityStatuses, item => item.Category == "有意降级/不支持");
-            Assert.Contains(details.CompatibilityStatuses, item => item.Category == "与 Tampermonkey 有差异" &&
-                item.Message.Contains("静态 @webRequest"));
-            Assert.Contains("@sandbox", details.ToConfirmationText());
+            Assert.Contains(details.CompatibilityStatuses, item => item.Category == "Intentionally degraded / Unsupported");
+            Assert.Contains(details.CompatibilityStatuses, item => item.Category == "Differs from Tampermonkey" &&
+                item.Message.Contains("Static @webRequest"));
+            Assert.Contains("@unwrap", details.ToConfirmationText());
+            Assert.DoesNotContain("Unsupported @sandbox", details.ToConfirmationText());
             Assert.Contains("proxy", details.ToConfirmationText());
         }
 
@@ -129,7 +134,7 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
                 Assert.True(manager.HasFilteredScripts);
                 Assert.Equal("Alpha", ((ScriptItemViewModel)manager.FilteredScripts.Cast<object>().First()).Name);
 
-                manager.StatusFilter = "已启用";
+                manager.StatusFilter = ScriptStatusFilter.Enabled;
                 Assert.Equal(1, manager.FilteredCount);
                 manager.Search = "does-not-exist";
                 Assert.True(manager.ShowNoResults);
@@ -155,15 +160,15 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
 
                     var disabled = await repository.GetAsync(installation.ScriptKey, CancellationToken.None);
                     Assert.False(disabled.IsEnabled);
-                    Assert.Equal("已停用", item.StatusLabel);
-                    Assert.Equal("启用", item.ToggleLabel);
+                    Assert.Equal("Disabled", item.StatusLabel);
+                    Assert.Equal("Enable", item.ToggleLabel);
 
                     await manager.ToggleScriptCommand.ExecuteAsync(item);
 
                     var enabled = await repository.GetAsync(installation.ScriptKey, CancellationToken.None);
                     Assert.True(enabled.IsEnabled);
-                    Assert.Equal("已启用", item.StatusLabel);
-                    Assert.Equal("停用", item.ToggleLabel);
+                    Assert.Equal("Enabled", item.StatusLabel);
+                    Assert.Equal("Disable", item.ToggleLabel);
                 }
             }
         }
@@ -191,15 +196,15 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
 
                     Assert.Equal(0, confirmationCount);
                     Assert.False((await repository.GetAsync(installation.ScriptKey, CancellationToken.None)).IsEnabled);
-                    Assert.Equal("已停用", item.StatusLabel);
+                    Assert.Equal("Disabled", item.StatusLabel);
                     Assert.Equal(1, stateNotificationCount);
 
                     await manager.ToggleScriptCommand.ExecuteAsync(item);
 
                     Assert.Equal(0, confirmationCount);
                     Assert.True((await repository.GetAsync(installation.ScriptKey, CancellationToken.None)).IsEnabled);
-                    Assert.Equal("已启用", item.StatusLabel);
-                    Assert.Equal("停用", item.ToggleLabel);
+                    Assert.Equal("Enabled", item.StatusLabel);
+                    Assert.Equal("Disable", item.ToggleLabel);
                     Assert.True(item.CanToggle);
                     Assert.Equal(2, stateNotificationCount);
                 }
@@ -267,6 +272,63 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
                     Assert.Equal(installation.ScriptKey, saved.ScriptKey);
                     Assert.False(saved.IsEnabled);
                     Assert.Equal(installation.ScriptKey.ToString(), Assert.Single(manager.Scripts).ScriptKey);
+                }
+            }
+        }
+
+        [Fact]
+        public async Task ImportingIdenticalDraftsRefreshesTheSourceOriginWithoutInstalling()
+        {
+            using (var fixture = await PersistenceTests.Fixture.Create())
+            using (var content = new HttpContentService(fixture.Paths))
+            {
+                var repository = new InMemoryUserScriptRepository();
+                using (var manager = CreateManager(repository, content, _ => true, fixture.Paths.LogsDirectory))
+                {
+                    var first = Path.Combine(fixture.Paths.BaseDirectory, "first.user.js");
+                    var second = Path.Combine(fixture.Paths.BaseDirectory, "second.user.js");
+                    File.WriteAllText(first, "\uFEFF" + Source, new UTF8Encoding(false));
+                    File.WriteAllText(second, Source, new UTF8Encoding(false));
+
+                    await manager.ImportFileAsync(first);
+                    Assert.Equal(new Uri(first).AbsoluteUri, manager.Details.SourceOrigin);
+                    await manager.ImportFileAsync(second);
+
+                    Assert.Equal(Source, manager.Editor.Source);
+                    Assert.Equal(new Uri(second).AbsoluteUri, manager.Details.SourceOrigin);
+                    Assert.Equal("Manager sample", manager.Details.Name);
+                    Assert.False(manager.Editor.IsDirty);
+                    Assert.Null(manager.SelectedScript);
+                    Assert.Empty(await repository.GetSnapshotAsync(CancellationToken.None));
+                }
+            }
+        }
+
+        [Fact]
+        public async Task RefusingToDiscardEditsPreservesTheSelectedInstallationAndDraft()
+        {
+            using (var fixture = await PersistenceTests.Fixture.Create())
+            using (var content = new HttpContentService(fixture.Paths))
+            {
+                var repository = new InMemoryUserScriptRepository();
+                await repository.InstallAsync(Source, "application://original", true, CancellationToken.None);
+                using (var manager = CreateManager(repository, content, _ => false, fixture.Paths.LogsDirectory))
+                {
+                    await manager.RefreshAsync();
+                    manager.SelectedScript = Assert.Single(manager.Scripts);
+                    var selected = manager.SelectedScript;
+                    var edited = Source + "// unsaved edit";
+                    manager.Editor.Source = edited;
+
+                    // A rejected import must not even try to read the supplied file.
+                    await manager.ImportFileAsync(Path.Combine(fixture.Paths.BaseDirectory, "missing.user.js"));
+                    manager.NewCommand.Execute(null);
+
+                    Assert.Same(selected, manager.SelectedScript);
+                    Assert.Equal(edited, manager.Editor.Source);
+                    Assert.Equal("application://original", manager.Details.SourceOrigin);
+                    Assert.True(manager.Editor.IsDirty);
+                    Assert.False(manager.ConfirmDiscard());
                 }
             }
         }

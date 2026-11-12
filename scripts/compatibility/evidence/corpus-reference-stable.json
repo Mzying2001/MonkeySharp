@@ -1,0 +1,1388 @@
+{
+  "schemaVersion": 1,
+  "manager": "tampermonkey",
+  "results": [
+    {
+      "schemaVersion": 1,
+      "caseId": "dom-decoration",
+      "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+      "actionHash": "c9296ac6b8721815bdec30dac39bb8b788451854daf8827400623122a67ef67b",
+      "contractSource": [
+        "https://raw.githubusercontent.com/fastnow/UserJs/4e58ac92f3acc409e05fcb156afca3237454f777/SiteAssetDL.user.js"
+      ],
+      "environment": {
+        "manager": "Tampermonkey",
+        "managerVersion": "5.5.1",
+        "chromiumVersion": "157.0.4341.42",
+        "manifestVersion": 3,
+        "extensionId": "iikmkjmpaadaobahmlepeloendndfphd",
+        "contentSha256": "8d03dfa6e2bff063425d652aa1ef7d6c22b9df01dd0732861969d7e1510fc95b",
+        "channel": "stable",
+        "settings": {
+          "freshProfile": true,
+          "userScriptsAccess": true,
+          "locale": "en-US",
+          "downloadMode": "browser (selected in options UI)",
+          "privateStorage": "normal profile only"
+        },
+        "commit": "cfb7c42e7017308d1cb00e97f7ef22dfbc34d56d",
+        "sourcePatchSha256": "d63396b4b7571adbf18e74f36d07b1c22a0c40cfa81c3827e8df223d5650d694",
+        "inputsSha256": {
+          "Run-Corpus.cjs": "4259dc8287869170714bd9cb17d907b83e52d215667fa4866944f6af0e9c970b",
+          "corpus/scenarios.cjs": "4f75a7d487f94bedf7dedda1cd3e21bc54f32ce95f3d18f9c9fcc4892c84f01f",
+          "corpus.json": "ec6f7828f93937f645b8619fbda9a739afe19b3539a75ad2673501f26b1a1aa9",
+          "PackageConsumer/CorpusHost.cs": "d3db0ab2862ee64ee3a8f3bdf50dc49b6d43d06fb010339c0eac4991199d299d",
+          "ReferenceEnvironment.cjs": "4027d9d646ad73dea080312af3795967021e05eb2b6ed7c304356e439b3b3b87",
+          "reference-stable.json": "c7b33ecad356a740d291713f0108da69e2954afce891628ff577003074354bab"
+        },
+        "platform": "x64",
+        "world": "manager-selected/default",
+        "capabilities": {}
+      },
+      "immediateReturn": {},
+      "events": [
+        {
+          "kind": "open"
+        },
+        {
+          "kind": "assert",
+          "name": "assetToolbar"
+        },
+        {
+          "kind": "wait"
+        },
+        {
+          "kind": "evaluate"
+        },
+        {
+          "kind": "assert",
+          "name": "resourceCollected"
+        },
+        {
+          "kind": "assert",
+          "name": "computedStyle"
+        },
+        {
+          "kind": "evaluate"
+        },
+        {
+          "kind": "wait"
+        },
+        {
+          "kind": "assert",
+          "name": "singleDecoration"
+        }
+      ],
+      "promise": {},
+      "effects": {
+        "observations": {
+          "browserDownloads": [],
+          "downloadPermissionPrompt": "requires manual browser permission confirmation",
+          "engineFeatures": {
+            "replaceAll": "function",
+            "compressionStream": "function",
+            "saveFilePicker": "function"
+          },
+          "downloadsPermission": false
+        },
+        "checks": {
+          "assetToolbar": true,
+          "resourceCollected": true,
+          "computedStyle": true,
+          "singleDecoration": true
+        },
+        "files": [],
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/corpus",
+            "host": "127.0.0.1:51698",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:51698",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:51700",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/favicon.ico",
+            "host": "127.0.0.1:51698",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/favicon.ico",
+            "host": "127.0.0.1:51698",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          }
+        ],
+        "failedAction": null
+      },
+      "status": "passed"
+    },
+    {
+      "schemaVersion": 1,
+      "caseId": "dom-decoration-csp",
+      "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+      "actionHash": "4ad2255cacdae13dbdde1c704fc37721e0ded480a8018c9d2ab15340e7a33911",
+      "contractSource": [
+        "https://raw.githubusercontent.com/fastnow/UserJs/4e58ac92f3acc409e05fcb156afca3237454f777/SiteAssetDL.user.js"
+      ],
+      "environment": {
+        "manager": "Tampermonkey",
+        "managerVersion": "5.5.1",
+        "chromiumVersion": "157.0.4341.42",
+        "manifestVersion": 3,
+        "extensionId": "iikmkjmpaadaobahmlepeloendndfphd",
+        "contentSha256": "8d03dfa6e2bff063425d652aa1ef7d6c22b9df01dd0732861969d7e1510fc95b",
+        "channel": "stable",
+        "settings": {
+          "freshProfile": true,
+          "userScriptsAccess": true,
+          "locale": "en-US",
+          "downloadMode": "browser (selected in options UI)",
+          "privateStorage": "normal profile only"
+        },
+        "commit": "cfb7c42e7017308d1cb00e97f7ef22dfbc34d56d",
+        "sourcePatchSha256": "d63396b4b7571adbf18e74f36d07b1c22a0c40cfa81c3827e8df223d5650d694",
+        "inputsSha256": {
+          "Run-Corpus.cjs": "4259dc8287869170714bd9cb17d907b83e52d215667fa4866944f6af0e9c970b",
+          "corpus/scenarios.cjs": "4f75a7d487f94bedf7dedda1cd3e21bc54f32ce95f3d18f9c9fcc4892c84f01f",
+          "corpus.json": "ec6f7828f93937f645b8619fbda9a739afe19b3539a75ad2673501f26b1a1aa9",
+          "PackageConsumer/CorpusHost.cs": "d3db0ab2862ee64ee3a8f3bdf50dc49b6d43d06fb010339c0eac4991199d299d",
+          "ReferenceEnvironment.cjs": "4027d9d646ad73dea080312af3795967021e05eb2b6ed7c304356e439b3b3b87",
+          "reference-stable.json": "c7b33ecad356a740d291713f0108da69e2954afce891628ff577003074354bab"
+        },
+        "platform": "x64",
+        "world": "manager-selected/default",
+        "capabilities": {}
+      },
+      "immediateReturn": {},
+      "events": [
+        {
+          "kind": "open"
+        },
+        {
+          "kind": "assert",
+          "name": "nodeCreatedUnderCsp"
+        },
+        {
+          "kind": "evaluate",
+          "name": "styleApplied"
+        },
+        {
+          "kind": "assert",
+          "name": "singleCspDecoration"
+        }
+      ],
+      "promise": {},
+      "effects": {
+        "observations": {
+          "browserDownloads": [],
+          "downloadPermissionPrompt": "requires manual browser permission confirmation",
+          "engineFeatures": {
+            "replaceAll": "function",
+            "compressionStream": "function",
+            "saveFilePicker": "function"
+          },
+          "styleApplied": false,
+          "downloadsPermission": false
+        },
+        "checks": {
+          "nodeCreatedUnderCsp": true,
+          "singleCspDecoration": true
+        },
+        "files": [],
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/corpus",
+            "host": "127.0.0.1:51698",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200,
+            "contentSecurityPolicy": "style-src 'self'"
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:51698",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:51700",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/favicon.ico",
+            "host": "127.0.0.1:51698",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          }
+        ],
+        "failedAction": null
+      },
+      "status": "expected-engine-limitation",
+      "reason": "Source created its live DOM toolbar, but page style-src blocked its inline styles.",
+      "reasonCategory": "engine-csp"
+    },
+    {
+      "schemaVersion": 1,
+      "caseId": "page-hook",
+      "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+      "actionHash": "8e51f3ca186acd31f49e68d49c4ccef75edacb6150ae87358732bd591970e375",
+      "contractSource": [
+        "https://raw.githubusercontent.com/fastnow/UserJs/4e58ac92f3acc409e05fcb156afca3237454f777/SiteAssetDL.user.js"
+      ],
+      "environment": {
+        "manager": "Tampermonkey",
+        "managerVersion": "5.5.1",
+        "chromiumVersion": "157.0.4341.42",
+        "manifestVersion": 3,
+        "extensionId": "iikmkjmpaadaobahmlepeloendndfphd",
+        "contentSha256": "8d03dfa6e2bff063425d652aa1ef7d6c22b9df01dd0732861969d7e1510fc95b",
+        "channel": "stable",
+        "settings": {
+          "freshProfile": true,
+          "userScriptsAccess": true,
+          "locale": "en-US",
+          "downloadMode": "browser (selected in options UI)",
+          "privateStorage": "normal profile only"
+        },
+        "commit": "cfb7c42e7017308d1cb00e97f7ef22dfbc34d56d",
+        "sourcePatchSha256": "d63396b4b7571adbf18e74f36d07b1c22a0c40cfa81c3827e8df223d5650d694",
+        "inputsSha256": {
+          "Run-Corpus.cjs": "4259dc8287869170714bd9cb17d907b83e52d215667fa4866944f6af0e9c970b",
+          "corpus/scenarios.cjs": "4f75a7d487f94bedf7dedda1cd3e21bc54f32ce95f3d18f9c9fcc4892c84f01f",
+          "corpus.json": "ec6f7828f93937f645b8619fbda9a739afe19b3539a75ad2673501f26b1a1aa9",
+          "PackageConsumer/CorpusHost.cs": "d3db0ab2862ee64ee3a8f3bdf50dc49b6d43d06fb010339c0eac4991199d299d",
+          "ReferenceEnvironment.cjs": "4027d9d646ad73dea080312af3795967021e05eb2b6ed7c304356e439b3b3b87",
+          "reference-stable.json": "c7b33ecad356a740d291713f0108da69e2954afce891628ff577003074354bab"
+        },
+        "platform": "x64",
+        "world": "manager-selected/default",
+        "capabilities": {}
+      },
+      "immediateReturn": {},
+      "events": [
+        {
+          "kind": "open"
+        },
+        {
+          "kind": "assert",
+          "name": "assetToolbar"
+        },
+        {
+          "kind": "wait"
+        },
+        {
+          "kind": "evaluate"
+        },
+        {
+          "kind": "assert",
+          "name": "resourceCollected"
+        },
+        {
+          "kind": "evaluate",
+          "name": "hookBeforeFirstInline"
+        },
+        {
+          "kind": "assert",
+          "name": "historyHookInstalled"
+        },
+        {
+          "kind": "evaluate"
+        },
+        {
+          "kind": "wait"
+        }
+      ],
+      "promise": {},
+      "effects": {
+        "observations": {
+          "browserDownloads": [],
+          "downloadPermissionPrompt": "requires manual browser permission confirmation",
+          "engineFeatures": {
+            "replaceAll": "function",
+            "compressionStream": "function",
+            "saveFilePicker": "function"
+          },
+          "hookBeforeFirstInline": false,
+          "downloadsPermission": false
+        },
+        "checks": {
+          "assetToolbar": true,
+          "resourceCollected": true,
+          "historyHookInstalled": true
+        },
+        "files": [],
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/corpus",
+            "host": "127.0.0.1:51698",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:51698",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:51700",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/favicon.ico",
+            "host": "127.0.0.1:51698",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/second.png",
+            "host": "127.0.0.1:51698",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/favicon.ico",
+            "host": "127.0.0.1:51698",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          }
+        ],
+        "failedAction": {
+          "kind": "assert",
+          "name": "hookRefreshesResources",
+          "expression": "Array.from(document.querySelector('[data-sniffer-self]')?.shadowRoot.querySelectorAll('.card')).some(card => card.title.includes('second.png'))"
+        }
+      },
+      "status": "failed",
+      "reason": "Error: Corpus action did not meet its functional assertion.\n    at until (D:\\code\\MonkeySharp\\scripts\\compatibility\\Run-Corpus.cjs:52:11)\n    at async reference (D:\\code\\MonkeySharp\\scripts\\compatibility\\Run-Corpus.cjs:130:50)\n    at async main (D:\\code\\MonkeySharp\\scripts\\compatibility\\Run-Corpus.cjs:206:62)",
+      "reasonCategory": "runtime-or-host"
+    },
+    {
+      "schemaVersion": 1,
+      "caseId": "authenticated-xhr",
+      "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+      "actionHash": "63d0c269eb7fe35262769844ec370357feea1cf6c15644fc2ffad070c77e81cd",
+      "contractSource": [
+        "https://raw.githubusercontent.com/fastnow/UserJs/4e58ac92f3acc409e05fcb156afca3237454f777/SiteAssetDL.user.js"
+      ],
+      "environment": {
+        "manager": "Tampermonkey",
+        "managerVersion": "5.5.1",
+        "chromiumVersion": "157.0.4341.42",
+        "manifestVersion": 3,
+        "extensionId": "iikmkjmpaadaobahmlepeloendndfphd",
+        "contentSha256": "8d03dfa6e2bff063425d652aa1ef7d6c22b9df01dd0732861969d7e1510fc95b",
+        "channel": "stable",
+        "settings": {
+          "freshProfile": true,
+          "userScriptsAccess": true,
+          "locale": "en-US",
+          "downloadMode": "browser (selected in options UI)",
+          "privateStorage": "normal profile only"
+        },
+        "commit": "cfb7c42e7017308d1cb00e97f7ef22dfbc34d56d",
+        "sourcePatchSha256": "d63396b4b7571adbf18e74f36d07b1c22a0c40cfa81c3827e8df223d5650d694",
+        "inputsSha256": {
+          "Run-Corpus.cjs": "4259dc8287869170714bd9cb17d907b83e52d215667fa4866944f6af0e9c970b",
+          "corpus/scenarios.cjs": "4f75a7d487f94bedf7dedda1cd3e21bc54f32ce95f3d18f9c9fcc4892c84f01f",
+          "corpus.json": "ec6f7828f93937f645b8619fbda9a739afe19b3539a75ad2673501f26b1a1aa9",
+          "PackageConsumer/CorpusHost.cs": "d3db0ab2862ee64ee3a8f3bdf50dc49b6d43d06fb010339c0eac4991199d299d",
+          "ReferenceEnvironment.cjs": "4027d9d646ad73dea080312af3795967021e05eb2b6ed7c304356e439b3b3b87",
+          "reference-stable.json": "c7b33ecad356a740d291713f0108da69e2954afce891628ff577003074354bab"
+        },
+        "platform": "x64",
+        "world": "manager-selected/default",
+        "capabilities": {}
+      },
+      "immediateReturn": {},
+      "events": [
+        {
+          "kind": "open"
+        },
+        {
+          "kind": "assert",
+          "name": "assetToolbar"
+        },
+        {
+          "kind": "wait"
+        },
+        {
+          "kind": "evaluate"
+        },
+        {
+          "kind": "assert",
+          "name": "resourceCollected"
+        },
+        {
+          "kind": "evaluate"
+        },
+        {
+          "kind": "wait"
+        },
+        {
+          "kind": "evaluate",
+          "name": "probeResponseUi"
+        },
+        {
+          "kind": "evaluate"
+        }
+      ],
+      "promise": {},
+      "effects": {
+        "observations": {
+          "browserDownloads": [],
+          "engineFeatures": {
+            "replaceAll": "function",
+            "compressionStream": "function",
+            "saveFilePicker": "function"
+          },
+          "downloadPermissionPrompt": "requires manual browser permission confirmation",
+          "probeResponseUi": {
+            "status": "探测大小 0/1",
+            "cards": [
+              "↓\n       ⧉\n       ◎\n       ↗redirect.png\n       1×1"
+            ]
+          },
+          "downloadsPermission": false
+        },
+        "checks": {
+          "assetToolbar": true,
+          "resourceCollected": true
+        },
+        "files": [],
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/corpus",
+            "host": "127.0.0.1:51698",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:51698",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:51700",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/favicon.ico",
+            "host": "127.0.0.1:51698",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "HEAD",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:51698",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "HEAD",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:51700",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:51698",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:51700",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:51698",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:51700",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          }
+        ],
+        "failedAction": {
+          "kind": "files",
+          "name": "authenticatedBytesPacked",
+          "minimum": 1
+        }
+      },
+      "status": "blocked",
+      "reason": "The browser has not granted Tampermonkey downloads permission; no saved-file parity result is available. Error: Corpus action did not meet its functional assertion.\n    at until (D:\\code\\MonkeySharp\\scripts\\compatibility\\Run-Corpus.cjs:52:11)\n    at async reference (D:\\code\\MonkeySharp\\scripts\\compatibility\\Run-Corpus.cjs:141:17)\n    at async main (D:\\code\\MonkeySharp\\scripts\\compatibility\\Run-Corpus.cjs:206:62)",
+      "reasonCategory": "reference-environment"
+    },
+    {
+      "schemaVersion": 1,
+      "caseId": "download",
+      "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+      "actionHash": "6781d0f6f4e23c2b163f0f1709154ca40e48a50fd245211da76419d71d9564b7",
+      "contractSource": [
+        "https://raw.githubusercontent.com/fastnow/UserJs/4e58ac92f3acc409e05fcb156afca3237454f777/SiteAssetDL.user.js"
+      ],
+      "environment": {
+        "manager": "Tampermonkey",
+        "managerVersion": "5.5.1",
+        "chromiumVersion": "157.0.4341.42",
+        "manifestVersion": 3,
+        "extensionId": "iikmkjmpaadaobahmlepeloendndfphd",
+        "contentSha256": "8d03dfa6e2bff063425d652aa1ef7d6c22b9df01dd0732861969d7e1510fc95b",
+        "channel": "stable",
+        "settings": {
+          "freshProfile": true,
+          "userScriptsAccess": true,
+          "locale": "en-US",
+          "downloadMode": "browser (selected in options UI)",
+          "privateStorage": "normal profile only"
+        },
+        "commit": "cfb7c42e7017308d1cb00e97f7ef22dfbc34d56d",
+        "sourcePatchSha256": "d63396b4b7571adbf18e74f36d07b1c22a0c40cfa81c3827e8df223d5650d694",
+        "inputsSha256": {
+          "Run-Corpus.cjs": "4259dc8287869170714bd9cb17d907b83e52d215667fa4866944f6af0e9c970b",
+          "corpus/scenarios.cjs": "4f75a7d487f94bedf7dedda1cd3e21bc54f32ce95f3d18f9c9fcc4892c84f01f",
+          "corpus.json": "ec6f7828f93937f645b8619fbda9a739afe19b3539a75ad2673501f26b1a1aa9",
+          "PackageConsumer/CorpusHost.cs": "d3db0ab2862ee64ee3a8f3bdf50dc49b6d43d06fb010339c0eac4991199d299d",
+          "ReferenceEnvironment.cjs": "4027d9d646ad73dea080312af3795967021e05eb2b6ed7c304356e439b3b3b87",
+          "reference-stable.json": "c7b33ecad356a740d291713f0108da69e2954afce891628ff577003074354bab"
+        },
+        "platform": "x64",
+        "world": "manager-selected/default",
+        "capabilities": {}
+      },
+      "immediateReturn": {},
+      "events": [
+        {
+          "kind": "open"
+        },
+        {
+          "kind": "assert",
+          "name": "assetToolbar"
+        },
+        {
+          "kind": "wait"
+        },
+        {
+          "kind": "evaluate"
+        },
+        {
+          "kind": "assert",
+          "name": "resourceCollected"
+        },
+        {
+          "kind": "evaluate"
+        }
+      ],
+      "promise": {},
+      "effects": {
+        "observations": {
+          "browserDownloads": [],
+          "engineFeatures": {
+            "replaceAll": "function",
+            "compressionStream": "function",
+            "saveFilePicker": "function"
+          },
+          "downloadPermissionPrompt": "requires manual browser permission confirmation",
+          "downloadsPermission": false
+        },
+        "checks": {
+          "assetToolbar": true,
+          "resourceCollected": true
+        },
+        "files": [],
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/corpus",
+            "host": "127.0.0.1:51698",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:51698",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:51700",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/favicon.ico",
+            "host": "127.0.0.1:51698",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          }
+        ],
+        "failedAction": {
+          "kind": "files",
+          "name": "fileSaved",
+          "minimum": 1
+        }
+      },
+      "status": "blocked",
+      "reason": "The browser has not granted Tampermonkey downloads permission; no saved-file parity result is available. Error: Corpus action did not meet its functional assertion.\n    at until (D:\\code\\MonkeySharp\\scripts\\compatibility\\Run-Corpus.cjs:52:11)\n    at async reference (D:\\code\\MonkeySharp\\scripts\\compatibility\\Run-Corpus.cjs:141:17)\n    at async main (D:\\code\\MonkeySharp\\scripts\\compatibility\\Run-Corpus.cjs:206:62)",
+      "reasonCategory": "reference-environment"
+    },
+    {
+      "schemaVersion": 1,
+      "caseId": "download-cancel",
+      "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+      "actionHash": "3ab8cc2018abcabc98467f4fa45c7d4b12a5bac67eefbc55b34fbb13a12dfa4f",
+      "contractSource": [
+        "https://raw.githubusercontent.com/fastnow/UserJs/4e58ac92f3acc409e05fcb156afca3237454f777/SiteAssetDL.user.js"
+      ],
+      "environment": {
+        "manager": "Tampermonkey",
+        "managerVersion": "5.5.1",
+        "chromiumVersion": "157.0.4341.42",
+        "manifestVersion": 3,
+        "extensionId": "iikmkjmpaadaobahmlepeloendndfphd",
+        "contentSha256": "8d03dfa6e2bff063425d652aa1ef7d6c22b9df01dd0732861969d7e1510fc95b",
+        "channel": "stable",
+        "settings": {
+          "freshProfile": true,
+          "userScriptsAccess": true,
+          "locale": "en-US",
+          "downloadMode": "browser (selected in options UI)",
+          "privateStorage": "normal profile only"
+        },
+        "commit": "cfb7c42e7017308d1cb00e97f7ef22dfbc34d56d",
+        "sourcePatchSha256": "d63396b4b7571adbf18e74f36d07b1c22a0c40cfa81c3827e8df223d5650d694",
+        "inputsSha256": {
+          "Run-Corpus.cjs": "4259dc8287869170714bd9cb17d907b83e52d215667fa4866944f6af0e9c970b",
+          "corpus/scenarios.cjs": "4f75a7d487f94bedf7dedda1cd3e21bc54f32ce95f3d18f9c9fcc4892c84f01f",
+          "corpus.json": "ec6f7828f93937f645b8619fbda9a739afe19b3539a75ad2673501f26b1a1aa9",
+          "PackageConsumer/CorpusHost.cs": "d3db0ab2862ee64ee3a8f3bdf50dc49b6d43d06fb010339c0eac4991199d299d",
+          "ReferenceEnvironment.cjs": "4027d9d646ad73dea080312af3795967021e05eb2b6ed7c304356e439b3b3b87",
+          "reference-stable.json": "c7b33ecad356a740d291713f0108da69e2954afce891628ff577003074354bab"
+        },
+        "platform": "x64",
+        "world": "manager-selected/default",
+        "capabilities": {}
+      },
+      "immediateReturn": {},
+      "events": [
+        {
+          "kind": "open"
+        },
+        {
+          "kind": "assert",
+          "name": "assetToolbar"
+        },
+        {
+          "kind": "wait"
+        },
+        {
+          "kind": "evaluate"
+        },
+        {
+          "kind": "assert",
+          "name": "resourceCollected"
+        },
+        {
+          "kind": "evaluate"
+        },
+        {
+          "kind": "wait"
+        },
+        {
+          "kind": "evaluate",
+          "name": "cancelStatus"
+        },
+        {
+          "kind": "files",
+          "name": "cancellationLeavesNoFile"
+        }
+      ],
+      "promise": {},
+      "effects": {
+        "observations": {
+          "browserDownloads": [],
+          "engineFeatures": {
+            "replaceAll": "function",
+            "compressionStream": "function",
+            "saveFilePicker": "function"
+          },
+          "downloadPermissionPrompt": "requires manual browser permission confirmation",
+          "cancelStatus": {
+            "url": "http://127.0.0.1:51698/corpus",
+            "status": "逐个下载 0/1"
+          },
+          "downloadsPermission": false
+        },
+        "checks": {
+          "assetToolbar": true,
+          "resourceCollected": true,
+          "cancellationLeavesNoFile": true
+        },
+        "files": [],
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/corpus",
+            "host": "127.0.0.1:51698",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:51698",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:51700",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/favicon.ico",
+            "host": "127.0.0.1:51698",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          }
+        ],
+        "failedAction": null
+      },
+      "status": "blocked",
+      "reason": "The browser has not granted Tampermonkey downloads permission; no saved-file parity result is available. No actual canceled download was observed; an empty output directory alone does not prove cancellation.",
+      "reasonCategory": "reference-environment"
+    },
+    {
+      "schemaVersion": 1,
+      "caseId": "storage-listener",
+      "fixtureHash": "476400193285d5ed26a0e92a8173919feaa5748141600c955da44e146eceed4f",
+      "actionHash": "34558f3f34180431eb14d954e24835aa81dbc0553221a405e14a581a4c3f4b28",
+      "contractSource": [
+        "https://raw.githubusercontent.com/utags/userscripts/5b6c8bbc379fcf8caf8f5e07d3dffe2de80387f9/find-scripts-for-this-site/find-scripts-for-this-site.user.js"
+      ],
+      "environment": {
+        "manager": "Tampermonkey",
+        "managerVersion": "5.5.1",
+        "chromiumVersion": "157.0.4341.42",
+        "manifestVersion": 3,
+        "extensionId": "iikmkjmpaadaobahmlepeloendndfphd",
+        "contentSha256": "8d03dfa6e2bff063425d652aa1ef7d6c22b9df01dd0732861969d7e1510fc95b",
+        "channel": "stable",
+        "settings": {
+          "freshProfile": true,
+          "userScriptsAccess": true,
+          "locale": "en-US",
+          "downloadMode": "browser (selected in options UI)",
+          "privateStorage": "normal profile only"
+        },
+        "commit": "cfb7c42e7017308d1cb00e97f7ef22dfbc34d56d",
+        "sourcePatchSha256": "d63396b4b7571adbf18e74f36d07b1c22a0c40cfa81c3827e8df223d5650d694",
+        "inputsSha256": {
+          "Run-Corpus.cjs": "4259dc8287869170714bd9cb17d907b83e52d215667fa4866944f6af0e9c970b",
+          "corpus/scenarios.cjs": "4f75a7d487f94bedf7dedda1cd3e21bc54f32ce95f3d18f9c9fcc4892c84f01f",
+          "corpus.json": "ec6f7828f93937f645b8619fbda9a739afe19b3539a75ad2673501f26b1a1aa9",
+          "PackageConsumer/CorpusHost.cs": "d3db0ab2862ee64ee3a8f3bdf50dc49b6d43d06fb010339c0eac4991199d299d",
+          "ReferenceEnvironment.cjs": "4027d9d646ad73dea080312af3795967021e05eb2b6ed7c304356e439b3b3b87",
+          "reference-stable.json": "c7b33ecad356a740d291713f0108da69e2954afce891628ff577003074354bab"
+        },
+        "platform": "x64",
+        "world": "manager-selected/default",
+        "capabilities": {}
+      },
+      "immediateReturn": {},
+      "events": [
+        {
+          "kind": "open"
+        },
+        {
+          "kind": "menu"
+        },
+        {
+          "kind": "assert",
+          "name": "settingsPanel"
+        },
+        {
+          "kind": "wait"
+        },
+        {
+          "kind": "open"
+        },
+        {
+          "kind": "menu"
+        },
+        {
+          "kind": "assert",
+          "name": "settingsPanel"
+        },
+        {
+          "kind": "wait"
+        },
+        {
+          "kind": "switch"
+        },
+        {
+          "kind": "evaluate"
+        },
+        {
+          "kind": "wait"
+        },
+        {
+          "kind": "assertMenu",
+          "name": "localMenuRemoved"
+        },
+        {
+          "kind": "switch"
+        },
+        {
+          "kind": "assertMenu",
+          "name": "remoteMenuRemoved"
+        },
+        {
+          "kind": "navigate"
+        },
+        {
+          "kind": "menu"
+        },
+        {
+          "kind": "assert",
+          "name": "settingsPanel"
+        },
+        {
+          "kind": "wait"
+        },
+        {
+          "kind": "assert",
+          "name": "persistedAfterNavigation"
+        }
+      ],
+      "promise": {},
+      "effects": {
+        "observations": {
+          "browserDownloads": [],
+          "engineFeatures": {
+            "replaceAll": "function",
+            "compressionStream": "function",
+            "saveFilePicker": "function"
+          },
+          "downloadPermissionPrompt": "requires manual browser permission confirmation",
+          "downloadsPermission": false
+        },
+        "checks": {
+          "settingsPanel": true,
+          "localMenuRemoved": true,
+          "remoteMenuRemoved": true,
+          "persistedAfterNavigation": true
+        },
+        "files": [],
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/settings-a",
+            "host": "127.0.0.1:51698",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:51698",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:51700",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/favicon.ico",
+            "host": "127.0.0.1:51698",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/settings-b",
+            "host": "127.0.0.1:51698",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:51698",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:51700",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/favicon.ico",
+            "host": "127.0.0.1:51698",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/settings-reload",
+            "host": "127.0.0.1:51698",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:51698",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:51700",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/favicon.ico",
+            "host": "127.0.0.1:51698",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          }
+        ],
+        "failedAction": null
+      },
+      "status": "passed"
+    },
+    {
+      "schemaVersion": 1,
+      "caseId": "menu-configuration",
+      "fixtureHash": "476400193285d5ed26a0e92a8173919feaa5748141600c955da44e146eceed4f",
+      "actionHash": "58bdef1a0d6ffd6190734858db6034c0ee7af0db35b014d63477c6d6e584f328",
+      "contractSource": [
+        "https://raw.githubusercontent.com/utags/userscripts/5b6c8bbc379fcf8caf8f5e07d3dffe2de80387f9/find-scripts-for-this-site/find-scripts-for-this-site.user.js"
+      ],
+      "environment": {
+        "manager": "Tampermonkey",
+        "managerVersion": "5.5.1",
+        "chromiumVersion": "157.0.4341.42",
+        "manifestVersion": 3,
+        "extensionId": "iikmkjmpaadaobahmlepeloendndfphd",
+        "contentSha256": "8d03dfa6e2bff063425d652aa1ef7d6c22b9df01dd0732861969d7e1510fc95b",
+        "channel": "stable",
+        "settings": {
+          "freshProfile": true,
+          "userScriptsAccess": true,
+          "locale": "en-US",
+          "downloadMode": "browser (selected in options UI)",
+          "privateStorage": "normal profile only"
+        },
+        "commit": "cfb7c42e7017308d1cb00e97f7ef22dfbc34d56d",
+        "sourcePatchSha256": "d63396b4b7571adbf18e74f36d07b1c22a0c40cfa81c3827e8df223d5650d694",
+        "inputsSha256": {
+          "Run-Corpus.cjs": "4259dc8287869170714bd9cb17d907b83e52d215667fa4866944f6af0e9c970b",
+          "corpus/scenarios.cjs": "4f75a7d487f94bedf7dedda1cd3e21bc54f32ce95f3d18f9c9fcc4892c84f01f",
+          "corpus.json": "ec6f7828f93937f645b8619fbda9a739afe19b3539a75ad2673501f26b1a1aa9",
+          "PackageConsumer/CorpusHost.cs": "d3db0ab2862ee64ee3a8f3bdf50dc49b6d43d06fb010339c0eac4991199d299d",
+          "ReferenceEnvironment.cjs": "4027d9d646ad73dea080312af3795967021e05eb2b6ed7c304356e439b3b3b87",
+          "reference-stable.json": "c7b33ecad356a740d291713f0108da69e2954afce891628ff577003074354bab"
+        },
+        "platform": "x64",
+        "world": "manager-selected/default",
+        "capabilities": {}
+      },
+      "immediateReturn": {},
+      "events": [
+        {
+          "kind": "open"
+        },
+        {
+          "kind": "wait"
+        },
+        {
+          "kind": "assertMenu",
+          "name": "initialDomainMenu"
+        },
+        {
+          "kind": "menu"
+        },
+        {
+          "kind": "assert",
+          "name": "settingsPanel"
+        },
+        {
+          "kind": "wait"
+        },
+        {
+          "kind": "evaluate"
+        },
+        {
+          "kind": "wait"
+        },
+        {
+          "kind": "assertMenu",
+          "name": "updatedDomainMenu"
+        },
+        {
+          "kind": "navigate"
+        },
+        {
+          "kind": "menu"
+        },
+        {
+          "kind": "assert",
+          "name": "settingsPanel"
+        },
+        {
+          "kind": "wait"
+        },
+        {
+          "kind": "assert",
+          "name": "configurationReadback"
+        }
+      ],
+      "promise": {},
+      "effects": {
+        "observations": {
+          "browserDownloads": [],
+          "engineFeatures": {
+            "replaceAll": "function",
+            "compressionStream": "function",
+            "saveFilePicker": "function"
+          },
+          "downloadPermissionPrompt": "requires manual browser permission confirmation",
+          "downloadsPermission": false
+        },
+        "checks": {
+          "initialDomainMenu": true,
+          "settingsPanel": true,
+          "updatedDomainMenu": true,
+          "configurationReadback": true
+        },
+        "files": [],
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/settings-menu",
+            "host": "127.0.0.1:51698",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:51698",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:51700",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/corpus-child",
+            "host": "127.0.0.1:51698",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:51698",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:51700",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/favicon.ico",
+            "host": "127.0.0.1:51698",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/settings-menu-reload",
+            "host": "127.0.0.1:51698",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:51698",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:51700",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/favicon.ico",
+            "host": "127.0.0.1:51698",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          }
+        ],
+        "failedAction": null
+      },
+      "status": "passed"
+    },
+    {
+      "schemaVersion": 1,
+      "caseId": "iframe-spa",
+      "fixtureHash": "5d1bdf092dfa93501826fa1db166b2e5a2e00b9bd725c26388b246d8a903c86f",
+      "actionHash": "e5e6dad00b5dd9b197465e1595aa5275e55c827991a0a112b83daf4c38bf29ef",
+      "contractSource": [
+        "https://raw.githubusercontent.com/fastnow/UserJs/4e58ac92f3acc409e05fcb156afca3237454f777/SiteAssetDL.user.js"
+      ],
+      "environment": {
+        "manager": "Tampermonkey",
+        "managerVersion": "5.5.1",
+        "chromiumVersion": "157.0.4341.42",
+        "manifestVersion": 3,
+        "extensionId": "iikmkjmpaadaobahmlepeloendndfphd",
+        "contentSha256": "8d03dfa6e2bff063425d652aa1ef7d6c22b9df01dd0732861969d7e1510fc95b",
+        "channel": "stable",
+        "settings": {
+          "freshProfile": true,
+          "userScriptsAccess": true,
+          "locale": "en-US",
+          "downloadMode": "browser (selected in options UI)",
+          "privateStorage": "normal profile only"
+        },
+        "commit": "cfb7c42e7017308d1cb00e97f7ef22dfbc34d56d",
+        "sourcePatchSha256": "d63396b4b7571adbf18e74f36d07b1c22a0c40cfa81c3827e8df223d5650d694",
+        "inputsSha256": {
+          "Run-Corpus.cjs": "4259dc8287869170714bd9cb17d907b83e52d215667fa4866944f6af0e9c970b",
+          "corpus/scenarios.cjs": "4f75a7d487f94bedf7dedda1cd3e21bc54f32ce95f3d18f9c9fcc4892c84f01f",
+          "corpus.json": "ec6f7828f93937f645b8619fbda9a739afe19b3539a75ad2673501f26b1a1aa9",
+          "PackageConsumer/CorpusHost.cs": "d3db0ab2862ee64ee3a8f3bdf50dc49b6d43d06fb010339c0eac4991199d299d",
+          "ReferenceEnvironment.cjs": "4027d9d646ad73dea080312af3795967021e05eb2b6ed7c304356e439b3b3b87",
+          "reference-stable.json": "c7b33ecad356a740d291713f0108da69e2954afce891628ff577003074354bab"
+        },
+        "platform": "x64",
+        "world": "manager-selected/default",
+        "capabilities": {}
+      },
+      "immediateReturn": {},
+      "events": [
+        {
+          "kind": "open"
+        },
+        {
+          "kind": "assert",
+          "name": "assetToolbar"
+        },
+        {
+          "kind": "wait"
+        },
+        {
+          "kind": "evaluate"
+        },
+        {
+          "kind": "assert",
+          "name": "resourceCollected"
+        },
+        {
+          "kind": "assert",
+          "name": "sameProcessFrameDecoration"
+        },
+        {
+          "kind": "evaluate"
+        },
+        {
+          "kind": "wait"
+        },
+        {
+          "kind": "assert",
+          "name": "spaNoDuplicate"
+        },
+        {
+          "kind": "evaluate",
+          "name": "excludedScopes"
+        }
+      ],
+      "promise": {},
+      "effects": {
+        "observations": {
+          "browserDownloads": [],
+          "engineFeatures": {
+            "replaceAll": "function",
+            "compressionStream": "function",
+            "saveFilePicker": "function"
+          },
+          "downloadPermissionPrompt": "requires manual browser permission confirmation",
+          "excludedScopes": {
+            "oopif": "not-proven-by-same-process-frame",
+            "bfcache": "not-proven-by-history-update"
+          },
+          "downloadsPermission": false
+        },
+        "checks": {
+          "assetToolbar": true,
+          "resourceCollected": true,
+          "sameProcessFrameDecoration": true,
+          "spaNoDuplicate": true
+        },
+        "files": [],
+        "requests": [
+          {
+            "method": "GET",
+            "path": "/corpus",
+            "host": "127.0.0.1:51698",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:51698",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:51700",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/corpus-child",
+            "host": "127.0.0.1:51698",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:51698",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:51700",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/favicon.ico",
+            "host": "127.0.0.1:51698",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/protected/redirect.png",
+            "host": "127.0.0.1:51698",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 302
+          },
+          {
+            "method": "GET",
+            "path": "/protected/image.png",
+            "host": "127.0.0.1:51700",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          },
+          {
+            "method": "GET",
+            "path": "/favicon.ico",
+            "host": "127.0.0.1:51698",
+            "cookie": "corpus-auth=fixture-only",
+            "status": 200
+          }
+        ],
+        "failedAction": null
+      },
+      "status": "passed"
+    }
+  ],
+  "artifactPath": "artifacts/corpus/reference-final/results.json"
+}

@@ -1,17 +1,19 @@
-# MonkeySharp 3.0
+# MonkeySharp
 
 [English](README.md) | **中文**
 
-MonkeySharp 3 是面向 CefSharp 嵌入式应用的用户脚本运行时。Core 包含与浏览器无关的解析、URL 匹配、仓库、存储、权限和 API 分发；CefSharp 适配器负责浏览器生命周期集成。
+MonkeySharp 是面向 CefSharp 嵌入式应用的用户脚本运行时。Core 包含与浏览器无关的解析、URL 匹配、仓库、存储、权限和 API 分发；CefSharp 适配器负责浏览器生命周期集成。
 
-默认 `LegacyCompatible` 配置通过异步桥接提供现代 `GM.*` API 和旧式 `GM_*` 别名。可用能力取决于脚本授权和宿主服务。
+脚本可以使用现代 `GM.*` 方法和旧式 `GM_*` 名称。可用能力由授权声明和宿主服务共同决定，调用约定见[用户脚本使用指南](docs/usage-guide.zh-CN.md#execution-grants-and-compatibility)。
 
 | 目标 | 阅读入口 |
 | --- | --- |
 | 运行浏览器和脚本管理器 | [WPF 示例](#wpf-浏览器示例) |
 | 在应用程序中集成 MonkeySharp | [最小集成](#最小宿主集成)，然后参阅[集成参考](docs/integration-reference.zh-CN.md) |
 | 编写或移植用户脚本 | [用户脚本使用指南](docs/usage-guide.zh-CN.md) |
-| 构建、打包或验证运行时 | [构建与测试](#构建与测试)，然后参阅[验证参考](docs/integration-reference.zh-CN.md#构建打包与验证) |
+| 构建、打包或验证运行时 | [构建与测试](#构建与测试)，然后参阅[开发指南](docs/development.zh-CN.md) |
+
+[文档导航](docs/README.md) · [兼容性范围与证据](docs/compatibility/README.md)
 
 ## 软件包
 
@@ -29,7 +31,7 @@ MonkeySharp 3 是面向 CefSharp 嵌入式应用的用户脚本运行时。Core 
 </ItemGroup>
 ```
 
-宿主还必须引用版本匹配的 `CefSharp.WinForms`、`CefSharp.Wpf` 或 `CefSharp.Common` 包；适配器的 `CefSharp.Common` 依赖是私有的。应用程序和适配器必须使用同一个显式 `x64` 或 `x86` 进程平台。适配器默认使用 CefSharp `121.3.70`；发布前应针对实际版本编译和测试。已测试版本及绑定说明见[集成参考](docs/integration-reference.zh-CN.md#cefsharp-版本兼容性)。
+宿主还必须引用版本匹配的 `CefSharp.WinForms`、`CefSharp.Wpf` 或 `CefSharp.Common` 包；适配器的 `CefSharp.Common` 依赖是私有的。应用程序和适配器必须使用同一个显式 `x64` 或 `x86` 进程平台。适配器默认使用 CefSharp `151.3.240`；发布前应针对实际版本编译和测试。已测试版本及绑定说明见[集成参考](docs/integration-reference.zh-CN.md#cefsharp-版本兼容性)。
 
 ## 快速开始
 
@@ -39,10 +41,10 @@ MonkeySharp 3 是面向 CefSharp 嵌入式应用的用户脚本运行时。Core 
 
 ```powershell
 dotnet build Mzying2001.MonkeySharp.Demo/Mzying2001.MonkeySharp.Demo.csproj -c Release -p:Platform=x64
-& .\Mzying2001.MonkeySharp.Demo\bin\x64\Release\net462\Mzying2001.MonkeySharp.Demo.exe
+& .\Mzying2001.MonkeySharp.Demo\bin\x64\Release\net462\MonkeySharpDemo.exe
 ```
 
-可执行文件目录必须可写，因为便携 profile 存储在其中的 `Data/` 目录。Demo 显式启用了 `TrustedPageWorld`：它是面向可信页面和脚本的集成示例，不是加固浏览器或完整的 Tampermonkey 替代品。使用方式、恢复流程、服务边界和验证方法见 [Demo 指南](Mzying2001.MonkeySharp.Demo/README.md)。
+可执行文件目录必须可写，因为便携 profile 存储在其中的 `Data/` 目录。Demo 显式启用了 `TrustedPageWorld`：它是面向可信页面和脚本的集成示例，不是加固浏览器或完整的 Tampermonkey 替代品。使用方式、恢复流程、服务边界和验证方法见 [Demo 指南](Mzying2001.MonkeySharp.Demo/README.zh-CN.md)。
 
 ### 最小宿主集成
 
@@ -82,7 +84,7 @@ host.Attach(browser);
 form.Controls.Add(browser);
 ```
 
-参数 `true` 表示启用该安装。页面加载后，在 DevTools 中执行 `document.documentElement.dataset.monkeySharp`，结果应为 `"ready"`。本例使用 `@grant none`；`none` 或 info 以外的授权需要[显式启用信任选项](#安全模型)，并按需注册对应宿主服务。
+参数 `true` 表示启用该安装。页面加载后，在 DevTools 中执行 `document.documentElement.dataset.monkeySharp`，结果应为 `"ready"`。本例使用 `@grant none`。使用特权 API 时，按[安全模型](#安全模型)选择执行世界，并注册所需宿主服务。
 
 在窗体存续期间保留宿主和浏览器。应先释放 MonkeySharp 宿主，再释放浏览器，并在全部浏览器释放后调用一次 `CefSharp.Cef.Shutdown()`。宿主重复释放是安全的，并会取消文档会话和待处理 API 请求。[SmokeHost](Mzying2001.MonkeySharp.CefSharp.SmokeHost/Program.cs) 提供了完整的 WinForms 启动和关闭示例。
 
@@ -100,18 +102,19 @@ browser.RequestHandler = requestHandlers;
 host.Attach(browser);
 ```
 
-只需组合已有应用处理器的槽位。浏览器已经初始化，或渲染处理器槽位被未复用的处理器占用时，`Attach` 会拒绝操作。存在 webRequest 服务时，请求处理器槽位也有同样要求，默认服务亦不例外。禁用或替换网络服务的说明见[请求处理器集成](docs/integration-reference.zh-CN.md#web-request)。
+只需组合已有应用处理器的槽位。已被未复用处理器占用的槽位会使 `Attach` 拒绝操作。应在初始化前附加以覆盖首批资源；晚附加会明确标记，无法补拦截已发送请求。存在 webRequest 服务时，请求处理器槽位也有同样要求，默认服务亦不例外。禁用或替换网络服务的说明见[请求处理器集成](docs/integration-reference.zh-CN.md#web-request)。
 
 ## 安全模型
 
-CefSharp 公开 API 会在页面主世界执行引导代码，因此 MonkeySharp 将该桥接报告为 `Unverified`。
+默认页面世界与显式 DOM 隔离世界具有不同的桥接要求：
 
-- 默认策略执行没有显式 API 授权、声明 `@grant none` 或仅声明 info 授权的脚本。带有 `none` 或 info 以外显式授权的脚本，必须在应用选择 `TrustedPageWorld` 后才会执行。
-- 只有应用程序同时信任页面和已安装脚本时，才应通过 `TrustedPageWorld` 启用显式授权的 API。
-- 每次执行的能力令牌能防止无关调用者冒充安装实例，但不是浏览器扩展式隔离边界。恶意页面代码可以截获令牌并调用已授予脚本的 API。
-- 已安装用户脚本属于可信代码；未知来源需要应用层审核、签名或信任策略。
+| 执行方式 | 桥接要求 |
+| --- | --- |
+| 页面世界，无有效授权 / `none` / 仅 info | 无需桥接绑定或信任选项。 |
+| 页面世界，包含已识别的 info 以外授权 | 需要 `TrustedPageWorld`，仅适用于可信页面和脚本。 |
+| `@sandbox DOM` 或 `@inject-into content` | 使用每脚本隔离世界及通过原生 context 验证的 CDP 传输；仍需授权声明、服务及宿主许可。 |
 
-接受上述限制后再启用特权 API：
+页面世界绑定报告为 `Unverified`。每次执行的能力令牌不是浏览器扩展式隔离边界：恶意页面可以截获令牌并调用脚本已获授权的 API。可信页面世界应用接受该限制后，可显式启用：
 
 ```csharp
 var host = new CefSharpUserScriptHostBuilder(repository)
@@ -119,49 +122,48 @@ var host = new CefSharpUserScriptHostBuilder(repository)
     .Build();
 ```
 
-默认模式跳过的执行会产生 `MSR201_BRIDGE_INTEGRITY_REQUIRED`；可信页面模式下，需要桥接的执行会产生 `MSR200_UNVERIFIED_BRIDGE`。仅提供 info 的执行无需桥接绑定或握手。
+页面世界因缺少信任而跳过的执行产生 `MSR201_BRIDGE_INTEGRITY_REQUIRED`；可信页面世界中需要桥接的执行产生 `MSR200_UNVERIFIED_BRIDGE`。
 
-脚本在页面世界的 MonkeySharp 包装器中执行。`@sandbox`、`@unwrap`、`@run-in` 和非 page 的 `@inject-into` 声明不会创建隔离世界；`unsafeWindow` 也不提供浏览器扩展式安全边界。
+已安装脚本属于可信代码，应用需要为未知来源制定信任策略。DOM 隔离分离脚本全局和派发身份，但不能暴露页面的 `unsafeWindow`；冲突要求和未支持的 unwrap 会拒绝。document-start 仍为尽力执行。OOPIF、菜单、CSP 和 BFCache 的范围见[执行世界与限制](docs/compatibility/execution-worlds.md)。
 
 ## 元数据
 
 元数据涵盖脚本身份、URL 选择、执行时机、授权、依赖、资源及更新/来源地址。解析错误会阻止安装；警告保留在 `MetadataParseResult.Diagnostics` 中。支持字段、匹配规则和示例见[元数据指南](docs/usage-guide.zh-CN.md#元数据)。
 
-`@require` 和 `@resource` 需要宿主提供程序，并支持完整性摘要。Demo 还提供手动脚本更新。摘要语法、校验及更新规则见[集成参考](docs/integration-reference.zh-CN.md#资源完整性与更新检查)。
-
-静态 `@webRequest` 元数据会被校验并写入 `GM.info`，但不会安装拦截规则。需要活动规则时请使用 `GM.webRequest(...)`。
+`@require` 和 `@resource` 由仓库的 `UserScriptPreparer` 在安装或更新激活前获取并校验。执行时跨 frame 复用已准备内容，支持离线重复执行。Demo 持久化这些版本并提供手动更新。摘要语法、预算和更新规则见[集成参考](docs/integration-reference.zh-CN.md#资源完整性与更新检查)。
 
 ## GM API 支持
 
-`GM.info` 和 `GM_info` 无需授权或桥接，在两个兼容模式下始终可用，关闭旧版全局绑定时也不例外。缺少 `@grant` 或显式声明 `@grant none` 时只提供 info；其他 API 需要逐项授权及对应宿主提供程序。
+`GM.info` 和 `GM_info` 无需授权或桥接，始终可用。其他 GM API 需要所属家族授权及对应宿主服务；旧式 `GM_*` 全局名称需要精确声明。
 
 下表概述可用能力。参数、返回值、回调及 [Tampermonkey 差异](docs/usage-guide.zh-CN.md#tampermonkey-兼容性检查表)详见[用户脚本使用指南](docs/usage-guide.zh-CN.md#api-索引)。
 
 | API | 可用性 | 说明 |
 | --- | --- | --- |
 | `GM.info` / `GM_info` | Core | 共用不可变的安装信息，无需授权或桥接，默认可用。 |
-| `GM.log` / `GM_log` | Core | 传递给 builder 的日志回调。 |
-| 值存储与变更监听 | Core | 按稳定 `ScriptKey` 隔离的 JSON 存储；通知同一安装实例的活动执行。 |
+| `GM.log` / `GM_log` | Core | 本地 console 输出及可选宿主日志回调。 |
+| 值存储与变更监听 | Core | 按安装实例隔离的类型化单键/批量存储；宿主提供持久化存储时可跨重启保留。 |
 | `GM.addStyle`、`GM.addElement` 及别名 | 引导代码 | 页面本地实现。 |
-| `GM.getResourceText`、`GM.getResourceURL` 及别名 | 条件支持 | 需要 `IResourceProvider` 和已声明的 `@resource`。 |
-| `GM.xmlHttpRequest` / `GM_xmlhttpRequest` | CefSharp 默认提供 | 需要 `@connect`；支持重定向、凭据、进度、中止及二进制/multipart 请求体。响应类型和限制见 [HTTP 请求](docs/usage-guide.zh-CN.md#http-请求)。 |
+| `GM.getResourceText`、`GM.getResourceUrl`、`GM_getResourceText`、`GM_getResourceURL` | 支持 | 消费安装时已准备的声明资源；旧式名称需要精确 grant。 |
+| `GM.xmlHttpRequest` / `GM_xmlhttpRequest` | CefSharp 默认提供 | 需要 `@connect`；支持凭据、中止、增量文本及二进制/multipart/暂存流请求体。详见 [HTTP 请求](docs/usage-guide.zh-CN.md#http-请求)。 |
 | `GM.registerMenuCommand`、`GM.unregisterMenuCommand` 及别名 | 条件支持 | 需要 `IMenuService`。 |
 | `GM.notification`、`GM.setClipboard`、`GM.openInTab` 及别名 | 条件支持 | 需要对应宿主服务。 |
-| `GM.download` / `GM_download` | 条件支持 | 需要 `IDownloadService`。现代调用在启动后返回句柄，并忽略回调字段；进度及完成回调需要旧式接口。详见[下载](docs/usage-guide.zh-CN.md#下载)。 |
+| `GM.download` / `GM_download` | 条件支持 | 需要 `IDownloadService`，文件提交后才完成；Demo 共用浏览器网络上下文。详见[下载](docs/usage-guide.zh-CN.md#下载)。 |
 | `GM.getTab`、`GM.saveTab`、`GM.getTabs` 及别名 | 条件支持 | 需要 `ITabStateService`。 |
-| `GM.cookie` / `GM_cookie` | CefSharp 默认提供 | 结构化访问浏览器请求上下文。 |
-| `GM.webRequest` / `GM_webRequest` | CefSharp 默认提供 | 运行时注册、可移除句柄及取消/重定向结果回调。 |
+| `GM.cookie` / `GM_cookie` | CefSharp 默认提供 | 实际 RequestContext 中的 CRUD；121/151 支持分区 CRUD，84 不支持。不提供变更监听或 XHR 请求分区选择。 |
+| `GM.audio` / `GM_audio` | CefSharp 默认提供 | 原生静音状态、操作及监听；省略 audible，并明确报告部分能力。 |
+| `GM.webRequest` / `GM_webRequest` | CefSharp 默认提供 | 有归属的取消/重定向规则、捕获替换、异步结果回调及静态元数据规则；无自有移除句柄。 |
 | `window.close`、`window.focus` | 条件支持 | 需要各自的精确授权和 `IUserScriptWindowService`；宿主可以拒绝关闭最后一个标签页。 |
 | `window.onurlchange` | Core | 需要精确授权；监听 `pushState`、`replaceState`、`popstate` 和 `hashchange` URL 变化。 |
-| `unsafeWindow` | 仅可信页面世界 | 仅在精确授权时公开。 |
+| `unsafeWindow` | 页面世界 | 除 `@grant none` 外指向页面全局；DOM 隔离世界不可用。详见 [window 扩展](docs/usage-guide.zh-CN.md#window-extensions)。 |
 
-除 `GM_info` 外，旧式别名需要 `LegacyCompatible` 且已启用旧版全局绑定；同步存储/资源别名还需要完整的引导快照。返回值及错误报告方式因 API 而异，部分旧式调用的失败会写入页面控制台。详见[兼容性配置](docs/integration-reference.zh-CN.md#兼容性配置)及[错误处理](docs/usage-guide.zh-CN.md#错误与排查)。
+旧式同步存储/资源 API 使用完整启动快照。返回值和错误渠道因 API 而异，详见 [API 索引](docs/usage-guide.zh-CN.md#api-索引)及[错误处理](docs/usage-guide.zh-CN.md#错误与排查)。
 
 缺少提供程序时，已声明 API 通常不会公开，直接桥接调用返回 `MSP006_NOT_SUPPORTED`；未声明的方法返回 `MSP004_GRANT_DENIED`。
 
 ## 宿主服务
 
-Builder 默认使用内存值存储。通过 `UseValueStore`、`UseDependencyProvider`、`UseResourceProvider`、`UseMenuService` 等方法注册应用服务，提供持久化及其他能力。
+Builder 默认使用内存值存储。通过 `UseValueStore`、`UseMenuService` 等方法注册应用服务，提供持久化及其他能力。
 
 默认 XHR、Cookie 和 webRequest 服务使用已附加浏览器的请求上下文。可通过 `UseHttpRequestService`、`UseCookieService`、`UseWebRequestService` 逐项替换，或设置 `EnableDefaultNetworkServices = false` 省略全部三个默认服务。
 
@@ -169,9 +171,9 @@ Builder 默认使用内存值存储。通过 `UseValueStore`、`UseDependencyPro
 
 ## 生命周期与诊断
 
-每个 `(document, frame, script, run-at)` 组合只执行一次。`@run-at context-menu` 脚本会按匹配的 frame 加入 CefSharp 原生上下文菜单，只有用户选择菜单项后才创建一次新的执行。导航、上下文释放、分离和宿主释放都会使能力失效并取消待处理工作；`@noframes` 阻止子框架执行。
+脚本在每个匹配文档/框架/生命周期阶段执行一次；`@noframes` 禁止子框架执行。`@run-at context-menu` 仅在原生菜单选择后执行。导航、上下文释放、分离及宿主释放撤销旧执行和待处理 API 调用；已接受的下载可继续到完成或宿主释放。
 
-`history.pushState`、`history.replaceState`、`popstate` 和 `hashchange` 产生的同文档 URL 变化不会重新注入脚本。获得 `window.onurlchange` 授权的脚本可通过该属性或 `addEventListener("urlchange", ...)` 订阅。已有 `GM.info` 快照保持不变；后续执行使用当前 URL。
+同文档导航不会重新注入脚本。SPA 更新请使用已授权的 `window.onurlchange` API 或 DOM 观察器，详见[匹配与生命周期](docs/usage-guide.zh-CN.md#匹配与生命周期)。
 
 CefSharp 只能提供尽力而为的 document-start 注入。此类执行产生 `MSR100_DOCUMENT_START_BEST_EFFORT`；设置 `RequireGuaranteedDocumentStart = true` 后会跳过并产生 `MSR101_DOCUMENT_START_UNAVAILABLE`。
 
@@ -184,24 +186,17 @@ host.Diagnostic += (_, diagnostic) =>
 
 协议错误码和桥接限制见[集成参考](docs/integration-reference.zh-CN.md#生命周期与诊断)。
 
-## 从 v1 迁移
-
-版本 3 的宿主服务契约不兼容旧源码，并替代了 `Injector`、`JScript`、`IDataStore` 和 WCF 桥接。保留 v1 数据时必须显式迁移存储键。类型对照及服务变更见[迁移说明](docs/integration-reference.zh-CN.md#迁移说明)。
-
 ## 构建与测试
 
-在 Windows 上使用支持 `MonkeySharp.slnx` 的 .NET SDK 构建，并安装 Node.js 运行 JavaScript 测试。CI 使用 .NET SDK `9.0.315` 和 Node.js `24`；这些是已测试版本，不代表最低要求。Core 测试目标为 `net8.0`，CefSharp 测试及应用程序目标为 `net462`。
+在 Windows 上使用支持 `MonkeySharp.slnx` 的 .NET SDK，并安装 Node.js 运行 JavaScript 测试。[开发指南](docs/development.zh-CN.md)集中维护还原、构建、测试、打包、版本切换及 CI 矩阵。
+
+验证单个引擎/平台的干净基线（包括真实 Chromium，x64 还包含 WPF）：
 
 ```powershell
-dotnet restore MonkeySharp.slnx -p:Platform=x64 -p:CefSharpVersion=121.3.70
-dotnet build MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=121.3.70 --no-restore
-dotnet test MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=121.3.70 --no-build
-node --test Mzying2001.MonkeySharp.Core.Tests/JavaScript/*.test.js
+./scripts/compatibility/Run-Baseline.ps1 -Platform x64 -CefSharpVersion 151.3.240
 ```
 
-使用 `-p:Platform=x86` 重复 .NET 命令；x86 配置会排除仅支持 x64 的 Demo 项目。测试其他受支持版本时，应向所有命令传入相同的 `CefSharpVersion` 属性。打包和真实 Chromium E2E 命令见[集成参考](docs/integration-reference.zh-CN.md#构建打包与验证)。
-
-CI 在 x64/x86 上覆盖 CefSharp `84.4.10`、`121.3.70` 和 `151.3.240`，运行 .NET/JavaScript 测试及真实 Chromium SmokeHost 门禁。WPF Demo 门禁使用默认版本并仅运行 x64。测试覆盖和 CI 日志说明见[兼容性门禁详情](docs/integration-reference.zh-CN.md#chromium-兼容性脚本包)。
+[验证指南](docs/compatibility/validation.md)区分原生门禁、固定 Tampermonkey 对照和第三方语料结果；已记录结论见注明日期的矩阵。
 
 ## 许可证
 

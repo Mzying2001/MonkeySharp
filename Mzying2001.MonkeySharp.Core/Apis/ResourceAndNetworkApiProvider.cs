@@ -1,4 +1,4 @@
-using Mzying2001.MonkeySharp.Core.Bridge;
+﻿using Mzying2001.MonkeySharp.Core.Bridge;
 using Mzying2001.MonkeySharp.Core.Domain;
 using Mzying2001.MonkeySharp.Core.Security;
 using Mzying2001.MonkeySharp.Core.Runtime;
@@ -21,7 +21,6 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         IUserScriptApiProvider,
         IUserScriptNotificationSource,
         IUserScriptDiagnosticSource,
-        IUserScriptCompatibilityBootstrapProvider,
         IUserScriptExecutionObserver,
         IDisposable
     {
@@ -35,7 +34,6 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             "Transfer-Encoding", "Upgrade", "Keep-Alive", "TE", "Trailer"
         };
 
-        private readonly IResourceProvider _resources;
         private readonly IHttpRequestService _http;
         private readonly BridgeOptions _options;
         private readonly IReadOnlyCollection<string> _methods;
@@ -44,27 +42,19 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         private bool _disposed;
 
         /// <summary>Initializes a resource and network API provider.</summary>
-        /// <param name="resources">The optional declared-resource provider.</param>
         /// <param name="http">The optional HTTP request service.</param>
         /// <param name="options">Bridge limits used for resources and responses, or <see langword="null"/> for defaults.</param>
         public ResourceAndNetworkApiProvider(
-            IResourceProvider resources = null,
             IHttpRequestService http = null,
             BridgeOptions options = null)
         {
-            if (resources == null && http == null)
-                throw new ArgumentException("At least one resource or HTTP service is required.");
-            _resources = resources;
             _http = http;
             if (_http is IUserScriptDiagnosticSource diagnosticSource)
                 diagnosticSource.Diagnostic += HttpDiagnostic;
             _options = options ?? new BridgeOptions();
             var methods = new List<string>();
-            if (resources != null)
-            {
-                methods.Add("GM.getResourceText");
-                methods.Add("GM.getResourceURL");
-            }
+            methods.Add("GM.getResourceText");
+            methods.Add("GM.getResourceUrl");
             if (http != null)
                 methods.Add("GM.xmlHttpRequest");
             _methods = new ReadOnlyCollection<string>(methods);
@@ -80,42 +70,12 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         public IReadOnlyCollection<string> Methods => _methods;
 
         /// <inheritdoc />
-        public async Task<IReadOnlyDictionary<string, CompatibilityResourceSnapshot>> PrepareAsync(
-            UserScriptInstallation installation,
-            DocumentFrame frame,
-            IReadOnlyCollection<string> capabilities,
-            CancellationToken cancellationToken)
-        {
-            if (_resources == null || !capabilities.Contains("GM.getResourceText") &&
-                !capabilities.Contains("GM.getResourceURL"))
-                return new ReadOnlyDictionary<string, CompatibilityResourceSnapshot>(
-                    new Dictionary<string, CompatibilityResourceSnapshot>(StringComparer.Ordinal));
-
-            var result = new Dictionary<string, CompatibilityResourceSnapshot>(StringComparer.Ordinal);
-            foreach (var declaration in installation.Definition.Metadata.Resources)
-            {
-                var content = await _resources.GetAsync(installation, declaration, cancellationToken)
-                    .ConfigureAwait(false);
-                if (content == null)
-                    throw new BridgeProtocolException(BridgeErrorCodes.Internal, "The resource provider returned no content.");
-                ResourceIntegrityVerifier.Verify(content.Bytes, declaration.Integrity, declaration.Url);
-                if (content.Bytes.Length > _options.MaxResourceBytes ||
-                    (content.Text != null && Encoding.UTF8.GetByteCount(content.Text) > _options.MaxResourceBytes))
-                    throw new BridgeProtocolException(BridgeErrorCodes.PayloadTooLarge, "The resource exceeds the configured limit.");
-                var text = content.Text ?? Encoding.UTF8.GetString(content.Bytes);
-                var url = "data:" + content.MediaType + ";base64," + Convert.ToBase64String(content.Bytes);
-                result[declaration.Name] = new CompatibilityResourceSnapshot(text, url);
-            }
-            return new ReadOnlyDictionary<string, CompatibilityResourceSnapshot>(result);
-        }
-
-        /// <inheritdoc />
         public async Task<ApiResult> InvokeAsync(ApiInvocationContext context, CancellationToken cancellationToken)
         {
             switch (context.Method)
             {
                 case "GM.getResourceText":
-                case "GM.getResourceURL":
+                case "GM.getResourceUrl":
                     return await InvokeResourceAsync(context, cancellationToken).ConfigureAwait(false);
                 case "GM.xmlHttpRequest":
                     return await InvokeHttpAsync(context, cancellationToken).ConfigureAwait(false);
@@ -124,7 +84,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             }
         }
 
-        private async Task<ApiResult> InvokeResourceAsync(
+        private Task<ApiResult> InvokeResourceAsync(
             ApiInvocationContext context,
             CancellationToken cancellationToken)
         {
@@ -133,10 +93,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 .SingleOrDefault(item => item.Name == name);
             if (declaration == null)
                 throw ProviderParameters.Invalid("The resource '" + name + "' was not declared.");
-            var content = await _resources.GetAsync(
-                context.Installation,
-                declaration,
-                cancellationToken);
+            var content = context.Installation.PreparedRevision.Resources[name];
             if (content == null)
                 throw new BridgeProtocolException(BridgeErrorCodes.Internal, "The resource provider returned no content.");
             ResourceIntegrityVerifier.Verify(content.Bytes, declaration.Integrity, declaration.Url);
@@ -145,11 +102,11 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 throw new BridgeProtocolException(BridgeErrorCodes.PayloadTooLarge, "The resource exceeds the configured limit.");
             if (context.Method == "GM.getResourceText")
             {
-                var text = content.Text ?? Encoding.UTF8.GetString(content.Bytes);
-                return ApiResult.FromValue(text);
+                var text = content.DecodeText();
+                return Task.FromResult(ApiResult.FromValue(text));
             }
-            return ApiResult.FromValue(
-                "data:" + content.MediaType + ";base64," + Convert.ToBase64String(content.Bytes));
+            return Task.FromResult(ApiResult.FromValue(
+                "data:" + content.MediaType + ";base64," + Convert.ToBase64String(content.Bytes)));
         }
 
         private async Task<ApiResult> InvokeHttpAsync(
@@ -167,7 +124,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 case "execute":
                     return await ExecuteHttpSessionAsync(context, cancellationToken).ConfigureAwait(false);
                 case "readBody":
-                    return ReadHttpBody(context);
+                    return await ReadHttpBodyAsync(context, cancellationToken).ConfigureAwait(false);
                 case "abort":
                     return AbortHttpSession(context);
                 case "release":
@@ -245,9 +202,10 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                         Fetch = fetch,
                         Binary = OptionalBoolean(context.Parameters, "binary"),
                         ResponseType = ReadResponseType(context.Parameters)
-                    }),
+                    }, context.Frame),
                 RaiseHttpNotification,
-                ReportHttpNotificationFailure);
+                ReportHttpNotificationFailure, _options.MaxBinaryTransferBytes,
+                OptionalBoolean(context.Parameters, "incremental"));
             lock (_sessionLock)
             {
                 ThrowIfDisposed();
@@ -281,7 +239,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 throw new BridgeProtocolException(BridgeErrorCodes.Internal, "The HTTP service returned no operation.");
             session.Start(operation);
             var completion = CompleteHttpSessionAsync(context, session, operation);
-            if (session.Request.Options.ResponseType == UserScriptHttpResponseType.Stream)
+            if (session.Streaming)
             {
                 var winner = await Task.WhenAny(session.ResponseStarted, completion).ConfigureAwait(false);
                 if (winner == completion)
@@ -344,19 +302,14 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             catch (Exception exception) { session.Fail(exception); }
         }
 
-        private ApiResult ReadHttpBody(ApiInvocationContext context)
+        private async Task<ApiResult> ReadHttpBodyAsync(ApiInvocationContext context, CancellationToken token)
         {
             var session = GetSession(context);
-            if (!context.Parameters.TryGetProperty("offset", out var value) ||
-                value.ValueKind != JsonValueKind.Number || !value.TryGetInt64(out var offset) || offset < 0)
+            if (!context.Parameters.TryGetProperty("offset", out var value) || value.ValueKind != JsonValueKind.Number || !value.TryGetInt64(out var offset) || offset < 0)
                 throw ProviderParameters.Invalid("offset must be a non-negative integer.");
-            var chunk = session.ReadResponseBody(offset);
-            return ApiResult.FromValue(new
-            {
-                chunk = Convert.ToBase64String(chunk),
-                offset,
-                done = offset + chunk.Length >= session.ResponseBodyLength
-            });
+            var chunk = await session.ReadResponseBodyAsync(offset, token).ConfigureAwait(false);
+            return ApiResult.FromValue(new { chunk = Convert.ToBase64String(chunk), offset, total = session.ResponseTotal,
+                done = session.NetworkCompleted && offset + chunk.Length >= session.ResponseBodyLength });
         }
 
         private ApiResult AbortHttpSession(ApiInvocationContext context)
@@ -499,6 +452,16 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             private bool _loadingReported;
             private bool _disposed;
             private UserScriptHttpResponse _response;
+            private readonly int _maxBinaryBytes;
+            private bool _networkCompleted;
+            private Exception _networkError;
+            private long _readOffset;
+            public bool Incremental { get; }
+            public bool Streaming => Incremental || Request.Options.ResponseType == UserScriptHttpResponseType.Stream;
+            public long? ResponseTotal { get; private set; }
+            private TaskCompletionSource<bool> _dataAvailable = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            public bool NetworkCompleted { get { lock (_sync) return _networkCompleted; } }
+            private void SignalData() { var old = _dataAvailable; _dataAvailable = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously); old.TrySetResult(true); }
 
             public HttpSession(
                 string sessionId,
@@ -509,7 +472,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 int xhrId,
                 UserScriptHttpRequest request,
                 Action<HttpSession, string, object> notify,
-                Action<HttpSession, string, Exception> reportNotificationFailure)
+                Action<HttpSession, string, Exception> reportNotificationFailure, int maxBinaryBytes, bool incremental)
             {
                 SessionId = sessionId;
                 ScriptKey = scriptKey;
@@ -520,6 +483,11 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 Request = request;
                 _notify = notify;
                 _reportNotificationFailure = reportNotificationFailure;
+                _maxBinaryBytes = maxBinaryBytes;
+                Incremental = incremental && !request.Options.Fetch &&
+                    (request.Options.ResponseType == UserScriptHttpResponseType.Text ||
+                     request.Options.ResponseType == UserScriptHttpResponseType.Json ||
+                     request.Options.ResponseType == UserScriptHttpResponseType.Document);
             }
 
             public string SessionId { get; }
@@ -539,6 +507,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 {
                     ThrowIfDisposed();
                     if (_started) throw ProviderParameters.Invalid("The HTTP request has already started.");
+                    if (_requestBody.Length + chunk.Length > _maxBinaryBytes) throw new BridgeProtocolException(BridgeErrorCodes.PayloadTooLarge, "Request body exceeds MaxBinaryTransferBytes.");
                     _requestBody.Append(chunk, 0, chunk.Length);
                 }
             }
@@ -560,7 +529,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                             Request.Timeout,
                             Request.MaxResponseBytes,
                             Request.RedirectAllowed,
-                            Request.Options);
+                            Request.Options, Request.OriginFrame);
                     }
                 }
             }
@@ -595,6 +564,8 @@ namespace Mzying2001.MonkeySharp.Core.Apis
 
             public void OnDownloadProgress(long loaded, long? total)
             {
+                ResponseTotal = total;
+                if (Incremental) return; // Text progress is pulled with the body; no unbounded notification queue.
                 if (Request.Options.Fetch) return;
                 Notify("xhr-progress", new { xhrId = XhrId, loaded, total });
             }
@@ -605,34 +576,43 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 lock (_sync)
                 {
                     ThrowIfDisposed();
-                    if (Request.Options.ResponseType == UserScriptHttpResponseType.Stream)
-                    {
-                        var chunk = new byte[count];
-                        Buffer.BlockCopy(buffer, offset, chunk, 0, count);
-                        Notify("xhr-chunk", new { xhrId = XhrId, chunk = Convert.ToBase64String(chunk) });
-                    }
-                    else
-                    {
-                        _responseBody.Append(buffer, offset, count);
-                    }
+                    if (_responseBody.Length + count > _maxBinaryBytes) throw new BridgeProtocolException(BridgeErrorCodes.PayloadTooLarge, "Response body exceeds MaxBinaryTransferBytes.");
+                    _responseBody.Append(buffer, offset, count);
+                    SignalData();
                     if (_loadingReported) return;
                     _loadingReported = true;
                 }
                 ReportReadyState(3, _response);
             }
 
-            public byte[] ReadResponseBody(long offset)
+            public async Task<byte[]> ReadResponseBodyAsync(long offset, CancellationToken token)
             {
-                lock (_sync)
+                while (true)
                 {
-                    ThrowIfDisposed();
-                    return _responseBody.Read(offset, HttpSpoolingBuffer.BridgeChunkSize);
+                    Task available;
+                    lock (_sync)
+                    {
+                        ThrowIfDisposed();
+                        if (_networkError != null) throw _networkError;
+                        if (Incremental && offset != _readOffset)
+                            throw ProviderParameters.Invalid("The incremental HTTP body offset is out of sequence.");
+                        if (_responseBody.Length > offset || _networkCompleted || !Streaming)
+                        {
+                            var chunk = _responseBody.Read(offset, HttpSpoolingBuffer.BridgeChunkSize);
+                            if (Incremental) _readOffset += chunk.Length;
+                            return chunk;
+                        }
+                        available = _dataAvailable.Task;
+                    }
+                    var canceled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+                    using (token.Register(() => canceled.TrySetCanceled())) await await Task.WhenAny(available, canceled.Task).ConfigureAwait(false);
                 }
             }
 
             public void Complete(UserScriptHttpResponse response)
             {
                 OnResponseStarted(response);
+                lock (_sync) { _networkCompleted = true; SignalData(); }
                 ReportReadyState(4, response);
                 if (Request.Options.ResponseType == UserScriptHttpResponseType.Stream)
                     Notify("xhr-complete", new { xhrId = XhrId });
@@ -640,6 +620,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
 
             public void Fail(Exception exception)
             {
+                lock (_sync) { _networkError = exception; _networkCompleted = true; SignalData(); }
                 var error = exception as BridgeProtocolException;
                 var code = error?.Code ?? (exception is OperationCanceledException
                     ? BridgeErrorCodes.Canceled : BridgeErrorCodes.Internal);
@@ -684,6 +665,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 {
                     if (_disposed) return;
                     _disposed = true;
+                    SignalData();
                     operation = _operation;
                     _operation = null;
                 }
@@ -809,8 +791,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                         continue;
                     value = NormalizeConnectHost(declaredUri);
                 }
-                var subdomains = value.StartsWith("*.", StringComparison.Ordinal);
-                if (subdomains)
+                if (value.StartsWith("*.", StringComparison.Ordinal))
                     value = value.Substring(2);
                 try
                 {
@@ -821,11 +802,8 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                     continue;
                 }
                 var exactOnly = IsIpAddress(value) || string.Equals(value, "localhost", StringComparison.Ordinal);
-                var matches = exactOnly
-                    ? targetHost == value
-                    : subdomains
-                        ? targetHost.Length > value.Length + 1 && targetHost.EndsWith("." + value, StringComparison.Ordinal)
-                        : targetHost == value || targetHost.EndsWith("." + value, StringComparison.Ordinal);
+                var matches = targetHost == value ||
+                    (!exactOnly && targetHost.EndsWith("." + value, StringComparison.Ordinal));
                 if (matches)
                     return true;
             }
