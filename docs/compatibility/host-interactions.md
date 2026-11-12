@@ -1,6 +1,6 @@
 # Notifications, menus and clipboard
 
-Both calling forms share operation implementations while preserving their immediate returns. The [API inventory](api-contract.md) and [userscript guide](../usage-guide.md#menus-notifications-and-clipboard) / [中文](../usage-guide.zh-CN.md#menus-notifications-and-clipboard) describe parameters and examples. Host interfaces are covered by the [integration reference](../integration-reference.md#host-service-contracts).
+Both calling forms share operation implementations while preserving their immediate returns. The [userscript guide](../usage-guide.md#menus-notifications-and-clipboard) / [中文](../usage-guide.zh-CN.md#menus-notifications-and-clipboard) owns parameters and examples; the [reference baseline](api-contract.md) identifies calling forms and comparison evidence. Host interfaces are covered by the [integration reference](../integration-reference.md#host-service-contracts).
 
 ## Notifications
 

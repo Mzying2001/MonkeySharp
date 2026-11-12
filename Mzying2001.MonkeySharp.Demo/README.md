@@ -102,7 +102,9 @@ Source/asset downloads and update checks use independent HTTP clients without br
 
 `GM.download` immediately returns an abortable completion Promise; `GM_download` returns an abort-only handle. Completion follows file cleanup or atomic commit. Accepted downloads continue across navigation, script disable, and uninstall under captured authorization, while callbacks to the ended execution are muted; redirect targets still require approval. Closing the tab or disposing the host cancels and drains the tasks before releasing the browser context. See [download behavior](../docs/compatibility/downloads.md).
 
-The Demo does not provide background automatic updates, cloud sync, bookmarks, full history, isolated execution worlds, script signatures, or extension-store installation. Full API parameters and contracts are in the [userscript guide](../docs/usage-guide.md) and [integration reference](../docs/integration-reference.md).
+Scripts can select the adapter's DOM/content isolated worlds through metadata; the Demo also enables `TrustedPageWorld` for page-world scripts. These modes retain the adapter's [execution and frame limits](../docs/compatibility/execution-worlds.md#remaining-limits). Full API parameters and host contracts are in the [userscript guide](../docs/usage-guide.md) and [integration reference](../docs/integration-reference.md).
+
+The Demo does not provide background automatic updates, cloud sync, bookmarks, full history, script signatures, or extension-store installation.
 
 ## Security
 

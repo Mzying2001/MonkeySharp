@@ -2,22 +2,37 @@
 
 **English** | [中文](integration-reference.zh-CN.md)
 
-This reference collects the compatibility, network API, host service, and verification details that are useful while implementing or maintaining a MonkeySharp host. Start with the repository [README](../README.md) for installation and minimal integration. The [userscript guide](usage-guide.md) covers script-facing parameters, return values, and examples; this reference focuses on host implementation and verification.
+This reference describes host configuration, service contracts, persistence and browser lifecycle. Start with the repository [README](../README.md) for packages and minimal integration. The [userscript guide](usage-guide.md) owns script parameters, returns and examples; the [development guide](development.md) owns source build and packaging commands.
 
 ## CefSharp Version Compatibility
 
 The adapter cannot support arbitrary CefSharp versions from one binary. CefSharp assemblies are strong-named, and public interfaces have changed between releases. For example, `IBrowser.GetFrame(long)` became `GetFrameByIdentifier(string)`, while `IFrame.Identifier` changed from `long` to `string`.
 
-The adapter defaults to `151.3.240` and has source compatibility shims verified against `84.4.10`, `121.3.70`, and `151.3.240`. Build and test the adapter against every version shipped by the application:
-
-```powershell
-dotnet restore Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj -p:Platform=x64 -p:CefSharpVersion=151.3.240
-dotnet build Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj -c Release -p:Platform=x64 -p:CefSharpVersion=151.3.240 --no-restore
-```
+The adapter defaults to `151.3.240` and has source compatibility shims verified against `84.4.10`, `121.3.70`, and `151.3.240`. Build and test the adapter against every version shipped by the application; use the [source build commands](development.md#build-and-test) with the selected version.
 
 The adapter's `CefSharp.Common` reference is private to its NuGet package. Consumers must reference the matching `CefSharp.WinForms`, `CefSharp.Wpf`, or `CefSharp.Common` package and allow the normal .NET Framework binding redirects. Keep the managed packages, native CEF binaries, and MonkeySharp adapter on the same version and process platform.
 
-Keep all projects on the selected `CefSharpVersion`; see [build and validation](#build-package-and-verify) for commands and the CI matrix.
+Keep all projects on the selected `CefSharpVersion`; see the [development guide](development.md) for commands and the CI matrix.
+
+## Attachment and navigation
+
+Initialize CefSharp once before creating controls. Initialize a persistent repository before building the host, compose any occupied browser handler slots as shown in the [minimal integration](../README.md#existing-browser-handlers), then attach the host before adding the control to the UI. Keep the host and browser alive together.
+
+For prepared navigation or static `@webRequest` rules, create the browser at `about:blank`. In an async UI-thread method, after building `host`:
+
+```csharp
+var browser = new CefSharp.WinForms.ChromiumWebBrowser("about:blank")
+{
+    Dock = System.Windows.Forms.DockStyle.Fill
+};
+host.Attach(browser);
+form.Controls.Add(browser);
+await host.NavigateAsync("https://example.com/");
+```
+
+`NavigateAsync` awaits `PrepareAsync`, including static-rule preparation and the shared CDP/isolated executor setup, before navigating. `PrepareAsync` is also available separately. A URL supplied to the browser constructor can start loading before preparation. `IsLateAttach` and `IsLatePreparation` report late boundaries; neither restores missed resources or guarantees pre-page userscript execution. See [timing evidence](compatibility/execution-worlds.md#protocol-session-and-preparation).
+
+Dispose the host before the browser. Cancel accepted download operations and await their cleanup before releasing the browser/RequestContext; shut down CefSharp only after all browsers are disposed. The [Demo tab runtime](../Mzying2001.MonkeySharp.Demo/Runtime/TabRuntime.cs) shows that ownership sequence; [lifecycle and diagnostics](#lifecycle-and-diagnostics) describes execution invalidation.
 
 ## API Contract and Grants
 
@@ -54,6 +69,8 @@ var host = new CefSharpUserScriptHostBuilder(repository)
     .Build();
 ```
 
+### Persistent installations
+
 For durable installations, replace the in-memory repository in the example above with a `PersistentUserScriptRepository` backed by an application-owned `IUserScriptRepositoryPersistence`. Initialize it before using it or attaching a host:
 
 ```csharp
@@ -63,9 +80,9 @@ var repository = new PersistentUserScriptRepository(persistence, parser);
 await repository.InitializeAsync(CancellationToken.None);
 ```
 
-The persistence implementation must preserve `ScriptKey`, installation order, and timestamps, and commit mutations atomically. Cancellation after a successful commit must complete successfully; repository change notifications follow commit. Stable keys retain the association with GM storage. See the [Demo guide](../Mzying2001.MonkeySharp.Demo/README.md#portable-data-and-recovery) for a concrete persistence and recovery implementation.
+The persistence implementation must preserve `ScriptKey`, installation order, and timestamps, and commit mutations atomically. Cancellation after a successful commit must complete successfully; repository change notifications follow commit. Stable keys retain the association with GM storage. For implementation examples, read [SqliteUserScriptRepositoryPersistence](../Mzying2001.MonkeySharp.Demo/Persistence/SqliteUserScriptRepositoryPersistence.cs), [SqliteUserScriptValueStore](../Mzying2001.MonkeySharp.Demo/Persistence/SqliteUserScriptValueStore.cs) and their [DemoRuntime initialization](../Mzying2001.MonkeySharp.Demo/Runtime/DemoRuntime.cs). The [Demo data and recovery guide](../Mzying2001.MonkeySharp.Demo/README.md#portable-data-and-recovery) covers profile operation and recovery.
 
-Provider requirements:
+### Value-store and permission providers
 
 - `IUserScriptValueStore.SetAsync` accepts an immutable `UserScriptValue`; `StoredValue.Value` exposes it and `StoredValue.Exists` alone distinguishes absence. Use `UserScriptValue.FromJson(json)`, `UserScriptValue.Undefined`, or `UserScriptValue.FromEncoded(encoded)`.
 - Persist `EncodedValue` without dropping type information. Encodings are `u` for undefined, `btrue`/`bfalse`, `n` followed by a number or `NaN`/`Infinity`/`-Infinity`, `s` followed by literal string contents, and `o` followed by canonical object/array/null JSON. `FromEncoded` validates and canonicalizes them; a user object's property names never act as protocol markers.
@@ -77,6 +94,8 @@ Provider requirements:
 
 `IUserScriptDependencyProvider` and `IResourceProvider` supply installation content to the repository's `UserScriptPreparer`, not to each execution. Missing providers or fetch/validation failures fail installation/update before publication; resource APIs consume the prepared revision. See [preparation and integrity](#resource-integrity-and-update-checks).
 
+### Interaction services
+
 `IMenuService.RegisterAsync` receives `Action<MenuCommandInvocation>`. `MenuCommandRequest.OriginFrame` identifies the authenticated subscriber; `ClickedFrame` requests invocation only for a matching host-attested current frame. Populate only input fields actually observed. Use `host.ResolveMenuFrame(nativeFrame, request)` for native frame resolution; null means unknown/stale and suppresses a targeted invocation. The Demo popup has no frame identity. This GM callback contract is separate from `@run-at context-menu` source execution. See [menu semantics and evidence](compatibility/host-interactions.md#menus).
 
 Interaction services have distinct lifecycle contracts:
@@ -87,7 +106,7 @@ Interaction services have distinct lifecycle contracts:
 | `ITabService.OpenAsync` | `Task<ITabHandle>` | `TabId`, `Closed`, `OnClose`, `CloseAsync`, and `Dispose`; there is no `Completion` task. |
 | `IDownloadService.CreateAsync` | `Task<IDownloadOperation>` | `Start`, `Result`, `DownloadId`, `Completion`, `Progress`, `Completed`, `Failed`, `Aborted`, `TimedOut`, `Abort`, and `Dispose`. Create must return an unstarted operation; subscribe to every event before Start. |
 
-Use `UseDownloadServiceFactory(http => new FileDownloadService(http, selectDestination))` to share the effective CEF network service (including webRequest composition) with XHR. The builder owns factory-created disposable services. `selectDestination` is trusted host policy/UI returning an absolute `DownloadDestination` or null to cancel. Browser-mode hosts implement picker and conflict options; native-mode hosts reject them before effects. Dispose cancels accepted tasks; await `DrainAsync` before shutting down CEF. `DownloadRequest.Anonymous` and `RedirectAllowed` must be honored. Each operation emits exactly one terminal event; successful `Result` describes the committed file. Never start transfer or UI from CreateAsync.
+Use `UseDownloadServiceFactory(http => new FileDownloadService(http, selectDestination))` to share the effective HTTP service with XHR. With the default CefSharp HTTP service, this includes the browser RequestContext and webRequest composition; a custom HTTP override determines its own behavior. The builder owns factory-created disposable services. `selectDestination` is trusted host policy/UI returning an absolute `DownloadDestination` or null to cancel. Browser-mode hosts implement picker and conflict options; native-mode hosts reject them before effects. Dispose cancels accepted tasks; await `DrainAsync` before shutting down CEF. `DownloadRequest.Anonymous` and `RedirectAllowed` must be honored. Each operation emits exactly one terminal event; successful `Result` describes the committed file. Never start transfer or UI from CreateAsync.
 
 The runtime uses handle events to deliver script callbacks; completing a `Completion` task alone does not send a terminal callback. Providers should emit one terminal event and support idempotent cleanup when the execution ends. Releasing a tab handle should release its observations; closing the user tab is a separate `CloseAsync` action.
 
@@ -204,19 +223,13 @@ Override it with `UseTabAudioService`, or set `EnableDefaultAudioService = false
 
 ## Lifecycle and Diagnostics
 
-`PrepareAsync()` prepares the attachment's shared CDP session; `NavigateAsync(url)` waits for it before navigating. Start the browser at `about:blank` when using this sequence. `IsLateAttach` and `IsLatePreparation` identify initialization that already occurred. These APIs do not upgrade userscript timing guarantees. See the [real protocol findings](compatibility/execution-worlds.md#protocol-session-and-preparation).
+The attachment and [navigation sequence](#attachment-and-navigation) establishes the shared CDP session. The adapter reads the current renderer URL before matching instead of trusting potentially stale callback URLs. If that lookup fails, it skips the document, including load fallback and context-menu execution; initialization diagnostics retain the exception. Native frame recovery and read-only retry details are in [lifecycle maintenance](development.md#native-lifecycle-maintenance).
 
 The adapter creates an identity per frame document and executes each `(document, frame, script, run-at)` once. `@run-at context-menu` scripts are listed by the native CefSharp context menu for the matching frame and execute a fresh invocation only after the user selects an entry. Navigation, context release and detach invalidate document capabilities and pending calls; both `ContextReleased` and `NavigationSuperseded` retire a document's executions. Accepted downloads continue as host tasks with document callbacks muted; host disposal cancels them.
-
-In mixed page/isolated-world hosts, asynchronous page-marker probes distinguish document navigation from isolated V8 context callbacks. Older CEF versions may reuse a frame ID and complete its release probe before its creation probe. The adapter retains a frame generation after release so the pending creation can initialize the new document; a newer document, main-page replacement or detach invalidates that generation. This bookkeeping does not retain the released document's capabilities or menu registrations.
-
-CEF 84 may also deliver the previous process's main-frame wrapper during a cross-site context-created callback. If load completion instead identifies a different, uninitialized frame that matches the browser's native current main frame, the adapter retires the old page and initializes that frame before advancing load lifecycle stages. Child sessions already created in the new page are preserved only when the native parent chain confirms their ancestry under the new main frame. This recovery does not retry known failed or released frames and does not provide a document-start timing guarantee.
 
 `GM.info` is a fixed per-execution snapshot; later executions use the current document URL and environment facts. Same-document URL changes do not reinject scripts. Use the granted [window.onurlchange API](usage-guide.md#window-extensions) for SPA updates.
 
 CefSharp exposes only best-effort document-start hooks. Selected document-start executions emit `MSR100_DOCUMENT_START_BEST_EFFORT`. Set `RequireGuaranteedDocumentStart = true` to skip them with `MSR101_DOCUMENT_START_UNAVAILABLE`.
-
-Before matching, the adapter reads the current renderer's `location.href`: older CefSharp context-created callbacks may retain the previous navigation URL. Canceled read-only evaluations are retried within a 15-second initialization budget, with at most two seconds per attempt and a 50 ms delay capped by the remaining budget. Cancellation, detach, replacement of the document session or native frame retirement stops initialization; a stale callback URL is never used as a fallback. An exhausted evaluation budget produces an initialization diagnostic containing a `TimeoutException` and the last cancellation. Failed lookup skips the document, including load fallback and context-menu execution. Document-start remains best effort.
 
 Protocol errors use stable codes `MSP001` through `MSP010` and `MSP999`. Diagnostics never include capability tokens or stored values. Configure limits by assigning a new `BridgeOptions(...)` to `CefSharpHostOptions.Bridge`:
 
@@ -248,41 +261,8 @@ The bridge uses protocol `2`. Messages declaring a different protocol version ar
 
 ## Build, Package, and Verify
 
-For a clean source baseline, run `./scripts/compatibility/Run-Baseline.ps1 -Platform x64 -CefSharpVersion 84.4.10` (including WPF on x64). For the full native/package gate, use `./scripts/compatibility/Run-Delivery.ps1`; it isolates each version/platform, verifies packages and runs public-API consumers. `-CorpusScript <path>` optionally adds a local script unchanged; `-PackageOnly` skips baseline checks and is diagnostic only. See [validation](compatibility/validation.md#reproduction) for scope and [tooling instructions](../scripts/compatibility/README.md) for parameters.
-
-CI runs on PRs targeting `dev` or `main`, with CefSharp `84.4.10`, `121.3.70` and `151.3.240` on x64/x86; WPF gates run on x64 only. Its toolchain is Windows Server 2022, .NET SDK `9.0.315` and Node.js `24`, tested versions rather than minimum requirements. The SDK must support `MonkeySharp.slnx`; Core tests target `net8.0`, while CefSharp tests/apps target `net462`. Real-Chromium gates require a Windows desktop session.
-
-Use the same `CefSharpVersion` property for restore, build, test, and package commands:
-
-```powershell
-dotnet restore MonkeySharp.slnx -p:Platform=x64 -p:CefSharpVersion=151.3.240
-dotnet build MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=151.3.240 --no-restore
-dotnet test MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=151.3.240 --no-build
-node --test Mzying2001.MonkeySharp.Core.Tests/JavaScript/*.test.js
-```
-
-Repeat the .NET commands with `-p:Platform=x86`. The x86 solution configuration excludes the x64-only Demo projects. Package Core and each adapter platform into separate directories:
-
-Both solution platforms map Core to AnyCPU, with outputs under `bin/Release/<framework>/`. Use `-p:Platform=AnyCPU` when packing Core, including with `--no-build` to reuse solution outputs. The CefSharp adapter requires its explicit x64 or x86 platform.
-
-```powershell
-dotnet pack Mzying2001.MonkeySharp.Core/Mzying2001.MonkeySharp.Core.csproj -c Release -p:Platform=AnyCPU -p:CefSharpVersion=151.3.240 -o artifacts/packages/core
-dotnet pack Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj -c Release -p:Platform=x64 -p:CefSharpVersion=151.3.240 -o artifacts/packages/x64
-dotnet pack Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj -c Release -p:Platform=x86 -p:CefSharpVersion=151.3.240 -o artifacts/packages/x86
-```
-
-Run the real-Chromium gates from a Windows desktop session:
-
-```powershell
-./Mzying2001.MonkeySharp.CefSharp.SmokeHost/Run-E2E.ps1 -Platform x64 -CefSharpVersion 151.3.240
-./Mzying2001.MonkeySharp.CefSharp.SmokeHost/Run-E2E.ps1 -Platform x86 -CefSharpVersion 151.3.240
-powershell -NoProfile -ExecutionPolicy Bypass -File Mzying2001.MonkeySharp.Demo/Run-E2E.ps1 -CefSharpVersion 151.3.240
-```
-
-Use the same version value throughout validation: `-p:CefSharpVersion=<version>` for `dotnet restore/build/test/pack`, and `-CefSharpVersion <version>` for the PowerShell runners. Run the SmokeHost commands for x64 and x86 at `84.4.10`, `121.3.70`, and `151.3.240`; the Demo gate covers x64 at all three versions and runs the default English UI once per version. Each Demo report records `environment.uiLanguage` and verifies English windows and permission controls. Other languages are covered by localization unit tests; see [interface language and deployment](../Mzying2001.MonkeySharp.Demo/README.md#interface-language). When switching versions in an existing checkout, first run `dotnet clean MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=<target-version>` (use the target platform) to avoid mixing incremental outputs from different CefSharp versions. The SmokeHost runner already restores, cleans and builds with the selected version, then verifies the running assembly version and process platform. Both gates use isolated profiles and `TrustedPageWorld`; they are integration checks, not security sandboxes.
+Source build, packaging, version switching and CI commands are maintained in the [development guide](development.md). Choose checks with the [validation guide](compatibility/validation.md#reproduction); runner parameters belong to the [tooling reference](../scripts/compatibility/README.md).
 
 ### Chromium Compatibility Script Package
 
-The SmokeHost installs repository-owned userscripts against loopback HTTP fixtures. Its runner requires all 15 compatibility cases, checks actual CefSharp version/platform and cleanup, and preserves logs under `artifacts/smoke/<version>-<platform>/`. Override that path with `-OutputDirectory`.
-
-See [SmokeHost cases and result validation](compatibility/validation.md#smokehost-cases-and-results) for case IDs, assertions, timeouts, parser checks and log triage. The [validation guide](compatibility/validation.md#latest-recorded-validation) owns recorded results and remaining gaps; [tooling instructions](../scripts/compatibility/README.md) own runner parameters and pinned-reference prerequisites.
+The SmokeHost case inventory, assertions, result parsing and log triage are maintained in [validation](compatibility/validation.md#smokehost-cases-and-results). Direct launch commands are in the [development guide](development.md#real-chromium-gates).

@@ -11,7 +11,7 @@ Scripts can use modern `GM.*` methods and legacy `GM_*` names. Availability depe
 | Run the browser and script manager | [WPF Demo](#wpf-browser-demo) |
 | Embed MonkeySharp in an application | [Minimal integration](#minimal-host-integration), then the [integration reference](docs/integration-reference.md) |
 | Write or port a userscript | [Userscript guide](docs/usage-guide.md) |
-| Build, package, or verify the runtime | [Build and test](#build-and-test), then the [verification reference](docs/integration-reference.md#build-package-and-verify) |
+| Build, package, or verify the runtime | [Build and test](#build-and-test), then the [development guide](docs/development.md) |
 
 [Documentation index](docs/README.md) · [Compatibility and evidence](docs/compatibility/README.md)
 
@@ -188,18 +188,15 @@ See the [integration reference](docs/integration-reference.md#lifecycle-and-diag
 
 ## Build and Test
 
-Build on Windows with a .NET SDK that supports `MonkeySharp.slnx` and Node.js for JavaScript tests. CI uses .NET SDK `9.0.315` and Node.js `24`; these are tested versions, not minimum requirements. Core tests target `net8.0`; CefSharp tests and applications target `net462`.
+Build on Windows using a .NET SDK that supports `MonkeySharp.slnx` and Node.js for JavaScript tests. The [development guide](docs/development.md) owns restore/build/test commands, packaging, version switching and the CI matrix.
+
+For one clean engine/platform baseline, including real Chromium and WPF on x64, run:
 
 ```powershell
-dotnet restore MonkeySharp.slnx -p:Platform=x64 -p:CefSharpVersion=151.3.240
-dotnet build MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=151.3.240 --no-restore
-dotnet test MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=151.3.240 --no-build
-node --test Mzying2001.MonkeySharp.Core.Tests/JavaScript/*.test.js
+./scripts/compatibility/Run-Baseline.ps1 -Platform x64 -CefSharpVersion 151.3.240
 ```
 
-Repeat the .NET commands with `-p:Platform=x86`; the x86 configuration excludes the x64-only Demo projects. Pass the same `CefSharpVersion` property to every command when testing another supported version. Packaging and real-Chromium E2E commands are in the [integration reference](docs/integration-reference.md#build-package-and-verify).
-
-CI covers CefSharp `84.4.10`, `121.3.70`, and `151.3.240` on x64 and x86 with .NET/JavaScript tests and real-Chromium SmokeHost gates. The WPF Demo gates run on x64 with all three versions. See [compatibility gate details](docs/integration-reference.md#chromium-compatibility-script-package) and the [validation guide](docs/compatibility/validation.md).
+The [validation guide](docs/compatibility/validation.md) distinguishes native gates, fixed-Tampermonkey comparisons and third-party corpus results. Consult the dated matrix for recorded outcomes.
 
 ## License
 

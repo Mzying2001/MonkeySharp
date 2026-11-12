@@ -2,6 +2,8 @@
 
 These versioned records preserve observed versions, inputs, commits, ordered events, effects and limitations. Current behavior is maintained in [compatibility topics](../../../docs/compatibility/README.md); [validation](../../../docs/compatibility/validation.md) owns check selection and recorded delivery scope. Records use capability names; keep test and cross-record references in sync when renaming them. A passed assessment does not establish an implemented capability. Failed, blocked and superseded results retain their original status.
 
+To evaluate a current claim, start at its compatibility topic, identify the engine/platform and API scope, then follow the relevant native and fixed-reference records. Use [delivery snapshots](#delivery-snapshots) for the combined run and [retained failures](#retained-failures-and-regressions) for superseded or blocked attempts. A newer delivery date does not replace a topic's missing reference comparison.
+
 The [differential schema](schema.json) applies to reference records; native matrices and delivery summaries retain their own shapes. Raw logs, profiles and packages belong under ignored `artifacts/`. Artifact paths and historical fixture hashes describe the original run, so they need not match a later fixture revision or exist in a fresh checkout. Historical artifact paths and observations retain their original names; maintained record identifiers, field names and descriptions use capability terminology.
 
 ## Test reference baselines

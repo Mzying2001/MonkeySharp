@@ -1,24 +1,51 @@
 # Execution worlds and lifecycle
 
-URL listeners share execution-owned registration and cleanup with other window listeners. `once`, signal, capture identity and per-callback exception isolation apply; URL notifications remain plain objects and are never replayed from the DOMContentLoaded/load cache. See [URL guarantees and pinned differences](../usage-guide.md#window-extensions).
+Choose the execution world from the script's page-access needs and the host's trust policy. This topic owns the adapter's world, frame and lifecycle limits; the [userscript guide](../usage-guide.md#execution-grants-and-compatibility) owns declarations and script behavior, and the [integration reference](../integration-reference.md#attachment-and-navigation) owns attachment and navigation.
 
-The adapter now executes `@sandbox DOM` / `@inject-into content` in per-installation, per-revision isolated worlds. Native CDP frame/loader/context events establish ownership. Source and delivery use a remote global-object ID tied to a context generation. Binding packets must belong to that native context's script and document before reaching the normal grant/permission gateway; the page binding rejects isolated proofs. CEF frame IDs are not cast into CDP IDs.
+## World and frame selection
 
-Raw/default and Chromium JavaScript access remain in the page world. Host-backed raw privileges require `TrustedPageWorld`; DOM dispatch uses verified native context ownership. DOM plus unsafeWindow, unsupported world requirements and unwrap reject before user source. Main-frame native manual selection can dispatch either world. CefSharp 84 also maps same-process isolated child-frame menus through a one-shot challenge sent before user source; native CEF event metadata supplies the frame. CEF's additional context callbacks caused by isolated V8 worlds are coalesced on the explicitly trusted raw path; raw scripts execute once, and isolated authentication does not use the page-world deduplication marker.
+| Metadata / world | Privileged dispatch | Page-global access |
+| --- | --- | --- |
+| Default/raw or Chromium JavaScript / page world | Recognized grants beyond info require host `TrustedPageWorld`. | `unsafeWindow` refers to the page global except with `@grant none`. |
+| `@sandbox DOM` or `@inject-into content` / isolated world | Context-authenticated transport; grants, services and host authorization still apply. | Separate script globals; no `unsafeWindow`. |
 
-The fixed Tampermonkey 5.5.1 references show private window-event replay: [document-end](../../scripts/compatibility/evidence/tampermonkey-5.5.1-lifecycle-end.json) receives DOMContentLoaded/load after registration, while [idle](../../scripts/compatibility/evidence/tampermonkey-5.5.1-lifecycle-idle.json) receives load. Replayed events are synthetic (`isTrusted: false`), and direct document listeners receive no private replay. The same original fixture bodies pass the JS facade tests. Raw and isolated browser fixtures delay the host snapshot while the DOM completes, then verify cached DOMContentLoaded delivery. Idle runs after DOMContentLoaded while a slow image still prevents load.
+Conflicting world requirements, explicit DOM plus an `unsafeWindow` grant, and unsupported unwrap reject before source starts with `MSR215_EXECUTION_WORLD_UNAVAILABLE`; there is no page-world fallback. Neither world provides guaranteed full-GM document-start or transparent BFCache restoration.
 
-The [browser matrix](../../scripts/compatibility/evidence/execution-worlds.json) separately records source, DOM and style CSP effects. On the tested CSP fixture, isolated source and DOM insertion succeed, inserted styles remain blocked, page inline script remains blocked and raw Function-based source execution is blocked. The adapter never calls a whole-page CSP bypass. A node being returned does not prove its style applied.
+| Isolated execution scope | 84.4.10 | 121.3.70 | 151.3.240 |
+| --- | --- | --- | --- |
+| Main and same-process child source/storage/resources/XHR | Validated | Validated | Validated |
+| OOPIF source/storage/resources/XHR through native child sessions | Validated | Validated | Validated |
+| Main-frame `@run-at context-menu` selection | Supported | Supported | Supported |
+| Same-process child `@run-at context-menu` selection | Verified | Unavailable | Unavailable |
+| OOPIF `@run-at context-menu` selection | Unsupported | Unsupported | Unsupported |
 
-Validated combinations include full synchronous value/resource readiness, actual XHR, separate A/B globals, an invisible page canary, native proof-scope rejection, same-process child frames, explicit about:blank/srcdoc matching, SPA URL events and navigation revocation. Raw control scripts execute once alongside isolated worlds. Context-created/released counts balance in the real gate.
+This table concerns source execution. `GM.registerMenuCommand` callbacks use their host service and optional clickedFrame filtering, described in [menu scope](host-interactions.md#menus). Page-world manual source selection uses the current native CEF frame session; isolated child-source routing does not imply native menu or historical webRequest support.
 
 ## Trust boundary
 
 The browser process, host application and other CDP owners are trusted. DOM isolation supplies per-script renderer globals and context-authenticated dispatch; it is not an operating-system sandbox. Raw/default/JavaScript privileges remain subject to the host's page-world trust policy. Page-world code shares the page environment, so a token or raw deduplication marker is not a boundary against a hostile page. Isolated authentication never relies on that marker.
 
+## Dispatch identity
+
+The adapter executes `@sandbox DOM` / `@inject-into content` in per-installation, per-revision isolated worlds. Native CDP frame/loader/context events establish ownership. Source and delivery use a remote global-object ID tied to a context generation. Binding packets must belong to that native context's script and document before reaching the normal grant/permission gateway; the page binding rejects isolated proofs. CEF frame IDs are not cast into CDP IDs.
+
+Raw/default and Chromium JavaScript access remain in the page world. Host-backed raw privileges require `TrustedPageWorld`; DOM dispatch uses verified native context ownership. DOM plus unsafeWindow, unsupported world requirements and unwrap reject before user source. Main-frame native manual selection can dispatch either world. CefSharp 84 also maps same-process isolated child-frame menus through a one-shot challenge sent before user source; native CEF event metadata supplies the frame. CEF's additional context callbacks caused by isolated V8 worlds are coalesced on the explicitly trusted raw path; raw scripts execute once, and isolated authentication does not use the page-world deduplication marker.
+
+Native CEF frame recovery and URL-probe retries are documented in [lifecycle maintenance](../development.md#native-lifecycle-maintenance).
+
+## Lifecycle replay and CSP
+
+The fixed Tampermonkey 5.5.1 references show private window-event replay: [document-end](../../scripts/compatibility/evidence/tampermonkey-5.5.1-lifecycle-end.json) receives DOMContentLoaded/load after registration, while [idle](../../scripts/compatibility/evidence/tampermonkey-5.5.1-lifecycle-idle.json) receives load. Replayed events are synthetic (`isTrusted: false`), and direct document listeners receive no private replay. The same original fixture bodies pass the JS facade tests. Raw and isolated browser fixtures delay the host snapshot while the DOM completes, then verify cached DOMContentLoaded delivery. Idle runs after DOMContentLoaded while a slow image still prevents load.
+
+URL notifications remain plain objects and are never replayed from the DOMContentLoaded/load cache. Listener options, cleanup and payloads belong to the [URL API contract](../usage-guide.md#window-extensions).
+
+The [browser matrix](../../scripts/compatibility/evidence/execution-worlds.json) separately records source, DOM and style CSP effects. On the tested CSP fixture, isolated source and DOM insertion succeed, inserted styles remain blocked, page inline script remains blocked and raw Function-based source execution is blocked. The adapter never calls a whole-page CSP bypass. A node being returned does not prove its style applied.
+
+Validated combinations include full synchronous value/resource readiness, actual XHR, separate A/B globals, an invisible page canary, native proof-scope rejection, same-process child frames, explicit about:blank/srcdoc matching, SPA URL events and navigation revocation. Raw control scripts execute once alongside isolated worlds. Context-created/released counts balance in the real gate.
+
 ## Protocol session and preparation
 
-The adapter prepares one shared CDP session per browser attachment. Start from an `about:blank` control, call `PrepareAsync()` before native initialization completes and use `NavigateAsync(url)` for business navigation. Preparation cannot postpone a URL already supplied to the control constructor. `IsLateAttach` and `IsLatePreparation` identify separate late boundaries; neither retroactively supplies missing start hooks.
+The adapter prepares one shared CDP session per browser attachment. Follow the [host attachment and navigation sequence](../integration-reference.md#attachment-and-navigation) to prepare before business navigation. The preparation APIs expose readiness and late-attachment state; they do not upgrade the timing guarantee.
 
 Commands run on CEF's UI thread with CEF-allocated IDs so other observers can coexist. On 84, a method result may arrive synchronously inside `ExecuteDevToolsMethod` before the assigned ID returns; the session retains results only during that submission window. Cancellation/timeout removes pending ownership and ignores late results. Detach or agent closure fails pending work and releases only this observer, leaving shared domains and other DevTools owners intact.
 

@@ -1,48 +1,47 @@
-# Tampermonkey contract baseline
+<a id="tampermonkey-contract-baseline"></a>
 
-This is the target contract; each capability also has a verified scope and explicit limits in the [compatibility index](README.md). The minimum engine remains CefSharp 84.4.10, with 121.3.70 and 151.3.240 regression targets, x64 and x86; the WPF Demo is x64 only. Both official calling forms share capabilities but their declared names and return types must be preserved independently.
+# Tampermonkey reference baseline
 
-Sources are the [official API documentation](https://www.tampermonkey.net/documentation.php?locale=en), checked on 2026-11-06, and versioned experiments under `scripts/compatibility/evidence/`. Online documentation is not a frozen Tampermonkey release specification. `pending` means evidence is still required; existing MonkeySharp tests cannot supply it.
+This reference identifies the calling forms MonkeySharp targets and the evidence used to interpret them. The [userscript guide](../usage-guide.md#api-index) owns MonkeySharp parameters, returns and examples; [compatibility topics](README.md) own its supported scope and differences. The [integration reference](../integration-reference.md) owns host backends and interfaces.
+
+Three kinds of claims must stay distinct: **official documentation** describes a changing upstream API; **pinned observations** describe the exact manager/browser recorded; **MonkeySharp guarantees** describe this implementation. A native test cannot establish upstream behavior, and a reference observation does not establish a MonkeySharp capability. The original official-document review was recorded on 2026-11-06; the [download](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_download), [XHR](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_xmlhttpRequest), [historical webRequest](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_webRequest) and [audio](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_audio) descriptions were rechecked on 2026-11-12. Neither review turns the online documentation into a frozen release specification.
 
 ## API inventory
 
-The names in each row are separate declaration spellings. Legacy globals require their exact name. `GM_info` and `GM.info` are implicit in the pinned runtime. Missing grants and `none` retain separate exposure fixtures; both expose an info-only GM object. Modern storage, resources, menus and tab-data operations are authorized by family; legacy globals retain exact declaration names. These grant rules are backed by the committed Tampermonkey 5.5.1 probes. Resource URL spellings are intentionally different. No `GM.getResourceURL`, `GM.windowClose`, Cookie listener, or webRequest removal handle is a TM target.
+This inventory gives MonkeySharp's selected calling-form contract, with legacy and modern results kept separate. The final column identifies the upstream basis and exactly what the fixed probes establish; an exposure check is not a return-value measurement. It does not claim that every upstream option or effect is implemented. Detailed MonkeySharp behavior belongs to the linked guides and topics.
 
-| Names / grants | Inputs / overloads | Immediate result (legacy; modern) | Callback / settlement | Backend / conditions |
-| --- | --- | --- | --- | --- |
-| `GM_info`, `GM.info` | property | metadata snapshot; snapshot | none | Actual manager, installation and execution environment; [info](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_info) |
-| `GM_log`, `GM.log` | console arguments | void; Promise<void> | none | Renderer console; preserve objects |
-| `GM_getValue`, `GM.getValue` | key, default | value; Promise | value / rejection | Value store and prepared mirror |
-| `GM_setValue`, `GM.setValue` | key, value | void; Promise | void / rejection | Value store; preserve typed undefined |
-| `GM_deleteValue`, `GM.deleteValue` | key | void; Promise | void / rejection | Value store |
-| `GM_listValues`, `GM.listValues` | none | keys; Promise | keys / rejection | Value store |
-| `GM_getValues`, `GM.getValues` | keys, defaults, or omitted | object; Promise | object / rejection | Value store; TM 5.3+ |
-| `GM_setValues`, `GM.setValues` | object | void; Promise | void / rejection | Value store; TM 5.3+ |
-| `GM_deleteValues`, `GM.deleteValues` | keys | void; Promise | void / rejection | Value store; TM 5.3+ |
-| `GM_addValueChangeListener`, `GM.addValueChangeListener` | key, listener | ID; Promise | key, old, new, remote; modern resolves ID | Value store / execution ownership |
-| `GM_removeValueChangeListener`, `GM.removeValueChangeListener` | ID | void; Promise | void / rejection | Value store |
-| `GM_getResourceText`, `GM.getResourceText` | declared name | text; Promise | text / rejection | Prepared resources |
-| `GM_getResourceURL`, `GM.getResourceUrl` | declared name | URL; Promise | URL / rejection | Prepared resources; valid data URL |
-| `GM_addStyle`, `GM.addStyle` | CSS | node; Promise<node> | preserve live node | Renderer; CSP effect separately verified |
-| `GM_addElement`, `GM.addElement` | tag, attributes; parent, tag, attributes | node/null; Promise<node/null> | DOM failure returns/fulfills null; normalization errors throw/reject | Renderer; CSP effect separately verified |
-| `GM_xmlhttpRequest`, `GM.xmlHttpRequest` | details | abort handle; abortable Promise | ordered lifecycle, final response / error | CEF network / actual RequestContext; [XHR](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_xmlhttpRequest) |
-| `GM_download`, `GM.download` | details; URL, name | abort handle; abortable Promise | progress; committed-file details / error | CEF network + host saving; anonymous TM 5.5+, Blob/File TM 5.4.6226+; [download](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_download) |
-| `GM_notification`, `GM.notification` | details, ondone; text, title, image, onclick | void; Promise | click/default prevention, done; boolean clicked result (false on timeout verified) | Notification service; tag/url TM 5.0+; [notification](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_notification) |
-| `GM_registerMenuCommand`, `GM.registerMenuCommand` | name, callback, accessKey/options | ID; Promise<ID> | mouse/keyboard event | Menu service; options 4.20+, id/title 5.0+, clickedFrame 5.6.6242+; [menu](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_registerMenuCommand) |
-| `GM_unregisterMenuCommand`, `GM.unregisterMenuCommand` | ID | void; Promise<void> | never public boolean | Menu service |
-| `GM_setClipboard`, `GM.setClipboard` | data, text/html/info, callback | void; Promise | after actual write; void / error | STA clipboard service; [clipboard](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_setClipboard) |
-| `GM_openInTab`, `GM.openInTab` | URL, options/background boolean | close/onclose/closed handle; Promise<handle> | close once | Host tabs; [openInTab](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_openInTab) |
-| `GM_getTab`, `GM.getTab` | legacy callback | void; Promise | script-owned tab data | Stable host tab identity |
-| `GM_saveTab`, `GM.saveTab` | object, callback | void; Promise | saved / error | Stable host tab identity |
-| `GM_getTabs`, `GM.getTabs` | legacy callback | void; Promise | saved tab data by ID | Stable host tab identity |
-| `GM_cookie.list`, `GM.cookie.list` | optional URL/name/domain/path filters | void; Promise | cookies, error; cookie array / rejection | Authorized actual RequestContext; [Cookie](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_cookie) |
-| `GM_cookie.set`, `GM.cookie.set` | cookie details | void; Promise | error only; void / rejection | Engine-accepted write; partition CRUD on 121/151, unsupported on84; request partition selection remains unavailable |
-| `GM_cookie.delete`, `GM.cookie.delete` | URL/name | void; Promise | error only; void / rejection | Exact selected Cookie deletion; no public boolean |
-| `GM_webRequest`, `GM.webRequest` | rules, listener | void; void (MV2 differential pending) | action, ok/error, details | Historical Chromium/MV2 only; separate environment; [webRequest](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_webRequest) |
-| `unsafeWindow` | property grant | page window | none | Actual execution world |
-| `window.close`, `window.focus` | exact grant | void | none | Host window policy |
-| `window.onurlchange` | exact grant | nullable capability | URL event | Same-document navigation |
-| `GM_audio.*`, `GM.audio.*` | mute/state/listener | callback; Promise | actual audio state | Mute implemented; audible omitted. Pinned 5.5.1 setMute resolves {isMuted}; no invented minimum TM version |
+| Legacy / modern names | Immediate legacy result | Immediate modern result | Reference basis / qualification |
+| --- | --- | --- | --- |
+| `GM_info` / `GM.info` | Snapshot property | Snapshot property | [Official info](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_info); both implicit in pinned grant probes. |
+| `GM_log` / `GM.log` | void | Promise | [Page-helper return probe](../../scripts/compatibility/evidence/tampermonkey-5.5.1-page-helpers.json); local object handling has [MonkeySharp differences](README.md#page-and-tab-services). |
+| `GM_getValue` / `GM.getValue` | value | Promise of value | [Official storage API](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_values); [authority](../../scripts/compatibility/evidence/tampermonkey-5.5.1-storage-authority.json) records exposure, while [timing](../../scripts/compatibility/evidence/tampermonkey-5.5.1-storage-timing.json) records listener/write order. |
+| `GM_setValue`, `GM_deleteValue` / `GM.setValue`, `GM.deleteValue` | void | Promise | Official storage forms; host commit/replay confirmation and atomic batches are [MonkeySharp guarantees](README.md#storage-and-resources). |
+| `GM_listValues` / `GM.listValues` | keys | Promise of keys | [Official storage forms](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_values); not a claim of a fixed return measurement for each method. |
+| `GM_getValues` / `GM.getValues` | object | Promise of object | [Official bulk storage](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_values), TM 5.3+; authority probes establish family exposure. |
+| `GM_setValues`, `GM_deleteValues` / `GM.setValues`, `GM.deleteValues` | void | Promise | [Official bulk storage](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_values), TM 5.3+; authority probes establish family exposure. |
+| `GM_addValueChangeListener` / `GM.addValueChangeListener` | Listener ID | Promise of ID | [Official listener returns](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_values); pinned storage timing additionally records synchronous local delivery. |
+| `GM_removeValueChangeListener` / `GM.removeValueChangeListener` | void | Promise | [Official storage forms](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_values); not a claim of a fixed return measurement for each method. |
+| `GM_getResourceText` / `GM.getResourceText` | text | Promise of text | [Official resource forms](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_getResource); [prepared-content reference](../../scripts/compatibility/evidence/tampermonkey-5.5.1-prepared-content.json) measures legacy text effects, not the modern return. Decoding and preparation guarantees have [separate scope](README.md#storage-and-resources). |
+| `GM_getResourceURL` / `GM.getResourceUrl` | URL | Promise of URL | [Official resource URL](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_getResource); MonkeySharp's [data-URL contract](../usage-guide.md#resources) is explicit. |
+| `GM_addStyle`, `GM_addElement` / `GM.addStyle`, `GM.addElement` | node; element may be null | Promise of corresponding result | [Return](../../scripts/compatibility/evidence/tampermonkey-5.5.1-returns.json) and [DOM](../../scripts/compatibility/evidence/tampermonkey-5.5.1-dom.json) probes; nodes alone do not prove CSP effects. |
+| `GM_xmlhttpRequest` / `GM.xmlHttpRequest` | Abort handle | Abortable Promise of response | [Official XHR](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_xmlhttpRequest); stable and beta behavior are separated in [network scope](network.md). |
+| `GM_download` / `GM.download` | Abort handle | Abortable Promise of download details | [Official download](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_download): Blob/File 5.4.6226+, anonymous 5.5+. MonkeySharp's file-commit boundary and blocked native reference are in [downloads](downloads.md). |
+| `GM_notification` / `GM.notification` | void | Promise | [Return probe](../../scripts/compatibility/evidence/tampermonkey-5.5.1-returns.json) verifies timeout resolves false; click/default-action comparisons remain [incomplete](host-interactions.md#notifications). |
+| `GM_registerMenuCommand` / `GM.registerMenuCommand` | Command ID | Promise of ID | [Official menu](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_registerMenuCommand): options 4.20+, id/title 5.0+, clickedFrame 5.6.6242+; native click comparisons have [separate limits](host-interactions.md#menus). |
+| `GM_unregisterMenuCommand` / `GM.unregisterMenuCommand` | void | Promise of void | [Return probe](../../scripts/compatibility/evidence/tampermonkey-5.5.1-returns.json); no public removal boolean. |
+| `GM_setClipboard` / `GM.setClipboard` | void | Promise | [Official clipboard](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_setClipboard) describes callback/await forms; [family probe](../../scripts/compatibility/evidence/tampermonkey-5.5.1-group-clipboard.json) measures exposure, not write completion or returns. |
+| `GM_openInTab` / `GM.openInTab` | close/onclose/closed handle | Promise of handle | [Return probe](../../scripts/compatibility/evidence/tampermonkey-5.5.1-returns.json) measures immediate returns and the fulfilled handle; [page-helper reference](../../scripts/compatibility/evidence/tampermonkey-5.5.1-page-helpers.json) adds closure effects. Queued early closure is a separate MonkeySharp guarantee. |
+| `GM_getTab`, `GM_getTabs` / `GM.getTab`, `GM.getTabs` | void; callback receives data | Promise of data | [Official tab-data forms](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_tabs); [family probe](../../scripts/compatibility/evidence/tampermonkey-5.5.1-group-tabs.json) measures exposure, not returned data or settlement. |
+| `GM_saveTab` / `GM.saveTab` | void | Promise | Same official tab-data forms; fixed family exposure does not measure commit completion. |
+| `GM_cookie.list` / `GM.cookie.list` | void; callback receives cookies/error | Promise of cookies | [Official Cookie callbacks](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_cookie); [pinned returns](../../scripts/compatibility/evidence/tampermonkey-5.5.1-cookie-returns.json) measure immediate forms and modern settlement, without invoking legacy callbacks. |
+| `GM_cookie.set`, `GM_cookie.delete` / `GM.cookie.set`, `GM.cookie.delete` | void; callback receives error | Promise of void | Same official callbacks and pinned return/settlement scope; reference partition side effects and native engine support are distinguished in [cookies](cookies.md). |
+| `GM_webRequest` / `GM.webRequest` | void in MonkeySharp | void in MonkeySharp | [Official historical API](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_webRequest); MV2 differential unavailable, so immediate returns and overlap behavior are implementation choices. |
+| `unsafeWindow` | Page-window property | Same property name | [Official unsafeWindow](https://www.tampermonkey.net/documentation.php?locale=en&q=unsafeWindow); actual access depends on the execution world. |
+| `window.close`, `window.focus` | void | Same names | Official exact grants; MonkeySharp delegates to host window policy. |
+| `window.onurlchange` | Capability/property | Same name | [Pinned URL reference](../../scripts/compatibility/evidence/tampermonkey-5.5.1-urlchange.json); additional MonkeySharp guarantees are listed below. |
+| `GM_audio.*` / `GM.audio.*` | void; callbacks | Promise | [Pinned 5.5.1 audio](../../scripts/compatibility/evidence/tampermonkey-5.5.1-audio.json) resolves setMute with `{isMuted}`, while official documentation describes void; [native audio support](README.md#tab-audio) is separate. |
+
+Legacy globals require exact declaration names. Modern storage, resources, menus and tab-data operations are authorized by family in the pinned 5.5.1 probes. Missing grants and `none` retain separate exposure fixtures; both expose info. Resource URL spellings intentionally differ. The selected baseline does not introduce `GM.getResourceURL`, `GM.windowClose`, Cookie listeners or a webRequest removal handle. See the [grant test baselines](../../scripts/compatibility/evidence/README.md#test-reference-baselines) and [modern-family observations](../../scripts/compatibility/evidence/README.md#fixed-reference-observations).
 
 ## Evidence and execution
 
@@ -70,13 +69,13 @@ Fixed beta 5.6.6242 is pinned separately from stable. Its non-fetch incremental 
 
 ## Reproduction
 
-Run `node scripts/compatibility/Run-Reference.cjs <Edge-exe> <extension-dir> [output.json] [fixture.user.js]` from the repository root. It requires Playwright (`PLAYWRIGHT_MODULE` may identify an existing module), checks the extension pin, serves loopback fixtures and imports through Tampermonkey's installation UI in a fresh profile. It does not copy user extension settings or installed scripts.
+Use the [reference runner instructions](../../scripts/compatibility/README.md#pinned-reference) for prerequisites, arguments and the environment pin. The runner serves loopback fixtures and imports through Tampermonkey's installation UI in a fresh profile; it does not copy user settings or scripts.
 
 The default fixture and companion content live under `scripts/compatibility/fixtures/`. See the [tooling reference](../../scripts/compatibility/README.md) for arguments and prerequisites and [validation](validation.md) for native gates and the dated delivery snapshot.
 
 ## Contract interpretation
 
-The bridge uses protocol `2`. ApiCatalog.json is shared by host metadata normalization and the composed renderer. Declared spelling, internal authorization and exposed names are independent; source directives choose strictness. The none receiver follows the [raw receiver reference](../../scripts/compatibility/evidence/tampermonkey-5.5.1-raw-receiver.json).
+In MonkeySharp, [ApiCatalog.json](../../Mzying2001.MonkeySharp.Core/Js/ApiCatalog.json) is shared by host metadata normalization and the renderer. Declared spelling, internal authorization and exposed names are independent; source directives choose strictness. The none receiver follows the [raw receiver reference](../../scripts/compatibility/evidence/tampermonkey-5.5.1-raw-receiver.json). Host protocol requirements belong to the [integration reference](../integration-reference.md#bridge-protocol).
 
 The [storage-authority probe](../../scripts/compatibility/evidence/tampermonkey-5.5.1-storage-authority.json) records modern storage-family authorization and exact legacy global exposure. GM.info reports actual manager, installation and execution facts, and capability reasons distinguish missing services, host policy and engine limits. Unknown host facts are omitted rather than replaced with placeholders.
 

@@ -4,7 +4,7 @@ Native MonkeySharp checks, pinned Tampermonkey comparisons and third-party scrip
 
 ## Browser-independent checks
 
-Core/JavaScript tests use the tracked fixtures and evidence and require no CefSharp browser, local notes or local corpus source. Use a .NET SDK capable of building the net8.0 test project and Node.js 24:
+Core/JavaScript tests use the tracked fixtures and evidence and require no CefSharp browser, local notes or local corpus source. Use a .NET SDK capable of building the net8.0 test project and Node.js; the [development environment](../development.md#environment-and-gate-selection) records the CI-tested toolchain:
 
 ```powershell
 dotnet test Mzying2001.MonkeySharp.Core.Tests/Mzying2001.MonkeySharp.Core.Tests.csproj -c Release
@@ -13,12 +13,20 @@ node --test Mzying2001.MonkeySharp.Core.Tests/JavaScript/*.test.js
 
 ## Reproduction
 
-Run from the repository root in a Windows desktop session. Use an SDK that supports the solution's `.slnx` format and Node.js 24, the CI-tested JavaScript version. Real-CefSharp builds require an explicit x64/x86 platform and matching managed/native versions. The Demo gate runs only for x64.
+Choose the gate by the claim being checked. Source build/package commands and environment requirements belong to the [development guide](../development.md) / [中文](../development.zh-CN.md); [tooling instructions](../../scripts/compatibility/README.md) own arguments, defaults and inputs. Commands run from the repository root. Real Chromium/WPF requires a Windows desktop session; Demo gates support x64 only.
 
-The WPF Demo runner builds once and runs only the default English UI in an isolated smoke profile. Reports under `artifacts/demo-smoke/` include `environment.uiLanguage` and require English resources, browser/manager titles and permission controls alongside the existing runtime assertions. Resource-key parity, format placeholders, preference precedence and language-independent status filtering are covered by the Demo unit tests. CI uploads one English Demo report for each supported x64 CefSharp version; adding UI languages does not add E2E runs.
+| Goal | Gate / interpretation |
+| --- | --- |
+| Browser-independent metadata, bridge and facade contracts | Core/.NET and JavaScript checks above; no native browser effects. |
+| One native engine/platform baseline | `Run-Baseline.ps1`: clean solution/.NET/JS, SmokeHost/CDP, normal/private OOPIF, source corpus and WPF on x64. |
+| Combined native and package delivery | `Run-Delivery.ps1`: isolated engine/platform baselines, NuGet checks, public consumers and package corpus. Package-only mode is diagnostic. |
+| Specific browser or WPF behavior | Direct SmokeHost or Demo runner; records effects for the selected version/platform. |
+| Fixed-manager comparison | `Run-Reference.cjs`: original fixtures in a verified stable/beta reference, with interaction gaps retained. |
+| Third-party script behavior | Corpus runner: unmodified sources and completed functional actions, separately for native and fixed-manager runs. |
+| OOPIF, BFCache or strict-start/CSP investigation | Native probe runner: distinguish actual supported effects from completed feasibility assessments. |
 
 ```powershell
-# Clean solution/.NET/JS/SmokeHost/CDP, plus WPF on x64.
+# One engine/platform baseline, including native OOPIF and source corpus.
 ./scripts/compatibility/Run-Baseline.ps1 -Platform x64 -CefSharpVersion 84.4.10
 
 # Six isolated native combinations, packaging and public-API consumers.
@@ -28,13 +36,13 @@ The WPF Demo runner builds once and runs only the default English UI in an isola
 ./scripts/compatibility/Run-Delivery.ps1 -CorpusScript C:/path/to/script.user.js
 ```
 
-The baseline accepts 84.4.10, 121.3.70 or 151.3.240 and x64/x86. Do not build different native versions concurrently in the same output tree. The delivery runner creates independent short-path worktrees, assets, profiles and unique package versions. It records the base commit and source-patch SHA-256, stops on failure and preserves failed worktrees. Successful worktrees are removed after validating their resolved paths. Reports and packages remain under `artifacts/delivery/<run>/`. `-KeepWorktrees` preserves successful worktrees too; `-PackageOnly` skips the baseline and is diagnostic only.
+Do not build different native versions concurrently in the same output tree. The delivery runner records its base commit and tracked source patch so results can be tied to exact inputs; see [worktree, output and parameter behavior](../../scripts/compatibility/README.md#native-gates). The NuGet consumer checks actual CEF version/platform, Core AnyCPU, public services and package contents independently of project-reference builds.
 
-The package consumer uses NuGet packages rather than project references. It checks actual CEF version/platform, Core AnyCPU, public services, package contents and optional local-script effects. An omitted `-CorpusScript` does not require local notes or an uncommitted script. See [tool parameters and prerequisites](../../scripts/compatibility/README.md) and the [integration build reference](../integration-reference.md#build-package-and-verify).
+The WPF gate runs once per selected x64 version using default English in an isolated profile. Reports record `environment.uiLanguage` and English UI assertions. Other languages use localization unit tests; the [Demo verification guide](../../Mzying2001.MonkeySharp.Demo/README.md#verification) owns UI coverage and manual checks.
 
 ## SmokeHost cases and results
 
-The SmokeHost embeds repository-owned `.user.js` fixtures and installs them through the normal repository. Two ephemeral loopback HTTP servers supply runtime inputs. These cases validate MonkeySharp contracts; they are separate from third-party corpus and Tampermonkey differential runs.
+The SmokeHost embeds repository-owned `.user.js` fixtures and installs them through the normal repository. Two ephemeral loopback HTTP servers supply runtime inputs; [fixture notes](../../Mzying2001.MonkeySharp.CefSharp.SmokeHost/Fixtures/README.md) explain its test-only TLS certificate and process-local policy. These cases validate MonkeySharp contracts; they are separate from third-party corpus and Tampermonkey differential runs.
 
 | Result ID | Required evidence |
 | --- | --- |
@@ -60,7 +68,7 @@ Each case emits a `compatibility-case` JSON record containing `caseId`, `success
 
 The `frames` child-navigation check accepts either `ContextReleased` or `NavigationSuperseded` for the old document ID. Both transitions retire the document in the runtime; native callback order can make Chromium 84 report supersession first. A terminal event for another document on the same native frame does not satisfy this check. The replacement must still have a new document ID, run once and preserve the required storage snapshot.
 
-The adapter's initial `location.href` probe and the legacy fixture result reader retry canceled read-only evaluations within a shared 15-second budget per initialization/fixture phase. Each attempt receives at most two seconds, followed by a 50 ms retry delay capped by the remaining budget. CefSharp represents evaluation deadlines as `TaskCanceledException`; an individual deadline does not end the whole phase. Caller cancellation, document replacement, detach and invalid native frames stop the relevant probe; script failures are not retried. Exhaustion reports `TimeoutException` with the last evaluation cancellation, and fixture failures and adapter diagnostic records retain full exception details. Deterministic adapter tests cover recovery, cancellation/retirement and both old-document terminal events.
+Read-only adapter initialization and fixture-result polling retry evaluation cancellations within a 15-second phase budget. They stop for caller cancellation, document replacement, detach or native frame retirement; script assertion failures are not retried. Exhaustion retains a `TimeoutException` and the last cancellation. See [native lifecycle maintenance](../development.md#native-lifecycle-maintenance) for retry timing and [adapter tests](../../Mzying2001.MonkeySharp.CefSharp.IntegrationTests/ReadOnlyScriptEvaluatorTests.cs) for deterministic failure coverage.
 
 Run `powershell -NoProfile -ExecutionPolicy Bypass -File Mzying2001.MonkeySharp.CefSharp.SmokeHost/Test-SmokeResults.ps1` to check result validation without launching a browser. Both Windows PowerShell and PowerShell 7 can run the scripts.
 

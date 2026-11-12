@@ -4,12 +4,14 @@ This index describes maintained capabilities and evidence gaps. The [validation 
 
 MonkeySharp targets the observable Chromium Tampermonkey contract while keeping CefSharp **84.4.10** as the minimum engine. The regression matrix also covers **121.3.70** and **151.3.240**, each on x64 and x86. The WPF Demo supports x64 only. Build the adapter against the exact CefSharp version shipped by the host.
 
-The [API contract](api-contract.md) distinguishes legacy and modern calling forms. The [userscript guide](../usage-guide.md) / [中文](../usage-guide.zh-CN.md) owns parameters and examples; the [integration reference](../integration-reference.md) / [中文](../integration-reference.zh-CN.md) owns host interfaces and configuration.
+The [reference baseline](api-contract.md) distinguishes official API descriptions, pinned observations and MonkeySharp guarantees, including legacy and modern calling forms. The [userscript guide](../usage-guide.md) / [中文](../usage-guide.zh-CN.md) owns parameters and examples; the [integration reference](../integration-reference.md) / [中文](../integration-reference.zh-CN.md) owns host interfaces and configuration.
+
+Read support claims with their conditions: **implemented** describes a MonkeySharp path; **validated** describes the configurations and effects in a recorded run; **reference-backed** describes comparison with the pinned manager. A capability can be implemented and natively validated while its reference comparison is blocked or missing. An unsupported engine capability is different from an unverified comparison, and a passed feasibility assessment does not add production support.
 
 | Topic | Maintained reference | Versioned evidence |
 | --- | --- | --- |
-| Grants and return shapes | [API contract](api-contract.md) | [Pinned TM 5.5.1 returns](../../scripts/compatibility/evidence/tampermonkey-5.5.1-returns.json) and [grant probes](../../scripts/compatibility/evidence/) |
-| Worlds, lifecycle and CSP | [Execution worlds](execution-worlds.md) | [Native world matrix](../../scripts/compatibility/evidence/execution-worlds.json) |
+| Grants and return shapes | [Reference baseline](api-contract.md) | [Pinned TM 5.5.1 returns](../../scripts/compatibility/evidence/tampermonkey-5.5.1-returns.json) and [grant test baselines](../../scripts/compatibility/evidence/README.md#test-reference-baselines) |
+| Worlds, lifecycle and CSP | [Execution worlds](execution-worlds.md) | [World/lifecycle matrix](../../scripts/compatibility/evidence/execution-worlds.json), [OOPIF follow-up](../../scripts/compatibility/evidence/oopif-follow-up.json), [start/CSP assessment](../../scripts/compatibility/evidence/start-csp-follow-up.json) |
 | Cookies and partitions | [Cookies](cookies.md) | [Basic Cookie matrix](../../scripts/compatibility/evidence/cookies.json), [partition matrix](../../scripts/compatibility/evidence/partition-cookies.json) |
 | HTTP requests and streams | [Network scope](network.md) | [Incremental text](../../scripts/compatibility/evidence/progress-follow-up.json), [stream inputs](../../scripts/compatibility/evidence/stream-body-follow-up.json) |
 | Downloads and binary inputs | [Downloads](downloads.md) | [Download matrix](../../scripts/compatibility/evidence/downloads.json), [binary matrix](../../scripts/compatibility/evidence/binary-transport.json) |
@@ -25,8 +27,6 @@ Storage uses per-script watermarks, bounded replay and a confirmed mirror plus o
 See [resource preparation](../integration-reference.md#resource-integrity-and-update-checks), [storage synchronization](../integration-reference.md#storage-snapshots-and-listeners), [prepared-content evidence](../../scripts/compatibility/evidence/prepared-revisions.json), [atomic snapshots](../../scripts/compatibility/evidence/atomic-storage.json) and [mirror evidence](../../scripts/compatibility/evidence/storage-mirror.json).
 
 ## Matching and permissions
-
-The default HTTP backend rejects explicit `cookie` and `headers.Cookie` before sending; native URLRequest ignored their requested values on 84/121/151. Ordinary jar-based authentication is retained. See [Cookie scope](cookies.md#explicit-request-cookies).
 
 Prepared URL/run-in rules are reused across frames. URL regular expressions use a bounded ECMAScript subset; unsupported syntax fails installation and timeouts fail closed. Unicode `@match` host declarations are diagnosed; use Punycode. Manual context-menu execution ignores include/exclude while retaining match/exclude-match, frame, privacy and trust checks.
 
@@ -54,7 +54,7 @@ The pinned 5.5.1 reference resolves modern setMute with `{isMuted}`, differing f
 
 The Demo uses real in-memory RequestContexts, temporary permissions/tab state and a private GM value store. A script's first private access copies its ordinary atomic baseline; private writes never return to ordinary storage. Private browsers drain before the last tab releases the shared private context. Diagnostics and automatic favicon loading avoid ordinary persistent paths; explicitly saved files and copied clipboard contents remain user outputs.
 
-The [native/WPF matrix](../../scripts/compatibility/evidence/private-contexts.json) and [final delivery snapshot](../../scripts/compatibility/evidence/delivery.json) distinguish incremental checks from the final 84/121/151 x64 WPF coverage. See the [private browsing guide](../usage-guide.md#private-browsing) and [pinned temporary-session reference](../../scripts/compatibility/evidence/tampermonkey-5.5.1-private-tabs.json). Page-world trust still applies; Firefox containers are unavailable.
+The [native/WPF matrix](../../scripts/compatibility/evidence/private-contexts.json) and [2026-11-07 delivery snapshot](../../scripts/compatibility/evidence/delivery.json) record their original checks and 84/121/151 x64 WPF coverage. The [latest recorded matrix](validation.md#latest-recorded-validation) identifies the newer delivery. See the [private browsing guide](../usage-guide.md#private-browsing) and [pinned temporary-session reference](../../scripts/compatibility/evidence/tampermonkey-5.5.1-private-tabs.json). Page-world trust still applies; Firefox containers are unavailable.
 
 ## Known evidence gaps
 

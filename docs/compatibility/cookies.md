@@ -4,7 +4,7 @@ The default service uses the attached browser's shared CDP session and actual Re
 
 Core checks the authorized URL before access and filters returned name/domain/path, host-only and secure scope. SameSite maps to CDP None/Lax/Strict, with unspecified omitted. Set checks engine acceptance and reads back the selected identity and attributes. Delete selects one visible identity, expires its complete domain/path/partition identity and verifies absence. Same-name siblings survive. Protocol success without the expected engine state is an error.
 
-Modern list resolves Cookie[]; modern set/delete resolve undefined. Legacy calls return undefined, with `(cookies, error)` for list and `(error)` for mutations. The pinned reference confirms the legacy function namespace and URL-directory default path. No reflection-based input echo or custom Cookie listener remains. See the [API guide](../usage-guide.md#cookies) / [中文](../usage-guide.zh-CN.md#cookies) and [host integration](../integration-reference.md#cookies).
+Modern list resolves Cookie[]; modern set/delete resolve undefined. Legacy calls return undefined, with `(cookies, error)` for list and `(error)` for mutations. The pinned reference confirms the legacy function namespace and URL-directory default path. There is no Cookie change-listener API. See the [API guide](../usage-guide.md#cookies) / [中文](../usage-guide.zh-CN.md#cookies) and [host integration](../integration-reference.md#cookies).
 
 ## Partitioned Cookie scope
 
@@ -16,7 +16,7 @@ Explicit request Cookie support is separate from CRUD; see below.
 | 121.3.70 | Serializable partitionKey CRUD | hasCrossSiteAncestor is unavailable and rejected |
 | 151.3.240 | Serializable partitionKey CRUD including hasCrossSiteAncestor | Opaque/nonce keys are unavailable |
 
-Unspecified partitionKey selects ordinary cookies. Empty list selectors include serializable ordinary and partitioned identities; site selectors filter canonical sites. Mutations use the complete identity. Site normalization uses pinned ICANN/private suffix snapshots for the corresponding Chromium engine. On 151, omitted ancestor state is derived for set, unrestricted for list and defaults to true for delete; false must be explicit for same-site ancestor deletion.
+Unspecified partitionKey selects ordinary cookies. Explicit `{partitionKey:{}}` list selectors include serializable ordinary and partitioned identities; site selectors filter canonical sites. Mutations use the complete identity. Site normalization uses pinned ICANN/private suffix snapshots for the corresponding Chromium engine; [snapshot provenance](../../Mzying2001.MonkeySharp.CefSharp/Protocol/public-suffix-snapshots.json) and [third-party notices](../../Mzying2001.MonkeySharp.CefSharp/Protocol/THIRD-PARTY-NOTICES.md) accompany the packaged data. On 151, omitted ancestor state is derived for set, unrestricted for list and defaults to true for delete; false must be explicit for same-site ancestor deletion.
 
 The pinned reference deletes an ordinary same-name sibling when deleting a partitioned cookie. That preservation check remains failed in its record. MonkeySharp deliberately preserves the sibling; this is a documented difference. `firstPartyDomain` remains unsupported.
 
@@ -36,6 +36,6 @@ See the [native before/after evidence](../../scripts/compatibility/evidence/expl
 
 The [basic native matrix](../../scripts/compatibility/evidence/cookies.json) covers real HTTP/TLS effects, SameSite, Secure, HttpOnly, host-only/domain cookies, expiration, exact multi-path deletion and two independent RequestContexts. The [pinned CRUD reference](../../scripts/compatibility/evidence/tampermonkey-5.5.1-cookie-returns.json) establishes return shapes and defaults.
 
-The [partition matrix](../../scripts/compatibility/evidence/partition-cookies.json) separately records CRUD and native request limitations. The [pinned partition reference](../../scripts/compatibility/evidence/tampermonkey-5.5.1-partition-cookies.json) retains its deletion side effect. The [final delivery snapshot](../../scripts/compatibility/evidence/delivery.json) adds all three x64 WPF gates.
+The [partition matrix](../../scripts/compatibility/evidence/partition-cookies.json) separately records CRUD and native request limitations. The [pinned partition reference](../../scripts/compatibility/evidence/tampermonkey-5.5.1-partition-cookies.json) retains its deletion side effect. The [2026-11-07 delivery snapshot](../../scripts/compatibility/evidence/delivery.json) includes all three x64 WPF gates; [validation](validation.md#latest-recorded-validation) identifies the latest recorded delivery.
 
 Run the [baseline and native gates](validation.md). SmokeHost's test certificate and DNS mapping are confined to the test host. Chromium 121's HTTP-loopback Secure behavior differs from 84, so TLS/credential claims use actual requests and readback, not mocks or CDP submission alone.

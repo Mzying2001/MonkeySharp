@@ -32,4 +32,4 @@ This table is a design requirement, not a tested renderer artifact. A future pro
 
 ## Reproduction
 
-Run `./scripts/compatibility/Run-NativeProbe.ps1 -Probe start-csp -Platform x64 -CefSharpVersion 121.3.70`, with 84.4.10 or 151.3.240 for the other engines. The runner uses a fresh profile, test-only DNS and TLS policy, explicit site isolation, native event/version facts and bounded timeouts. It records two normal/private assessments and rejects a missing report or nonzero process exit. Use a new output directory for each run.
+Run `./scripts/compatibility/Run-NativeProbe.ps1 -Probe start-csp -Platform x64 -CefSharpVersion 121.3.70`, with 84.4.10 or 151.3.240 for the other engines. The runner uses a fresh profile, test-only DNS and TLS policy, explicit site isolation, native event/version facts and bounded timeouts. It records two normal/private assessments and rejects a missing report or nonzero process exit. Use a new output directory for each run. See [probe parameters](../../scripts/compatibility/README.md#native-feasibility-probes) and [validation scope](validation.md#reproduction) when selecting a gate.

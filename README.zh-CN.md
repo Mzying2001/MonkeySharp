@@ -11,7 +11,7 @@ MonkeySharp 是面向 CefSharp 嵌入式应用的用户脚本运行时。Core �
 | 运行浏览器和脚本管理器 | [WPF 示例](#wpf-浏览器示例) |
 | 在应用程序中集成 MonkeySharp | [最小集成](#最小宿主集成)，然后参阅[集成参考](docs/integration-reference.zh-CN.md) |
 | 编写或移植用户脚本 | [用户脚本使用指南](docs/usage-guide.zh-CN.md) |
-| 构建、打包或验证运行时 | [构建与测试](#构建与测试)，然后参阅[验证参考](docs/integration-reference.zh-CN.md#构建打包与验证) |
+| 构建、打包或验证运行时 | [构建与测试](#构建与测试)，然后参阅[开发指南](docs/development.zh-CN.md) |
 
 [文档导航](docs/README.md) · [兼容性范围与证据](docs/compatibility/README.md)
 
@@ -188,18 +188,15 @@ host.Diagnostic += (_, diagnostic) =>
 
 ## 构建与测试
 
-在 Windows 上使用支持 `MonkeySharp.slnx` 的 .NET SDK 构建，并安装 Node.js 运行 JavaScript 测试。CI 使用 .NET SDK `9.0.315` 和 Node.js `24`；这些是已测试版本，不代表最低要求。Core 测试目标为 `net8.0`，CefSharp 测试及应用程序目标为 `net462`。
+在 Windows 上使用支持 `MonkeySharp.slnx` 的 .NET SDK，并安装 Node.js 运行 JavaScript 测试。[开发指南](docs/development.zh-CN.md)集中维护还原、构建、测试、打包、版本切换及 CI 矩阵。
+
+验证单个引擎/平台的干净基线（包括真实 Chromium，x64 还包含 WPF）：
 
 ```powershell
-dotnet restore MonkeySharp.slnx -p:Platform=x64 -p:CefSharpVersion=151.3.240
-dotnet build MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=151.3.240 --no-restore
-dotnet test MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=151.3.240 --no-build
-node --test Mzying2001.MonkeySharp.Core.Tests/JavaScript/*.test.js
+./scripts/compatibility/Run-Baseline.ps1 -Platform x64 -CefSharpVersion 151.3.240
 ```
 
-使用 `-p:Platform=x86` 重复 .NET 命令；x86 配置会排除仅支持 x64 的 Demo 项目。测试其他受支持版本时，应向所有命令传入相同的 `CefSharpVersion` 属性。打包和真实 Chromium E2E 命令见[集成参考](docs/integration-reference.zh-CN.md#构建打包与验证)。
-
-CI 在 x64/x86 上覆盖 CefSharp `84.4.10`、`121.3.70` 和 `151.3.240`，运行 .NET/JavaScript 测试及真实 Chromium SmokeHost 门禁。WPF Demo 在三个版本的 x64 上设门禁。见[兼容性门禁详情](docs/integration-reference.zh-CN.md#chromium-兼容性脚本包)及 [验证说明](docs/compatibility/validation.md)。
+[验证指南](docs/compatibility/validation.md)区分原生门禁、固定 Tampermonkey 对照和第三方语料结果；已记录结论见注明日期的矩阵。
 
 ## 许可证
 

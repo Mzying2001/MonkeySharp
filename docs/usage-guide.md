@@ -126,7 +126,7 @@ The header begins with `// ==UserScript==` and ends with `// ==/UserScript==`. P
 
 URL regexes support a bounded ECMAScript-compatible subset: literals, classes, groups/noncapturing groups, lookahead, anchors and ordinary quantifiers. Literal flags, lookbehind/named groups, backreferences, Unicode-property escapes, .NET-only constructs and class subtraction are rejected during installation with `MSM021_INVALID_URL_REGEX`. A timeout rejects that script (including a timed-out exclusion) and reports `MSR214_URL_RULE_TIMEOUT`. Rules are compiled into each prepared revision and reused across frames; cache lifetime follows immutable metadata.
 
-`context-menu` ignores include/exclude rules for explicit selection, while match/exclude-match, noframes, run-in and host trust checks still apply. `@run-in` is checked for automatic and manual execution. Configure `CefSharpHostOptions.IsIncognito` from the request contexts your application actually owns; an unknown context cannot satisfy a single privacy restriction. This filtering does not create private tabs or Firefox containers.
+`context-menu` ignores include/exclude rules for explicit selection, while match/exclude-match, noframes, run-in and host trust checks still apply. `@run-in` is checked for automatic and manual execution. An unknown host privacy context cannot satisfy a single privacy restriction. This filtering does not create private tabs or Firefox containers; hosts configure the context through [private-browsing integration](integration-reference.md#private-browsing).
 
 Unicode host text in `@match` is retained but does not match normalized browser hosts in the pinned manager. Use Punycode; installation reports `MSM084_UNSUPPORTED_IDN_MATCH` for this ineffective declaration. Punycode rules match canonical IDN browser URLs.
 
@@ -477,6 +477,7 @@ Demo merges commands from the same installation and tab when name, title and acc
 Accepts the numeric/string ID. Modern resolves `undefined`; legacy returns `undefined` immediately. Unknown IDs are harmless. No removal boolean is exposed. The menu family grant supplies both modern methods; legacy globals still require their exact declarations.
 
 ```javascript
+// @grant GM.registerMenuCommand
 const id = await GM.registerMenuCommand('Action', event => console.log(event.type), {title:'Run action',autoClose:false});
 await GM.registerMenuCommand('Updated action', () => {}, {id});
 await GM.unregisterMenuCommand(id);
@@ -491,6 +492,7 @@ Options include text (required unless highlight), title (script name by default)
 Demo uses owned WPF windows. It selects/activates the originating tab for highlight; highlight without text finishes without a window. Silent suppresses sound; positive timeout closes the window. A normal URL click opens a tab after the callback. Notifications without url/tag close on document end. Those with url/tag remain until completion or host disposal, with old-document callbacks muted; the default click action can still run. Tags are scoped to an installation in one host, rather than a global OS notification service.
 
 ```javascript
+// @grant GM.notification
 const clicked = await GM.notification({text:'Ready',tag:'status',silent:true,url:'https://example.com/',
     onclick:event => event.preventDefault(), ondone:() => console.log('Closed')});
 console.log('Clicked:', clicked);
@@ -503,6 +505,8 @@ Data must be a string. Info accepts `"text"`, `"html"`, `"text/plain"`, `"text/h
 Demo writes Unicode text and, for HTML, CF_HTML with UTF-8 byte offsets on its STA dispatcher, retaining the clipboard-contention retry loop. It preserves HTML rather than silently converting it to plain text. Real E2E verifies both formats and restores the previous clipboard afterward.
 
 ```javascript
+// @grant GM.setClipboard
+// @grant GM_setClipboard
 await GM.setClipboard('<b>Hello</b>', {type:'html',mimetype:'text/html'});
 GM_setClipboard('Copied', 'text', () => console.log('Written'));
 ```
@@ -517,7 +521,7 @@ Modern returns `Promise<TabHandle>` after opening; legacy returns a local handle
 
 ### GM.getTab(), GM.saveTab(value), GM.getTabs()
 
-Require each respective grant and a tab-state service. This is per-installation data associated with **live host tabs**, not page sessionStorage and not an enumeration of arbitrary browser tabs.
+Require a tab-state family grant and a tab-state service. Any declared member enables all three modern methods; each legacy global still requires its exact declaration. This is per-installation data associated with **live host tabs**, not page sessionStorage and not an enumeration of arbitrary browser tabs.
 
 | API | Parameters / behavior | Modern result | Legacy contract |
 | --- | --- | --- | --- |
@@ -606,11 +610,13 @@ Omitted details/url use the current frame URL. Name is an optional exact list fi
 
 List returns actual name/value/domain/path, hostOnly, session, secure, httpOnly and normalized sameSite. Persistent cookies include expirationDate in Unix seconds; session cookies omit it. Unknown first-party/partition state is not invented. Set checks the protocol result and reads back the complete selected identity and attributes; a policy-rejected or silently discarded write is an error. An expired set verifies absence. Delete selects one visible matching identity (longest path first; host-only first on a tie), expires its exact domain/path/partition identity, then verifies absence. Explicit domain/path further constrain deletion; it never broadly removes every cookie with the same name. Deleting an absent cookie is harmless.
 
-The default backend uses the host's shared CDP session, which belongs to the attached browser's actual RequestContext. It keeps one session throughout each operation and never detaches another consumer's observer. Navigation can cancel a document's calls; detach/disposal invalidate the native session. Hosts can construct the service directly with `new CefSharpCookieService(host)`. A custom ICookieService implements only CRUD and must return actual verified state.
+The default backend uses the attached browser's actual RequestContext. Navigation can cancel a document's calls; detach/disposal invalidate the session. Custom backends must return actual verified state. Backend construction and service contracts belong to [host integration](integration-reference.md#cookies).
 
 partitionKey CRUD is supported on tested 121/151 engines as described below; 84 rejects it. cookiePartition and firstPartyDomain remain unsupported. Unspecified partition keys only access normal cookies. Legacy callback failures are reported once, independently of the completed operation. Calling the legacy namespace itself is unsupported; use its three documented methods.
 
 ```javascript
+// @grant GM.cookie
+// @grant GM_cookie
 await GM.cookie.set({name:'session',value:'ready',sameSite:'lax',path:'/'});
 console.log(await GM.cookie.list({name:'session'}));
 await GM.cookie.delete({name:'session'}); // undefined, no removal boolean
@@ -625,7 +631,7 @@ Set/delete accept the same partitionKey object. Empty objects select a normal id
 
 151 additionally accepts/returns hasCrossSiteAncestor. When omitted, list matches either ancestor variant, set derives it from the cookie URL and chosen site, and delete defaults to true as observed in the reference. Pass false explicitly to delete a same-site ancestor identity. 121 rejects that field because its protocol has no such dimension. Mutations and readback include the complete partition identity; deletion expires only that identity and verifies absence, preserving same-name siblings in other partitions and paths.
 
-Custom partition backends implement IPartitionedCookieService.NormalizePartitionKeyAsync in addition to CRUD. It validates actual backend support and canonicalizes the key before Core filters results. Other backends reject partitionKey rather than silently treating it as normal storage.
+Custom backend support can differ; an unsupported backend rejects `partitionKey` instead of silently accessing normal storage. Host implementers should follow the [partition service contract](integration-reference.md#partitioned-cookie-scope).
 
 XHR cookiePartition remains unsupported on every tested version. The native request probe has no public top-level partition setter, sends the ordinary cookie, and stores a Partitioned response under the request's own site rather than the requested site. The option is rejected before network dispatch. CRUD support is not request-partition support; no Cookie-header simulation is used. The [Cookie scope and evidence](compatibility/cookies.md#partitioned-cookie-scope) separates those results and the pinned reference's deletion side effect.
 
@@ -727,7 +733,7 @@ window.addEventListener("urlchange", onRoute);
 | Grants | Info is implicit; legacy globals require exact declarations, while modern API families follow the pinned 5.5.1 evidence. |
 | Timing / SPA | Do not require guaranteed document-start or automatic reruns on history changes. |
 | Match subdomains | `*.domain` match patterns include the bare domain and all its subdomains. |
-| Stored values | Use supported storage values; await modern writes for failures; account for bounded mirrors and post-commit notifications. |
+| Stored values | Use supported storage values and bounded mirrors. Local listeners run synchronously; remote notifications follow commit. Await modern writes for host commit/replay confirmation and failures. |
 | Resources | Use `GM_getResourceURL` or `GM.getResourceUrl` with the corresponding grant; expect a data URL and prepared resources. |
 | XHR | Default CEF rejects explicit Cookie and request partitions; proxy is Firefox-only. Adapt progress/XML and inspect status. |
 | Menu / clipboard | Options and ID updates, interaction-completion notifications, and text/HTML clipboard info/callback overloads. |

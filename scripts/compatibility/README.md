@@ -4,7 +4,7 @@ This directory contains the shared validation harness and its inputs. Maintained
 
 | Entry | Purpose |
 | --- | --- |
-| `Run-Baseline.ps1` | Clean restore/build/.NET/JS, real SmokeHost/CDP and x64 WPF gate for one engine/platform |
+| `Run-Baseline.ps1` | Clean restore/build/.NET/JS, real SmokeHost/CDP, normal/private OOPIF, pinned source corpus and x64 WPF gate for one engine/platform |
 | `Run-Delivery.ps1` | Isolated version/platform worktrees, baseline gates, package checks and public-API consumers |
 | `Run-Reference.cjs` | Original fixture comparisons with a locally installed pinned Tampermonkey |
 | `Run-Corpus.ps1`, `Run-Corpus.cjs` | Build/run pinned third-party scenarios through a source host, package consumer or fixed reference |
@@ -20,7 +20,7 @@ This directory contains the shared validation harness and its inputs. Maintained
 
 ## Native gates
 
-Use Windows, a desktop session for real Chromium/WPF gates, an SDK supporting `.slnx`, and the matching CefSharp managed/native packages. CI uses .NET SDK 9.0.315 and Node.js 24. See the [build reference](../../docs/integration-reference.md#build-package-and-verify) for framework and packaging details.
+Use Windows, a desktop session for real Chromium/WPF gates, an SDK supporting `.slnx`, and matching CefSharp managed/native packages. The [development guide](../../docs/development.md) / [中文](../../docs/development.zh-CN.md) owns toolchain, source build and packaging details; [validation](../../docs/compatibility/validation.md#reproduction) explains gate selection and result scope.
 
 ```powershell
 ./scripts/compatibility/Run-Baseline.ps1 -Platform x64 -CefSharpVersion 84.4.10
@@ -30,6 +30,8 @@ Use Windows, a desktop session for real Chromium/WPF gates, an SDK supporting `.
 Baseline defaults are x64 and 84.4.10; accepted versions are 84.4.10, 121.3.70 and 151.3.240. WPF runs for x64 only. Delivery defaults to all three versions and both platforms. `-CefSharpVersions` and `-Platforms` select subsets; `-CorpusScript <path>` adds an existing local script, `-KeepWorktrees` keeps successful checkouts, and `-PackageOnly` skips baseline checks for diagnostics. Keep different native versions in separate output trees.
 
 Raw baseline output is printed by the runner; SmokeHost saves its logs under `artifacts/smoke/<version>-<platform>/`. Delivery stores reports/packages under `artifacts/delivery/<run>/`. These generated directories and temporary browser profiles are ignored by Git.
+
+Delivery creates independent short-path worktrees, assets, profiles and unique package versions. It snapshots tracked changes against the base commit and records the source-patch SHA-256; untracked files are not included in that patch. It stops on failure and preserves failed worktrees. Successful worktrees are removed after validating their resolved paths unless `-KeepWorktrees` is set. The public consumer resolves the generated NuGet packages rather than project references. An omitted `-CorpusScript` does not require local notes or an uncommitted script.
 
 ## Pinned reference
 

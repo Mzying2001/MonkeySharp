@@ -102,7 +102,9 @@ Windows 文件对话框中的系统控件跟随操作系统语言。脚本元数
 
 `GM.download` 立即返回可中止的完成 Promise，`GM_download` 返回仅支持中止的句柄；完成发生在文件清理或原子提交之后。已接受的下载在导航、脚本停用或卸载后仍按已有授权继续执行，但不再向已结束的执行发送回调；重定向目标仍需授权。关闭标签页或释放宿主时，会取消并等待任务结束，再释放浏览器上下文。详见[下载行为](../docs/compatibility/downloads.md)。
 
-Demo 不提供后台自动更新、云同步、书签、完整历史记录、隔离执行世界、脚本签名或扩展商店安装。完整 API 参数与契约见[用户脚本指南](../docs/usage-guide.zh-CN.md)和[集成参考](../docs/integration-reference.zh-CN.md)。
+脚本可通过元数据选择适配器的 DOM/content 隔离世界；Demo 同时为页面世界脚本启用 `TrustedPageWorld`。这些模式仍遵守适配器的[执行与 frame 限制](../docs/compatibility/execution-worlds.md#remaining-limits)。完整 API 参数及宿主契约见[用户脚本指南](../docs/usage-guide.zh-CN.md)和[集成参考](../docs/integration-reference.zh-CN.md)。
+
+Demo 不提供后台自动更新、云同步、书签、完整历史记录、脚本签名或扩展商店安装。
 
 ## 安全
 

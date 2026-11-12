@@ -130,7 +130,7 @@
 
 URL 正则支持有界的 ECMAScript 子集：字面量、字符类、分组/非捕获分组、前瞻、锚点及普通量词。字面量 flags、后瞻/命名分组、反向引用、Unicode 属性转义、.NET 专属构造及字符类相减会在安装时以 MSM021_INVALID_URL_REGEX 拒绝。超时包括排除规则超时，都会以 MSR214_URL_RULE_TIMEOUT 拒绝该脚本。规则编译到准备版本中并跨 frame 复用，缓存随元数据释放。
 
-显式 context-menu 选择忽略 include/exclude，仍保留 match/exclude-match、noframes、run-in 及宿主信任检查。自动和手动执行都会检查 run-in。宿主必须通过 CefSharpHostOptions.IsIncognito 描述其实际拥有的 RequestContext；未知环境不满足单一隐私限制。筛选不创建私密标签页或 Firefox 容器。
+显式 context-menu 选择忽略 include/exclude，仍保留 match/exclude-match、noframes、run-in 及宿主信任检查。自动和手动执行都会检查 run-in；未知的宿主隐私环境不满足单一隐私限制。筛选不创建私密标签页或 Firefox 容器；宿主配置方式见[私密浏览集成](integration-reference.zh-CN.md#私密浏览)。
 
 固定管理器中，@match 的 Unicode 主机声明被保留但不匹配规范化后的浏览器主机；应使用 Punycode。安装会以 MSM084_UNSUPPORTED_IDN_MATCH 提示该无效声明。Punycode 规则可匹配 IDN 浏览器 URL。
 
@@ -497,6 +497,7 @@ Demo 将同一安装、同一标签页中 name/title/accessKey 相同的条目�
 接受数字或字符串 ID。现代兑现 undefined，旧版立即返回 undefined；未知 ID 无副作用，不返回自有移除布尔值。现代菜单家族同时提供注册及注销，旧版全局仍按准确声明暴露。
 
 ```javascript
+// @grant GM.registerMenuCommand
 const id = await GM.registerMenuCommand('操作', event => console.log(event.type), {title:'执行操作',autoClose:false});
 await GM.registerMenuCommand('更新操作', () => {}, {id});
 await GM.unregisterMenuCommand(id);
@@ -511,6 +512,7 @@ await GM.unregisterMenuCommand(id);
 Demo 使用 WPF 所属窗口，highlight 选择并激活来源标签；无 text 的高亮直接完成。silent 禁止声音，正数 timeout 到期关闭。普通 URL 点击在回调后打开标签。无 url/tag 的通知在文档结束时关闭；带 url/tag 的通知保留到完成或宿主释放，旧文档回调停止，默认点击动作仍可执行。tag 限于同一宿主中的脚本安装，不是全局系统通知服务。
 
 ```javascript
+// @grant GM.notification
 const clicked = await GM.notification({text:'已就绪',tag:'status',silent:true,url:'https://example.com/',
     onclick:event => event.preventDefault(), ondone:() => console.log('已关闭')});
 console.log('点击:', clicked);
@@ -523,6 +525,8 @@ data 必须是字符串。info 接受 text、html、text/plain、text/html，或
 Demo 在 STA dispatcher 写入 Unicode 文本和 HTML 的 CF_HTML 格式，偏移按 UTF-8 字节计算，保留占用重试。HTML 保持原格式，不静默降为纯文本。真实 E2E 检查两种格式，并在检查后恢复原剪贴板。
 
 ```javascript
+// @grant GM.setClipboard
+// @grant GM_setClipboard
 await GM.setClipboard('<b>你好</b>', {type:'html',mimetype:'text/html'});
 GM_setClipboard('已复制', 'text', () => console.log('已写入'));
 ```
@@ -539,7 +543,7 @@ GM_setClipboard('已复制', 'text', () => console.log('已写入'));
 
 ### GM.getTab()、GM.saveTab(value)、GM.getTabs()
 
-各自需要对应授权和标签页状态服务。数据按安装实例关联**当前存活的宿主标签页**，不是页面 sessionStorage，也不是枚举任意浏览器标签页。
+需要标签页状态家族授权和标签页状态服务。声明任一成员即可启用全部三个现代方法；每个旧式全局仍须精确声明。数据按安装实例关联**当前存活的宿主标签页**，不是页面 sessionStorage，也不是枚举任意浏览器标签页。
 
 | API | 参数 / 行为 | 现代返回值 | 旧版约定 |
 | --- | --- | --- | --- |
@@ -632,11 +636,13 @@ Blob/File 下载先逐块暂存，再进入相同的保存、取消及原子提�
 
 列表返回真实 name/value/domain/path、hostOnly、session、secure、httpOnly 及规范化 sameSite；持久 Cookie 含 Unix 秒 expirationDate，session Cookie 省略该字段。未知 first-party/partition 状态不伪造。set 检查协议结果，再读回完整身份及属性；策略拒绝或静默丢弃都报错。过期时间在过去的 set 验证 Cookie 已不存在。delete 选择一个可见身份（路径最长优先，同长时 host-only 优先），过期准确 domain/path/partition 身份并验证不存在；显式 domain/path 进一步限定，不会按名字批量误删。删除不存在项无副作用。
 
-默认后端使用宿主共享 CDP 会话，对应已附加浏览器的真实 RequestContext。单次操作始终使用同一会话，不解除其他消费者的观察器。导航可取消文档调用，detach/dispose 使原生会话失效。宿主可通过 `new CefSharpCookieService(host)` 直接构造服务。自定义 ICookieService 仅实现 CRUD，并须提供经过验证的实际状态。
+默认后端使用已附加浏览器的真实 RequestContext。导航可取消文档调用，detach/dispose 使会话失效。自定义后端须提供经过验证的实际状态；后端构造及服务契约见[宿主集成](integration-reference.zh-CN.md#cookie)。
 
 partitionKey CRUD 在已测 121/151 支持，84 明确拒绝；cookiePartition、firstPartyDomain 仍不支持。省略分区键仅访问普通 Cookie。旧版回调异常只单独报告一次，不改变已完成操作。请使用旧版命名空间的三个公开方法，不支持直接调用命名空间本身。
 
 ```javascript
+// @grant GM.cookie
+// @grant GM_cookie
 await GM.cookie.set({name:'session',value:'ready',sameSite:'lax',path:'/'});
 console.log(await GM.cookie.list({name:'session'}));
 await GM.cookie.delete({name:'session'}); // undefined，不返回删除布尔值
@@ -653,7 +659,7 @@ set/delete 接受同一 partitionKey 对象，修改中的空对象选择普通�
 
 151 还支持 hasCrossSiteAncestor。省略时 list 匹配两类 ancestor 身份，set 按 Cookie URL 与目标站点推导，delete 按固定参考默认 true；删除同站祖先身份须显式传 false。121 协议没有该维度，会明确拒绝该字段。修改及读回覆盖完整分区身份；删除通过过期准确身份并验证不存在，保留其他分区、路径中的同名 Cookie。
 
-自定义分区后端除 CRUD 外实现 IPartitionedCookieService.NormalizePartitionKeyAsync，在 Core 过滤前验证实际支持并规范化键。其他后端会拒绝 partitionKey，不会静默访问普通存储。
+自定义后端的支持范围可能不同；不支持的后端会拒绝 `partitionKey`，不会静默访问普通存储。宿主实现要求见[分区服务契约](integration-reference.zh-CN.md#分区-cookie-范围)。
 
 所有已测版本的 XHR cookiePartition 仍不支持。原生请求探针没有公开顶层分区选择字段，发送普通 Cookie，并将 Partitioned 响应存入请求自身站点而非指定站点；该参数在网络发送前拒绝。CRUD 不等于请求分区支持，不使用拼接 Cookie 头模拟。见 [Cookie 范围与证据](compatibility/cookies.md#partitioned-cookie-scope)中的独立结果及固定参考的删除副作用差异。
 
@@ -765,7 +771,7 @@ window.addEventListener("urlchange", onRoute);
 | 授权 | info 默认可用，旧式全局需要精确声明；现代 API 家族按固定 5.5.1 实测开放。 |
 | 时机 / SPA | 不依赖保证的 document-start 或历史导航后的自动重跑。 |
 | 子域名匹配 | `*.domain` 的 match 模式包含裸域名及其所有层级的子域名。 |
-| 存储 | 使用支持的存储值，await 现代写入以观察失败，并考虑镜像限额、本地同步监听及远端提交通知的时序。 |
+| 存储 | 使用支持的存储值并考虑镜像限额。本地监听同步触发，远端通知在提交后到达；await 现代写入以取得宿主提交/重放确认并观察失败。 |
 | 资源 | 使用 GM_getResourceURL 或 GM.getResourceUrl 及对应 grant；按 data URL 和已准备资源处理。 |
 | XHR | 默认 CEF 拒绝显式 Cookie 和请求分区；proxy 是 Firefox-only。适配 progress/XML 并检查 HTTP 状态。 |
 | 菜单 / 剪贴板 | 菜单选项及 ID 更新、通知交互完成、文本/HTML 剪贴板 info 与回调重载。 |

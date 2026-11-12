@@ -2,22 +2,37 @@
 
 [English](integration-reference.md) | **中文**
 
-本文集中说明实现和维护 MonkeySharp 宿主时需要查阅的兼容性、网络 API、宿主服务及验证细节。安装和最小接入方式请先阅读仓库 [README](../README.zh-CN.md)。[用户脚本使用指南](usage-guide.zh-CN.md) 介绍脚本侧的参数、返回值和示例；本文侧重宿主实现与验证。
+本文说明宿主配置、服务契约、持久化与浏览器生命周期。包和最小接入示例见仓库 [README](../README.zh-CN.md)。[用户脚本指南](usage-guide.zh-CN.md)维护脚本侧参数、返回值和示例；源码构建与打包命令见[开发指南](development.zh-CN.md)。
 
 ## CefSharp 版本兼容性
 
 同一个适配器二进制文件无法兼容任意 CefSharp 版本。CefSharp 程序集具有强名称，而且公开接口曾在版本间发生变化，例如 `IBrowser.GetFrame(long)` 改为 `GetFrameByIdentifier(string)`，`IFrame.Identifier` 也从 `long` 改为 `string`。
 
-适配器默认使用 `151.3.240`，源码兼容层已针对 `84.4.10`、`121.3.70` 和 `151.3.240` 验证。应用程序应针对实际发布的版本重新构建并测试：
-
-```powershell
-dotnet restore Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj -p:Platform=x64 -p:CefSharpVersion=151.3.240
-dotnet build Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj -c Release -p:Platform=x64 -p:CefSharpVersion=151.3.240 --no-restore
-```
+适配器默认使用 `151.3.240`，源码兼容层已针对 `84.4.10`、`121.3.70` 和 `151.3.240` 验证。应用程序应针对实际发布的版本重新构建并测试；使用[源码构建命令](development.zh-CN.md#构建与测试)并指定所选版本。
 
 适配器 NuGet 包将 `CefSharp.Common` 引用设为私有。使用者需要自行引用匹配的 `CefSharp.WinForms`、`CefSharp.Wpf` 或 `CefSharp.Common` 包，并在 .NET Framework 应用中允许常规绑定重定向。托管包、CEF 原生文件、MonkeySharp 适配器的版本和进程平台必须一致。
 
-各项目应保持相同的 `CefSharpVersion`，命令及 CI 矩阵见[构建与验证](#构建打包与验证)。
+各项目应保持相同的 `CefSharpVersion`，命令及 CI 矩阵见[开发指南](development.zh-CN.md)。
+
+## 附加与导航
+
+创建浏览器控件前只初始化一次 CefSharp。持久化仓库须先完成初始化，再构建宿主；已有浏览器处理器须按[最小集成示例](../README.zh-CN.md#已有的浏览器处理器)组合，然后在控件加入 UI 前附加宿主。宿主与浏览器应保持相同的使用生命周期。
+
+需要准备后导航或静态 `@webRequest` 规则时，以 `about:blank` 创建浏览器。在 UI 线程的异步方法中，构建好 `host` 后：
+
+```csharp
+var browser = new CefSharp.WinForms.ChromiumWebBrowser("about:blank")
+{
+    Dock = System.Windows.Forms.DockStyle.Fill
+};
+host.Attach(browser);
+form.Controls.Add(browser);
+await host.NavigateAsync("https://example.com/");
+```
+
+`NavigateAsync` 等待 `PrepareAsync` 完成静态规则、共享 CDP 会话及隔离执行器准备后才导航，也可单独调用 `PrepareAsync`。构造浏览器时传入的目标 URL 可能在准备前开始加载。`IsLateAttach` 和 `IsLatePreparation` 标记各自的晚期边界，不能补回错过的资源，也不能保证用户脚本早于页面执行。详见[时序证据](compatibility/execution-worlds.md#protocol-session-and-preparation)。
+
+先释放宿主，再释放浏览器。释放浏览器或 RequestContext 前，取消并等待已接受下载任务清理；所有浏览器释放后才关闭 CefSharp。[Demo 标签页运行时](../Mzying2001.MonkeySharp.Demo/Runtime/TabRuntime.cs)展示该顺序，[生命周期与诊断](#生命周期与诊断)说明执行实例何时失效。
 
 ## 授权与 API 契约
 
@@ -54,6 +69,8 @@ var host = new CefSharpUserScriptHostBuilder(repository)
     .Build();
 ```
 
+### 持久化安装
+
 需要持久化安装时，将前述示例中的内存仓库替换为 `PersistentUserScriptRepository`，并由应用程序提供和管理 `IUserScriptRepositoryPersistence`。在使用仓库或附加宿主前完成初始化：
 
 ```csharp
@@ -63,9 +80,9 @@ var repository = new PersistentUserScriptRepository(persistence, parser);
 await repository.InitializeAsync(CancellationToken.None);
 ```
 
-持久化实现必须保留 `ScriptKey`、安装顺序及时间戳，并原子提交变更。提交成功后即使收到取消也应成功完成；仓库变更通知在提交后发出。稳定的键用于维持脚本与 GM 存储的关联。具体的持久化及恢复实现见 [Demo 指南](../Mzying2001.MonkeySharp.Demo/README.zh-CN.md#便携数据与恢复)。
+持久化实现必须保留 `ScriptKey`、安装顺序及时间戳，并原子提交变更。提交成功后即使收到取消也应成功完成；仓库变更通知在提交后发出。稳定的键用于维持脚本与 GM 存储的关联。实现示例见 [SqliteUserScriptRepositoryPersistence](../Mzying2001.MonkeySharp.Demo/Persistence/SqliteUserScriptRepositoryPersistence.cs)、[SqliteUserScriptValueStore](../Mzying2001.MonkeySharp.Demo/Persistence/SqliteUserScriptValueStore.cs)及其 [DemoRuntime 初始化](../Mzying2001.MonkeySharp.Demo/Runtime/DemoRuntime.cs)。[Demo 数据与恢复指南](../Mzying2001.MonkeySharp.Demo/README.zh-CN.md#便携数据与恢复)说明配置目录的操作和恢复。
 
-提供程序要求：
+### 值存储与权限提供程序
 
 - `IUserScriptValueStore.SetAsync` 接收不可变的 `UserScriptValue`，由 `StoredValue.Value` 返回；仅以 `StoredValue.Exists` 区分键是否存在。使用 `UserScriptValue.FromJson(json)`、`UserScriptValue.Undefined` 或 `UserScriptValue.FromEncoded(encoded)` 构造值。
 - 持久化 `EncodedValue`，不得丢失类型信息。编码为：undefined 使用 `u`，布尔使用 `btrue`/`bfalse`，数字使用 `n` 加数字或 `NaN`/`Infinity`/`-Infinity`，字符串使用 `s` 加原文，对象/数组/null 使用 `o` 加规范 JSON。`FromEncoded` 校验并规范化编码，用户对象的属性名不会作为协议标记。
@@ -77,6 +94,8 @@ await repository.InitializeAsync(CancellationToken.None);
 
 `IUserScriptDependencyProvider` 和 `IResourceProvider` 向仓库的 `UserScriptPreparer` 提供安装内容，不在每次执行时调用。缺少提供器或获取/校验失败会在发布前使安装或更新失败；资源 API 读取已准备版本。详见[准备与完整性](#资源完整性与更新检查)。
 
+### 交互服务
+
 `IMenuService.RegisterAsync` 接收 `Action<MenuCommandInvocation>`。`MenuCommandRequest.OriginFrame` 标识已认证的订阅文档，`ClickedFrame` 要求仅向匹配且经宿主证明的当前 frame 派发。仅填写实际观测到的输入字段。通过 `host.ResolveMenuFrame(nativeFrame, request)` 解析原生 frame；null 表示未知或已过期，不派发定向调用。Demo 弹出菜单没有 frame 身份。该 GM 回调契约与 `@run-at context-menu` 源码执行不同，详见[菜单语义及证据](compatibility/host-interactions.md#menus)。
 
 交互服务的生命周期契约各不相同：
@@ -87,7 +106,7 @@ await repository.InitializeAsync(CancellationToken.None);
 | `ITabService.OpenAsync` | `Task<ITabHandle>` | `TabId`、`Closed`、`OnClose`、`CloseAsync`、`Dispose`；没有 `Completion` 任务。 |
 | `IDownloadService.CreateAsync` | `Task<IDownloadOperation>` | `Start`、`Result`、`DownloadId`、`Completion` 及进度/完成/失败/取消/超时事件、`Abort`、`Dispose`。Create 必须返回未启动操作，先订阅所有事件，再调用 Start。 |
 
-通过 `UseDownloadServiceFactory(http => new FileDownloadService(http, selectDestination))` 与 XHR 共用实际 CEF 网络服务及 webRequest 组合。builder 管理工厂创建的可释放服务。selectDestination 是可信宿主策略或 UI，返回绝对 DownloadDestination，取消时返回 null。browser 模式实现保存和冲突选项；native 模式在副作用前拒绝这些选项。Dispose 取消已接受任务；关闭 CEF 前等待 DrainAsync。必须遵守 DownloadRequest.Anonymous 和 RedirectAllowed。每次操作只发一个终态事件，成功 Result 表示已提交的文件；CreateAsync 不得启动网络或 UI。
+通过 `UseDownloadServiceFactory(http => new FileDownloadService(http, selectDestination))` 与 XHR 共用实际 HTTP 服务。使用默认 CefSharp HTTP 服务时，共享浏览器 RequestContext 及 webRequest 组合；自定义 HTTP 服务决定其自身网络行为。builder 管理工厂创建的可释放服务。selectDestination 是可信宿主策略或 UI，返回绝对 DownloadDestination，取消时返回 null。browser 模式实现保存和冲突选项；native 模式在副作用前拒绝这些选项。Dispose 取消已接受任务；关闭 CEF 前等待 DrainAsync。必须遵守 DownloadRequest.Anonymous 和 RedirectAllowed。每次操作只发一个终态事件，成功 Result 表示已提交的文件；CreateAsync 不得启动网络或 UI。
 
 运行时通过句柄事件向脚本发送回调；仅完成 `Completion` 任务不会发送终态回调。提供程序应只发出一次终态事件，并支持执行结束时的幂等清理。释放标签页句柄应解除观察关系；关闭用户标签页是独立的 `CloseAsync` 操作。
 
@@ -206,19 +225,13 @@ profile 处理、保存文件/剪贴板例外及脚本行为见[私密浏览](us
 
 ## 生命周期与诊断
 
-`PrepareAsync()` 准备当前附加会话的共享 CDP；`NavigateAsync(url)` 等待准备后导航。使用该顺序时，浏览器应以 `about:blank` 初始化。`IsLateAttach` 与 `IsLatePreparation` 分别标记附加、准备发生时初始化已完成。这些 API 不提高用户脚本的时序保证。参见[真实协议实验结论](compatibility/execution-worlds.md#protocol-session-and-preparation)。
+前述[附加与导航顺序](#附加与导航)建立共享 CDP 会话。适配器在匹配前读取当前 renderer URL，不依赖可能过期的回调 URL。读取失败会跳过该文档，包括 load fallback 和上下文菜单执行；初始化诊断保留异常。原生 frame 恢复与只读重试细节见[生命周期维护](development.zh-CN.md#原生生命周期维护)。
 
 适配器为每个框架文档建立身份，并对每个 `(document, frame, script, run-at)` 组合执行一次。`@run-at context-menu` 脚本会按当前 frame 匹配规则出现在 CefSharp 原生上下文菜单中，只有用户选择菜单项后才创建一次新的执行。导航、上下文释放和分离使文档能力失效并取消待处理调用；`ContextReleased` 和 `NavigationSuperseded` 都会结束该文档的执行。已接受下载继续作为宿主任务运行，文档回调停止。宿主释放时取消这些任务。
-
-同时运行页面和隔离世界的宿主通过异步页面标记探测区分文档导航与隔离 V8 上下文回调。旧版 CEF 可能复用 frame ID，并先完成释放探测、后完成创建探测。适配器在释放后保留帧代次编号，使待完成的创建探测仍可初始化新文档；后续文档、主页面替换或分离会使旧代次失效。这些记录不会保留已释放文档的能力或菜单注册。
-
-CEF 84 在跨站 context-created 回调中还可能提供上一个进程的主帧包装。若加载完成事件标识了另一个从未初始化过、且与浏览器当前原生主帧一致的 frame，适配器会结束旧页面并初始化该帧，再推进 load 生命周期阶段。已在新页面创建的子帧会话仅在原生父帧链确认其属于新主帧时保留。此恢复不会重试已知失败或已释放的帧，也不提供 document-start 时序保证。
 
 `GM.info` 是每次执行固定的信息快照，后续执行使用当前文档 URL 和环境事实。同文档 URL 变化不会重新注入脚本；SPA 更新请使用已授权的 [window.onurlchange API](usage-guide.zh-CN.md#window-extensions)。
 
 CefSharp 只能提供尽力而为的 document-start 钩子。相应执行产生 `MSR100_DOCUMENT_START_BEST_EFFORT`；设置 `RequireGuaranteedDocumentStart = true` 后会跳过并产生 `MSR101_DOCUMENT_START_UNAVAILABLE`。
-
-匹配前，适配器读取当前 renderer 的 `location.href`，因为旧版 CefSharp 的 context-created 回调可能仍携带上次导航 URL。只读求值取消后，在本次初始化的 15 秒总期限内重试；每次求值最多两秒，重试间隔为不超过剩余期限的 50 ms。调用方取消、分离、文档会话被替换或原生 frame 失效时停止初始化，不回退使用过期的回调 URL。耗尽求值期限会产生初始化诊断，其中包含 `TimeoutException` 和最后一次取消异常。读取失败时跳过该文档，包括 load fallback 及上下文菜单执行。document-start 仍为尽力执行。
 
 协议错误使用稳定代码 `MSP001` 至 `MSP010` 以及 `MSP999`。诊断不会包含能力令牌或存储值。将新建的 `BridgeOptions(...)` 赋给 `CefSharpHostOptions.Bridge` 即可配置限制：
 
@@ -250,41 +263,8 @@ BFCache 缓存执行会被撤销，需要新导航；隔离世界不支持历史
 
 ## 构建、打包与验证
 
-清理并验证源码基线可运行 `./scripts/compatibility/Run-Baseline.ps1 -Platform x64 -CefSharpVersion 84.4.10`（x64 包含 WPF）。完整原生/包消费门禁使用 `./scripts/compatibility/Run-Delivery.ps1`，隔离各版本/平台、核查包内容并运行公开 API 消费宿主。`-CorpusScript <path>` 可额外原样安装本地脚本，`-PackageOnly` 跳过基础门禁、仅供诊断。范围见[验证说明](compatibility/validation.md#reproduction)，参数见[工具说明](../scripts/compatibility/README.md)。
-
-CI 在目标分支为 `dev` 或 `main` 的 PR 上运行，覆盖 CefSharp `84.4.10`、`121.3.70`、`151.3.240` 的 x64/x86，WPF 仅 x64。工具链为 Windows Server 2022、.NET SDK `9.0.315` 和 Node.js `24`，这些是已测试版本而非最低要求。SDK 须支持 `MonkeySharp.slnx`；Core 测试目标为 `net8.0`，CefSharp 测试/应用目标为 `net462`。真实 Chromium 门禁需要 Windows 桌面会话。
-
-还原、构建、测试和打包必须使用相同的 `CefSharpVersion` 属性：
-
-```powershell
-dotnet restore MonkeySharp.slnx -p:Platform=x64 -p:CefSharpVersion=151.3.240
-dotnet build MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=151.3.240 --no-restore
-dotnet test MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=151.3.240 --no-build
-node --test Mzying2001.MonkeySharp.Core.Tests/JavaScript/*.test.js
-```
-
-使用 `-p:Platform=x86` 重复 .NET 命令；x86 配置会排除仅支持 x64 的 Demo 项目。Core 及不同平台适配器应输出到不同目录：
-
-Solution 的两个平台均将 Core 映射到 AnyCPU，产物位于 `bin/Release/<framework>/`。打包 Core 时应使用 `-p:Platform=AnyCPU`，通过 `--no-build` 复用 solution 产物时也应如此。CefSharp 适配器则需要显式指定 x64 或 x86 平台。
-
-```powershell
-dotnet pack Mzying2001.MonkeySharp.Core/Mzying2001.MonkeySharp.Core.csproj -c Release -p:Platform=AnyCPU -p:CefSharpVersion=151.3.240 -o artifacts/packages/core
-dotnet pack Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj -c Release -p:Platform=x64 -p:CefSharpVersion=151.3.240 -o artifacts/packages/x64
-dotnet pack Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj -c Release -p:Platform=x86 -p:CefSharpVersion=151.3.240 -o artifacts/packages/x86
-```
-
-在 Windows 桌面会话中运行真实 Chromium 验证：
-
-```powershell
-./Mzying2001.MonkeySharp.CefSharp.SmokeHost/Run-E2E.ps1 -Platform x64 -CefSharpVersion 151.3.240
-./Mzying2001.MonkeySharp.CefSharp.SmokeHost/Run-E2E.ps1 -Platform x86 -CefSharpVersion 151.3.240
-powershell -NoProfile -ExecutionPolicy Bypass -File Mzying2001.MonkeySharp.Demo/Run-E2E.ps1 -CefSharpVersion 151.3.240
-```
-
-验证全过程应使用同一版本值：`dotnet restore/build/test/pack` 使用 `-p:CefSharpVersion=<版本>`，PowerShell runner 使用 `-CefSharpVersion <版本>`。SmokeHost 应分别对 x64/x86 和 `84.4.10`、`121.3.70`、`151.3.240` 运行；Demo gate 覆盖三个版本的 x64，每个版本只运行一次默认英文界面。每份报告记录 `environment.uiLanguage`，并验证英文窗口及权限控件；其他语言由本地化单元测试覆盖，详见[界面语言和部署](../Mzying2001.MonkeySharp.Demo/README.zh-CN.md#界面语言)。在已有工作区切换版本前，先执行 `dotnet clean MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=<目标版本>`（位数使用目标平台），避免混用不同 CefSharp 版本的增量构建产物。SmokeHost runner 已使用选定版本执行 restore、clean、build，并核对实际运行的程序集版本和进程位数。两个验证入口都使用隔离 profile 和 `TrustedPageWorld`；它们是集成测试，不是安全沙箱。
+源码构建、打包、版本切换及 CI 命令统一维护在[开发指南](development.zh-CN.md)。通过[验证指南](compatibility/validation.md#reproduction)选择检查；runner 参数见[工具说明](../scripts/compatibility/README.md)。
 
 ### Chromium 兼容性脚本包
 
-SmokeHost 通过正常安装流程，在 loopback HTTP fixture 上运行仓库原创脚本。runner 要求全部 15 个兼容性场景，核验实际 CefSharp 版本、平台及清理，并将日志保存在 `artifacts/smoke/<version>-<platform>/`；可通过 `-OutputDirectory` 覆盖。
-
-场景 ID、断言、超时、解析器检查及日志排查见 [SmokeHost 场景与结果验证](compatibility/validation.md#smokehost-cases-and-results)。[验证指南](compatibility/validation.md#latest-recorded-validation)维护已记录结果及剩余缺口，[工具说明](../scripts/compatibility/README.md)维护 runner 参数及固定参考环境前置条件。
+SmokeHost 场景、断言、结果解析及日志排查统一维护在[验证指南](compatibility/validation.md#smokehost-cases-and-results)。直接启动命令见[开发指南](development.zh-CN.md#真实-chromium-门禁)。
