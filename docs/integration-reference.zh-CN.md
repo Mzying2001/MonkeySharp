@@ -210,6 +210,10 @@ profile 处理、保存文件/剪贴板例外及脚本行为见[私密浏览](us
 
 适配器为每个框架文档建立身份，并对每个 `(document, frame, script, run-at)` 组合执行一次。`@run-at context-menu` 脚本会按当前 frame 匹配规则出现在 CefSharp 原生上下文菜单中，只有用户选择菜单项后才创建一次新的执行。导航、上下文释放和分离使文档能力失效并取消待处理调用；`ContextReleased` 和 `NavigationSuperseded` 都会结束该文档的执行。已接受下载继续作为宿主任务运行，文档回调停止。宿主释放时取消这些任务。
 
+同时运行页面和隔离世界的宿主通过异步页面标记探测区分文档导航与隔离 V8 上下文回调。旧版 CEF 可能复用 frame ID，并先完成释放探测、后完成创建探测。适配器在释放后保留帧代次编号，使待完成的创建探测仍可初始化新文档；后续文档、主页面替换或分离会使旧代次失效。这些记录不会保留已释放文档的能力或菜单注册。
+
+CEF 84 在跨站 context-created 回调中还可能提供上一个进程的主帧包装。若加载完成事件标识了另一个从未初始化过、且与浏览器当前原生主帧一致的 frame，适配器会结束旧页面并初始化该帧，再推进 load 生命周期阶段。已在新页面创建的子帧会话仅在原生父帧链确认其属于新主帧时保留。此恢复不会重试已知失败或已释放的帧，也不提供 document-start 时序保证。
+
 `GM.info` 是每次执行固定的信息快照，后续执行使用当前文档 URL 和环境事实。同文档 URL 变化不会重新注入脚本；SPA 更新请使用已授权的 [window.onurlchange API](usage-guide.zh-CN.md#window-extensions)。
 
 CefSharp 只能提供尽力而为的 document-start 钩子。相应执行产生 `MSR100_DOCUMENT_START_BEST_EFFORT`；设置 `RequireGuaranteedDocumentStart = true` 后会跳过并产生 `MSR101_DOCUMENT_START_UNAVAILABLE`。

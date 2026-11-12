@@ -8,6 +8,7 @@ using Mzying2001.MonkeySharp.Core.Runtime;
 using System;
 using System.Collections.Concurrent;
 using System.Linq;
+using System.Reflection;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -17,6 +18,100 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
 {
     public sealed class NavigationMenuTests
     {
+        [Fact]
+        public async Task MainFrameLoadRecoveryKeepsChildrenAlreadyCreatedInTheNewPage()
+        {
+            using (var fixture = await Fixture.CreateAsync())
+            {
+                var old = new Frame(42);
+                await fixture.CreateContextAsync(old);
+                var oldMenu = await fixture.RegisterAsync(old);
+                var oldChild = new Frame(44, false);
+                oldChild.Native.SetupGet(frame => frame.Parent).Returns(old.Native.Object);
+                await fixture.CreateContextAsync(oldChild);
+                var oldChildMenu = await fixture.RegisterAsync(oldChild);
+                var next = new Frame(43, url: "https://other.example.test/next");
+                var child = new Frame(45, false);
+                child.Native.SetupGet(frame => frame.Parent).Returns(next.Native.Object);
+                await fixture.CreateContextAsync(child);
+                var childMenu = await fixture.RegisterAsync(child);
+                fixture.Load(next, next);
+                await fixture.DrainAsync();
+                Assert.Equal(1, oldMenu.Registration.DisposeCount);
+                Assert.Equal(1, oldChildMenu.Registration.DisposeCount);
+                Assert.Equal(0, childMenu.Registration.DisposeCount);
+                Assert.Equal(1, fixture.Menu.ActiveCount);
+                Assert.Single(fixture.Lifecycle.Where(item => item.Kind == DocumentLifecycleKind.ContextCreated && item.Frame.FrameId == child.Id));
+            }
+        }
+
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public async Task LoadOfANewMainFrameRecoversAMissingContextCallbackOnlyForTheNativeMainFrame(bool current)
+        {
+            using (var fixture = await Fixture.CreateAsync())
+            {
+                var old = new Frame(42);
+                await fixture.CreateContextAsync(old);
+                var menu = await fixture.RegisterAsync(old);
+                var next = new Frame(43, url: "https://other.example.test/next");
+                var location = new TaskCompletionSource<JavascriptResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
+                next.SetLocation(location.Task);
+                fixture.Load(next, current ? next : old);
+                location.SetResult(new JavascriptResponse { Success = true, Result = "https://other.example.test/next" });
+                if (current)
+                    Assert.Same(next.Injected.Task, await Task.WhenAny(next.Injected.Task, Task.Delay(2000)));
+                await fixture.DrainAsync();
+                Assert.Equal(current ? 2 : 1, fixture.DocumentCount);
+                Assert.Equal(current ? 1 : 0, menu.Registration.DisposeCount);
+                if (current) Assert.Contains(fixture.Lifecycle, item => item.Kind == DocumentLifecycleKind.Load && item.Frame.FrameId == next.Id);
+            }
+        }
+
+        [Theory]
+        [InlineData(false, false)]
+        [InlineData(true, false)]
+        [InlineData(false, true)]
+        [InlineData(true, true)]
+        public async Task PendingCreationProbeSurvivesReleaseButCannotReplaceANewerDocument(bool child, bool superseded)
+        {
+            using (var fixture = await Fixture.CreateAsync())
+            {
+                fixture.EnableDocumentMarkers();
+                var main = new Frame(42);
+                await fixture.CreateContextAsync(main);
+                var frame = child ? new Frame(44, false) : main;
+                if (child) await fixture.CreateContextAsync(frame);
+                var menu = await fixture.RegisterAsync(frame);
+                var released = new TaskCompletionSource<JavascriptResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
+                var created = new TaskCompletionSource<JavascriptResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
+                frame.SetMarkerProbe(released.Task, created.Task);
+                try
+                {
+                    fixture.ReleaseContext(frame);
+                    fixture.CreateContext(frame);
+                    // Older CEF reuses the frame ID: both probes observe the new page,
+                    // but the release response can retire the old session first.
+                    released.SetResult(new JavascriptResponse { Success = true });
+                    Assert.Same(fixture.WaitForReleaseAsync(), await Task.WhenAny(fixture.WaitForReleaseAsync(), Task.Delay(5000)));
+                    if (superseded) await fixture.CreateContextAsync(new Frame(43));
+                    var before = fixture.DocumentCount;
+                    created.SetResult(new JavascriptResponse { Success = true });
+                    var drained = fixture.DrainAsync();
+                    Assert.Same(drained, await Task.WhenAny(drained, Task.Delay(5000)));
+                    await drained;
+                    Assert.Equal(before + (superseded ? 0 : 1), fixture.DocumentCount);
+                    Assert.Equal(1, menu.Registration.DisposeCount);
+                }
+                finally
+                {
+                    released.TrySetCanceled();
+                    created.TrySetCanceled();
+                }
+            }
+        }
+
         [Theory]
         [InlineData(false)]
         [InlineData(true)]
@@ -117,11 +212,30 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
             private readonly Mock<IWebBrowser> _browser = new Mock<IWebBrowser>();
             private readonly Mock<IBrowser> _native = new Mock<IBrowser>();
             private readonly ConcurrentQueue<DocumentFrame> _documents = new ConcurrentQueue<DocumentFrame>();
+            public readonly ConcurrentQueue<DocumentLifecycleEventArgs> Lifecycle = new ConcurrentQueue<DocumentLifecycleEventArgs>();
             private UserScriptInstallation _installation;
             public CefSharpUserScriptHost Host;
             public HostInteractionApiProvider Provider;
             public readonly MenuService Menu = new MenuService();
             public readonly ConcurrentQueue<UserScriptDiagnostic> Diagnostics = new ConcurrentQueue<UserScriptDiagnostic>();
+            private readonly TaskCompletionSource<bool> _released = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            public int DocumentCount => _documents.Count;
+
+            public Task WaitForReleaseAsync() => _released.Task;
+            public Task DrainAsync() => (Task)typeof(CefSharpUserScriptHost)
+                .GetMethod("DrainBackgroundTasksAsync", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(Host, null);
+
+            public void EnableDocumentMarkers()
+            {
+                // No CDP worlds are needed for this raw lifecycle race. An inactive
+                // executor enables the same marker path used by mixed-world hosts.
+                var cdp = new CefSharpCdpSession(Mock.Of<IBrowserHost>(), action => { action(); return Task.CompletedTask; });
+                cdp.Dispose();
+                var executor = new CefSharpIsolatedExecutor(cdp, new InMemoryUserScriptRepository(), Host.Engine, Host.Gateway,
+                    "test", () => false, new BridgeOptions(), _ => { }, _ => { }, CancellationToken.None);
+                typeof(CefSharpUserScriptHost).GetField("_isolated", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(Host, executor);
+                _browser.Setup(browser => browser.GetBrowser()).Returns(_native.Object);
+            }
 
             public static async Task<Fixture> CreateAsync()
             {
@@ -133,19 +247,35 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
                     .Configure(new CefSharpHostOptions { TrustedPageWorld = true }).Build();
                 fixture.Host.DocumentLifecycle += (_, args) =>
                 {
+                    fixture.Lifecycle.Enqueue(args);
                     if (args.Kind == DocumentLifecycleKind.ContextCreated) fixture._documents.Enqueue(args.Frame);
+                    if (args.Kind == DocumentLifecycleKind.ContextReleased) fixture._released.TrySetResult(true);
                 };
                 fixture.Host.Diagnostic += (_, args) => fixture.Diagnostics.Enqueue(args);
                 fixture._browser.SetupGet(browser => browser.JavascriptObjectRepository).Returns(Mock.Of<IJavascriptObjectRepository>());
                 fixture._browser.SetupProperty(browser => browser.RenderProcessMessageHandler);
                 fixture._browser.SetupProperty(browser => browser.RequestHandler);
                 fixture._browser.SetupProperty(browser => browser.MenuHandler);
+                fixture._browser.Setup(browser => browser.GetBrowser()).Returns(fixture._native.Object);
                 fixture.Host.Attach(fixture._browser.Object);
                 return fixture;
             }
 
-            public void CreateContext(Frame frame) => _browser.Object.RenderProcessMessageHandler.OnContextCreated(_browser.Object, _native.Object, frame.Native.Object);
+            public void CreateContext(Frame frame)
+            {
+#if CEF_SHARP_STRING_FRAME_IDS
+                _native.Setup(browser => browser.GetFrameByIdentifier(frame.Id)).Returns(frame.Native.Object);
+#else
+                _native.Setup(browser => browser.GetFrame(long.Parse(frame.Id))).Returns(frame.Native.Object);
+#endif
+                _browser.Object.RenderProcessMessageHandler.OnContextCreated(_browser.Object, _native.Object, frame.Native.Object);
+            }
             public void ReleaseContext(Frame frame) => _browser.Object.RenderProcessMessageHandler.OnContextReleased(_browser.Object, _native.Object, frame.Native.Object);
+            public void Load(Frame frame, Frame current)
+            {
+                _native.SetupGet(browser => browser.MainFrame).Returns(current.Native.Object);
+                _browser.Raise(browser => browser.FrameLoadEnd += null, new FrameLoadEndEventArgs(_native.Object, frame.Native.Object, 200));
+            }
 
             public async Task CreateContextAsync(Frame frame)
             {
@@ -188,7 +318,10 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
                 Native.SetupGet(frame => frame.Url).Returns(url);
                 SetLocation(Task.FromResult(new JavascriptResponse { Success = true, Result = url }));
                 Native.Setup(frame => frame.ExecuteJavaScriptAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>()))
-                    .Callback(() => Injected.TrySetResult(true));
+                    .Callback<string, string, int>((script, _, __) =>
+                    {
+                        if (script.Contains("__MonkeySharpLifecycle")) Injected.TrySetResult(true);
+                    });
             }
 
             public void SetLocation(Task<JavascriptResponse> response) => Native.Setup(frame => frame.EvaluateScriptAsync(
@@ -197,6 +330,16 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
                 , false
 #endif
                 )).Returns(response);
+
+            public void SetMarkerProbe(Task<JavascriptResponse> released, Task<JavascriptResponse> created)
+            {
+                Native.SetupSequence(frame => frame.EvaluateScriptAsync(
+                    It.Is<string>(script => script.StartsWith("globalThis[", StringComparison.Ordinal)), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<TimeSpan?>()
+#if !CEF_SHARP_LEGACY_EVALUATION
+                    , false
+#endif
+                    )).Returns(released).Returns(created);
+            }
         }
 
         private sealed class RegisteredMenu

@@ -92,16 +92,12 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             }
             private async Task<string> ReadAsync(string expression)
             {
-                try
-                {
                 using (var frame = _browser.GetMainFrame())
                 {
-                    var response = await frame.EvaluateScriptAsync(expression, timeout: TimeSpan.FromSeconds(2));
-                    if (!response.Success) return null;
+                    var response = await NativeFrameProbe.EvaluateAsync(frame, expression);
+                    if (response?.Success != true) return null;
                     return response.Result is bool value ? value ? "true" : "false" : Convert.ToString(response.Result, System.Globalization.CultureInfo.InvariantCulture);
                 }
-                }
-                catch (TaskCanceledException) { return null; } // Navigation can replace the polled context; the outer deadline still applies.
             }
             private static async Task WaitAsync(Func<Task<bool>> predicate)
             {

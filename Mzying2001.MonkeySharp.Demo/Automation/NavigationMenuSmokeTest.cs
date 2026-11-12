@@ -100,9 +100,17 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
         private static async Task<ScriptMenuCommand> CurrentMenuAsync(BrowserTabViewModel tab, string url, ScriptMenuCommand previous = null)
         {
             var label = "Navigation menu " + new Uri(url).Authority;
-            await WaitAsync(async () => tab.MenuCommands.Count == 1 && !ReferenceEquals(previous, tab.MenuCommands[0]) &&
-                tab.MenuCommands[0].Label.StartsWith(label, StringComparison.Ordinal) &&
-                await EvaluateBoolean(tab, "window.__navigationMenuReady === true"));
+            try
+            {
+                await WaitAsync(async () => tab.MenuCommands.Count == 1 && !ReferenceEquals(previous, tab.MenuCommands[0]) &&
+                    tab.MenuCommands[0].Label.StartsWith(label, StringComparison.Ordinal) &&
+                    await EvaluateBoolean(tab, "window.__navigationMenuReady === true"));
+            }
+            catch (TimeoutException error)
+            {
+                throw new TimeoutException("Navigation menu did not become ready. Expected=" + url + "; address=" + tab.Address + "; menuCount=" + tab.MenuCommands.Count +
+                    " js=" + await Evaluate(tab, "JSON.stringify({url:location.href,ready:window.__navigationMenuReady,clicks:window.__navigationMenuClicks})"), error);
+            }
             return tab.MenuCommands[0];
         }
     }

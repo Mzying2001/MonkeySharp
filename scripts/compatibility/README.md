@@ -83,6 +83,8 @@ Recorded beta observations cover incremental text and stream inputs; fixed-beta 
 
 `./scripts/compatibility/Run-NativeProbe.ps1 -Probe bfcache -Platform x64 -CefSharpVersion 121.3.70` builds and launches isolated native experiments, records actual version/architecture and rejects missing records or failed process exits. `-EnableBackForwardCache` tests explicit enablement; `-NoBuild` reuses an already matching build. Choose a new OutputDirectory for each attempt. A completed assessment does not turn an unobserved capability into supported behavior.
 
+BFCache read-only polling treats a confirmed retired native frame as not yet ready and retries within its existing deadline. Errors from a still-valid frame remain failures; successful assessment does not establish that Chromium restored a cached page.
+
 `Run-NativeProbe.ps1 -Probe oopif` tests distinct-site targets, flat public DevTools transport and actual isolated GM in normal/private contexts, including nested targets, migration, script/storage separation, permission denial and native cookie jars. Run-Baseline.ps1 invokes it on each selected engine/platform; it requires no external extension input.
 
 `Run-NativeProbe.ps1 -Probe start-csp` runs prepared full-GM start, owned parser-pause and CSP effect experiments in normal/private main and OOPIF pages. Assessment success never implies strict start or a CSP bypass; see [decisions and candidate limits](../../docs/compatibility/start-csp-decision.md).

@@ -37,6 +37,10 @@ namespace Mzying2001.MonkeySharp.CefSharp
         private readonly RenderObserver _renderObserver;
         private readonly Dictionary<string, FrameSession> _sessions =
             new Dictionary<string, FrameSession>(StringComparer.Ordinal);
+        // Retain only generation numbers after release so in-flight creation
+        // probes can distinguish a released owner from a superseding document.
+        private readonly Dictionary<string, long> _contextGenerations = new Dictionary<string, long>(StringComparer.Ordinal);
+        private long _contextGeneration;
         private readonly HashSet<Task> _backgroundTasks = new HashSet<Task>();
         private IUserScriptBridge _bridge;
         private IWebBrowser _browser;
@@ -394,6 +398,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 _staticWebRequests = null;
                 _staticWebRequestPreparation = null;
                 _sessions.Clear();
+                _contextGenerations.Clear();
                 _browser = null;
                 _multiplexer = null;
                 _requestMultiplexer = null;
@@ -675,7 +680,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             catch (Exception) { return null; }
         }
 
-        private void ContextCreated(IWebBrowser browser, IBrowser cefBrowser, IFrame cefFrame, bool probeDocument = true)
+        private void ContextCreated(IWebBrowser browser, IBrowser cefBrowser, IFrame cefFrame, bool probeDocument = true, bool recoverMainFrame = false)
         {
             FrameSession session;
             lock (_sync)
@@ -703,15 +708,25 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 // A cross-process navigation can change the main frame ID without
                 // releasing the old renderer's contexts. Retire the whole old page,
                 // including child frames whose menu registrations may be merged.
-                var retired = cefFrame.IsMain ? _sessions.Values.ToArray() :
+                var preserved = recoverMainFrame ? _sessions.Values.Where(old => !old.Frame.IsMainFrame &&
+                    IsNativeDescendant(cefBrowser, old.Frame.FrameId, frameId)).ToArray() : Array.Empty<FrameSession>();
+                var retired = cefFrame.IsMain ? _sessions.Values.Except(preserved).ToArray() :
                     previous == null ? Array.Empty<FrameSession>() : new[] { previous };
                 foreach (var old in retired) _sessions.Remove(old.Frame.FrameId);
+                if (cefFrame.IsMain)
+                {
+                    _contextGenerations.Clear();
+                    foreach (var child in preserved) _contextGenerations[child.Frame.FrameId] = child.ContextGeneration;
+                }
+                session.ContextGeneration = ++_contextGeneration;
+                _contextGenerations[frameId] = session.ContextGeneration;
                 _sessions[frameId] = session;
                 session.PredecessorsReleased = Task.WhenAll(retired.Select(old =>
                     ReleaseSessionAsync(old, DocumentLifecycleKind.NavigationSuperseded, CancellationToken.None)));
                 if (_isolated != null) InstallDocumentMarker(session, cefFrame);
+                session.Initialization = InitializeSessionAsync(session);
             }
-            Observe(InitializeSessionAsync(session), "MSC101_CONTEXT_INITIALIZATION_FAILED", session);
+            Observe(session.Initialization, "MSC101_CONTEXT_INITIALIZATION_FAILED", session);
         }
 
         private void InstallDocumentMarker(FrameSession session, IFrame frame)
@@ -719,6 +734,28 @@ namespace Mzying2001.MonkeySharp.CefSharp
             frame.ExecuteJavaScriptAsync("if(typeof globalThis[" + JsonSerializer.Serialize(_rawDocumentMarker) + "]==='undefined')Object.defineProperty(globalThis," +
                 JsonSerializer.Serialize(_rawDocumentMarker) + ",{value:" + JsonSerializer.Serialize(session.Frame.DocumentId) + "});", "monkeysharp://document-identity", 1);
             session.HasDocumentMarker = true;
+        }
+
+        private static bool IsNativeDescendant(IBrowser browser, string frameId, string mainId)
+        {
+            IFrame current = null;
+            try
+            {
+                current = GetFrameByIdentifier(browser, frameId);
+                var visited = new HashSet<string>(StringComparer.Ordinal);
+                while (current != null && !current.IsDisposed && current.IsValid)
+                {
+                    var id = GetFrameIdentifier(current);
+                    if (id == mainId) return true;
+                    if (!visited.Add(id)) return false;
+                    var parent = current.Parent;
+                    current.Dispose();
+                    current = parent;
+                }
+                return false;
+            }
+            catch (ObjectDisposedException) { return false; }
+            finally { current?.Dispose(); }
         }
 
         private async Task ProbeContextAsync(IWebBrowser browser, FrameSession session, Task<JavascriptResponse> probe, bool released)
@@ -738,7 +775,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     lock (_sync)
                     {
                         if (_browser == null || !ReferenceEquals(_browser, browser) || session.AttachmentGeneration != _attachmentGeneration ||
-                            !_sessions.TryGetValue(session.Frame.FrameId, out var current) || !ReferenceEquals(current, session)) return;
+                            !_contextGenerations.TryGetValue(session.Frame.FrameId, out var generation) || generation != session.ContextGeneration) return;
                         ContextCreated(browser, browser.GetBrowser(), frame, false);
                     }
                 }
@@ -1035,10 +1072,29 @@ namespace Mzying2001.MonkeySharp.CefSharp
             FrameSession session;
             lock (_sync)
             {
-                if (!_sessions.TryGetValue(GetFrameIdentifier(args.Frame), out session))
-                    return;
+                var frameId = GetFrameIdentifier(args.Frame);
+                if (!_sessions.TryGetValue(frameId, out session))
+                {
+                    // CEF 84 can report the old main-frame wrapper in the new
+                    // renderer's context callback. Recover only a different,
+                    // native-attested main frame, never a failed/retired session.
+                    if (_browser == null || !args.Frame.IsMain || args.Frame.IsDisposed || !args.Frame.IsValid ||
+                        _contextGenerations.ContainsKey(frameId) || !_sessions.Values.Any(item => item.Frame.IsMainFrame)) return;
+                    using (var current = args.Browser.MainFrame)
+                    {
+                        if (current == null || current.IsDisposed || !current.IsValid || GetFrameIdentifier(current) != frameId) return;
+                    }
+                    ContextCreated(_browser, args.Browser, args.Frame, recoverMainFrame: true);
+                    if (!_sessions.TryGetValue(frameId, out session)) return;
+                }
             }
-            Observe(ProcessThroughAsync(session, 4), "MSC103_LOAD_FALLBACK_FAILED", session);
+            Observe(ProcessLoadedSessionAsync(session), "MSC103_LOAD_FALLBACK_FAILED", session);
+        }
+
+        private async Task ProcessLoadedSessionAsync(FrameSession session)
+        {
+            await session.Initialization.ConfigureAwait(false);
+            await ProcessThroughAsync(session, 4).ConfigureAwait(false);
         }
 
         private void GatewayNotification(object sender, BridgeNotificationEventArgs notification)
@@ -1480,6 +1536,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             }
 
             public long AttachmentGeneration { get; set; }
+            public long ContextGeneration { get; set; }
             public bool HasDocumentMarker { get; set; }
             public IFrame CefFrame { get; }
             public DocumentFrame Frame { get; private set; }
@@ -1489,6 +1546,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             public object LifetimeSync { get; } = new object();
             public Task ReleaseTask { get; set; }
             public Task PredecessorsReleased { get; set; } = Task.CompletedTask;
+            public Task Initialization { get; set; } = Task.CompletedTask;
             public SemaphoreSlim OperationGate { get; } = new SemaphoreSlim(1, 1);
             public int CompletedRank { get; set; }
             public bool Initialized { get; set; }
