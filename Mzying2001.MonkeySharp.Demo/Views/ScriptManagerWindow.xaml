@@ -3,7 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:Mzying2001.MonkeySharp.Demo.Localization"
         xmlns:views="clr-namespace:Mzying2001.MonkeySharp.Demo.Views"
-        Title="{loc:Text ManagerTitle}" Width="1150" Height="780" MinWidth="900" MinHeight="600" Background="#F4F6F9">
+        Title="{loc:Text ManagerTitle}"
+        MinWidth="900" MinHeight="600" Background="#F4F6F9">
     <Window.InputBindings>
         <KeyBinding Key="S" Modifiers="Control" Command="{Binding SaveCommand}" />
     </Window.InputBindings>

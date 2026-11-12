@@ -3,7 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:loc="clr-namespace:Mzying2001.MonkeySharp.Demo.Localization"
         xmlns:views="clr-namespace:Mzying2001.MonkeySharp.Demo.Views"
-        Title="{loc:Text BrowserTitle}" Width="1320" Height="860" MinWidth="900" MinHeight="600"
+        Title="{loc:Text BrowserTitle}"
+        MinWidth="900" MinHeight="600"
         Background="#F4F6F9" FontFamily="Segoe UI, Microsoft YaHei UI">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BooleanVisibility" />
