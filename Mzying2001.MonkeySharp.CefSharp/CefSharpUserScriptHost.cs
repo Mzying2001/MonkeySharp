@@ -433,7 +433,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 catch (Exception error) { EmitDiagnostic("MSC220_CDP_PREPARATION_FAILED", DiagnosticSeverity.Warning, "CDP preparation failed during detach.", error); }
             }
             foreach (var session in sessions)
-                session.Cancellation.Cancel();
+                session.Cancel();
 
             browser.FrameLoadEnd -= BrowserFrameLoadEnd;
             browser.JavascriptMessageReceived -= BrowserJavascriptMessageReceived;
@@ -677,14 +677,13 @@ namespace Mzying2001.MonkeySharp.CefSharp
 
         private void ContextCreated(IWebBrowser browser, IBrowser cefBrowser, IFrame cefFrame, bool probeDocument = true)
         {
-            FrameSession previous;
             FrameSession session;
             lock (_sync)
             {
                 if (_browser == null || !ReferenceEquals(_browser, browser))
                     return;
                 var frameId = GetFrameIdentifier(cefFrame);
-                _sessions.TryGetValue(frameId, out previous);
+                _sessions.TryGetValue(frameId, out var previous);
                 if (probeDocument && _isolated != null && previous != null && previous.HasDocumentMarker)
                 {
                     var probe = cefFrame.EvaluateScriptAsync("globalThis[" + JsonSerializer.Serialize(_rawDocumentMarker) + "]", timeout: TimeSpan.FromSeconds(2));
@@ -701,12 +700,18 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     TimingGuarantee.BestEffortDocumentStart,
                     BridgeIntegrity);
                 session = new FrameSession(cefFrame, frame, CreateToken()) { AttachmentGeneration = _attachmentGeneration };
+                // A cross-process navigation can change the main frame ID without
+                // releasing the old renderer's contexts. Retire the whole old page,
+                // including child frames whose menu registrations may be merged.
+                var retired = cefFrame.IsMain ? _sessions.Values.ToArray() :
+                    previous == null ? Array.Empty<FrameSession>() : new[] { previous };
+                foreach (var old in retired) _sessions.Remove(old.Frame.FrameId);
                 _sessions[frameId] = session;
+                session.PredecessorsReleased = Task.WhenAll(retired.Select(old =>
+                    ReleaseSessionAsync(old, DocumentLifecycleKind.NavigationSuperseded, CancellationToken.None)));
                 if (_isolated != null) InstallDocumentMarker(session, cefFrame);
             }
-            if (previous != null)
-                previous.Cancellation.Cancel();
-            Observe(InitializeSessionAsync(previous, session), "MSC101_CONTEXT_INITIALIZATION_FAILED", session);
+            Observe(InitializeSessionAsync(session), "MSC101_CONTEXT_INITIALIZATION_FAILED", session);
         }
 
         private void InstallDocumentMarker(FrameSession session, IFrame frame)
@@ -733,7 +738,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     lock (_sync)
                     {
                         if (_browser == null || !ReferenceEquals(_browser, browser) || session.AttachmentGeneration != _attachmentGeneration ||
-                            _sessions.TryGetValue(session.Frame.FrameId, out var current) && !ReferenceEquals(current, session)) return;
+                            !_sessions.TryGetValue(session.Frame.FrameId, out var current) || !ReferenceEquals(current, session)) return;
                         ContextCreated(browser, browser.GetBrowser(), frame, false);
                     }
                 }
@@ -745,7 +750,6 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     !_sessions.TryGetValue(session.Frame.FrameId, out var current) || !ReferenceEquals(current, session)) return;
                 _sessions.Remove(session.Frame.FrameId);
             }
-            session.Cancellation.Cancel();
             await ReleaseSessionAsync(session, DocumentLifecycleKind.ContextReleased, CancellationToken.None).ConfigureAwait(false);
         }
 
@@ -767,7 +771,6 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 }
                 _sessions.Remove(frameId);
             }
-            session.Cancellation.Cancel();
             Observe(
                 ReleaseSessionAsync(session, DocumentLifecycleKind.ContextReleased, CancellationToken.None),
                 "MSC102_CONTEXT_RELEASE_FAILED",
@@ -788,12 +791,11 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 Guid.NewGuid().ToString("D"));
         }
 
-        private async Task InitializeSessionAsync(FrameSession previous, FrameSession session)
+        private async Task InitializeSessionAsync(FrameSession session)
         {
-            if (previous != null)
-                await ReleaseSessionAsync(previous, DocumentLifecycleKind.NavigationSuperseded, CancellationToken.None)
-                    .ConfigureAwait(false);
-            await session.OperationGate.WaitAsync(session.Cancellation.Token).ConfigureAwait(false);
+            await session.PredecessorsReleased.ConfigureAwait(false);
+            session.Token.ThrowIfCancellationRequested();
+            await session.OperationGate.WaitAsync(session.Token).ConfigureAwait(false);
             try
             {
                 // Older CefSharp releases can report the previous navigation's URL
@@ -808,18 +810,18 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 await ProcessLifecycleAsync(
                     DocumentLifecycleKind.ContextCreated,
                     session,
-                    session.Cancellation.Token).ConfigureAwait(false);
+                    session.Token).ConfigureAwait(false);
                 var startPlan = await ProcessLifecycleAsync(
                     DocumentLifecycleKind.DocumentStart,
                     session,
-                    session.Cancellation.Token).ConfigureAwait(false);
+                    session.Token).ConfigureAwait(false);
                 var script = new StringBuilder(LifecycleScriptBuilder.Build(
                     session.Frame.DocumentId,
                     session.Frame.FrameId,
                     session.LifecycleToken));
                 if (startPlan.Invocations.Count != 0)
                     script.AppendLine().Append(BridgeScriptBuilder.BuildInjection(startPlan));
-                await ExecuteAsync(session.Frame, script.ToString(), session.Cancellation.Token).ConfigureAwait(false);
+                await ExecuteAsync(session.Frame, script.ToString(), session.Token).ConfigureAwait(false);
                 session.Initialized = true;
             }
             finally
@@ -844,7 +846,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 {
                     if (nativeFrame == null || nativeFrame.IsDisposed || !nativeFrame.IsValid) return null;
                     var response = await nativeFrame.EvaluateScriptAsync("location.href", timeout: timeout).ConfigureAwait(false);
-                    session.Cancellation.Token.ThrowIfCancellationRequested();
+                    session.Token.ThrowIfCancellationRequested();
                     lock (_sync) if (!IsCurrentSession(session)) return null;
                     if (nativeFrame.IsDisposed || !nativeFrame.IsValid) return null;
                     return response ?? throw new InvalidOperationException("The CefSharp document URL probe returned no response.");
@@ -855,7 +857,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     return null;
                 }
                 finally { refreshedFrame?.Dispose(); }
-            }, TimeSpan.FromSeconds(15), session.Cancellation.Token);
+            }, TimeSpan.FromSeconds(15), session.Token);
         }
 
         // Caller holds _sync while checking attachment and document ownership.
@@ -865,11 +867,26 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 _sessions.TryGetValue(session.Frame.FrameId, out var current) && ReferenceEquals(current, session);
         }
 
-        private async Task ReleaseSessionAsync(
+        private Task ReleaseSessionAsync(
             FrameSession session,
             DocumentLifecycleKind kind,
             CancellationToken cancellationToken)
         {
+            lock (session.LifetimeSync)
+            {
+                session.Cancel();
+                return session.ReleaseTask ?? (session.ReleaseTask = ReleaseSessionCoreAsync(session, kind, cancellationToken));
+            }
+        }
+
+        private async Task ReleaseSessionCoreAsync(
+            FrameSession session,
+            DocumentLifecycleKind kind,
+            CancellationToken cancellationToken)
+        {
+            // Preserve cleanup ordering even if this document is replaced while
+            // it is still waiting for its own predecessor to finish retiring.
+            await session.PredecessorsReleased.ConfigureAwait(false);
             await session.OperationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
@@ -884,7 +901,8 @@ namespace Mzying2001.MonkeySharp.CefSharp
 
         private async Task ProcessThroughAsync(FrameSession session, int requestedRank)
         {
-            await session.OperationGate.WaitAsync(session.Cancellation.Token).ConfigureAwait(false);
+            session.Token.ThrowIfCancellationRequested();
+            await session.OperationGate.WaitAsync(session.Token).ConfigureAwait(false);
             try
             {
                 if (!session.Initialized) return;
@@ -896,14 +914,14 @@ namespace Mzying2001.MonkeySharp.CefSharp
                         : session.CompletedRank == 2
                             ? DocumentLifecycleKind.DomContentLoaded
                             : session.CompletedRank == 3 ? DocumentLifecycleKind.DocumentIdle : DocumentLifecycleKind.Load;
-                    var plan = await ProcessLifecycleAsync(kind, session, session.Cancellation.Token)
+                    var plan = await ProcessLifecycleAsync(kind, session, session.Token)
                         .ConfigureAwait(false);
                     if (plan.Invocations.Count != 0)
                     {
                         await ExecuteAsync(
                             session.Frame,
                             BridgeScriptBuilder.BuildInjection(plan),
-                            session.Cancellation.Token).ConfigureAwait(false);
+                            session.Token).ConfigureAwait(false);
                     }
                 }
             }
@@ -992,7 +1010,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                         await ProcessLifecycleAsync(
                             DocumentLifecycleKind.UrlChanged,
                             session,
-                            session.Cancellation.Token).ConfigureAwait(false);
+                            session.Token).ConfigureAwait(false);
                         return true;
                     }
                     var rank = stage == "body" ? 1 : stage == "dom-content-loaded" ? 2 : stage == "idle" ? 3 : stage == "load" ? 4 : 0;
@@ -1270,13 +1288,14 @@ namespace Mzying2001.MonkeySharp.CefSharp
 
         private async Task ExecuteContextMenuAsync(FrameSession session, ScriptKey scriptKey)
         {
-            await session.OperationGate.WaitAsync(session.Cancellation.Token).ConfigureAwait(false);
+            session.Token.ThrowIfCancellationRequested();
+            await session.OperationGate.WaitAsync(session.Token).ConfigureAwait(false);
             try
             {
                 var plan = await _engine.ProcessContextMenuAsync(
-                    session.Frame, scriptKey, session.Cancellation.Token).ConfigureAwait(false);
+                    session.Frame, scriptKey, session.Token).ConfigureAwait(false);
                 if (plan.Invocations.Count != 0)
-                    await ExecuteAsync(session.Frame, BridgeScriptBuilder.BuildInjection(plan), session.Cancellation.Token)
+                    await ExecuteAsync(session.Frame, BridgeScriptBuilder.BuildInjection(plan), session.Token)
                         .ConfigureAwait(false);
             }
             finally
@@ -1451,11 +1470,13 @@ namespace Mzying2001.MonkeySharp.CefSharp
 
         private sealed class FrameSession : IDisposable
         {
+            private bool _disposed;
             public FrameSession(IFrame cefFrame, DocumentFrame frame, string lifecycleToken)
             {
                 CefFrame = cefFrame;
                 Frame = frame;
                 LifecycleToken = lifecycleToken;
+                Token = Cancellation.Token;
             }
 
             public long AttachmentGeneration { get; set; }
@@ -1464,6 +1485,10 @@ namespace Mzying2001.MonkeySharp.CefSharp
             public DocumentFrame Frame { get; private set; }
             public string LifecycleToken { get; }
             public CancellationTokenSource Cancellation { get; } = new CancellationTokenSource();
+            public CancellationToken Token { get; }
+            public object LifetimeSync { get; } = new object();
+            public Task ReleaseTask { get; set; }
+            public Task PredecessorsReleased { get; set; } = Task.CompletedTask;
             public SemaphoreSlim OperationGate { get; } = new SemaphoreSlim(1, 1);
             public int CompletedRank { get; set; }
             public bool Initialized { get; set; }
@@ -1480,10 +1505,21 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     Frame.BridgeIntegrity);
             }
 
+            public void Cancel()
+            {
+                lock (LifetimeSync)
+                    if (!_disposed) Cancellation.Cancel();
+            }
+
             public void Dispose()
             {
-                Cancellation.Dispose();
-                OperationGate.Dispose();
+                lock (LifetimeSync)
+                {
+                    if (_disposed) return;
+                    _disposed = true;
+                    Cancellation.Dispose();
+                    OperationGate.Dispose();
+                }
             }
         }
     }

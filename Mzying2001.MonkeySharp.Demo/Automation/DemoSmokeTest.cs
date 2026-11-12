@@ -50,6 +50,7 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                     "/page*\n// @grant GM_getTab\n// @grant GM_saveTab\n// @grant GM_getTabs\n// @run-at document-end\n// ==/UserScript==\n" +
                     "(async function(){ const state=await GM.getTab(); await GM.saveTab({isolated:true}); const all=await GM.getTabs(); window.__tabIsolation=typeof state.marker==='undefined' && Object.values(all).every(value=>value.isolated===true && typeof value.marker==='undefined'); })();",
                     "application://tab-isolation-smoke", true, CancellationToken.None);
+                await NavigationMenuSmokeTest.InstallAsync(runtime, fixture);
                 var primary = runtime.MainWindow.NewTab(fixture.BaseUrl + "/page?primary");
                 await WaitAsync(async () => await EvaluateBoolean(primary, "!!(window.__demo && window.__demo.ready)"));
                 await WaitAsync(() => Task.FromResult(string.Equals(primary.IconUrl, fixture.BaseUrl + "/favicon.ico", StringComparison.OrdinalIgnoreCase)));
@@ -155,6 +156,7 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                 await runtime.Repository.SetEnabledAsync(installation.ScriptKey, true, CancellationToken.None);
                 await WaitAsync(async () => await EvaluateBoolean(primary, "!!(window.__demo && window.__demo.ready)"));
                 checks["enableAndReload"] = true;
+                await NavigationMenuSmokeTest.RunAsync(runtime, fixture, checks);
                 await PrivateContextSmokeTest.RunAsync(runtime, fixture, checks, () => permissionPrompts);
                 await WaitAsync(async () => await EvaluateBoolean(primary, "window.__demo && window.__demo.ready"));
                 selector.SelectedItem = secondary;

@@ -61,6 +61,7 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                     switch (path)
                     {
                         case "/page":
+                        case "/menu-page":
                             body = "<!doctype html><html><head><title>MonkeySharp E2E</title><link rel='icon' href='/favicon.ico'></head><body><h1>Local userscript fixture</h1><iframe src='/frame'></iframe></body></html>";
                             mime = "text/html; charset=utf-8"; break;
                         case "/private-normal":

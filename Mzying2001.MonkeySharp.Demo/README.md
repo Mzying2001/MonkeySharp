@@ -91,7 +91,7 @@ Private console/runtime diagnostics and tab data are not written to the normal p
 | Partitioned Cookie | CDP CRUD on tested 121/151; rejected on 84. XHR partition selection is rejected before sending. |
 | XHR, Cookie, webRequest | CefSharp services use the browser's actual RequestContext. Custom navigation handlers use the adapter's request-handler multiplexer. |
 | Audio | Native mute-state reads, writes, and change listeners; audible state is unavailable. |
-| Menus | Per-tab commands, callbacks, access keys, and cleanup on execution end. |
+| Menus | Per-tab commands, callbacks, access keys, and cleanup on execution end. New main documents retire the previous page's commands, including child-frame commands, even when cross-site navigation changes the main frame ID. Hash and History API changes within the same document preserve its commands. |
 | Notifications | Nonmodal WPF windows with completion Promises, tag replacement, cancelable URL clicks, tab highlight, silent mode, timeout, and bounded HTTP(S) images. No system toast registration. |
 | Clipboard | Dispatcher/STA writes for Unicode text and CF_HTML, with bounded contention retries. |
 | `openInTab` | Respects active/insert/setParent/incognito, observes user closure, and supports explicit close. Releasing a script handle leaves the opened tab alive. |
