@@ -40,16 +40,16 @@ async function main() {
                 else { received.push(value); resolveEvidence(value); }
                 response.end("ok");
             });
-        } else if (request.url.startsWith('/p1-body')) {
+        } else if (request.url.startsWith('/stream-body')) {
             const chunks = [];
             request.on('data', chunk => chunks.push(chunk));
             request.on('end', () => {
-                if (request.url.startsWith('/p1-body-redirect')) { response.statusCode = 307; response.setHeader('Location', '/p1-body'); }
+                if (request.url.startsWith('/stream-body-redirect')) { response.statusCode = 307; response.setHeader('Location', '/stream-body'); }
                 const bytes = Buffer.concat(chunks);
                 response.setHeader('Content-Type', 'application/json');
                 response.end(JSON.stringify({ length: bytes.length, sha256: crypto.createHash('sha256').update(bytes).digest('hex'), method: request.method }));
             });
-        } else if (request.url.startsWith('/p1-progress')) {
+        } else if (request.url.startsWith('/progress')) {
             response.setHeader('Content-Type', 'text/plain; charset=utf-8');
             response.write(Buffer.from([97, 228, 189]));
             setTimeout(() => response.end(Buffer.from([160, 229, 165, 189])), 700);
@@ -74,7 +74,7 @@ async function main() {
     const server = http.createServer(requestHandler);
     await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
     const partitionProbe = path.basename(fixture) === 'partition-cookies.user.js';
-    const streamBodyProbe = path.basename(fixture) === 'p1-stream-body.user.js';
+    const streamBodyProbe = path.basename(fixture) === 'stream-body.user.js';
     const tlsProbe = partitionProbe || streamBodyProbe;
     let tls;
     const matching = path.basename(fixture) === "matching-conditions.user.js";
@@ -147,8 +147,8 @@ async function main() {
                 promise: {}, immediateReturn: { probe: "completed" }, effects: { automaticExecutions: received.length } };
         } else {
             await target.goto(`http://127.0.0.1:${server.address().port}/`);
-            if (path.basename(fixture) === 'p1-menus.user.js') await target.bringToFront();
-            if (path.basename(fixture) === 'p0-urlchange.user.js') {
+            if (path.basename(fixture) === 'menus.user.js') await target.bringToFront();
+            if (path.basename(fixture) === 'urlchange.user.js') {
                 await target.waitForFunction(() => document.documentElement.dataset.urlProbeReady === 'true');
                 await target.waitForTimeout(500);
                 for (const operation of ['push', 'replace', 'hash', 'back']) {
@@ -161,7 +161,7 @@ async function main() {
                     await target.waitForTimeout(1100);
                 }
             }
-            result = await Promise.race([evidence, new Promise((_, reject) => { deadline = setTimeout(() => reject(new Error("No userscript evidence within fixture deadline.")), path.basename(fixture) === 'p1-menus.user.js' ? 600000 : 20000); })]).finally(() => clearTimeout(deadline));
+            result = await Promise.race([evidence, new Promise((_, reject) => { deadline = setTimeout(() => reject(new Error("No userscript evidence within fixture deadline.")), path.basename(fixture) === 'menus.user.js' ? 600000 : 20000); })]).finally(() => clearTimeout(deadline));
         }
         result.effects.tabsBefore = tabsBefore;
         if (result.caseId === "private-tabs") {
@@ -179,7 +179,7 @@ async function main() {
             result.effects.afterManagerReload = privateReloadEvidence;
         }
         result.effects.tabsAfter = await worker.evaluate(() => chrome.tabs.query({}).then(tabs => tabs.length));
-        const checks = result.caseId === 'p1-stream-body' ? {
+        const checks = result.caseId === 'stream-body' ? {
             noError: !result.effects.error,
             exactBytes: result.effects.upload?.sha256 === result.effects.expectedHash && result.effects.upload?.length === 150003,
             previewRedirectRefusesDisturbedReplay: result.effects.redirectError?.status === 408,
@@ -187,28 +187,28 @@ async function main() {
             lockedRejected: result.promise.locked?.state === 'rejected',
             disturbedAndProducerPendingWithinProbe: result.promise.disturbed?.state === 'pending' && result.promise.producer?.state === 'pending',
             emptyBody: result.effects.empty?.length === 0
-        } : result.caseId === 'p1-progress' ? {
+        } : result.caseId === 'progress' ? {
             noError: !result.effects.error,
             partialText: result.events.some(event => event.name === 'progress' && event.text === 'a'),
             finalText: result.effects.text === 'a你好',
             decoderBoundary: result.events.filter(event => event.name === 'progress').every(event => !event.text?.includes('\ufffd')),
             fetchProgressObserved: result.effects.fetchProgress > 0
-        } : result.caseId === 'p0-dom' ? {
+        } : result.caseId === 'dom' ? {
             invalidCreation: ['invalidTag', 'invalidAttribute', 'invalidParent', 'emptyTag'].every(name =>
                 result.immediateReturn[name] === 'null' && result.promise[name]?.state === 'fulfilled' && result.promise[name]?.value === 'null'),
             invalidType: result.immediateReturn.invalidType === 'throws:TypeError' && result.promise.invalidType?.state === 'rejected',
             continued: result.effects.continued === true
-        } : result.caseId === 'p0-urlchange' ? {
+        } : result.caseId === 'urlchange' ? {
             changesObserved: result.events.some(event => event.name === 'listener'),
             once: result.effects.onceCount === 1,
             signalIgnoredByPinnedReference: result.events.some(event => event.name === 'aborted'),
             plainUrlPayload: result.events.filter(event => event.name === 'listener').every(event => event.isEvent === false && event.keys?.join(',') === 'url')
-        } : result.caseId === 'p0-cookies' ? {
+        } : result.caseId === 'cookies' ? {
             jarObserved: result.effects.jar?.includes('same=jar'),
             headerWins: result.effects.both?.includes('same=header') && !result.effects.both?.includes('same=details'),
             values: result.effects.values?.includes('equals=a=b=c') && result.effects.values?.includes('empty='),
             anonymous: result.effects.anonymous === 'same=header'
-        } : result.caseId === 'p0-notification' ? {
+        } : result.caseId === 'notification' ? {
             replacementTimeout: result.promise.replacement?.state === 'fulfilled' && result.promise.replacement.value === false
         } : matching ? {
             allCasesRecorded: result.effects.cases.length === matchingScenarios.length,

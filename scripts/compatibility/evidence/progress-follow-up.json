@@ -1,0 +1,184 @@
+{
+  "schemaVersion": 1,
+  "caseId": "progress-follow-up",
+  "date": "2026-11-11",
+  "baseCommit": "1cc6a60925d9b25e2977b01154726466a86bd969",
+  "reference": "tampermonkey-5.6.6242-progress-repro.json",
+  "tests": {
+    "core": 304,
+    "javascript": 123
+  },
+  "runs": [
+    {
+      "path": "artifacts/p1-follow-up/step28/84-x64-retry/results.jsonl",
+      "status": "passed",
+      "binaryCase": {
+        "type": "compatibility-case",
+        "caseId": "binary",
+        "success": true,
+        "checks": {
+          "callbackThis": true,
+          "context": true,
+          "blob": true,
+          "events": true,
+          "url": true,
+          "file": true,
+          "echo": true,
+          "multipart": true,
+          "searchParams": true,
+          "charset": true,
+          "progressState": true,
+          "progress": true,
+          "html": true,
+          "decoderBoundary": true,
+          "stream": true,
+          "streamCompletion": true,
+          "streamFailure": true,
+          "abort": true,
+          "blob-bytes.bin": true,
+          "file-bytes.bin": true,
+          "url-bytes.bin": true,
+          "noPartialFiles": true
+        },
+        "error": null,
+        "frameId": "17179869185",
+        "documentId": "a41d27bb-1de3-44fd-a088-861d6df42ef8",
+        "url": "http://127.0.0.1:52645/compat/binary",
+        "state": "{\"callbackThis\":true,\"context\":true,\"blob\":true,\"events\":true,\"url\":true,\"file\":true,\"echo\":true,\"multipart\":true,\"searchParams\":true,\"charset\":true,\"progressState\":true,\"progress\":true,\"html\":true,\"decoderBoundary\":true,\"stream\":true,\"streamCompletion\":true,\"streamFailure\":true,\"abort\":true,\"done\":true}"
+      }
+    },
+    {
+      "path": "artifacts/p1-follow-up/step28/121-x64/results.jsonl",
+      "status": "passed",
+      "binaryCase": {
+        "type": "compatibility-case",
+        "caseId": "binary",
+        "success": true,
+        "checks": {
+          "callbackThis": true,
+          "context": true,
+          "blob": true,
+          "events": true,
+          "url": true,
+          "file": true,
+          "echo": true,
+          "multipart": true,
+          "searchParams": true,
+          "charset": true,
+          "progressState": true,
+          "progress": true,
+          "html": true,
+          "decoderBoundary": true,
+          "stream": true,
+          "streamCompletion": true,
+          "streamFailure": true,
+          "abort": true,
+          "blob-bytes.bin": true,
+          "file-bytes.bin": true,
+          "url-bytes.bin": true,
+          "noPartialFiles": true
+        },
+        "error": null,
+        "frameId": "21474836481",
+        "documentId": "1f08d865-c40e-4b02-8416-e6fa81cba469",
+        "url": "http://127.0.0.1:52814/compat/binary",
+        "state": "{\"callbackThis\":true,\"context\":true,\"blob\":true,\"events\":true,\"url\":true,\"file\":true,\"echo\":true,\"multipart\":true,\"searchParams\":true,\"charset\":true,\"progressState\":true,\"progress\":true,\"html\":true,\"decoderBoundary\":true,\"stream\":true,\"streamCompletion\":true,\"streamFailure\":true,\"abort\":true,\"done\":true}"
+      }
+    },
+    {
+      "path": "artifacts/p1-follow-up/step28/151-x64/results.jsonl",
+      "status": "passed",
+      "binaryCase": {
+        "type": "compatibility-case",
+        "caseId": "binary",
+        "success": true,
+        "checks": {
+          "callbackThis": true,
+          "context": true,
+          "blob": true,
+          "events": true,
+          "url": true,
+          "file": true,
+          "echo": true,
+          "multipart": true,
+          "searchParams": true,
+          "charset": true,
+          "progressState": true,
+          "progress": true,
+          "html": true,
+          "decoderBoundary": true,
+          "stream": true,
+          "streamCompletion": true,
+          "streamFailure": true,
+          "abort": true,
+          "blob-bytes.bin": true,
+          "file-bytes.bin": true,
+          "url-bytes.bin": true,
+          "noPartialFiles": true
+        },
+        "error": null,
+        "frameId": "8-F408E232DCCFEA64884BFC002058B352",
+        "documentId": "ef9a8067-f66e-4130-bf6f-0c49735a4b27",
+        "url": "http://127.0.0.1:53073/compat/binary",
+        "state": "{\"callbackThis\":true,\"context\":true,\"blob\":true,\"events\":true,\"url\":true,\"file\":true,\"echo\":true,\"multipart\":true,\"searchParams\":true,\"charset\":true,\"progressState\":true,\"progress\":true,\"html\":true,\"decoderBoundary\":true,\"stream\":true,\"streamCompletion\":true,\"streamFailure\":true,\"abort\":true,\"done\":true}"
+      }
+    },
+    {
+      "path": "artifacts/p1-follow-up/step28/84-final-retry/results.jsonl",
+      "status": "passed",
+      "binaryCase": {
+        "type": "compatibility-case",
+        "caseId": "binary",
+        "success": true,
+        "checks": {
+          "callbackThis": true,
+          "context": true,
+          "blob": true,
+          "events": true,
+          "url": true,
+          "file": true,
+          "echo": true,
+          "multipart": true,
+          "searchParams": true,
+          "charset": true,
+          "progressState": true,
+          "progress": true,
+          "progressGzip": true,
+          "progressAbort": true,
+          "progressTimeout": true,
+          "html": true,
+          "decoderBoundary": true,
+          "stream": true,
+          "streamCompletion": true,
+          "streamFailure": true,
+          "abort": true,
+          "blob-bytes.bin": true,
+          "file-bytes.bin": true,
+          "url-bytes.bin": true,
+          "noPartialFiles": true
+        },
+        "error": null,
+        "frameId": "17179869185",
+        "documentId": "92d803a5-321e-445a-b59e-37792c719c9f",
+        "url": "http://127.0.0.1:53634/compat/binary",
+        "state": "{\"callbackThis\":true,\"context\":true,\"blob\":true,\"events\":true,\"url\":true,\"file\":true,\"echo\":true,\"multipart\":true,\"searchParams\":true,\"charset\":true,\"progressState\":true,\"progress\":true,\"progressGzip\":true,\"progressAbort\":true,\"progressTimeout\":true,\"html\":true,\"decoderBoundary\":true,\"stream\":true,\"streamCompletion\":true,\"streamFailure\":true,\"abort\":true,\"done\":true}"
+      }
+    }
+  ],
+  "limits": [
+    "fetch progress is suppressed unlike pinned beta",
+    "CEF source cannot pause; total spool budget applies",
+    "Malformed bytes use replacement; charset fallback unchanged"
+  ],
+  "retainedAttempts": [
+    "initial native build variable shadowing corrected before runtime",
+    "gzip fixture argument-order build error corrected before runtime",
+    "tampermonkey-5.6.6242-progress-initial-failed.json: store proof was selected, fetch assumption failed",
+    "tampermonkey-5.6.6242-progress.json: corrected publisher identity, before canonical unpack formatting"
+  ],
+  "inputSha256": {
+    "Mzying2001.MonkeySharp.Core/Js/Network.js": "245f923f7cc76b6199eab6fcaef0ef0eb74bb7ce068867b58c1ff1bb258270f2",
+    "Mzying2001.MonkeySharp.Core/Apis/ResourceAndNetworkApiProvider.cs": "989b7d6b2b7e68760f3239c568287372681b80bcc477d07f465300e0824fa8ff",
+    "Mzying2001.MonkeySharp.Core.Tests/JavaScript/xmlhttp-progress.test.js": "54a8f517db10501d9aedf062b423730e2742a4daa303b60c6367dcd5851f1635"
+  }
+}

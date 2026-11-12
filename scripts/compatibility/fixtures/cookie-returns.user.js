@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name P0 cookie return probe
+// @name cookie return probe
 // @namespace MonkeySharp.Reference
 // @match http://127.0.0.1/*
 // @grant GM_cookie

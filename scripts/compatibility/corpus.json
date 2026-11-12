@@ -69,7 +69,7 @@
       "empty submit without external navigation",
       "full navigation retaining choice"
     ],
-    "evidence": "evidence/p2-delivery.json",
+    "evidence": "evidence/delivery.json",
     "packageConsumerRuns": 6
   },
   "scripts": {

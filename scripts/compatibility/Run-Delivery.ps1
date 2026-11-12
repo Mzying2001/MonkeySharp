@@ -9,9 +9,9 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $runId = [Guid]::NewGuid().ToString('N').Substring(0,12)
-$runRoot = Join-Path $root "artifacts/p2-delivery/$runId"
+$runRoot = Join-Path $root "artifacts/delivery/$runId"
 New-Item -ItemType Directory -Path $runRoot -Force | Out-Null
-$checkoutParent = Join-Path ([IO.Path]::GetPathRoot($root)) ("m2-" + $runId.Substring(0,10))
+$checkoutParent = Join-Path ([IO.Path]::GetPathRoot($root)) ("ms-" + $runId.Substring(0,10))
 if (Test-Path -LiteralPath $checkoutParent) { throw "Checkout target already exists: $checkoutParent" }
 New-Item -ItemType Directory -Path $checkoutParent | Out-Null
 $caseIndex = 0

@@ -1,0 +1,120 @@
+{
+  "schemaVersion": 1,
+  "caseId": "dom",
+  "immediateReturn": {
+    "valid": "SPAN",
+    "invalidTag": "null",
+    "invalidAttribute": "null",
+    "explicitParent": "SPAN",
+    "invalidParent": "null",
+    "emptyTag": "null",
+    "invalidType": "throws:TypeError"
+  },
+  "promise": {
+    "valid": {
+      "state": "fulfilled",
+      "value": "SPAN"
+    },
+    "invalidTag": {
+      "state": "fulfilled",
+      "value": "null"
+    },
+    "invalidAttribute": {
+      "state": "fulfilled",
+      "value": "null"
+    },
+    "explicitParent": {
+      "state": "fulfilled",
+      "value": "SPAN"
+    },
+    "invalidParent": {
+      "state": "fulfilled",
+      "value": "null"
+    },
+    "emptyTag": {
+      "state": "fulfilled",
+      "value": "null"
+    },
+    "invalidType": {
+      "state": "rejected",
+      "error": "TypeError"
+    }
+  },
+  "events": [
+    {
+      "name": "valid",
+      "then": "function"
+    },
+    {
+      "name": "invalidTag",
+      "then": "function"
+    },
+    {
+      "name": "invalidAttribute",
+      "then": "function"
+    },
+    {
+      "name": "explicitParent",
+      "then": "function"
+    },
+    {
+      "name": "invalidParent",
+      "then": "function"
+    },
+    {
+      "name": "emptyTag",
+      "then": "function"
+    },
+    {
+      "name": "invalidType",
+      "then": "function"
+    }
+  ],
+  "effects": {
+    "withoutHead": "SPAN",
+    "withoutHeadParent": "BODY",
+    "withoutHeadBody": "SPAN",
+    "continued": true,
+    "tabsBefore": 4,
+    "tabsAfter": 4
+  },
+  "fixtureHash": "c961d3cd4f5d16eeaf7469ce721cc9d714b55d3ad75f047d2cffb83af8f65d66",
+  "contractSource": [
+    "https://www.tampermonkey.net/documentation.php?locale=en",
+    "Tampermonkey 5.5.1/stable/MV3 runtime"
+  ],
+  "environment": {
+    "manager": "Tampermonkey",
+    "managerVersion": "5.5.1",
+    "chromiumVersion": "Edg/157.0.4341.42",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/157.0.0.0 Safari/537.36 Edg/157.0.0.0",
+    "manifestVersion": 3,
+    "channel": "stable",
+    "extensionId": "iikmkjmpaadaobahmlepeloendndfphd",
+    "contentSha256": "8d03dfa6e2bff063425d652aa1ef7d6c22b9df01dd0732861969d7e1510fc95b",
+    "minimumChromeVersion": "120",
+    "settings": {
+      "downloadMode": "fresh-profile-default",
+      "privateStorage": "split; no incognito access unless private-tabs fixture",
+      "headless": true,
+      "userScriptsAccess": true,
+      "freshProfile": true,
+      "ignoreLoopbackCertificateErrors": false,
+      "legacyPfxProvider": false
+    },
+    "commit": "d6f672be63fabf4879a2f2f8724568c0a287bbd5",
+    "sourcePatchSha256": "63b9bffce2b0bb3fca4541c6b8b3c8044aff21e276aa1d0ddb2e4cb7a7ef504a",
+    "runnerSha256": "85164f9aa0b616fedfb686b2d886e91347de933182d0a8cf2966fd2c93647175",
+    "platform": "x64",
+    "capabilities": {
+      "referenceReturnProbe": true
+    },
+    "world": "manager-selected"
+  },
+  "checks": {
+    "invalidCreation": true,
+    "invalidType": true,
+    "continued": true
+  },
+  "status": "passed"
+}

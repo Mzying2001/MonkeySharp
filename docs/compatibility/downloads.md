@@ -18,8 +18,8 @@ XHR streams have a different completion boundary: their Promise resolves when he
 
 ## Evidence and reproduction
 
-The [native download matrix](../../scripts/compatibility/evidence/downloads-p0.json) records actual bytes and file hashes, authenticated redirects, anonymous denial, zero-byte files, immediate/transfer cancellation, timeout, disk failure, staging cleanup and completion after navigation. WPF checks exercise the actual save picker and cancellation; SmokeHost does not establish browser-extension download UI parity.
+The [native download matrix](../../scripts/compatibility/evidence/downloads.json) records actual bytes and file hashes, authenticated redirects, anonymous denial, zero-byte files, immediate/transfer cancellation, timeout, disk failure, staging cleanup and completion after navigation. WPF checks exercise the actual save picker and cancellation; SmokeHost does not establish browser-extension download UI parity.
 
-The [binary matrix](../../scripts/compatibility/evidence/binary-transport-p1.json) and [pinned reference](../../scripts/compatibility/evidence/tampermonkey-5.5.1-binary-inputs.json) add Blob/File/blob URL cases. The reference clones callback context across its extension boundary; MonkeySharp keeps the original local object. Identical context-object identity is not claimed.
+The [binary matrix](../../scripts/compatibility/evidence/binary-transport.json) and [pinned reference](../../scripts/compatibility/evidence/tampermonkey-5.5.1-binary-inputs.json) add Blob/File/blob URL cases. The reference clones callback context across its extension boundary; MonkeySharp keeps the original local object. Identical context-object identity is not claimed.
 
 Run the [baseline and native gates](validation.md). Script parameters and examples are in the [download guide](../usage-guide.md#downloads) / [中文](../usage-guide.zh-CN.md#downloads); host ownership and configuration are in the [integration reference](../integration-reference.md#host-service-contracts).

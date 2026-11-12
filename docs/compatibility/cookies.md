@@ -28,14 +28,14 @@ The default CefSharp HTTP backend rejects `headers.Cookie` (case insensitive) an
 
 Ordinary jar-based login, TLS/Secure/HttpOnly/domain/path selection, redirects, anonymous suppression and independent RequestContexts retain their existing network validation. This limitation also applies to download headers through the same backend.
 
-The [fixed Tampermonkey 5.5.1 reference](../../scripts/compatibility/evidence/tampermonkey-5.5.1-p0-cookies.json) gives `headers.Cookie` priority over the entire `details.cookie` string. Explicit names override jar names; repeated explicit names use the last value, preserving empty values and embedded `=`. An explicit string also collapses jar names across paths. Anonymous suppresses the jar but still sends explicit cookies, with headers taking priority. Custom verified `IHttpRequestService` backends can implement these observed merge rules; the default backend does not claim that behavior.
+The [fixed Tampermonkey 5.5.1 reference](../../scripts/compatibility/evidence/tampermonkey-5.5.1-cookies.json) gives `headers.Cookie` priority over the entire `details.cookie` string. Explicit names override jar names; repeated explicit names use the last value, preserving empty values and embedded `=`. An explicit string also collapses jar names across paths. Anonymous suppresses the jar but still sends explicit cookies, with headers taking priority. Custom verified `IHttpRequestService` backends can implement these observed merge rules; the default backend does not claim that behavior.
 
-See the [native before/after evidence](../../scripts/compatibility/evidence/explicit-cookies-follow-up-p0.json).
+See the [native before/after evidence](../../scripts/compatibility/evidence/explicit-cookies-follow-up.json).
 
 ## Evidence and reproduction
 
-The [basic native matrix](../../scripts/compatibility/evidence/cookies-p0.json) covers real HTTP/TLS effects, SameSite, Secure, HttpOnly, host-only/domain cookies, expiration, exact multi-path deletion and two independent RequestContexts. The [pinned CRUD reference](../../scripts/compatibility/evidence/tampermonkey-5.5.1-cookie-returns.json) establishes return shapes and defaults.
+The [basic native matrix](../../scripts/compatibility/evidence/cookies.json) covers real HTTP/TLS effects, SameSite, Secure, HttpOnly, host-only/domain cookies, expiration, exact multi-path deletion and two independent RequestContexts. The [pinned CRUD reference](../../scripts/compatibility/evidence/tampermonkey-5.5.1-cookie-returns.json) establishes return shapes and defaults.
 
-The [partition matrix](../../scripts/compatibility/evidence/partition-cookies-p2.json) separately records CRUD and native request limitations. The [pinned partition reference](../../scripts/compatibility/evidence/tampermonkey-5.5.1-partition-cookies.json) retains its deletion side effect. The [final delivery snapshot](../../scripts/compatibility/evidence/p2-delivery.json) adds all three x64 WPF gates.
+The [partition matrix](../../scripts/compatibility/evidence/partition-cookies.json) separately records CRUD and native request limitations. The [pinned partition reference](../../scripts/compatibility/evidence/tampermonkey-5.5.1-partition-cookies.json) retains its deletion side effect. The [final delivery snapshot](../../scripts/compatibility/evidence/delivery.json) adds all three x64 WPF gates.
 
 Run the [baseline and native gates](validation.md). SmokeHost's test certificate and DNS mapping are confined to the test host. Chromium 121's HTTP-loopback Secure behavior differs from 84, so TLS/credential claims use actual requests and readback, not mocks or CDP submission alone.

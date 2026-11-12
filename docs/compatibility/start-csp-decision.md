@@ -1,6 +1,6 @@
 # Full-GM start and CSP decisions
 
-Full-GM document-start and CSP effects are independent capabilities. The experiments use the production prepared-revision, engine, gateway and isolated executor, including native child-target routing. [Versioned evidence](../../scripts/compatibility/evidence/start-csp-follow-up-p1.json) retains the assessments and their outcomes. A completed assessment does not establish a timing or CSP-bypass feature.
+Full-GM document-start and CSP effects are independent capabilities. The experiments use the production prepared-revision, engine, gateway and isolated executor, including native child-target routing. [Versioned evidence](../../scripts/compatibility/evidence/start-csp-follow-up.json) retains the assessments and their outcomes. A completed assessment does not establish a timing or CSP-bypass feature.
 
 ## Full GM before first inline
 

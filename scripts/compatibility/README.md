@@ -29,7 +29,7 @@ Use Windows, a desktop session for real Chromium/WPF gates, an SDK supporting `.
 
 Baseline defaults are x64 and 84.4.10; accepted versions are 84.4.10, 121.3.70 and 151.3.240. WPF runs for x64 only. Delivery defaults to all three versions and both platforms. `-CefSharpVersions` and `-Platforms` select subsets; `-CorpusScript <path>` adds an existing local script, `-KeepWorktrees` keeps successful checkouts, and `-PackageOnly` skips baseline checks for diagnostics. Keep different native versions in separate output trees.
 
-Raw baseline output is printed by the runner; SmokeHost saves its logs under `artifacts/smoke/<version>-<platform>/`. Delivery stores reports/packages under `artifacts/p2-delivery/<run>/`. These generated directories and temporary browser profiles are ignored by Git.
+Raw baseline output is printed by the runner; SmokeHost saves its logs under `artifacts/smoke/<version>-<platform>/`. Delivery stores reports/packages under `artifacts/delivery/<run>/`. These generated directories and temporary browser profiles are ignored by Git.
 
 ## Pinned reference
 
@@ -65,11 +65,11 @@ node scripts/compatibility/Run-Corpus.cjs --manager tampermonkey --browser C:/pa
 
 `results.json` contains schema-1 differential records under `results`, including source/action/input hashes, environment and source patch, actual completed actions, failed action, checks, file/ZIP-entry hashes, diagnostics and server Cookie/method/status logs. Raw profiles, inputs and host logs stay beside it. Exit 0 accepts only `passed` and the explicitly recognized `expected-engine-limitation`; blocked/failed results exit 1. Manifest intake `ready` is separate from runtime status. The pinned corpus has seven main categories plus CSP, cancel and host-denial variants. See [scenario scope](corpus/README.md).
 
-Baseline runs the source corpus. Delivery additionally runs it through every NuGet-only consumer; `-CorpusScript` remains the separate historical optional local-search script. Package-only diagnostics still do not establish full M1.
+Baseline runs the source corpus. Delivery additionally runs it through every NuGet-only consumer; `-CorpusScript` remains the separate historical optional local-search script. Package-only diagnostics still do not establish full stable-reference acceptance.
 
 ## Maintaining shared inputs
 
-Keep fixtures, corpus declarations and concise evidence in Git. Preserve hashed userscript LF bytes through `.gitattributes`; do not reformat binary or charset fixtures. Evidence names containing P0/P1/P2 identify historical runs and remain stable. Use the [evidence index](evidence/README.md) to find test dependencies, current topic evidence, delivery snapshots and retained failures. Relocation does not change fixture hashes, recorded commits, statuses or historical artifact paths.
+Keep fixtures, corpus declarations and concise evidence in Git. Preserve hashed userscript LF bytes through `.gitattributes`; do not reformat binary or charset fixtures. Name fixtures and evidence by capability, keeping version and investigation qualifiers where they distinguish records. Update tests, runners and cross-record references together when renaming files. Use the [evidence index](evidence/README.md) to find test dependencies, current topic evidence, delivery snapshots and retained failures. Historical fixture hashes identify the inputs at the recorded commit and source patch, even when current fixture names or contents have changed. Preserve recorded commits, observed outcomes and historical artifact paths.
 
 The optional local corpus source is not redistributed or required by automated Core/JS tests. Temporary plans and full implementation diaries belong in ignored `local-notes/`; raw output belongs in `artifacts/`. Promote current behavior and limitations into the [maintained documentation](../../docs/README.md).
 

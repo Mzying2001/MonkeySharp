@@ -1,0 +1,168 @@
+{
+  "schemaVersion": 1,
+  "caseId": "webrequest",
+  "date": "2026-11-07",
+  "baseCommit": "500e83bd041150f1be80cd25df1984b557e4aba3",
+  "fixtureSha256": "d7a6653e22f297b7d7025288da1032b0ee9f57f32f1096731436a234695b6524",
+  "runs": [
+    {
+      "version": "84.4.10",
+      "platform": "x64",
+      "status": "passed",
+      "checks": {
+        "staticFirstScript": true,
+        "voidReturn": true,
+        "cancel": true,
+        "replacement": true,
+        "redirect": true,
+        "capture": true,
+        "restored": true,
+        "noCallbackAfterRevoke": true,
+        "serverEffects": true,
+        "staticServerEffects": true,
+        "navigationCleanup": true,
+        "disabledRevokesStatic": true
+      },
+      "websocket": {
+        "type": "webrequest-websocket-probe",
+        "requests": 1,
+        "status": "expected-engine-limitation"
+      }
+    },
+    {
+      "version": "84.4.10",
+      "platform": "x86",
+      "status": "passed",
+      "checks": {
+        "staticFirstScript": true,
+        "voidReturn": true,
+        "cancel": true,
+        "replacement": true,
+        "redirect": true,
+        "capture": true,
+        "restored": true,
+        "noCallbackAfterRevoke": true,
+        "serverEffects": true,
+        "staticServerEffects": true,
+        "navigationCleanup": true,
+        "disabledRevokesStatic": true
+      },
+      "websocket": {
+        "type": "webrequest-websocket-probe",
+        "requests": 1,
+        "status": "expected-engine-limitation"
+      }
+    },
+    {
+      "version": "121.3.70",
+      "platform": "x64",
+      "status": "passed",
+      "checks": {
+        "staticFirstScript": true,
+        "voidReturn": true,
+        "cancel": true,
+        "replacement": true,
+        "redirect": true,
+        "capture": true,
+        "restored": true,
+        "noCallbackAfterRevoke": true,
+        "serverEffects": true,
+        "staticServerEffects": true,
+        "navigationCleanup": true,
+        "disabledRevokesStatic": true
+      },
+      "websocket": {
+        "type": "webrequest-websocket-probe",
+        "requests": 1,
+        "status": "expected-engine-limitation"
+      }
+    },
+    {
+      "version": "121.3.70",
+      "platform": "x86",
+      "status": "passed",
+      "checks": {
+        "staticFirstScript": true,
+        "voidReturn": true,
+        "cancel": true,
+        "replacement": true,
+        "redirect": true,
+        "capture": true,
+        "restored": true,
+        "noCallbackAfterRevoke": true,
+        "serverEffects": true,
+        "staticServerEffects": true,
+        "navigationCleanup": true,
+        "disabledRevokesStatic": true
+      },
+      "websocket": {
+        "type": "webrequest-websocket-probe",
+        "requests": 1,
+        "status": "expected-engine-limitation"
+      }
+    },
+    {
+      "version": "151.3.240",
+      "platform": "x64",
+      "status": "passed",
+      "checks": {
+        "staticFirstScript": true,
+        "voidReturn": true,
+        "cancel": true,
+        "replacement": true,
+        "redirect": true,
+        "capture": true,
+        "restored": true,
+        "noCallbackAfterRevoke": true,
+        "serverEffects": true,
+        "staticServerEffects": true,
+        "navigationCleanup": true,
+        "disabledRevokesStatic": true
+      },
+      "websocket": {
+        "type": "webrequest-websocket-probe",
+        "requests": 1,
+        "status": "expected-engine-limitation"
+      }
+    },
+    {
+      "version": "151.3.240",
+      "platform": "x86",
+      "status": "passed",
+      "checks": {
+        "staticFirstScript": true,
+        "voidReturn": true,
+        "cancel": true,
+        "replacement": true,
+        "redirect": true,
+        "capture": true,
+        "restored": true,
+        "noCallbackAfterRevoke": true,
+        "serverEffects": true,
+        "staticServerEffects": true,
+        "navigationCleanup": true,
+        "disabledRevokesStatic": true
+      },
+      "websocket": {
+        "type": "webrequest-websocket-probe",
+        "requests": 1,
+        "status": "expected-engine-limitation"
+      }
+    }
+  ],
+  "unitTests": {
+    "84-x64": 381,
+    "121-x64": 381,
+    "JavaScript": 113
+  },
+  "wpf": {
+    "84.4.10": "passed",
+    "121.3.70": "passed"
+  },
+  "limitations": [
+    "Pinned historical MV2 differential reference unavailable",
+    "OOPIF unverified",
+    "Isolated dynamic page-frame interception unavailable",
+    "Overlapping rule order and immediate returns lack historical differential evidence"
+  ]
+}

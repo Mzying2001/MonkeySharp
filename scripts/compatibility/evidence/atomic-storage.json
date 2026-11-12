@@ -1,0 +1,287 @@
+{
+  "schemaVersion": 1,
+  "caseId": "atomic-storage",
+  "date": "2026-11-07",
+  "baseCommit": "fa60bef",
+  "runs": [
+    {
+      "version": "84.4.10",
+      "platform": "x64",
+      "status": "passed",
+      "checks": {
+        "/compat/prepared:scope": true,
+        "/compat/prepared:charset": true,
+        "/compat/prepared:binary": true,
+        "/compat/prepared:syncText": true,
+        "/compat/prepared:storageSnapshot": true,
+        "/compat/prepared-again:scope": true,
+        "/compat/prepared-again:charset": true,
+        "/compat/prepared-again:binary": true,
+        "/compat/prepared-again:syncText": true,
+        "/compat/prepared-again:storageSnapshot": true,
+        "frameResources": true,
+        "frameStorageSnapshot": true
+      },
+      "compatibility": {
+        "prepared": true,
+        "frames": true,
+        "spaUrl": true,
+        "download": true,
+        "cookie": true,
+        "webRequest": true
+      }
+    },
+    {
+      "version": "84.4.10",
+      "platform": "x86",
+      "status": "passed",
+      "checks": {
+        "/compat/prepared:scope": true,
+        "/compat/prepared:charset": true,
+        "/compat/prepared:binary": true,
+        "/compat/prepared:syncText": true,
+        "/compat/prepared:storageSnapshot": true,
+        "/compat/prepared-again:scope": true,
+        "/compat/prepared-again:charset": true,
+        "/compat/prepared-again:binary": true,
+        "/compat/prepared-again:syncText": true,
+        "/compat/prepared-again:storageSnapshot": true,
+        "frameResources": true,
+        "frameStorageSnapshot": true
+      },
+      "compatibility": {
+        "prepared": true,
+        "frames": true,
+        "spaUrl": true,
+        "download": true,
+        "cookie": true,
+        "webRequest": true
+      }
+    },
+    {
+      "version": "121.3.70",
+      "platform": "x64",
+      "status": "passed",
+      "checks": {
+        "/compat/prepared:scope": true,
+        "/compat/prepared:charset": true,
+        "/compat/prepared:binary": true,
+        "/compat/prepared:syncText": true,
+        "/compat/prepared:storageSnapshot": true,
+        "/compat/prepared-again:scope": true,
+        "/compat/prepared-again:charset": true,
+        "/compat/prepared-again:binary": true,
+        "/compat/prepared-again:syncText": true,
+        "/compat/prepared-again:storageSnapshot": true,
+        "frameResources": true,
+        "frameStorageSnapshot": true
+      },
+      "compatibility": {
+        "prepared": true,
+        "frames": true,
+        "spaUrl": true,
+        "download": true,
+        "cookie": true,
+        "webRequest": true
+      }
+    },
+    {
+      "version": "121.3.70",
+      "platform": "x86",
+      "status": "passed",
+      "checks": {
+        "/compat/prepared:scope": true,
+        "/compat/prepared:charset": true,
+        "/compat/prepared:binary": true,
+        "/compat/prepared:syncText": true,
+        "/compat/prepared:storageSnapshot": true,
+        "/compat/prepared-again:scope": true,
+        "/compat/prepared-again:charset": true,
+        "/compat/prepared-again:binary": true,
+        "/compat/prepared-again:syncText": true,
+        "/compat/prepared-again:storageSnapshot": true,
+        "frameResources": true,
+        "frameStorageSnapshot": true
+      },
+      "compatibility": {
+        "prepared": true,
+        "frames": true,
+        "spaUrl": true,
+        "download": true,
+        "cookie": true,
+        "webRequest": true
+      }
+    },
+    {
+      "version": "151.3.240",
+      "platform": "x64",
+      "status": "passed",
+      "checks": {
+        "/compat/prepared:scope": true,
+        "/compat/prepared:charset": true,
+        "/compat/prepared:binary": true,
+        "/compat/prepared:syncText": true,
+        "/compat/prepared:storageSnapshot": true,
+        "/compat/prepared-again:scope": true,
+        "/compat/prepared-again:charset": true,
+        "/compat/prepared-again:binary": true,
+        "/compat/prepared-again:syncText": true,
+        "/compat/prepared-again:storageSnapshot": true,
+        "frameResources": true,
+        "frameStorageSnapshot": true
+      },
+      "compatibility": {
+        "prepared": true,
+        "frames": true,
+        "spaUrl": true,
+        "download": true,
+        "cookie": true,
+        "webRequest": true
+      }
+    },
+    {
+      "version": "151.3.240",
+      "platform": "x86",
+      "status": "passed",
+      "checks": {
+        "/compat/prepared:scope": true,
+        "/compat/prepared:charset": true,
+        "/compat/prepared:binary": true,
+        "/compat/prepared:syncText": true,
+        "/compat/prepared:storageSnapshot": true,
+        "/compat/prepared-again:scope": true,
+        "/compat/prepared-again:charset": true,
+        "/compat/prepared-again:binary": true,
+        "/compat/prepared-again:syncText": true,
+        "/compat/prepared-again:storageSnapshot": true,
+        "frameResources": true,
+        "frameStorageSnapshot": true
+      },
+      "compatibility": {
+        "prepared": true,
+        "frames": true,
+        "spaUrl": true,
+        "download": true,
+        "cookie": true,
+        "webRequest": true
+      }
+    }
+  ],
+  "dotnet": {
+    "84.4.10-x64": {
+      "core": 248,
+      "adapter": 42,
+      "demo": 40
+    },
+    "121.3.70-x64": {
+      "core": 248,
+      "adapter": 42,
+      "demo": 40
+    }
+  },
+  "javascript": {
+    "passed": 96
+  },
+  "demo": [
+    {
+      "version": "84.4.10",
+      "environment": {
+        "cefSharpVersion": "84.4.10.0",
+        "platform": "x64"
+      },
+      "checks": {
+        "storageResourcesXhrCookieWebRequest": true,
+        "domAndInfo": true,
+        "iframe": true,
+        "menu": true,
+        "menuOptions": true,
+        "menuUpdate": true,
+        "multiFrameMenu": true,
+        "backgroundTab": true,
+        "tabSwitchPreservesDocument": true,
+        "crossTabValues": true,
+        "undefinedSnapshot": true,
+        "undefinedNavigation": true,
+        "sharedCookies": true,
+        "openInTab": true,
+        "download": true,
+        "downloadSaveCanceled": true,
+        "notificationWaits": true,
+        "notification": true,
+        "notificationTag": true,
+        "notificationPreventDefault": true,
+        "notificationUrl": true,
+        "notificationHighlight": true,
+        "clipboardHtml": true,
+        "clipboardText": true,
+        "tabState": true,
+        "tabFavicon": true,
+        "selectedTabColors": true,
+        "inactiveSelectedTabColors": true,
+        "scriptManagerDetails": true,
+        "scriptManagerInlineToggle": true,
+        "scriptManagerCtrlS": true,
+        "navigationCleanup": true,
+        "disableAndReload": true,
+        "enableAndReload": true,
+        "closeTab": true,
+        "closeTabSelectsPrevious": true,
+        "closeTabsDuringRequests": true,
+        "finalDisposal": true
+      },
+      "status": "passed"
+    },
+    {
+      "version": "121.3.70",
+      "environment": {
+        "cefSharpVersion": "121.3.70.0",
+        "platform": "x64"
+      },
+      "checks": {
+        "storageResourcesXhrCookieWebRequest": true,
+        "domAndInfo": true,
+        "iframe": true,
+        "menu": true,
+        "menuOptions": true,
+        "menuUpdate": true,
+        "multiFrameMenu": true,
+        "backgroundTab": true,
+        "tabSwitchPreservesDocument": true,
+        "crossTabValues": true,
+        "undefinedSnapshot": true,
+        "undefinedNavigation": true,
+        "sharedCookies": true,
+        "openInTab": true,
+        "download": true,
+        "downloadSaveCanceled": true,
+        "notificationWaits": true,
+        "notification": true,
+        "notificationTag": true,
+        "notificationPreventDefault": true,
+        "notificationUrl": true,
+        "notificationHighlight": true,
+        "clipboardHtml": true,
+        "clipboardText": true,
+        "tabState": true,
+        "tabFavicon": true,
+        "selectedTabColors": true,
+        "inactiveSelectedTabColors": true,
+        "scriptManagerDetails": true,
+        "scriptManagerInlineToggle": true,
+        "scriptManagerCtrlS": true,
+        "navigationCleanup": true,
+        "disableAndReload": true,
+        "enableAndReload": true,
+        "closeTab": true,
+        "closeTabSelectsPrevious": true,
+        "closeTabsDuringRequests": true,
+        "finalDisposal": true
+      },
+      "status": "passed"
+    }
+  ],
+  "limitations": [
+    "Confirmed/pending mirror and complete listener replay semantics are outside this atomic-snapshot assessment; see storage-mirror.json.",
+    "Strict full-GM document-start and isolated transport are outside this atomic-snapshot assessment."
+  ]
+}

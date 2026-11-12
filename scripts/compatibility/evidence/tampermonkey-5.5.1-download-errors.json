@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "caseId": "download-errors",
+  "immediateReturn": {
+    "legacyAbort": "function",
+    "modernThen": "function",
+    "modernAbort": "function"
+  },
+  "promise": {},
+  "events": [],
+  "effects": {
+    "downloadMode": "native",
+    "tabsBefore": 4,
+    "tabsAfter": 6
+  },
+  "status": "blocked",
+  "reason": "Download permission/settings interaction has not completed; no terminal error observed.",
+  "fixtureHash": "0637297097bae17a5ca6295a8f0287ccd11d6464308afe05fb07dd82d33c2712",
+  "contractSource": [
+    "https://www.tampermonkey.net/documentation.php?locale=en",
+    "Tampermonkey 5.5.1/stable/MV3 runtime"
+  ],
+  "environment": {
+    "manager": "Tampermonkey",
+    "managerVersion": "5.5.1",
+    "chromiumVersion": "Edg/157.0.4341.42",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/157.0.0.0 Safari/537.36 Edg/157.0.0.0",
+    "manifestVersion": 3,
+    "channel": "stable",
+    "extensionId": "iikmkjmpaadaobahmlepeloendndfphd",
+    "contentSha256": "8d03dfa6e2bff063425d652aa1ef7d6c22b9df01dd0732861969d7e1510fc95b",
+    "minimumChromeVersion": "120",
+    "settings": {
+      "downloadMode": "fresh-profile-default",
+      "privateStorage": "split; no incognito access unless private-tabs fixture",
+      "headless": true,
+      "userScriptsAccess": true,
+      "freshProfile": true,
+      "ignoreLoopbackCertificateErrors": false,
+      "legacyPfxProvider": false
+    },
+    "commit": "d6f672be63fabf4879a2f2f8724568c0a287bbd5",
+    "sourcePatchSha256": "63b9bffce2b0bb3fca4541c6b8b3c8044aff21e276aa1d0ddb2e4cb7a7ef504a",
+    "runnerSha256": "85164f9aa0b616fedfb686b2d886e91347de933182d0a8cf2966fd2c93647175",
+    "platform": "x64",
+    "capabilities": {
+      "referenceReturnProbe": true
+    },
+    "world": "manager-selected"
+  },
+  "checks": {
+    "exposureRecorded": true
+  }
+}
