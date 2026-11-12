@@ -8,7 +8,7 @@ namespace Mzying2001.MonkeySharp.Demo.Localization
     public static class Strings
     {
         internal static readonly ResourceManager Resources = new ResourceManager(
-            "Mzying2001.MonkeySharp.Demo.Localization.Strings", typeof(Strings).Assembly);
+            "Mzying2001.MonkeySharp.Demo.Properties.Resources", typeof(Strings).Assembly);
 
         // CEF callbacks can carry an older ExecutionContext/UICulture onto the dispatcher.
         // Resource selection must follow the application language, not the calling thread.
