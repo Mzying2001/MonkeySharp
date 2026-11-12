@@ -15,7 +15,7 @@ dotnet build Mzying2001.MonkeySharp.Demo/Mzying2001.MonkeySharp.Demo.csproj -c R
 & .\Mzying2001.MonkeySharp.Demo\bin\x64\Release\net462\MonkeySharpDemo.exe
 ```
 
-部署时复制整个输出目录，包括原生 DLL、浏览器子进程和 `zh-CN` 卫星资源目录。请使用可写的应用目录，Demo 的便携配置保存在可执行文件旁的 `Data/` 中。
+部署时复制整个输出目录，包括完整的 `CefSharp/` 子目录、`MonkeySharpDemo.exe.config` 和 `zh-CN` 卫星资源目录。CefSharp 原生依赖、浏览器子进程和资源通过官方 `CefSharpTargetDir` 属性输出到 `CefSharp/`，托管程序集保留包的默认输出行为。请使用可写的应用目录，Demo 的便携配置保存在可执行文件旁的 `Data/` 中。
 
 默认 `CefSharpVersion` 为 `151.3.240`。源码构建可通过 `-p:CefSharpVersion=<version>` 覆盖版本，但所有托管和原生组件必须使用同一版本。运行 `Run-E2E.ps1` 时传入 `-CefSharpVersion <version>`，以测试相应版本。切换版本前应清理输出，避免残留旧版原生 DLL。除非指定 `-NoBuild`，Runner 会执行还原、清理和构建，并保留配置目录。已测试版本见[验证](#验证)。
 

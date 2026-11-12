@@ -15,6 +15,38 @@ if (!$NoBuild) {
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 $executable = Join-Path $PSScriptRoot 'bin/x64/Release/net462/MonkeySharpDemo.exe'
+$outputDirectory = Split-Path -Parent $executable
+$cefSharpDirectory = Join-Path $outputDirectory 'CefSharp'
+$expectedVersion = [version]$CefSharpVersion
+$requiredFiles = @(
+    'CefSharp.dll',
+    'CefSharp.BrowserSubprocess.exe', 'CefSharp.BrowserSubprocess.Core.dll',
+    'libcef.dll', 'icudtl.dat', 'locales/en-US.pak', 'locales/zh-CN.pak'
+)
+if ($expectedVersion.Major -ge 87) { $requiredFiles += 'CefSharp.Core.Runtime.dll' }
+foreach ($relativePath in $requiredFiles) {
+    if (!(Test-Path -LiteralPath (Join-Path $cefSharpDirectory $relativePath) -PathType Leaf)) {
+        throw "Missing CefSharp dependency in the CefSharp output directory: $relativePath"
+    }
+}
+$managedAssemblyNames = @('CefSharp', 'CefSharp.Core', 'CefSharp.Wpf')
+# Version 87 introduced ordinary managed references; keep the package's default layout.
+$managedAssemblyDirectory = if ($expectedVersion.Major -ge 87) { $outputDirectory } else { $cefSharpDirectory }
+foreach ($name in $managedAssemblyNames) {
+    if (!(Test-Path -LiteralPath (Join-Path $managedAssemblyDirectory ($name + '.dll')) -PathType Leaf)) {
+        throw "Missing CefSharp managed assembly in its default output directory: $name.dll"
+    }
+}
+if (@(Get-ChildItem -LiteralPath $cefSharpDirectory -Filter '*.pak' -File).Count -eq 0) {
+    throw 'CefSharp resource packs are missing from the CefSharp output directory.'
+}
+[xml]$configuration = Get-Content -LiteralPath ($executable + '.config') -Raw
+$namespaces = New-Object System.Xml.XmlNamespaceManager($configuration.NameTable)
+$namespaces.AddNamespace('asm', 'urn:schemas-microsoft-com:asm.v1')
+$probing = $configuration.SelectSingleNode('/configuration/runtime/asm:assemblyBinding/asm:probing', $namespaces)
+if (!$probing -or 'CefSharp' -notin @($probing.privatePath -split ';')) {
+    throw 'The Demo executable configuration must probe the CefSharp output directory.'
+}
 $reports = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../artifacts/demo-smoke'))
 New-Item -ItemType Directory -Path $reports -Force | Out-Null
 $report = Join-Path $reports ('smoke-en-' + [Guid]::NewGuid().ToString('N') + '.json')
@@ -28,7 +60,6 @@ if (!(Test-Path -LiteralPath $report)) { throw "No smoke report was produced: $r
 $result = Get-Content -LiteralPath $report -Raw | ConvertFrom-Json
 Get-Content -LiteralPath $report -Raw
 if (!$result.success -or $process.ExitCode -ne 0) { throw "Demo smoke failed. See $report and $($result.profile)/Data/Logs/demo.log" }
-$expectedVersion = [version]$CefSharpVersion
 if (!$result.environment -or $result.environment.platform -ne 'x64') { throw 'Demo smoke requires actual x64 process evidence.' }
 if ($result.environment.uiLanguage -ne 'en') { throw "Demo used UI language '$($result.environment.uiLanguage)', expected default English (en)." }
 foreach ($check in @('localizedResources', 'localizedBrowser', 'localizedScriptManager', 'localizedPermissionPrompt')) {

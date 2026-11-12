@@ -10,6 +10,7 @@
     <AssemblyName>MonkeySharpDemo</AssemblyName>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <CefSharpVersion Condition="'$(CefSharpVersion)' == ''">151.3.240</CefSharpVersion>
+    <CefSharpTargetDir>CefSharp\</CefSharpTargetDir>
     <DefineConstants Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(CefSharpVersion)', '100.0.0'))">$(DefineConstants);CEF_SHARP_HAS_CURSOR_CHANGE</DefineConstants>
     <DefineConstants Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(CefSharpVersion)', '125.0.0'))">$(DefineConstants);CEF_SHARP_BOOLEAN_DOWNLOAD</DefineConstants>
     <DefineConstants Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(CefSharpVersion)', '100.0.0'))">$(DefineConstants);CEF_SHARP_HAS_DOWNLOAD_CAN_DOWNLOAD</DefineConstants>

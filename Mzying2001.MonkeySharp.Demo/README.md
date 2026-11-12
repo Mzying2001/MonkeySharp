@@ -15,7 +15,7 @@ dotnet build Mzying2001.MonkeySharp.Demo/Mzying2001.MonkeySharp.Demo.csproj -c R
 & .\Mzying2001.MonkeySharp.Demo\bin\x64\Release\net462\MonkeySharpDemo.exe
 ```
 
-Deploy the entire output directory, including native DLLs, the browser subprocess, and the `zh-CN` satellite resource directory. Use a writable application directory: the Demo stores its portable profile under `Data/` beside the executable.
+Deploy the entire output directory, including the complete `CefSharp/` subdirectory, `MonkeySharpDemo.exe.config`, and the `zh-CN` satellite resource directory. CefSharp native dependencies, the browser subprocess, and resources are placed under `CefSharp/` using the official `CefSharpTargetDir` property; managed assemblies retain the package's default output behavior. Use a writable application directory: the Demo stores its portable profile under `Data/` beside the executable.
 
 The default `CefSharpVersion` is `151.3.240`. Override it with `-p:CefSharpVersion=<version>` when building from source, using the same version for all managed and native components. Pass `-CefSharpVersion <version>` to `Run-E2E.ps1` to test that version. Clean outputs before switching versions to avoid retaining old native DLLs. The runner restores, cleans, and builds unless `-NoBuild` is supplied; the profile is preserved. See [Verification](#verification) for the tested versions.
 
