@@ -63,7 +63,7 @@ var repository = new PersistentUserScriptRepository(persistence, parser);
 await repository.InitializeAsync(CancellationToken.None);
 ```
 
-持久化实现必须保留 `ScriptKey`、安装顺序及时间戳，并原子提交变更。提交成功后即使收到取消也应成功完成；仓库变更通知在提交后发出。稳定的键用于维持脚本与 GM 存储的关联。具体的持久化及恢复实现见 [Demo 指南](../Mzying2001.MonkeySharp.Demo/README.md#portable-data-and-recovery)。
+持久化实现必须保留 `ScriptKey`、安装顺序及时间戳，并原子提交变更。提交成功后即使收到取消也应成功完成；仓库变更通知在提交后发出。稳定的键用于维持脚本与 GM 存储的关联。具体的持久化及恢复实现见 [Demo 指南](../Mzying2001.MonkeySharp.Demo/README.zh-CN.md#便携数据与恢复)。
 
 提供程序要求：
 
@@ -196,7 +196,7 @@ selector、action、替换/撤销及回调见[请求拦截指南](usage-guide.zh
 
 Demo 的 `TabContext` 绑定稳定标签身份、RequestContext、隐私状态、值存储、权限策略和标签数据服务。私密标签共享独立内存上下文、临时权限/标签数据及逐脚本复制的普通 GM 初值；私密写入和监听不回流到普通存储。最后私密标签关闭后，先排空其宿主任务，再释放上下文并清除会话。
 
-profile 处理、保存文件/剪贴板例外及脚本行为见[私密浏览](usage-guide.zh-CN.md#private-browsing)和 [Demo 指南](../Mzying2001.MonkeySharp.Demo/README.md)。[兼容性证据](compatibility/README.md#private-contexts)记录已验证的上下文隔离。
+profile 处理、保存文件/剪贴板例外及脚本行为见[私密浏览](usage-guide.zh-CN.md#private-browsing)和 [Demo 指南](../Mzying2001.MonkeySharp.Demo/README.zh-CN.md)。[兼容性证据](compatibility/README.md#private-contexts)记录已验证的上下文隔离。
 
 ## 标签音频
 
@@ -277,7 +277,7 @@ dotnet pack Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.cspr
 powershell -NoProfile -ExecutionPolicy Bypass -File Mzying2001.MonkeySharp.Demo/Run-E2E.ps1 -CefSharpVersion 151.3.240
 ```
 
-验证全过程应使用同一版本值：`dotnet restore/build/test/pack` 使用 `-p:CefSharpVersion=<版本>`，PowerShell runner 使用 `-CefSharpVersion <版本>`。SmokeHost 应分别对 x64/x86 和 `84.4.10`、`121.3.70`、`151.3.240` 运行；Demo gate 覆盖三个版本的 x64，每个版本只运行一次默认英文界面。每份报告记录 `environment.uiLanguage`，并验证英文窗口及权限控件；其他语言由本地化单元测试覆盖，详见[界面语言和部署](../Mzying2001.MonkeySharp.Demo/README.md#interface-language)。在已有工作区切换版本前，先执行 `dotnet clean MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=<目标版本>`（位数使用目标平台），避免混用不同 CefSharp 版本的增量构建产物。SmokeHost runner 已使用选定版本执行 restore、clean、build，并核对实际运行的程序集版本和进程位数。两个验证入口都使用隔离 profile 和 `TrustedPageWorld`；它们是集成测试，不是安全沙箱。
+验证全过程应使用同一版本值：`dotnet restore/build/test/pack` 使用 `-p:CefSharpVersion=<版本>`，PowerShell runner 使用 `-CefSharpVersion <版本>`。SmokeHost 应分别对 x64/x86 和 `84.4.10`、`121.3.70`、`151.3.240` 运行；Demo gate 覆盖三个版本的 x64，每个版本只运行一次默认英文界面。每份报告记录 `environment.uiLanguage`，并验证英文窗口及权限控件；其他语言由本地化单元测试覆盖，详见[界面语言和部署](../Mzying2001.MonkeySharp.Demo/README.zh-CN.md#界面语言)。在已有工作区切换版本前，先执行 `dotnet clean MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=<目标版本>`（位数使用目标平台），避免混用不同 CefSharp 版本的增量构建产物。SmokeHost runner 已使用选定版本执行 restore、clean、build，并核对实际运行的程序集版本和进程位数。两个验证入口都使用隔离 profile 和 `TrustedPageWorld`；它们是集成测试，不是安全沙箱。
 
 ### Chromium 兼容性脚本包
 
