@@ -14,5 +14,13 @@
     "sha256": "4155611645690529d1bbea0cfe653b0c45f63b028e0ba039de29a97edc3204ca",
     "compressedSha256": "639919365a55a3f4433498caeca4b4df33a09e8e33b84f8e84b134ed204aba0a",
     "license": "MPL-2.0"
+  },
+  {
+    "chromiumVersion": "156.0.8078.80",
+    "source": "https://github.com/chromium/chromium/blob/156.0.8078.80/net/base/registry_controlled_domains/effective_tld_names.dat",
+    "gitBlob": "15a397c8db130e2ffbafe815526a5f6242a5671c",
+    "sha256": "d4d5c24befb4a21306ace7f28cb04d35121d90f300f8c56c442937f9d1b5e278",
+    "compressedSha256": "057fb88f10493cecc7ecd1e4c28c240c714a0fcadbee8459a36ff74e5fcdaae1",
+    "license": "MPL-2.0"
   }
 ]

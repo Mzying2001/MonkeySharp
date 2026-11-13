@@ -45,5 +45,13 @@ function Assert-SmokeRecords {
         $checks = @($matches[0].checks.PSObject.Properties)
         if ($checks.Count -eq 0 -or @($checks | Where-Object { $_.Value -isnot [bool] -or !$_.Value }).Count -gt 0) { throw "Compatibility assertions failed or missing: $id." }
         if ($summary.compatibility.$id -isnot [bool] -or !$summary.compatibility.$id) { throw "Compatibility summary failed: $id." }
+        if ($id -eq 'partitions') {
+            $required = if ($expected.Major -lt 114) { @('listRejected','setRejected','deleteRejected') }
+                else { @('partitionA','partitionB','siteNormalization','partitionDeleteIsExact','cleaned','partitionCrudExecuted') }
+            if ($expected.Major -ge 128) { $required += @('ancestorIdentities','defaultDeleteAncestor','ancestorCrudExecuted') }
+            foreach ($name in $required) {
+                if ($matches[0].checks.$name -isnot [bool] -or !$matches[0].checks.$name) { throw "Partition assertion missing or failed: $name." }
+            }
+        }
     }
 }

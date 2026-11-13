@@ -184,7 +184,7 @@ The default `CefSharpCookieService` uses the host's shared CDP session and attac
 
 ### Partitioned Cookie scope
 
-The default backend supports serializable `partitionKey` CRUD on tested 121/151 engines; 84 and unverified engines including 156 reject explicit partition keys before effects. The ancestor dimension is available on 151 and rejected on 121. Normalization uses the public-suffix snapshot matching the Chromium release. Opaque/nonce keys are unsupported. See the [partition input and identity rules](usage-guide.md#partitioned-cookie-scope).
+The default backend selects serializable `partitionKey` CRUD by Chromium protocol range, including newer engines. Capability status reports whether the ancestor dimension is available. Normalization reuses bundled public-suffix snapshots; opaque/nonce keys remain unsupported. See [Cookie scope](compatibility/cookies.md#partitioned-cookie-scope) for ranges and snapshot selection, and the [partition input and identity rules](usage-guide.md#partitioned-cookie-scope).
 
 Custom partition backends implement `IPartitionedCookieService.NormalizePartitionKeyAsync` in addition to CRUD, validating actual support and canonicalizing keys before Core filters results. Other backends reject `partitionKey` instead of silently accessing ordinary storage.
 

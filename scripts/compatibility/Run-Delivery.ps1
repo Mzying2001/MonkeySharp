@@ -62,7 +62,9 @@ foreach ($version in $CefSharpVersions) {
             $adapter = Get-Item -LiteralPath (Join-Path $feed "Mzying2001.MonkeySharp.CefSharp$suffix.$platform.$packageVersion.nupkg")
             $zip = [IO.Compression.ZipFile]::OpenRead($adapter.FullName)
             try {
-                foreach ($name in @('psl-121.dat.gz','psl-151.dat.gz','public-suffix-snapshots.json','THIRD-PARTY-NOTICES.md')) {
+                $snapshots = Get-Content -LiteralPath (Join-Path $checkout 'Mzying2001.MonkeySharp.CefSharp/Protocol/public-suffix-snapshots.json') -Raw | ConvertFrom-Json
+                $snapshotFiles = @($snapshots | ForEach-Object { 'psl-' + ([version]$_.chromiumVersion).Major + '.dat.gz' })
+                foreach ($name in @('public-suffix-snapshots.json','THIRD-PARTY-NOTICES.md') + $snapshotFiles) {
                     if (!@($zip.Entries | Where-Object FullName -EQ "third-party/public-suffix/$name").Count) { throw "Package lacks $name" }
                 }
             } finally { $zip.Dispose() }

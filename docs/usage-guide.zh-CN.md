@@ -225,7 +225,7 @@ Demo 手动更新时优先从 `@updateURL` 检查，其次使用 `@downloadURL`�
 | `execution.bfcache` | 缓存执行撤销，需要新导航。 |
 | `execution.contextMenuFrame` | 隔离菜单：84 支持同进程子 frame；121/151 仅主 frame，隔离 OOPIF 菜单不支持。 |
 | `GM.xmlHttpRequest.cookie`、`GM.xmlHttpRequest.cookiePartition` | 默认后端不支持显式 Cookie 或请求分区选择。 |
-| `GM.cookie.partitionKey` | 84 不支持；121 无 ancestor 维度；151 支持可序列化分区身份。 |
+| `GM.cookie.partitionKey` | 分区及 ancestor 支持按 [Chromium 协议版本范围](compatibility/cookies.md#partitioned-cookie-scope)适配。 |
 | `GM.audio.audible` | 没有可靠来源时不可用。 |
 | `GM.registerMenuCommand.clickedFrame` | 须有宿主证明的当前文档/frame；未知 frame 不派发。 |
 
@@ -638,7 +638,7 @@ Blob/File 下载先逐块暂存，再进入相同的保存、取消及原子提�
 
 默认后端使用已附加浏览器的真实 RequestContext。导航可取消文档调用，detach/dispose 使会话失效。自定义后端须提供经过验证的实际状态；后端构造及服务契约见[宿主集成](integration-reference.zh-CN.md#cookie)。
 
-partitionKey CRUD 在已测 121/151 支持，84 明确拒绝；cookiePartition、firstPartyDomain 仍不支持。省略分区键仅访问普通 Cookie。旧版回调异常只单独报告一次，不改变已完成操作。请使用旧版命名空间的三个公开方法，不支持直接调用命名空间本身。
+partitionKey CRUD 按 [Chromium 协议版本范围](compatibility/cookies.md#partitioned-cookie-scope)适配；cookiePartition、firstPartyDomain 仍不支持。省略分区键仅访问普通 Cookie。旧版回调异常只单独报告一次，不改变已完成操作。请使用旧版命名空间的三个公开方法，不支持直接调用命名空间本身。
 
 ```javascript
 // @grant GM.cookie
@@ -653,11 +653,11 @@ GM_cookie.list({}, (cookies, error) => console.log(cookies, error));
 
 ### 分区 Cookie 范围
 
-默认 CDP 后端在已测 121/151 支持可序列化分区 Cookie CRUD。84 对所有显式 partitionKey 在 Cookie 副作用前拒绝。省略 partitionKey 仅选择普通 Cookie；list 的 `{partitionKey:{}}` 包含所有可序列化分区及普通 Cookie，`{partitionKey:{topLevelSite:"https://top-a.test"}}` 选择该站点；显式空 topLevelSite 选择普通 Cookie。
+默认 CDP 后端按 [Chromium 协议版本范围](compatibility/cookies.md#partitioned-cookie-scope)支持可序列化分区 Cookie CRUD。不支持的引擎对所有显式 partitionKey 在 Cookie 副作用前拒绝。省略 partitionKey 仅选择普通 Cookie；list 的 `{partitionKey:{}}` 包含所有可序列化分区及普通 Cookie，`{partitionKey:{topLevelSite:"https://top-a.test"}}` 选择该站点；显式空 topLevelSite 选择普通 Cookie。
 
-set/delete 接受同一 partitionKey 对象，修改中的空对象选择普通身份。分区 set 要求 secure:true。站点按对应 Chromium 固定版本的 ICANN/私有后缀列表规范化，包含通配与例外规则；返回真实规范化 partitionKey。opaque/nonce 键不在支持范围内。
+set/delete 接受同一 partitionKey 对象，修改中的空对象选择普通身份。分区 set 要求 secure:true。站点按内置 ICANN/私有后缀快照规范化，包含通配与例外规则；较新引擎同样遵循[快照选择策略](compatibility/cookies.md#partitioned-cookie-scope)。返回真实规范化 partitionKey。opaque/nonce 键不在支持范围内。
 
-151 还支持 hasCrossSiteAncestor。省略时 list 匹配两类 ancestor 身份，set 按 Cookie URL 与目标站点推导，delete 按固定参考默认 true；删除同站祖先身份须显式传 false。121 协议没有该维度，会明确拒绝该字段。修改及读回覆盖完整分区身份；删除通过过期准确身份并验证不存在，保留其他分区、路径中的同名 Cookie。
+开放 ancestor 维度的引擎还支持 hasCrossSiteAncestor。省略时 list 匹配两类 ancestor 身份，set 按 Cookie URL 与目标站点推导，delete 按固定参考默认 true；删除同站祖先身份须显式传 false。不支持 ancestor 的引擎会明确拒绝该字段。修改及读回覆盖完整分区身份；删除通过过期准确身份并验证不存在，保留其他分区、路径中的同名 Cookie。
 
 自定义后端的支持范围可能不同；不支持的后端会拒绝 `partitionKey`，不会静默访问普通存储。宿主实现要求见[分区服务契约](integration-reference.zh-CN.md#分区-cookie-范围)。
 
@@ -778,7 +778,7 @@ window.addEventListener("urlchange", onRoute);
 | 通知 | 现代 Promise 等待完成并兑现点击状态；点击/tag/导航对照限制仍公开保留。 |
 | 标签页 | 现代返回 Promise，旧版立即返回句柄；Demo 支持数字插入和真实私密上下文，通过 close/onclose 操作。 |
 | 下载 | 立即返回带 abort 的完成 Promise；Demo 共用浏览器网络上下文，文件提交后才完成。 |
-| Cookie | 121/151 支持分区 CRUD；请求 cookiePartition、firstPartyDomain 及变更监听仍不可用。 |
+| Cookie | 分区 CRUD 按 Chromium 协议版本范围适配；请求 cookiePartition、firstPartyDomain 及变更监听仍不可用。 |
 | webRequest | 历史 MV2 目标；官方 selector/cancel/redirect、返回 void，重新注册替换或 [] 撤销；历史 TM 差分仍 pending。 |
 | 其他管理器 API | 不内置扩展专属内容/部署 API；未知授权不会增加它们。音频按上文提供部分能力。 |
 

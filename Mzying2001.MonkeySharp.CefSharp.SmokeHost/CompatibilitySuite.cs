@@ -595,16 +595,24 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             var session = await _host.GetCdpSessionAsync(CancellationToken.None);
             var version = (await session.ExecuteAsync("Browser.getVersion")).GetProperty("product").GetString();
             var major = int.Parse(version.Substring(version.LastIndexOf('/') + 1).Split('.')[0], CultureInfo.InvariantCulture);
+            var protocol = new CookieProtocolProfile(major);
             using (var tls = new LocalHttpFixture(true))
             {
                 var url = tls.Start();
                 await ReadAsync("(globalThis.__runPartitionProbe(" + JsonSerializer.Serialize(url.GetLeftPart(UriPartial.Authority)) + "," +
-                    (major == 121 || major == 151 ? "true" : "false") + "," + (major == 151 ? "true" : "false") + "),true)");
+                    (protocol.SupportsPartitions ? "true" : "false") + "," + (protocol.SupportsAncestors ? "true" : "false") + "),true)");
                 var result = await WaitResultAsync("globalThis.__partitionCase");
                 if (result.TryGetProperty("error", out var error)) throw new InvalidOperationException(error.GetString());
                 foreach (var check in result.GetProperty("checks").EnumerateObject()) Check(check.Name, check.Value.GetBoolean());
+                var checks = result.GetProperty("checks");
+                if (protocol.SupportsPartitions)
+                {
+                    Check("partitionCrudExecuted", checks.GetProperty("partitionA").GetBoolean() && checks.GetProperty("partitionB").GetBoolean() &&
+                        checks.GetProperty("partitionDeleteIsExact").GetBoolean() && checks.GetProperty("cleaned").GetBoolean());
+                    if (protocol.SupportsAncestors) Check("ancestorCrudExecuted", checks.GetProperty("ancestorIdentities").GetBoolean());
+                }
                 Check("unsupportedRequestHasNoNetworkEffect", tls.RequestCount("/partition-receive") == 0);
-                if (major == 121 || major == 151)
+                if (protocol.SupportsPartitions)
                 {
                     using (var cookies = new CefSharpCookieService(_host))
                     {

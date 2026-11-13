@@ -186,7 +186,7 @@ Blob/File 下载逐块确认暂存后进入保存、取消及原子提交流程�
 
 ### 分区 Cookie 范围
 
-默认后端在已测 121/151 支持可序列化 `partitionKey` CRUD；84 以及包括 156 在内的未验证引擎在副作用前拒绝显式分区键。ancestor 维度在 151 可用，121 明确拒绝。规范化使用对应 Chromium 版本的公共后缀快照，不支持 opaque/nonce 键。详见[分区输入及身份规则](usage-guide.zh-CN.md#分区-cookie-范围)。
+默认后端按 Chromium 协议版本范围适配可序列化 `partitionKey` CRUD，较新引擎沿用现代协议格式。能力状态报告 ancestor 维度是否可用。规范化复用内置公共后缀快照，不支持 opaque/nonce 键。版本范围及快照选择见 [Cookie 范围](compatibility/cookies.md#partitioned-cookie-scope)，参数语义见[分区输入及身份规则](usage-guide.zh-CN.md#分区-cookie-范围)。
 
 自定义分区后端除 CRUD 外实现 `IPartitionedCookieService.NormalizePartitionKeyAsync`，在 Core 过滤前验证真实支持并规范化键。其他后端拒绝 `partitionKey`，不能静默访问普通存储。
 

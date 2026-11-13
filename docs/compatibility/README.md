@@ -58,7 +58,7 @@ The [native/WPF matrix](../../scripts/compatibility/evidence/private-contexts.js
 
 ## Known evidence gaps
 
-Guaranteed full-GM document-start and transparent BFCache restoration remain unavailable. Isolated OOPIF source/storage/resources/XHR now use native child sessions; native isolated child manual menus are verified on 84, while 121/151 remain main-only. See the precise [execution limits](execution-worlds.md#remaining-limits). Cookie partition CRUD on 121/151 does not imply XHR request-partition selection; see [partition scope](cookies.md#partitioned-cookie-scope).
+Guaranteed full-GM document-start and transparent BFCache restoration remain unavailable. Isolated OOPIF source/storage/resources/XHR now use native child sessions; native isolated child manual menus are verified on 84, while 121/151 remain main-only. See the precise [execution limits](execution-worlds.md#remaining-limits). Cookie partition CRUD does not imply XHR request-partition selection; see [partition scope](cookies.md#partitioned-cookie-scope).
 
 The [seven-category corpus](../../scripts/compatibility/corpus/README.md) has pinned sources and functional runs. Full stable-reference and comprehensive acceptance remain incomplete: saved-file/ZIP/cancellation checks are blocked by reference browser download permission, the reference history-refresh assertion failed, and native notification/download interactions still lack comparisons. The [reference corpus](../../scripts/compatibility/evidence/corpus-reference-stable.json) and [delivery evidence](../../scripts/compatibility/evidence/enhanced-follow-up-delivery.json) preserve those outcomes. Native test totals are not a compatibility percentage.
 

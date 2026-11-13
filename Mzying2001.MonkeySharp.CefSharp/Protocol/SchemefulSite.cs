@@ -8,12 +8,18 @@ using System.Net;
 
 namespace Mzying2001.MonkeySharp.CefSharp
 {
-    // Partition defaults require the engine's site semantics, including private suffixes.
-    // Keep the fixed datasets aligned with the supported native Chromium releases.
+    // Reuse the latest bundled snapshot not newer than the engine, including private suffixes.
     internal static class SchemefulSite
     {
-        private static readonly Lazy<Rules> Chromium121 = new Lazy<Rules>(() => Load(121));
-        private static readonly Lazy<Rules> Chromium151 = new Lazy<Rules>(() => Load(151));
+        private const string ResourcePrefix = "Mzying2001.MonkeySharp.CefSharp.Protocol.psl-";
+
+        private static readonly SortedDictionary<int, Lazy<Rules>> Snapshots = new SortedDictionary<int, Lazy<Rules>>(
+            typeof(SchemefulSite).Assembly.GetManifestResourceNames()
+                .Where(name => name.StartsWith(ResourcePrefix, StringComparison.Ordinal) && name.EndsWith(".dat.gz", StringComparison.Ordinal))
+                .Select(name => int.Parse(name.Substring(ResourcePrefix.Length, name.Length - ResourcePrefix.Length - ".dat.gz".Length), CultureInfo.InvariantCulture))
+                .ToDictionary(major => major, major => new Lazy<Rules>(() => Load(major))));
+
+        private static int SnapshotMajor(int major) => Snapshots.Keys.TakeWhile(version => version <= major).DefaultIfEmpty(Snapshots.Keys.First()).Last();
 
         internal static string FromUrl(Uri url, int major)
         {
@@ -24,7 +30,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             if (IPAddress.TryParse(host, out var address)) host = address.ToString();
             else
             {
-                var rules = major == 121 ? Chromium121.Value : major == 151 ? Chromium151.Value : throw new NotSupportedException("No verified suffix snapshot for this engine.");
+                var rules = Snapshots[SnapshotMajor(major)].Value;
                 var labels = host.Split('.');
                 var publicLength = 1;
                 for (var index = 0; index < labels.Length; index++)

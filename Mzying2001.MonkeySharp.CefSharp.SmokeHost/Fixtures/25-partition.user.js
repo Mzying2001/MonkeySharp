@@ -23,12 +23,19 @@ globalThis.__runPartitionProbe = async function (origin, supported, ancestors) {
                 result.checks[operation+'Rejected'] = rejected;
             }
         } else {
+            result.checks.capability = GM.info.compatibility.capabilities['GM.cookie.partitionKey'] ===
+                (ancestors ? 'available:serializable-keys' : 'available:without-ancestor-dimension');
             await GM.cookie.set({...base,value:'plain'});
             await GM.cookie.set({...base,value:'a',partitionKey:a});
             await GM.cookie.set({...base,value:'b',partitionKey:b});
             result.checks.defaults = (await list(null)).length === 1 && (await list(null))[0].value === 'plain';
             result.checks.partitionA = (await list(a))[0].value === 'a';
             result.checks.partitionB = (await list(b))[0].value === 'b';
+            const site = {topLevelSite:'https://a.b.example.co.uk:9443/path'};
+            await GM.cookie.set({...base,value:'normalized',partitionKey:site});
+            const normalized = await list(site);
+            result.checks.siteNormalization = normalized.length === 1 && normalized[0].partitionKey.topLevelSite === 'https://example.co.uk';
+            await GM.cookie.delete({...base,partitionKey:site});
             result.checks.all = (await list({})).length === 3;
             await GM.cookie.set({...base,value:'a2',partitionKey:a});
             result.checks.updated = (await list(a))[0].value === 'a2';

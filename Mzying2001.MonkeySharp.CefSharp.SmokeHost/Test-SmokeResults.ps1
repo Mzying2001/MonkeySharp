@@ -13,6 +13,9 @@ $sample = @(
 foreach ($id in @('prepared', 'conditions', 'isolated', 'replay', 'csp', 'permissions', 'binary', 'pageHelpers', 'frames', 'spaUrl', 'download', 'cookie', 'webRequest', 'audio', 'partitions')) {
     $sample += @{ type = 'compatibility-case'; caseId = $id; success = $true; checks = @{ assertion = $true }; error = $null }
 }
+foreach ($name in @('partitionA','partitionB','siteNormalization','partitionDeleteIsExact','cleaned','partitionCrudExecuted','ancestorIdentities','defaultDeleteAncestor','ancestorCrudExecuted')) {
+    ($sample | Where-Object { $_.caseId -eq 'partitions' }).checks[$name] = $true
+}
 $sampleJson = ConvertTo-Json -InputObject $sample -Depth 20
 Assert-SmokeRecords -Records ($sampleJson | ConvertFrom-Json) -Platform x64 -CefSharpVersion 121.3.70
 $tests = [ordered]@{
@@ -29,6 +32,7 @@ $tests = [ordered]@{
     missingDetach = { param($r) ($r | Where-Object { $_.type -eq 'smoke-summary' }).PSObject.Properties.Remove('hostAttachedAfterDetach'); $r }
     missingLegacy = { param($r) @($r | Where-Object { $_.phase -ne 'initial' }) }
     inconsistentSummary = { param($r) ($r | Where-Object { $_.type -eq 'smoke-summary' }).compatibility.frames = $false; $r }
+    missingPartitionCrud = { param($r) ($r | Where-Object { $_.caseId -eq 'partitions' }).checks.PSObject.Properties.Remove('partitionCrudExecuted'); $r }
     timeout = { param($r) $r + [pscustomobject]@{ type = 'runner-timeout' } }
 }
 foreach ($test in $tests.GetEnumerator()) {
@@ -41,6 +45,21 @@ $rejected = $false
 try { Assert-SmokeRecords -Records ($sampleJson | ConvertFrom-Json) -Platform x64 -CefSharpVersion 121.3.70 -RunExitCode 1 } catch { $rejected = $true }
 if (!$rejected) { throw 'Nonzero exit code was accepted.' }
 Write-Host "Smoke result validation passed (1 positive, $($tests.Count + 1) negative cases)."
+$partitionNegative = 0
+foreach ($version in @('84.4.10','127.0.0','128.0.0','156.0.150','200.0.0')) {
+    $records = $sampleJson | ConvertFrom-Json
+    ($records | Where-Object { $_.type -eq 'final-disposal' }).cefSharpVersion = $version + '.0'
+    $partition = $records | Where-Object { $_.caseId -eq 'partitions' }
+    if (([version]$version).Major -lt 114) { $partition.checks = [pscustomobject]@{ listRejected = $true; setRejected = $true; deleteRejected = $true } }
+    Assert-SmokeRecords -Records $records -Platform x64 -CefSharpVersion $version
+    $required = if (([version]$version).Major -lt 114) { 'setRejected' } elseif (([version]$version).Major -lt 128) { 'partitionCrudExecuted' } else { 'ancestorCrudExecuted' }
+    $partition.checks.PSObject.Properties.Remove($required)
+    $rejected = $false
+    try { Assert-SmokeRecords -Records $records -Platform x64 -CefSharpVersion $version } catch { $rejected = $true }
+    if (!$rejected) { throw "Missing partition evidence was accepted for $version." }
+    $partitionNegative++
+}
+Write-Host "Partition result validation passed (5 positive, $partitionNegative negative cases)."
 $cdp = @{ type = 'cdp-probe'; status = 'passed'; platform = 'x64'; cefSharpVersion = '84.4.10.0'; strictGm = 'blocked'; checks = @{} }
 foreach ($name in @('preparedNavigation', 'pageBeforeFirstInline', 'isolatedBeforeFirstInline', 'realGmEventuallyReady', 'nativeFrameIdentity', 'perScriptWorld', 'contextIdBinding', 'cookieEngineAccepted', 'cookieReadback', 'cookieHttpEffect', 'cookieDeleted', 'observerCoexistence', 'commandTimeout', 'commandCancellation', 'contextRevocation')) { $cdp.checks[$name] = $true }
 $cdpJson = ConvertTo-Json $cdp -Depth 10

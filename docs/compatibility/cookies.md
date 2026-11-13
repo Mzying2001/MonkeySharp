@@ -10,14 +10,18 @@ Modern list resolves Cookie[]; modern set/delete resolve undefined. Legacy calls
 
 Explicit request Cookie support is separate from CRUD; see below.
 
-| Engine | CRUD | Remaining limits |
+| Chromium range | CRUD protocol | Remaining limits |
 | --- | --- | --- |
-| 84.4.10 | Ordinary cookies | Explicit partitionKey is rejected before effects |
-| 121.3.70 | Serializable partitionKey CRUD | hasCrossSiteAncestor is unavailable and rejected |
-| 151.3.240 | Serializable partitionKey CRUD including hasCrossSiteAncestor | Opaque/nonce keys are unavailable |
-| 156.0.150 and other unverified engines | Ordinary cookies | Explicit partitionKey is rejected before effects |
+| Below 114 | Ordinary cookies | Explicit partitionKey is rejected before effects |
+| 114–126 | Serializable partitionKey CRUD with a string CDP key | hasCrossSiteAncestor is unavailable and rejected |
+| 127 | Serializable partitionKey CRUD with an object CDP key | The ancestor dimension is disabled by default and not exposed |
+| 128 and later | Serializable partitionKey CRUD with an object CDP key and ancestor dimension | Opaque/nonce keys are unavailable |
 
-Unspecified partitionKey selects ordinary cookies. Explicit `{partitionKey:{}}` list selectors include serializable ordinary and partitioned identities; site selectors filter canonical sites. Mutations use the complete identity. Site normalization uses pinned ICANN/private suffix snapshots for the corresponding Chromium engine; [snapshot provenance](../../Mzying2001.MonkeySharp.CefSharp/Protocol/public-suffix-snapshots.json) and [third-party notices](../../Mzying2001.MonkeySharp.CefSharp/Protocol/THIRD-PARTY-NOTICES.md) accompany the packaged data. On 151, omitted ancestor state is derived for set, unrestricted for list and defaults to true for delete; false must be explicit for same-site ancestor deletion.
+These ranges select the protocol without restricting support to individually tested versions. Newer engines use the modern format; native rejection or incorrect readback remains an error. Native evidence is recorded separately below. `GM.info.compatibility.capabilities['GM.cookie.partitionKey']` reports the selected partition and ancestor support.
+
+Unspecified partitionKey selects ordinary cookies. Explicit `{partitionKey:{}}` list selectors include serializable ordinary and partitioned identities; site selectors filter canonical sites. Mutations use the complete identity. On engines supporting the ancestor dimension, omitted ancestor state is derived for set, unrestricted for list and defaults to true for delete; false must be explicit for same-site ancestor deletion. Earlier engines reject explicit ancestor selectors.
+
+Site normalization uses bundled ICANN/private suffix snapshots, selecting the latest snapshot not newer than the engine, or the earliest snapshot if all are newer. Future engines reuse the latest bundled snapshot. Rules can differ from the actual engine between snapshots; writes still require matching native readback. [Snapshot provenance](../../Mzying2001.MonkeySharp.CefSharp/Protocol/public-suffix-snapshots.json) and [third-party notices](../../Mzying2001.MonkeySharp.CefSharp/Protocol/THIRD-PARTY-NOTICES.md) accompany the packaged data.
 
 The pinned reference deletes an ordinary same-name sibling when deleting a partitioned cookie. That preservation check remains failed in its record. MonkeySharp deliberately preserves the sibling; this is a documented difference. `firstPartyDomain` remains unsupported.
 

@@ -313,8 +313,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             if (_cookies is CefSharpCookieService || _cookies == null && _options.EnableDefaultNetworkServices)
             {
                 var major = typeof(Cef).Assembly.GetName().Version.Major;
-                status["GM.cookie.partitionKey"] = major == 121 ? "available:without-ancestor-dimension" :
-                    major == 151 ? "available:serializable-keys" : major == 84 ? "unsupported:engine-version" : "unsupported:unverified-engine";
+                status["GM.cookie.partitionKey"] = new CookieProtocolProfile(major).CapabilityStatus;
             }
             if (_audio != null && !_audio.SupportsAudible)
             {
