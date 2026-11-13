@@ -63,6 +63,42 @@ dotnet pack Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.cspr
 dotnet pack Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj -c Release -p:Platform=x86 -p:CefSharpVersion=156.0.150 -o artifacts/packages/x86
 ```
 
+## Publish to NuGet with GitHub Actions
+
+[Publish NuGet](../.github/workflows/publish.yml) is a manually dispatched workflow. It calls the existing CI workflow to run the `84.4.10`/`156.0.150` x64/x86 .NET/JavaScript and real-Chromium/WPF gates, builds all five packages with the requested version, and tests publication logic without network access. The publish job downloads those exact artifacts, validates their manifest/version/SHA-256 hashes, then exchanges GitHub OIDC identity for a temporary NuGet credential with `NuGet/login@v1`. Only that job has `id-token: write`; it uses the GitHub environment `nuget`. See the official [NuGet Trusted Publishing guide](https://learn.microsoft.com/en-us/nuget/nuget-org/trusted-publishing).
+
+Complete this setup once:
+
+1. Commit and push the workflow and scripts to the repository's default branch so GitHub displays the **Run workflow** button.
+2. In GitHub **Settings → Secrets and variables → Actions → Variables**, create the repository variable `NUGET_USER` containing the publishing user's nuget.org profile name, not an email address or an assumed GitHub username. No stored `NUGET_API_KEY` secret is needed.
+3. In GitHub **Settings → Environments**, create the environment `nuget` used by the publish job.
+4. Sign in to nuget.org, open the username menu, choose **Trusted Publishing**, and create a GitHub policy with the following values. Choose the individual/organization that owns the packages as the policy owner; existing package IDs must belong to that owner. Enable both new-package publishing and publishing new versions, scoped to `Mzying2001.MonkeySharp.*`.
+
+| NuGet policy field | Value |
+| --- | --- |
+| Repository Owner | `Mzying2001` |
+| Repository | `MonkeySharp` |
+| Workflow File | `publish.yml` (filename only) |
+| Environment | `nuget` |
+| Package glob | `Mzying2001.MonkeySharp.*` |
+
+When using a fork, substitute its actual GitHub owner/repository. The NuGet profile in `NUGET_USER` must have access to the selected policy owner. If NuGet marks the policy as temporarily active, complete the first publication during that activation window or reactivate it before running the workflow.
+
+For each release, open GitHub **Actions → Publish NuGet → Run workflow**, choose the source branch/ref and enter a new version such as `3.0.1` or `3.0.1-rc.1` without a `v` prefix. The input overrides the project package versions for that build; it does not edit the project files, create a Git tag or a GitHub Release. Publication starts automatically after all gates pass, using the selected revision's artifacts. Ordinary PR CI cannot publish.
+
+[Publish-Packages.ps1](../scripts/Publish-Packages.ps1) checks all ten files before any upload and resolves manifest paths relative to the downloaded artifact, so build-runner absolute paths are never reused. It uploads Core before the adapters, disables implicit symbols on main-package pushes, then explicitly uploads each `.snupkg` with its symbol credential. Both phases use `--skip-duplicate`, so a duplicate main package does not prevent a missing symbol package from being retried. It stops on other CLI failures and writes credential-free `publish-results.json`, uploaded as the `nuget-publish-results` artifact. Its `accepted-or-existing` status means the server accepted the push or the package already existed; it does not mean asynchronous NuGet validation/indexing has completed.
+
+If a publication is interrupted, use **Re-run failed jobs** on the same workflow run to reuse the existing `nuget-packages` artifact and obtain a new temporary credential. Do not change binaries while reusing an already published version. NuGet cannot publish the five packages as one transaction. Check package availability and validation status on nuget.org after the workflow completes.
+
+Local verification, without credentials or uploads:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/Publish-Packages.ps1 -PackageDirectory artifacts/release -Version 3.0.1 -ValidateOnly
+powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/Test-PublishPackages.ps1 -PackageDirectory artifacts/release
+```
+
+The test runner uses a temporary copy of built packages and shadows `dotnet` with an in-process stub; it verifies relocated artifacts, missing credentials, version/hash/incomplete-release rejection before uploads, Core-first independent symbol uploads, and partial failure reports. CI executes these checks against the packages it builds.
+
 ## Real-Chromium gates
 
 Run the real-Chromium gates from a Windows desktop session:

@@ -63,6 +63,42 @@ dotnet pack Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.cspr
 dotnet pack Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj -c Release -p:Platform=x86 -p:CefSharpVersion=156.0.150 -o artifacts/packages/x86
 ```
 
+## 使用 GitHub Actions 发布到 NuGet
+
+[Publish NuGet](../.github/workflows/publish.yml) 是手动触发的工作流，复用现有 CI 执行 `84.4.10`/`156.0.150` 的 x64/x86 .NET/JavaScript、真实 Chromium 和 x64 WPF 门禁，再按输入版本构建五个包，并离线验证发布逻辑。发布作业下载同一批产物，检查清单、版本及 SHA-256 后，通过 `NuGet/login@v1` 用 GitHub OIDC 身份交换临时 NuGet 凭据。仅发布作业具有 `id-token: write`，使用 GitHub 环境 `nuget`。认证机制见 [NuGet Trusted Publishing 官方指南](https://learn.microsoft.com/en-us/nuget/nuget-org/trusted-publishing)。
+
+首次使用时完成以下配置：
+
+1. 将工作流及脚本提交并推送到仓库默认分支，GitHub 才会显示 **Run workflow** 按钮。
+2. 在 GitHub **Settings → Secrets and variables → Actions → Variables** 创建仓库变量 `NUGET_USER`，值为发布用户在 nuget.org 的个人资料用户名，不是邮箱，也不要直接假定与 GitHub 用户名相同。无需保存 `NUGET_API_KEY` Secret。
+3. 在 GitHub **Settings → Environments** 创建发布作业使用的环境 `nuget`。
+4. 登录 nuget.org，从右上角用户名菜单进入 **Trusted Publishing**，新建 GitHub 策略并填写下表。策略 Owner 选择软件包所属的个人或组织；已有包名必须归该 Owner 所有。权限同时允许发布新包和发布已有包的新版本，范围限定为 `Mzying2001.MonkeySharp.*`。
+
+| NuGet 策略字段 | 填写值 |
+| --- | --- |
+| Repository Owner | `Mzying2001` |
+| Repository | `MonkeySharp` |
+| Workflow File | `publish.yml`，只填文件名 |
+| Environment | `nuget` |
+| Package glob | `Mzying2001.MonkeySharp.*` |
+
+使用 fork 时，将仓库 Owner 和名称替换为实际值。`NUGET_USER` 中的 NuGet 用户必须有权使用所选策略 Owner。如果 NuGet 显示策略暂时激活，应在激活窗口内完成首次发布，或在运行工作流前重新激活。
+
+每次发布时，进入 GitHub **Actions → Publish NuGet → Run workflow**，选择源码分支/ref，输入新的版本号，例如 `3.0.1` 或 `3.0.1-rc.1`，不要添加 `v` 前缀。该输入覆盖本次构建的项目包版本，不修改项目文件，也不创建 Git 标签或 GitHub Release。所有门禁通过后自动发布所选代码版本对应的产物；普通 PR CI 不会发布。
+
+[Publish-Packages.ps1](../scripts/Publish-Packages.ps1) 在任何上传前检查全部十个文件，并按下载后的产物目录解析清单路径，不使用构建机器的绝对路径。先上传 Core，再上传适配器；普通包关闭隐式符号上传，随后显式上传各 `.snupkg` 并传入符号凭据。两个阶段都使用 `--skip-duplicate`，已有普通包不会妨碍补传缺失的符号包。其他 CLI 失败立即停止，并写入不包含凭据的 `publish-results.json`，作为 `nuget-publish-results` 产物上传。其中 `accepted-or-existing` 表示推送被服务器接受或对应包已存在，不代表 NuGet 后台验证或索引已完成。
+
+发布中断时，在同一次工作流运行中选择 **Re-run failed jobs**，复用已有 `nuget-packages` 产物并重新获取临时凭据。不要修改二进制内容后复用已经发布的版本号。NuGet 不支持将五个包作为一个事务一起发布；工作流完成后，在 nuget.org 查看包的可用性及验证状态。
+
+本地离线验证，不需要凭据，也不会上传：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/Publish-Packages.ps1 -PackageDirectory artifacts/release -Version 3.0.1 -ValidateOnly
+powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/Test-PublishPackages.ps1 -PackageDirectory artifacts/release
+```
+
+测试脚本复制构建包到临时目录，并用进程内函数替代 `dotnet`，覆盖跨目录产物、缺少凭据、版本/哈希/包不完整时禁止上传、Core 优先与独立符号上传，以及失败后的部分结果报告。CI 对实际构建的包执行这些检查。
+
 ## 真实 Chromium 门禁
 
 在 Windows 桌面会话中运行真实 Chromium 验证：

@@ -3,6 +3,16 @@ name: ci
 on:
   pull_request:
     branches: [dev, main]
+  workflow_call:
+    inputs:
+      package-version:
+        description: NuGet version override; empty uses the Core project version.
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: read
 
 jobs:
   build-test:
@@ -101,7 +111,13 @@ jobs:
 
       - name: Build release packages
         shell: pwsh
-        run: ./scripts/Build-Packages.ps1 -OutputDirectory artifacts/packages
+        env:
+          PACKAGE_VERSION: ${{ inputs.package-version }}
+        run: ./scripts/Build-Packages.ps1 -Version $env:PACKAGE_VERSION -OutputDirectory artifacts/packages
+
+      - name: Test package publishing without network access
+        shell: pwsh
+        run: ./scripts/Test-PublishPackages.ps1 -PackageDirectory artifacts/packages
 
       - uses: actions/upload-artifact@v4
         with:
