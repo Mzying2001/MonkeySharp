@@ -1,0 +1,88 @@
+name: Publish NuGet
+run-name: Publish NuGet ${{ inputs.version }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: NuGet version for Core and all four adapters (for example, 3.0.1 or 3.0.1-rc.1).
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nuget-publish
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: windows-2022
+    steps:
+      - name: Check release settings
+        shell: pwsh
+        env:
+          PACKAGE_VERSION: ${{ inputs.version }}
+          NUGET_USER: ${{ vars.NUGET_USER }}
+        run: |
+          if ($env:PACKAGE_VERSION -notmatch '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$') {
+            throw 'Enter a three-part NuGet version, optionally with a prerelease suffix.'
+          }
+          if ([string]::IsNullOrWhiteSpace($env:NUGET_USER)) {
+            throw 'Set the repository Actions variable NUGET_USER to your nuget.org profile name.'
+          }
+
+  validate-and-build:
+    needs: prepare
+    uses: ./.github/workflows/ci.yml
+    with:
+      package-version: ${{ inputs.version }}
+
+  publish:
+    needs: validate-and-build
+    runs-on: windows-2022
+    timeout-minutes: 20
+    environment: nuget
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.315
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: nuget-packages
+          path: artifacts/nuget
+
+      - name: Validate downloaded packages before authentication
+        shell: pwsh
+        env:
+          PACKAGE_VERSION: ${{ inputs.version }}
+        run: ./scripts/Publish-Packages.ps1 -PackageDirectory artifacts/nuget -Version $env:PACKAGE_VERSION -ValidateOnly
+
+      - name: Get a temporary NuGet API key
+        id: login
+        uses: NuGet/login@v1
+        with:
+          user: ${{ vars.NUGET_USER }}
+
+      - name: Publish packages and symbols
+        shell: pwsh
+        env:
+          PACKAGE_VERSION: ${{ inputs.version }}
+          NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
+        run: ./scripts/Publish-Packages.ps1 -PackageDirectory artifacts/nuget -Version $env:PACKAGE_VERSION
+
+      - name: Upload publication results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-publish-results
+          path: artifacts/nuget/publish-results.json
+          if-no-files-found: warn
+          overwrite: true

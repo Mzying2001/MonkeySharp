@@ -631,6 +631,12 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
                     CancellationToken.None);
                 var invocation = Assert.Single(plan.Invocations);
                 Assert.StartsWith("// @require https://cdn.example/dependency.js\nwindow.dependencyLoaded = true;\n;\n", invocation.Source);
+                using (var info = JsonDocument.Parse(invocation.SerializedInfo))
+                {
+                    var major = typeof(Cef).Assembly.GetName().Version.Major;
+                    var expected = major < 114 ? "unsupported:engine-version" : major < 128 ? "available:without-ancestor-dimension" : "available:serializable-keys";
+                    Assert.Equal(expected, info.RootElement.GetProperty("compatibility").GetProperty("capabilities").GetProperty("GM.cookie.partitionKey").GetString());
+                }
 
                 var responseJson = await host.Gateway.DispatchAsync(JsonSerializer.Serialize(new
                 {

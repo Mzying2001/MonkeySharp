@@ -21,6 +21,7 @@ Use an explicit `x64` or `x86` platform for CefSharp builds. The Demo and its te
 ## Development Guidelines
 
 - Update related documentation and tests alongside code changes so they reflect the current implementation and requirements.
+- Keep documentation updates concise and readable; integrate necessary information into the relevant sections rather than appending detailed fix histories.
 - Keep documentation paragraphs on single source lines, preserving Markdown structure.
 - Task notes and temporary documents that do not need to be committed to Git may be stored in `local-notes/`; create the directory if needed.
 

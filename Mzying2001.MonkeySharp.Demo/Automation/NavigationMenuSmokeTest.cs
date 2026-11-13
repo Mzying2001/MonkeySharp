@@ -97,21 +97,32 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
 
         private static string OtherSite(LocalHttpFixture fixture) => fixture.BaseUrl.Replace("127.0.0.1", "localhost");
 
-        private static async Task<ScriptMenuCommand> CurrentMenuAsync(BrowserTabViewModel tab, string url, ScriptMenuCommand previous = null)
+        private static Task<ScriptMenuCommand> CurrentMenuAsync(BrowserTabViewModel tab, string url, ScriptMenuCommand previous = null)
+            => CurrentMenuAsync(tab, url, previous, () => EvaluateBoolean(tab, "window.__navigationMenuReady === true"));
+
+        internal static async Task<ScriptMenuCommand> CurrentMenuAsync(BrowserTabViewModel tab, string url, ScriptMenuCommand previous,
+            Func<Task<bool>> isReady)
         {
             var label = "Navigation menu " + new Uri(url).Authority;
+            ScriptMenuCommand current = null;
             try
             {
-                await WaitAsync(async () => tab.MenuCommands.Count == 1 && !ReferenceEquals(previous, tab.MenuCommands[0]) &&
-                    tab.MenuCommands[0].Label.StartsWith(label, StringComparison.Ordinal) &&
-                    await EvaluateBoolean(tab, "window.__navigationMenuReady === true"));
+                await WaitAsync(async () =>
+                {
+                    // Navigation can replace the collection while the renderer evaluation is pending.
+                    if (!await isReady() || tab.MenuCommands.Count != 1) return false;
+                    var command = tab.MenuCommands[0];
+                    if (ReferenceEquals(previous, command) || !command.Label.StartsWith(label, StringComparison.Ordinal)) return false;
+                    current = command;
+                    return true;
+                });
             }
             catch (TimeoutException error)
             {
                 throw new TimeoutException("Navigation menu did not become ready. Expected=" + url + "; address=" + tab.Address + "; menuCount=" + tab.MenuCommands.Count +
                     " js=" + await Evaluate(tab, "JSON.stringify({url:location.href,ready:window.__navigationMenuReady,clicks:window.__navigationMenuClicks})"), error);
             }
-            return tab.MenuCommands[0];
+            return current;
         }
     }
 }

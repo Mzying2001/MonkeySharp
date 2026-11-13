@@ -17,7 +17,7 @@ dotnet build Mzying2001.MonkeySharp.Demo/Mzying2001.MonkeySharp.Demo.csproj -c R
 
 部署时复制整个输出目录，包括完整的 `CefSharp/` 子目录、`MonkeySharpDemo.exe.config` 和 `zh-CN` 卫星资源目录。CefSharp 原生依赖、浏览器子进程和资源通过官方 `CefSharpTargetDir` 属性输出到 `CefSharp/`，托管程序集保留包的默认输出行为。请使用可写的应用目录，Demo 的便携配置保存在可执行文件旁的 `Data/` 中。
 
-默认 `CefSharpVersion` 为 `151.3.240`。源码构建可通过 `-p:CefSharpVersion=<version>` 覆盖版本，但所有托管和原生组件必须使用同一版本。运行 `Run-E2E.ps1` 时传入 `-CefSharpVersion <version>`，以测试相应版本。切换版本前应清理输出，避免残留旧版原生 DLL。除非指定 `-NoBuild`，Runner 会执行还原、清理和构建，并保留配置目录。已测试版本见[验证](#验证)。
+默认 `CefSharpVersion` 为 `156.0.150`。源码构建可通过 `-p:CefSharpVersion=<version>` 覆盖版本，但所有托管和原生组件必须使用同一版本。运行 `Run-E2E.ps1` 时传入 `-CefSharpVersion <version>`，以测试相应版本。切换版本前应清理输出，避免残留旧版原生 DLL。除非指定 `-NoBuild`，Runner 会执行还原、清理和构建，并保留配置目录。已测试版本见[验证](#验证)。
 
 ## 界面语言
 
@@ -143,6 +143,6 @@ powershell -NoProfile -ExecutionPolicy Bypass -File Mzying2001.MonkeySharp.Demo/
 
 Runner 使用默认英文界面和隔离的 `SmokeRuns/<id>/Data` 配置目录启动一个进程，检查界面标签、权限、标签页与 frame、值和 Cookie、资源、XHR/webRequest、菜单、通知、真实下载、私密上下文、脚本变更和最终释放。剪贴板检查会临时写入 Unicode 文本和 HTML，然后恢复原内容。测试项目禁用 shadow copy，以便从测试输出中解析 SQLite 原生库。
 
-JSON 报告写入 `artifacts/demo-smoke`，`environment.uiLanguage` 记录界面语言，`profile` 指向包含日志和截图的运行目录。其他语言由本地化单元测试检查。CI 对每个受支持的 x64 CefSharp 版本执行一次英文 Demo E2E：`84.4.10`、`121.3.70` 和 `151.3.240`；SmokeHost 还覆盖 x86。完整矩阵见[验证指南](../docs/compatibility/validation.md)。
+JSON 报告写入 `artifacts/demo-smoke`，`environment.uiLanguage` 记录界面语言，`profile` 指向包含日志和截图的运行目录。其他语言由本地化单元测试检查。CI 对每个受支持的 x64 CefSharp 版本执行一次英文 Demo E2E：`84.4.10` 和 `156.0.150`；SmokeHost 还覆盖 x86。完整矩阵见[验证指南](../docs/compatibility/validation.md)。
 
 手动检查项：切换语言并重启；用 `--lang` 临时覆盖启动语言；安装/编辑/删除脚本；拒绝权限请求；存在未保存修改时关闭；确认/取消另存为；重启后验证登录持久化；检查源码缺失或被锁定时的恢复；使用同一配置目录启动第二个进程，确认启动错误。

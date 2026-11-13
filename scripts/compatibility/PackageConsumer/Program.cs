@@ -52,7 +52,9 @@ internal static class Program
             using (var values = new InMemoryUserScriptValueStore())
             {
                 var repository = new InMemoryUserScriptRepository();
-                repository.InstallAsync(Source.Replace("__BASE__", fixture.Url).Replace("__PARTITIONS__", expected.Major == 84 ? "false" : "true"), "consumer://public-api", true, CancellationToken.None).GetAwaiter().GetResult();
+                // Independently assert the documented minimum version through the packaged public API.
+                var partitionsAvailable = expected.Major >= 114;
+                repository.InstallAsync(Source.Replace("__BASE__", fixture.Url).Replace("__PARTITIONS__", partitionsAvailable ? "true" : "false"), "consumer://public-api", true, CancellationToken.None).GetAwaiter().GetResult();
                 var childScript = repository.InstallAsync(OopifSource, "consumer://oopif-public-api", true, CancellationToken.None).GetAwaiter().GetResult();
                 values.SetAsync(childScript.ScriptKey.ToString(), "snapshot", UserScriptValue.FromJson("\"package-ready\""), CancellationToken.None).GetAwaiter().GetResult();
                 string corpusKey = null;
@@ -217,7 +219,7 @@ internal static class Program
     await GM.audio.setMute({isMuted:true}); r.audio = (await GM.audio.getState()).isMuted === true;
     await GM.audio.setMute({isMuted:false});
     const details={url:'__BASE__'.replace(/^http:/,'https:')+'/',name:'package-partition',value:'ready',secure:true,path:'/',sameSite:'no_restriction',partitionKey:{topLevelSite:'https://top-a.test'}};
-    try { await GM.cookie.set(details); r.partition = __PARTITIONS__ && (await GM.cookie.list(details))[0].value === 'ready'; await GM.cookie.delete(details); }
+    try { await GM.cookie.set(details); r.partition = __PARTITIONS__ && (await GM.cookie.list(details))[0].value === 'ready'; await GM.cookie.delete(details); r.partition = r.partition && (await GM.cookie.list(details)).length === 0; }
     catch(error) { r.partition = !__PARTITIONS__ && error.code === 'MSP006_NOT_SUPPORTED'; }
     const bytes=Uint8Array.from({length:350003},(_,i)=>i%251); let sent=false;
     const uploaded=await GM.xmlHttpRequest({url:'__BASE__/echo',method:'POST',responseType:'arraybuffer',data:new ReadableStream({pull(c){if(sent)c.close();else{sent=true;c.enqueue(bytes);}}},{highWaterMark:0})});

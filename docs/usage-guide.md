@@ -215,7 +215,7 @@ Except for info and `unsafeWindow` as described below, each row requires its cap
 | `execution.bfcache` | Cached executions revoked; fresh navigation required. |
 | `execution.contextMenuFrame` | Isolated menus: 84 same-process child frames; 121/151 main only; no isolated OOPIF menus. |
 | `GM.xmlHttpRequest.cookie`, `GM.xmlHttpRequest.cookiePartition` | No explicit Cookie or request-partition selection in the default backend. |
-| `GM.cookie.partitionKey` | 84 unsupported; 121 without ancestor dimension; 151 serializable partition identities. |
+| `GM.cookie.partitionKey` | Partition and ancestor support follow the [Chromium protocol ranges](compatibility/cookies.md#partitioned-cookie-scope). |
 | `GM.audio.audible` | Unavailable without a reliable source. |
 | `GM.registerMenuCommand.clickedFrame` | Host-attested current document/frame required; unknown frame suppressed. |
 
@@ -612,7 +612,7 @@ List returns actual name/value/domain/path, hostOnly, session, secure, httpOnly 
 
 The default backend uses the attached browser's actual RequestContext. Navigation can cancel a document's calls; detach/disposal invalidate the session. Custom backends must return actual verified state. Backend construction and service contracts belong to [host integration](integration-reference.md#cookies).
 
-partitionKey CRUD is supported on tested 121/151 engines as described below; 84 rejects it. cookiePartition and firstPartyDomain remain unsupported. Unspecified partition keys only access normal cookies. Legacy callback failures are reported once, independently of the completed operation. Calling the legacy namespace itself is unsupported; use its three documented methods.
+partitionKey CRUD follows the [Chromium protocol ranges](compatibility/cookies.md#partitioned-cookie-scope); cookiePartition and firstPartyDomain remain unsupported. Unspecified partition keys only access normal cookies. Legacy callback failures are reported once, independently of the completed operation. Calling the legacy namespace itself is unsupported; use its three documented methods.
 
 ```javascript
 // @grant GM.cookie
@@ -625,11 +625,11 @@ GM_cookie.list({}, (cookies, error) => console.log(cookies, error));
 
 ### Partitioned Cookie scope
 
-The default CDP backend supports serializable partitioned Cookie CRUD on the tested 121/151 engines. Chromium 84 rejects every explicit partitionKey before Cookie effects. Unspecified partitionKey selects unpartitioned cookies. For list, `{partitionKey:{}}` includes all serializable partitions and normal cookies; `{partitionKey:{topLevelSite:"https://top-a.test"}}` selects that site. An explicitly empty topLevelSite selects normal cookies.
+The default CDP backend supports serializable partitioned Cookie CRUD according to its [Chromium protocol ranges](compatibility/cookies.md#partitioned-cookie-scope). Unsupported engines reject every explicit partitionKey before Cookie effects. Unspecified partitionKey selects unpartitioned cookies. For list, `{partitionKey:{}}` includes all serializable partitions and normal cookies; `{partitionKey:{topLevelSite:"https://top-a.test"}}` selects that site. An explicitly empty topLevelSite selects normal cookies.
 
-Set/delete accept the same partitionKey object. Empty objects select a normal identity for mutations. Partitioned set requires secure:true. Site inputs are normalized using fixed ICANN/private suffix snapshots from the matching native Chromium release, including wildcard and exception rules. Results contain the actual canonical partitionKey. Opaque/nonce keys are outside the supported contract.
+Set/delete accept the same partitionKey object. Empty objects select a normal identity for mutations. Partitioned set requires secure:true. Site inputs are normalized using bundled ICANN/private suffix snapshots, including wildcard and exception rules; the [snapshot selection policy](compatibility/cookies.md#partitioned-cookie-scope) also applies to newer engines. Results contain the actual canonical partitionKey. Opaque/nonce keys are outside the supported contract.
 
-151 additionally accepts/returns hasCrossSiteAncestor. When omitted, list matches either ancestor variant, set derives it from the cookie URL and chosen site, and delete defaults to true as observed in the reference. Pass false explicitly to delete a same-site ancestor identity. 121 rejects that field because its protocol has no such dimension. Mutations and readback include the complete partition identity; deletion expires only that identity and verifies absence, preserving same-name siblings in other partitions and paths.
+Engines exposing the ancestor dimension also accept/return hasCrossSiteAncestor. When omitted, list matches either ancestor variant, set derives it from the cookie URL and chosen site, and delete defaults to true as observed in the reference. Pass false explicitly to delete a same-site ancestor identity. Engines without ancestor support reject that field. Mutations and readback include the complete partition identity; deletion expires only that identity and verifies absence, preserving same-name siblings in other partitions and paths.
 
 Custom backend support can differ; an unsupported backend rejects `partitionKey` instead of silently accessing normal storage. Host implementers should follow the [partition service contract](integration-reference.md#partitioned-cookie-scope).
 
@@ -740,7 +740,7 @@ window.addEventListener("urlchange", onRoute);
 | Notifications | Modern Promise waits for completion and resolves clicked status; click/tag/navigation comparison limits remain documented. |
 | Tabs | Modern returns a Promise; legacy returns an immediate handle; use close/onclose; numeric insertion positions and real private contexts are supported by the Demo. |
 | Downloads | Immediately returns an abortable completion Promise; Demo uses the shared browser network context and commits the file before completion. |
-| Cookies | Partition CRUD on 121/151; request cookiePartition, firstPartyDomain and change feeds remain unavailable. |
+| Cookies | Partition CRUD follows Chromium protocol ranges; request cookiePartition, firstPartyDomain and change feeds remain unavailable. |
 | webRequest | Historical MV2 target: official selector/cancel/redirect rules; void return, replace registration or pass [] to revoke. Historical TM parity remains pending. |
 | Other manager APIs | Extension-specific content/deployment APIs are not built in. Unknown grants do not add them. Audio is partial as described above. |
 

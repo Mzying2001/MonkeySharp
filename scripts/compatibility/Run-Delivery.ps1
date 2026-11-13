@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string[]]$CefSharpVersions = @('84.4.10','121.3.70','151.3.240'),
+    [ValidateSet('84.4.10','156.0.150')][string[]]$CefSharpVersions = @('84.4.10','156.0.150'),
     [string[]]$Platforms = @('x64','x86'),
     [string]$CorpusScript = '',
     [switch]$PackageOnly,
@@ -58,10 +58,13 @@ foreach ($version in $CefSharpVersions) {
             Invoke-Logged 'dotnet' @('pack',(Join-Path $checkout 'Mzying2001.MonkeySharp.Core/Mzying2001.MonkeySharp.Core.csproj'),'-c','Release','-p:Platform=AnyCPU',"-p:Version=$packageVersion","-p:PackageVersion=$packageVersion",'-o',$feed,'--nologo') $checkout (Join-Path $caseRoot 'pack-core.log')
             Invoke-Logged 'dotnet' @('pack',(Join-Path $checkout 'Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj'),'-c','Release',"-p:Platform=$platform","-p:CefSharpVersion=$version","-p:Version=$packageVersion","-p:PackageVersion=$packageVersion",'-o',$feed,'--nologo') $checkout (Join-Path $caseRoot 'pack-adapter.log')
             Add-Type -AssemblyName System.IO.Compression.FileSystem
-            $adapter = Get-ChildItem -LiteralPath $feed -Filter "Mzying2001.MonkeySharp.CefSharp.$platform.*.nupkg" | Select-Object -First 1
+            $suffix = if ($version -eq '84.4.10') { '84' } else { '' }
+            $adapter = Get-Item -LiteralPath (Join-Path $feed "Mzying2001.MonkeySharp.CefSharp$suffix.$platform.$packageVersion.nupkg")
             $zip = [IO.Compression.ZipFile]::OpenRead($adapter.FullName)
             try {
-                foreach ($name in @('psl-121.dat.gz','psl-151.dat.gz','public-suffix-snapshots.json','THIRD-PARTY-NOTICES.md')) {
+                $snapshots = Get-Content -LiteralPath (Join-Path $checkout 'Mzying2001.MonkeySharp.CefSharp/Protocol/public-suffix-snapshots.json') -Raw | ConvertFrom-Json
+                $snapshotFiles = @($snapshots | ForEach-Object { 'psl-' + ([version]$_.chromiumVersion).Major + '.dat.gz' })
+                foreach ($name in @('public-suffix-snapshots.json','THIRD-PARTY-NOTICES.md') + $snapshotFiles) {
                     if (!@($zip.Entries | Where-Object FullName -EQ "third-party/public-suffix/$name").Count) { throw "Package lacks $name" }
                 }
             } finally { $zip.Dispose() }

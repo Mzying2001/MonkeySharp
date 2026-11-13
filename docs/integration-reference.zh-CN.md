@@ -8,9 +8,9 @@
 
 同一个适配器二进制文件无法兼容任意 CefSharp 版本。CefSharp 程序集具有强名称，而且公开接口曾在版本间发生变化，例如 `IBrowser.GetFrame(long)` 改为 `GetFrameByIdentifier(string)`，`IFrame.Identifier` 也从 `long` 改为 `string`。
 
-适配器默认使用 `151.3.240`，源码兼容层已针对 `84.4.10`、`121.3.70` 和 `151.3.240` 验证。应用程序应针对实际发布的版本重新构建并测试；使用[源码构建命令](development.zh-CN.md#构建与测试)并指定所选版本。
+适配器默认使用 `156.0.150`，旧版 `CefSharp84` 包面向 `84.4.10`。CI 和交付验证仅覆盖这两个版本的 x64/x86。其他版本的历史原生证据仍只适用于其记录的引擎和版本。应用程序应针对实际发布的版本重新构建并测试；使用[源码构建命令](development.zh-CN.md#构建与测试)并指定所选版本。
 
-适配器 NuGet 包将 `CefSharp.Common` 引用设为私有。使用者需要自行引用匹配的 `CefSharp.WinForms`、`CefSharp.Wpf` 或 `CefSharp.Common` 包，并在 .NET Framework 应用中允许常规绑定重定向。托管包、CEF 原生文件、MonkeySharp 适配器的版本和进程平台必须一致。
+每个适配器 NuGet 包均公开依赖其编译时使用的精确版本 `CefSharp.Common` 和共享 Core 包。使用者选择版本匹配的 `CefSharp.WinForms`、`CefSharp.Wpf` 等 UI 包，并在 .NET Framework 应用中允许常规绑定重定向。托管包、CEF 原生文件、MonkeySharp 适配器的版本和进程平台必须一致。应用程序只应安装一种适配器；绑定重定向无法解决 CefSharp API 不兼容。
 
 各项目应保持相同的 `CefSharpVersion`，命令及 CI 矩阵见[开发指南](development.zh-CN.md)。
 
@@ -186,7 +186,7 @@ Blob/File 下载逐块确认暂存后进入保存、取消及原子提交流程�
 
 ### 分区 Cookie 范围
 
-默认后端在已测 121/151 支持可序列化 `partitionKey` CRUD；84 在副作用前拒绝显式分区键。ancestor 维度在 151 可用，121 明确拒绝。规范化使用对应 Chromium 版本的公共后缀快照，不支持 opaque/nonce 键。详见[分区输入及身份规则](usage-guide.zh-CN.md#分区-cookie-范围)。
+默认后端按 Chromium 协议版本范围适配可序列化 `partitionKey` CRUD，较新引擎沿用现代协议格式。能力状态报告 ancestor 维度是否可用。规范化复用内置公共后缀快照，不支持 opaque/nonce 键。版本范围及快照选择见 [Cookie 范围](compatibility/cookies.md#partitioned-cookie-scope)，参数语义见[分区输入及身份规则](usage-guide.zh-CN.md#分区-cookie-范围)。
 
 自定义分区后端除 CRUD 外实现 `IPartitionedCookieService.NormalizePartitionKeyAsync`，在 Core 过滤前验证真实支持并规范化键。其他后端拒绝 `partitionKey`，不能静默访问普通存储。
 

@@ -75,6 +75,7 @@ sessionStorage.setItem('runs', String(window.__demo.runs));
     window.__testWindowFocus = function () { return window.focus(); };
     window.__testWindowClose = function () { return window.close(); };
     window.__testCookiePartitions = async function () {
+        result.partitionCapability = GM.info.compatibility.capabilities['GM.cookie.partitionKey'];
         const details = {url:'__BASE__'.replace(/^http:/,'https:')+'/',name:'wpf-partition-proof',value:'ready',path:'/',secure:true,sameSite:'no_restriction',partitionKey:{topLevelSite:'https://top-a.test'}};
         try {
             await GM.cookie.set(details);

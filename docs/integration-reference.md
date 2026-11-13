@@ -8,9 +8,9 @@ This reference describes host configuration, service contracts, persistence and 
 
 The adapter cannot support arbitrary CefSharp versions from one binary. CefSharp assemblies are strong-named, and public interfaces have changed between releases. For example, `IBrowser.GetFrame(long)` became `GetFrameByIdentifier(string)`, while `IFrame.Identifier` changed from `long` to `string`.
 
-The adapter defaults to `151.3.240` and has source compatibility shims verified against `84.4.10`, `121.3.70`, and `151.3.240`. Build and test the adapter against every version shipped by the application; use the [source build commands](development.md#build-and-test) with the selected version.
+The adapter defaults to `156.0.150`; the legacy `CefSharp84` packages target `84.4.10`. CI and delivery validation cover these two versions on x64/x86. Historical native evidence for other versions remains specific to its recorded engine/version. Build and test the adapter against every version shipped by the application; use the [source build commands](development.md#build-and-test) with the selected version.
 
-The adapter's `CefSharp.Common` reference is private to its NuGet package. Consumers must reference the matching `CefSharp.WinForms`, `CefSharp.Wpf`, or `CefSharp.Common` package and allow the normal .NET Framework binding redirects. Keep the managed packages, native CEF binaries, and MonkeySharp adapter on the same version and process platform.
+Each adapter NuGet package publicly depends on the exact `CefSharp.Common` version it was compiled against and on the shared Core package. Consumers choose a matching `CefSharp.WinForms`, `CefSharp.Wpf`, or other UI package and allow the normal .NET Framework binding redirects. Keep the managed packages, native CEF binaries, and MonkeySharp adapter on the same version and process platform. Install only one adapter variant; binding redirects cannot bridge incompatible CefSharp APIs.
 
 Keep all projects on the selected `CefSharpVersion`; see the [development guide](development.md) for commands and the CI matrix.
 
@@ -184,7 +184,7 @@ The default `CefSharpCookieService` uses the host's shared CDP session and attac
 
 ### Partitioned Cookie scope
 
-The default backend supports serializable `partitionKey` CRUD on tested 121/151 engines; 84 rejects explicit partition keys before effects. The ancestor dimension is available on 151 and rejected on 121. Normalization uses the public-suffix snapshot matching the Chromium release. Opaque/nonce keys are unsupported. See the [partition input and identity rules](usage-guide.md#partitioned-cookie-scope).
+The default backend selects serializable `partitionKey` CRUD by Chromium protocol range, including newer engines. Capability status reports whether the ancestor dimension is available. Normalization reuses bundled public-suffix snapshots; opaque/nonce keys remain unsupported. See [Cookie scope](compatibility/cookies.md#partitioned-cookie-scope) for ranges and snapshot selection, and the [partition input and identity rules](usage-guide.md#partitioned-cookie-scope).
 
 Custom partition backends implement `IPartitionedCookieService.NormalizePartitionKeyAsync` in addition to CRUD, validating actual support and canonicalizing keys before Core filters results. Other backends reject `partitionKey` instead of silently accessing ordinary storage.
 

@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [ValidateSet('x64', 'x86')][string]$Platform = 'x64',
-    [ValidateSet('84.4.10', '121.3.70', '151.3.240')][string]$CefSharpVersion = '84.4.10'
+    [ValidateSet('84.4.10', '156.0.150')][string]$CefSharpVersion = '84.4.10'
 )
 $ErrorActionPreference = 'Stop'
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))

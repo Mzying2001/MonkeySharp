@@ -55,7 +55,7 @@ The SmokeHost embeds repository-owned `.user.js` fixtures and installs them thro
 | `binary` | Exact Blob/File/form bytes, charset boundaries, document parsing, streams and binary downloads. |
 | `pageHelpers` | Real DOM/style, local logging, tab handles and window/helper behavior. |
 | `audio` | Native mute readback, listeners, frames/navigation and explicit audible unavailability. |
-| `partitions` | Version-specific partition CRUD/readback/deletion and independent request-partition limitations. |
+| `partitions` | Version-specific partition CRUD/readback/deletion and request-partition limitations; see [Cookie scope](cookies.md#partitioned-cookie-scope). |
 | `frames` | Single-key and bulk GM storage calls, including all six modern/legacy bulk entry points, typed undefined, listener return contracts, cross-instance notifications and navigation snapshots, in the main frame, a same-origin child and a child on another port; once-per-document execution, `@noframes`, child navigation and context release. |
 | `spaUrl` | `pushState`, `replaceState`, hash navigation and history back; both URL callback forms, old/new URLs, host lifecycle events, grant gating and no reinjection. |
 | `download` | Modern Promise/handle and legacy callbacks; actual HTTP downloads with exact file bytes, cancellation after progress, timeout, HTTP failure, one terminal callback and partial-file cleanup. |

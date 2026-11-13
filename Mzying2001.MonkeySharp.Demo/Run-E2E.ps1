@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$CefSharpVersion = '151.3.240',
+    [string]$CefSharpVersion = '156.0.150',
     [switch]$NoBuild
 )
 

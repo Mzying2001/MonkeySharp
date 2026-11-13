@@ -1,6 +1,6 @@
 # Public Suffix List snapshots
 
-The `psl-121.dat.gz` and `psl-151.dat.gz` resources contain unchanged UTF-8 Public Suffix List source data from the matching Chromium releases. The original license, attribution and Chromium annotations remain inside each compressed file. Decompress them with any gzip utility to inspect or modify the source.
+The `psl-*.dat.gz` resources contain unchanged UTF-8 Public Suffix List source data from the Chromium releases recorded in `public-suffix-snapshots.json`. The original license, attribution and Chromium annotations remain inside each compressed file. Decompress them with any gzip utility to inspect or modify the source.
 
 The data is licensed under the Mozilla Public License 2.0: https://mozilla.org/MPL/2.0/
 

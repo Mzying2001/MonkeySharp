@@ -20,10 +20,12 @@ MonkeySharp 是面向 CefSharp 嵌入式应用的用户脚本运行时。Core �
 | 软件包 | 目标框架 | 用途 |
 | --- | --- | --- |
 | `Mzying2001.MonkeySharp.Core` | `net462`、`netstandard2.0`、`net8.0` | 与浏览器无关的运行时和宿主契约。 |
-| `Mzying2001.MonkeySharp.CefSharp.x64` | `net462` x64 | 64 位宿主的 CefSharp 生命周期适配器。 |
-| `Mzying2001.MonkeySharp.CefSharp.x86` | `net462` x86 | 32 位宿主的同一适配器。 |
+| `Mzying2001.MonkeySharp.CefSharp.x64` | `net462` x64 | 面向 CefSharp `156.0.150` 的 64 位宿主适配器。 |
+| `Mzying2001.MonkeySharp.CefSharp.x86` | `net462` x86 | 新版 CefSharp 的 32 位宿主适配器。 |
+| `Mzying2001.MonkeySharp.CefSharp84.x64` | `net462` x64 | 面向 CefSharp `84.4.10` 的 64 位宿主适配器。 |
+| `Mzying2001.MonkeySharp.CefSharp84.x86` | `net462` x86 | 旧版 CefSharp 84 的 32 位宿主适配器。 |
 
-两个适配器包都公开 `Mzying2001.MonkeySharp.CefSharp` 程序集和命名空间。从源码集成时，可以直接引用适配器项目；Core 会被传递引用：
+所有适配器包都公开 `Mzying2001.MonkeySharp.CefSharp` 程序集和命名空间，并依赖同一个 Core 包。应用程序应选择一个与 CefSharp 版本和进程平台匹配的适配器。从源码集成时，可以直接引用适配器项目；Core 会被传递引用：
 
 ```xml
 <ItemGroup>
@@ -31,7 +33,7 @@ MonkeySharp 是面向 CefSharp 嵌入式应用的用户脚本运行时。Core �
 </ItemGroup>
 ```
 
-宿主还必须引用版本匹配的 `CefSharp.WinForms`、`CefSharp.Wpf` 或 `CefSharp.Common` 包；适配器的 `CefSharp.Common` 依赖是私有的。应用程序和适配器必须使用同一个显式 `x64` 或 `x86` 进程平台。适配器默认使用 CefSharp `151.3.240`；发布前应针对实际版本编译和测试。已测试版本及绑定说明见[集成参考](docs/integration-reference.zh-CN.md#cefsharp-版本兼容性)。
+每个适配器包均声明精确版本的 `CefSharp.Common` 依赖。宿主选择版本匹配的 `CefSharp.WinForms`、`CefSharp.Wpf` 等 UI 包，并与适配器使用同一个显式 `x64` 或 `x86` 进程平台。源码默认使用 CefSharp `156.0.150`；发布前应针对实际版本编译和测试。兼容性限制及绑定说明见[集成参考](docs/integration-reference.zh-CN.md#cefsharp-版本兼容性)。使用[打包脚本](docs/development.zh-CN.md#打包)可构建 Core 和两条适配器产品线。
 
 ## 快速开始
 
@@ -193,7 +195,7 @@ host.Diagnostic += (_, diagnostic) =>
 验证单个引擎/平台的干净基线（包括真实 Chromium，x64 还包含 WPF）：
 
 ```powershell
-./scripts/compatibility/Run-Baseline.ps1 -Platform x64 -CefSharpVersion 151.3.240
+./scripts/compatibility/Run-Baseline.ps1 -Platform x64 -CefSharpVersion 156.0.150
 ```
 
 [验证指南](docs/compatibility/validation.md)区分原生门禁、固定 Tampermonkey 对照和第三方语料结果；已记录结论见注明日期的矩阵。
