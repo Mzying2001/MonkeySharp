@@ -27,7 +27,7 @@ Use Windows, a desktop session for real Chromium/WPF gates, an SDK supporting `.
 ./scripts/compatibility/Run-Delivery.ps1
 ```
 
-Baseline defaults are x64 and 84.4.10; accepted versions are 84.4.10, 121.3.70 and 151.3.240. WPF runs for x64 only. Delivery defaults to all three versions and both platforms. `-CefSharpVersions` and `-Platforms` select subsets; `-CorpusScript <path>` adds an existing local script, `-KeepWorktrees` keeps successful checkouts, and `-PackageOnly` skips baseline checks for diagnostics. Keep different native versions in separate output trees.
+Baseline defaults are x64 and 84.4.10; accepted versions are 84.4.10 and 156.0.150. WPF runs for x64 only. Delivery defaults to these two versions and both platforms. `-CefSharpVersions` and `-Platforms` select subsets; `-CorpusScript <path>` adds an existing local script, `-KeepWorktrees` keeps successful checkouts, and `-PackageOnly` skips baseline checks for diagnostics. Keep different native versions in separate output trees. Historical evidence for 121/151 remains archived. For release package generation without native gates, use [Build-Packages.ps1](../../docs/development.md#package).
 
 Raw baseline output is printed by the runner; SmokeHost saves its logs under `artifacts/smoke/<version>-<platform>/`. Delivery stores reports/packages under `artifacts/delivery/<run>/`. These generated directories and temporary browser profiles are ignored by Git.
 
@@ -48,16 +48,16 @@ The environment JSON pins `channel` (stable/beta), `version`, `manifestVersion`,
 
 ## WPF Demo E2E
 
-The x64 baseline also invokes the [WPF Demo E2E runner](../../Mzying2001.MonkeySharp.Demo/README.md#verification), which runs once using the application's default English UI. Run it directly with `./Mzying2001.MonkeySharp.Demo/Run-E2E.ps1 -CefSharpVersion 151.3.240`; `-NoBuild` reuses an already matching deployment. Demo JSON reports record `environment.uiLanguage` and English UI assertions under `artifacts/demo-smoke/`. Other languages are checked by localization unit tests without repeating the full browser suite.
+The x64 baseline also invokes the [WPF Demo E2E runner](../../Mzying2001.MonkeySharp.Demo/README.md#verification), which runs once using the application's default English UI. Run it directly with `./Mzying2001.MonkeySharp.Demo/Run-E2E.ps1 -CefSharpVersion 156.0.150`; `-NoBuild` reuses an already matching deployment. Demo JSON reports record `environment.uiLanguage` and English UI assertions under `artifacts/demo-smoke/`. Other languages are checked by localization unit tests without repeating the full browser suite.
 
 ## Pinned third-party corpus
 
 ```powershell
 # Restore/clean/build the source host, then execute all pinned scenarios.
-./scripts/compatibility/Run-Corpus.ps1 -Platform x64 -CefSharpVersion 121.3.70
+./scripts/compatibility/Run-Corpus.ps1 -Platform x64 -CefSharpVersion 156.0.150
 
 # Use a built source host or a NuGet-only package consumer.
-node scripts/compatibility/Run-Corpus.cjs --manager monkeysharp --host C:/path/to/MonkeySharp.PackageConsumer.exe --expected-cef-version 121.3.70 --expected-platform x64 --output artifacts/corpus/consumer-run
+node scripts/compatibility/Run-Corpus.cjs --manager monkeysharp --host C:/path/to/MonkeySharp.PackageConsumer.exe --expected-cef-version 156.0.150 --expected-platform x64 --output artifacts/corpus/consumer-run
 
 # Compare the same original sources and actions against pinned TM.
 node scripts/compatibility/Run-Corpus.cjs --manager tampermonkey --browser C:/path/to/msedge.exe --extension C:/path/to/tampermonkey --output artifacts/corpus/reference-run
@@ -83,7 +83,7 @@ Recorded beta observations cover incremental text and stream inputs; fixed-beta 
 
 ## Native feasibility probes
 
-`./scripts/compatibility/Run-NativeProbe.ps1 -Probe bfcache -Platform x64 -CefSharpVersion 121.3.70` builds and launches isolated native experiments, records actual version/architecture and rejects missing records or failed process exits. `-EnableBackForwardCache` tests explicit enablement; `-NoBuild` reuses an already matching build. Choose a new OutputDirectory for each attempt. A completed assessment does not turn an unobserved capability into supported behavior.
+`./scripts/compatibility/Run-NativeProbe.ps1 -Probe bfcache -Platform x64 -CefSharpVersion 156.0.150` builds and launches isolated native experiments, records actual version/architecture and rejects missing records or failed process exits. `-EnableBackForwardCache` tests explicit enablement; `-NoBuild` reuses an already matching build. Choose a new OutputDirectory for each attempt. A completed assessment does not turn an unobserved capability into supported behavior.
 
 BFCache read-only polling treats a confirmed retired native frame as not yet ready and retries within its existing deadline. Errors from a still-valid frame remain failures; successful assessment does not establish that Chromium restored a cached page.
 

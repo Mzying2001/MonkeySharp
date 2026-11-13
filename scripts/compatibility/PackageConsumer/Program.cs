@@ -52,7 +52,9 @@ internal static class Program
             using (var values = new InMemoryUserScriptValueStore())
             {
                 var repository = new InMemoryUserScriptRepository();
-                repository.InstallAsync(Source.Replace("__BASE__", fixture.Url).Replace("__PARTITIONS__", expected.Major == 84 ? "false" : "true"), "consumer://public-api", true, CancellationToken.None).GetAwaiter().GetResult();
+                // Partition CRUD requires an explicitly verified protocol and suffix snapshot.
+                var partitionsAvailable = expected.Major == 121 || expected.Major == 151;
+                repository.InstallAsync(Source.Replace("__BASE__", fixture.Url).Replace("__PARTITIONS__", partitionsAvailable ? "true" : "false"), "consumer://public-api", true, CancellationToken.None).GetAwaiter().GetResult();
                 var childScript = repository.InstallAsync(OopifSource, "consumer://oopif-public-api", true, CancellationToken.None).GetAwaiter().GetResult();
                 values.SetAsync(childScript.ScriptKey.ToString(), "snapshot", UserScriptValue.FromJson("\"package-ready\""), CancellationToken.None).GetAwaiter().GetResult();
                 string corpusKey = null;
