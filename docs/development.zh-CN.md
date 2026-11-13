@@ -34,6 +34,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/Build-Packages.ps1
 ./scripts/Build-Packages.ps1 -Version 3.0.1 -Platforms x64 -CurrentCefSharpVersion 156.0.150 -OutputDirectory artifacts/release
 ```
 
+Windows 下可以双击 [Build-Packages.bat](../scripts/Build-Packages.bat) 按默认配置构建，也可以运行 `./scripts/Build-Packages.bat -Version 3.0.1 -Platforms x64 -OutputDirectory "artifacts/release packages"`。包装脚本不依赖当前工作目录，定位同目录的 PowerShell 脚本，通过 `-NoProfile -ExecutionPolicy Bypass` 绕过本次进程的执行限制，使用 `%*` 原样转发参数，并以 PowerShell 退出码作为自身结果。构建结束后直接退出，不暂停等待输入。
+
 默认构建一个 `Mzying2001.MonkeySharp.Core` 包和四个适配包：面向 `84.4.10` 的 `Mzying2001.MonkeySharp.CefSharp84.x64`/`.x86`，以及面向固定新版 `156.0.150` 的 `Mzying2001.MonkeySharp.CefSharp.x64`/`.x86`。所有包使用相同的 MonkeySharp 版本。省略 `-Version` 或 `-CurrentCefSharpVersion` 时，脚本读取 Core 和适配器项目的默认值；不会动态解析最新版或执行发布。
 
 脚本默认使用 Release 和两个平台，`-Configuration` 可选 Release 或 Debug。相对 `-OutputDirectory` 按仓库根目录解析，且必须为空；默认输出到新的 `artifacts/packages/<version>-<run>/` 目录。每次运行按引擎和平台将还原、构建产物隔离到 `artifacts/package-build/<run>/`，原生命令失败立即停止，并检查包标识、Core 目标框架、Core 传递依赖、CefSharp 精确版本依赖及符号包。`packages.json` 记录 `.nupkg` 和相应 `.snupkg` 的路径、版本、平台与 SHA-256。失败时保留部分产物用于诊断，仅完整成功后写入清单。生成包不会运行源码或原生门禁，发布前仍须验证；CI 在源码及真实 Chromium 作业通过后使用同一个脚本打包。
