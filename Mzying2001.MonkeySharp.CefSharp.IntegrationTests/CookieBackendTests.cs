@@ -102,14 +102,23 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
             }
         }
 
-        [Fact]
-        public async Task OldEngineRejectsPartitionParametersBeforeCookieCommands()
+        [Theory]
+        [InlineData(84)]
+        [InlineData(156)]
+        public async Task UnsupportedEnginesRejectPartitionParametersBeforeCookieCommands(int major)
         {
-            using (var harness = new Harness((method, _) => method == "Browser.getVersion" ? "{\"product\":\"Chrome/84.0.4147.105\"}" : throw new InvalidOperationException("Cookie effect is forbidden.")))
+            using (var harness = new Harness((method, _) => method == "Browser.getVersion" ? "{\"product\":\"Chrome/" + major + ".0.0.0\"}" : throw new InvalidOperationException("Cookie effect is forbidden.")))
             using (var service = harness.Service())
             {
+                var url = new Uri("https://example.com/");
+                var key = new UserScriptCookiePartitionKey("https://top.test");
+                var mutation = new UserScriptCookieMutation(url, "sid", "value", secure:true, partitionKey:key);
+                await Assert.ThrowsAsync<Mzying2001.MonkeySharp.Core.Domain.UnsupportedApiException>(() => service.ListAsync(
+                    new UserScriptCookieQuery(url, partitionKey:key), CancellationToken.None));
                 await Assert.ThrowsAsync<Mzying2001.MonkeySharp.Core.Domain.UnsupportedApiException>(() => service.SetAsync(
-                    new UserScriptCookieMutation(new Uri("https://example.com/"), "sid", "value", secure:true, partitionKey:new UserScriptCookiePartitionKey("https://top.test")), CancellationToken.None));
+                    mutation, CancellationToken.None));
+                await Assert.ThrowsAsync<Mzying2001.MonkeySharp.Core.Domain.UnsupportedApiException>(() => service.DeleteAsync(
+                    mutation, CancellationToken.None));
                 Assert.Single(harness.Commands);
                 Assert.Equal("Browser.getVersion", harness.Commands[0].Item1);
             }

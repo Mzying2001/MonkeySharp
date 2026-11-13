@@ -61,8 +61,10 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                 checks["audioMuteOnly"] = await EvaluateBoolean(primary, "window.__demo.audio === true");
                 await Evaluate(primary, "(window.__testCookiePartitions(), true)");
                 await WaitAsync(async () => await EvaluateBoolean(primary, "window.__demo.partitionDone === true"));
-                checks["cookiePartitionCapability"] = await EvaluateBoolean(primary, typeof(global::CefSharp.Cef).Assembly.GetName().Version.Major == 84
-                    ? "window.__demo.partitionUnsupported === true" : "window.__demo.partitionCrud === true");
+                var cefMajor = typeof(global::CefSharp.Cef).Assembly.GetName().Version.Major;
+                // Match the verified engines in CefSharpCookieService; newer engines can be unsupported too.
+                checks["cookiePartitionCapability"] = await EvaluateBoolean(primary, cefMajor == 121 || cefMajor == 151
+                    ? "window.__demo.partitionCrud === true" : "window.__demo.partitionUnsupported === true");
                 await WaitAsync(async () => await EvaluateBoolean(primary, "window.__tabIsolation === true"));
                 checks["tabStateScriptIsolation"] = true;
                 checks["domAndInfo"] = await EvaluateBoolean(primary, "window.__demo.dom && window.__demo.info");

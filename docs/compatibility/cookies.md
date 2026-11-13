@@ -15,6 +15,7 @@ Explicit request Cookie support is separate from CRUD; see below.
 | 84.4.10 | Ordinary cookies | Explicit partitionKey is rejected before effects |
 | 121.3.70 | Serializable partitionKey CRUD | hasCrossSiteAncestor is unavailable and rejected |
 | 151.3.240 | Serializable partitionKey CRUD including hasCrossSiteAncestor | Opaque/nonce keys are unavailable |
+| 156.0.150 and other unverified engines | Ordinary cookies | Explicit partitionKey is rejected before effects |
 
 Unspecified partitionKey selects ordinary cookies. Explicit `{partitionKey:{}}` list selectors include serializable ordinary and partitioned identities; site selectors filter canonical sites. Mutations use the complete identity. Site normalization uses pinned ICANN/private suffix snapshots for the corresponding Chromium engine; [snapshot provenance](../../Mzying2001.MonkeySharp.CefSharp/Protocol/public-suffix-snapshots.json) and [third-party notices](../../Mzying2001.MonkeySharp.CefSharp/Protocol/THIRD-PARTY-NOTICES.md) accompany the packaged data. On 151, omitted ancestor state is derived for set, unrestricted for list and defaults to true for delete; false must be explicit for same-site ancestor deletion.
 
