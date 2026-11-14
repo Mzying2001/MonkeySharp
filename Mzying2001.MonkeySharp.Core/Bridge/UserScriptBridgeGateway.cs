@@ -600,8 +600,11 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
             if ((method != "GM.download" && execution.Cancellation.IsCancellationRequested) ||
                 !execution.Installation.Definition.Metadata.Capabilities.Contains(method))
                 return false;
-            if (!await _engine.IsInstallationActiveAsync(execution.Installation, cancellationToken).ConfigureAwait(false)) return false;
-            var canPrompt = !execution.Cancellation.IsCancellationRequested;
+            var canPrompt = !execution.Cancellation.IsCancellationRequested &&
+                await _engine.IsInstallationActiveAsync(execution.Installation, cancellationToken).ConfigureAwait(false);
+            // Only a previously authorized download retains this callback beyond its
+            // execution. It keeps the captured installation, but cannot reopen prompts.
+            if (method != "GM.download" && !canPrompt) return false;
             var authorization = new ApiAuthorizationRequest(execution.Installation, execution.Frame, method, target,
                 Summarize(parameters), SupportedApis(), canPrompt);
             if (!canPrompt) return await AuthorizeAsync(authorization, cancellationToken).ConfigureAwait(false) == PermissionDecision.Allow;

@@ -1,5 +1,6 @@
 using Mzying2001.MonkeySharp.Core.Apis;
 using Mzying2001.MonkeySharp.Core.Bridge;
+using Mzying2001.MonkeySharp.Core.Permissions;
 using Mzying2001.MonkeySharp.Core.Repository;
 using Mzying2001.MonkeySharp.Core.Runtime;
 using Mzying2001.MonkeySharp.Core.Storage;
@@ -78,6 +79,44 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             downloads.Operation.Complete();
             Assert.Equal(0, callbacks);
             Assert.True(downloads.Operation.Completion.IsCompletedSuccessfully);
+        }
+
+        [Theory]
+        [InlineData("navigation")]
+        [InlineData("disable")]
+        [InlineData("update")]
+        [InlineData("remove")]
+        public async Task AcceptedDownloadRedirectsUseCapturedInstallationAndStillApplyTargetPolicy(string change)
+        {
+            var repository = new InMemoryUserScriptRepository();
+            var script = await repository.InstallAsync(Source("captured"), "test", true, CancellationToken.None);
+            using var engine = new UserScriptEngine(repository);
+            using var store = new InMemoryUserScriptValueStore();
+            var downloads = new Downloads();
+            var policy = new TargetPolicy();
+            using var gateway = new UserScriptBridgeGateway(engine, store, policy, new[] { new HostInteractionApiProvider(downloads: downloads) });
+            var frame = Frame("captured");
+            var invocation = Assert.Single((await engine.ProcessLifecycleAsync(new DocumentLifecycleEventArgs(DocumentLifecycleKind.DomContentLoaded, frame), CancellationToken.None)).Invocations);
+            using var result = JsonDocument.Parse(await gateway.DispatchAsync(DownloadEnvelope(frame, invocation), CancellationToken.None));
+            Assert.True(result.RootElement.GetProperty("ok").GetBoolean());
+            if (change == "navigation") await engine.InvalidateDocumentAsync(frame.DocumentId, CancellationToken.None);
+            else if (change == "disable") await repository.SetEnabledAsync(script.ScriptKey, false, CancellationToken.None);
+            else if (change == "remove") await repository.RemoveAsync(script.ScriptKey, CancellationToken.None);
+            else await repository.UpdateAsync(script.ScriptKey, Source("changed"), "test", CancellationToken.None);
+            await engine.ProcessLifecycleAsync(new DocumentLifecycleEventArgs(DocumentLifecycleKind.UrlChanged, frame), CancellationToken.None);
+            Assert.True(await downloads.Request.RedirectAllowed(new Uri("https://example.com/final"), CancellationToken.None));
+            Assert.Same(script, policy.Last.Installation);
+            Assert.False(policy.Last.CanPrompt);
+            Assert.False(await downloads.Request.RedirectAllowed(new Uri("https://example.com/denied"), CancellationToken.None));
+            using var stale = JsonDocument.Parse(await gateway.DispatchAsync(DownloadEnvelope(frame, invocation), CancellationToken.None));
+            Assert.Equal(BridgeErrorCodes.SessionExpired, stale.RootElement.GetProperty("error").GetProperty("code").GetString());
+        }
+
+        private sealed class TargetPolicy : IUserScriptPermissionPolicy
+        {
+            public ApiAuthorizationRequest Last;
+            public Task<PermissionDecision> AuthorizeAsync(ApiAuthorizationRequest request, CancellationToken token)
+            { Last = request; return Task.FromResult(request.Target?.EndsWith("/denied", StringComparison.Ordinal) == true ? PermissionDecision.Deny : PermissionDecision.Allow); }
         }
 
         [Fact]
