@@ -27,7 +27,7 @@ Use Windows, a desktop session for real Chromium/WPF gates, an SDK supporting `.
 ./scripts/compatibility/Run-Delivery.ps1
 ```
 
-Baseline defaults are x64 and 84.4.10; accepted versions are 84.4.10 and 156.0.150. WPF runs for x64 only. Delivery defaults to these two versions and both platforms. `-CefSharpVersions` and `-Platforms` select subsets; `-CorpusScript <path>` adds an existing local script, `-KeepWorktrees` keeps successful checkouts, and `-PackageOnly` skips baseline checks for diagnostics. Keep different native versions in separate output trees. Historical evidence for 121/151 remains archived. For release package generation without native gates, use [Build-Packages.ps1](../../docs/development.md#package).
+Baseline defaults are x64 and 84.4.10; version arguments accept three-part numeric values. WPF runs for x64 only. Delivery defaults to the fixed legacy version plus the [adapter project](../../Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj) default, on both platforms; its validation package versions derive from [Version.props](../../Version.props) in each patched checkout. `-CefSharpVersions` and `-Platforms` select subsets; `-CorpusScript <path>` adds an existing local script, `-KeepWorktrees` keeps successful checkouts, and `-PackageOnly` skips baseline checks for diagnostics. Keep different native versions in separate output trees. Historical evidence for 121/151 remains archived. For release package generation without native gates, use [Build-Packages.ps1](../../docs/development.md#package).
 
 Baseline composes the same source/native runners as CI and retains per-stage logs under `artifacts/baseline/<version>-<platform>/<run>/`; `-OutputDirectory` overrides the root. Direct SmokeHost runs use `artifacts/smoke/<version>-<platform>/<run>/`. Delivery stores reports/packages under `artifacts/delivery/<run>/`, including baseline evidence and native OOPIF records. These generated directories and temporary browser profiles are ignored by Git.
 
@@ -48,22 +48,22 @@ The environment JSON pins `channel` (stable/beta), `version`, `manifestVersion`,
 
 ## WPF Demo E2E
 
-The x64 baseline also invokes the [WPF Demo E2E runner](../../Mzying2001.MonkeySharp.Demo/README.md#verification), which runs once using the application's default English UI. Run it directly with `./Mzying2001.MonkeySharp.Demo/Run-E2E.ps1 -CefSharpVersion 156.0.150`; `-NoBuild` reuses an already matching deployment. Add `-Case navigation-menu` to isolate cross-site, history, reload and tab-isolation menu checks. Demo JSON reports record the selected case, `environment.uiLanguage` and named assertions under `artifacts/demo-smoke/`; adjacent `.events.jsonl` files correlate steps, renderer observations, document identities, menu registrations/clicks/releases and bridge diagnostics without recording bridge credentials. Other languages are checked by localization unit tests without repeating the full browser suite.
+The x64 baseline also invokes the [WPF Demo E2E runner](../../Mzying2001.MonkeySharp.Demo/README.md#verification), which runs once using the application's default English UI. Run it directly with `./Mzying2001.MonkeySharp.Demo/Run-E2E.ps1`; `-NoBuild` reuses an already matching deployment. Add `-Case navigation-menu` to isolate cross-site, history, reload and tab-isolation menu checks. Demo JSON reports record the selected case, `environment.uiLanguage` and named assertions under `artifacts/demo-smoke/`; adjacent `.events.jsonl` files correlate steps, renderer observations, document identities, menu registrations/clicks/releases and bridge diagnostics without recording bridge credentials. Other languages are checked by localization unit tests without repeating the full browser suite.
 
 ## Pinned third-party corpus
 
 ```powershell
 # Restore/clean/build the source host, then execute all pinned scenarios.
-./scripts/compatibility/Run-Corpus.ps1 -Platform x64 -CefSharpVersion 156.0.150
+./scripts/compatibility/Run-Corpus.ps1 -Platform x64
 
 # Use a built source host or a NuGet-only package consumer.
-node scripts/compatibility/Run-Corpus.cjs --manager monkeysharp --host C:/path/to/MonkeySharp.PackageConsumer.exe --expected-cef-version 156.0.150 --expected-platform x64 --output artifacts/corpus/consumer-run
+node scripts/compatibility/Run-Corpus.cjs --manager monkeysharp --host C:/path/to/MonkeySharp.PackageConsumer.exe --expected-cef-version '<host-version>' --expected-platform x64 --output artifacts/corpus/consumer-run
 
 # Compare the same original sources and actions against pinned TM.
 node scripts/compatibility/Run-Corpus.cjs --manager tampermonkey --browser C:/path/to/msedge.exe --extension C:/path/to/tampermonkey --output artifacts/corpus/reference-run
 ```
 
-`Run-Corpus.ps1` accepts `-Platform`, `-CefSharpVersion`, `-OutputDirectory` and `-NoBuild`. Do not share native outputs between versions/platforms. `Run-Corpus.cjs` accepts `--case <scenario-id>` to select one scenario, `--environment <JSON>` for a complete reference pin, `--headed true` for manual browser interaction and `--permission-wait-ms <milliseconds>` to allow a manual download permission step. Do not treat elapsed time as permission. Output directories must be new.
+`Run-Corpus.ps1` accepts `-Platform`, `-CefSharpVersion`, `-OutputDirectory` and `-NoBuild`; an omitted version reads the adapter project default. For the raw Node command, replace `<host-version>` with the actual CefSharp version used to build the host. Do not share native outputs between versions/platforms. `Run-Corpus.cjs` accepts `--case <scenario-id>` to select one scenario, `--environment <JSON>` for a complete reference pin, `--headed true` for manual browser interaction and `--permission-wait-ms <milliseconds>` to allow a manual download permission step. Do not treat elapsed time as permission. Output directories must be new.
 
 `results.json` contains schema-1 differential records under `results`, including source/action/input hashes, environment and source patch, actual completed actions, failed action, checks, file/ZIP-entry hashes, diagnostics and server Cookie/method/status logs. Raw profiles, inputs and host logs stay beside it. Exit 0 accepts only `passed` and the explicitly recognized `expected-engine-limitation`; blocked/failed results exit 1. Manifest intake `ready` is separate from runtime status. The pinned corpus has seven main categories plus CSP, cancel and host-denial variants. See [scenario scope](corpus/README.md).
 
@@ -83,7 +83,7 @@ Recorded beta observations cover incremental text and stream inputs; fixed-beta 
 
 ## Native feasibility probes
 
-`./scripts/compatibility/Run-NativeProbe.ps1 -Probe bfcache -Platform x64 -CefSharpVersion 156.0.150` builds and launches isolated native experiments, records actual version/architecture and rejects missing records or failed process exits. `-EnableBackForwardCache` tests explicit enablement; `-NoBuild` reuses an already matching build. Choose a new OutputDirectory for each attempt. A completed assessment does not turn an unobserved capability into supported behavior.
+`./scripts/compatibility/Run-NativeProbe.ps1 -Probe bfcache -Platform x64` builds and launches isolated native experiments, records actual version/architecture and rejects missing records or failed process exits. Probes default to the fixed legacy version; pass `-CefSharpVersion <version>` for another engine. `-EnableBackForwardCache` tests explicit enablement; `-NoBuild` reuses an already matching build. Choose a new OutputDirectory for each attempt. A completed assessment does not turn an unobserved capability into supported behavior.
 
 BFCache read-only polling treats a confirmed retired native frame as not yet ready and retries within its existing deadline. Errors from a still-valid frame remain failures; successful assessment does not establish that Chromium restored a cached page.
 

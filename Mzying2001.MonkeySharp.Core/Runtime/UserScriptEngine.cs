@@ -25,6 +25,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
         private readonly IUserScriptMatcher _matcher;
         private readonly UserScriptEngineOptions _options;
         private readonly SemaphoreSlim _queue = new SemaphoreSlim(1, 1);
+        private readonly CancellationTokenSource _repositoryLifetime = new CancellationTokenSource();
         private readonly object _stateLock = new object();
         private readonly Dictionary<string, DocumentState> _documents =
             new Dictionary<string, DocumentState>(StringComparer.Ordinal);
@@ -48,6 +49,54 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
             _repository = repository ?? throw new ArgumentNullException(nameof(repository));
             _matcher = matcher;
             _options = options ?? new UserScriptEngineOptions();
+            _repository.Changed += RepositoryChanged;
+        }
+
+        private void RepositoryChanged(object sender, UserScriptRepositoryChangedEventArgs args)
+        {
+            if (args?.Installation != null)
+                _ = RevokeChangedExecutionsAsync(args.Installation.ScriptKey);
+        }
+
+        private async Task RevokeChangedExecutionsAsync(ScriptKey key)
+        {
+            try
+            {
+                var ended = new List<ExecutionRecord>();
+                await _queue.WaitAsync(_repositoryLifetime.Token).ConfigureAwait(false);
+                try
+                {
+                    if (_disposed) return;
+                    UserScriptInstallation current = null;
+                    try { current = await _repository.GetAsync(key, _repositoryLifetime.Token).ConfigureAwait(false); }
+                    catch (KeyNotFoundException) { }
+                    lock (_stateLock)
+                    {
+                        foreach (var execution in _executions.Values.Where(item => item.Installation.ScriptKey == key &&
+                            (current == null || !current.IsEnabled || current.RevisionId != item.Installation.RevisionId)).ToArray())
+                        {
+                            _executions.Remove(execution.Invocation.ExecutionId);
+                            if (_documents.TryGetValue(execution.Frame.DocumentId, out var document))
+                                document.ExecutionIds.Remove(execution.Invocation.ExecutionId);
+                            execution.Cancellation.Cancel();
+                            execution.Cancellation.Dispose();
+                            ended.Add(execution);
+                        }
+                    }
+                }
+                finally { _queue.Release(); }
+                NotifyExecutionsEnded(ended);
+            }
+            catch (OperationCanceledException) when (_repositoryLifetime.IsCancellationRequested) { }
+            catch (ObjectDisposedException) when (_disposed) { }
+            catch (Exception error)
+            {
+                var diagnostic = new UserScriptDiagnostic("MSR301_EXECUTION_REVOCATION_FAILED", DiagnosticSeverity.Error,
+                    "Repository changes could not revoke obsolete executions.", error, scriptKey: key);
+                try { Diagnostic?.Invoke(this, diagnostic); }
+                catch (Exception observerError) { System.Diagnostics.Trace.TraceError(observerError.ToString()); }
+                System.Diagnostics.Trace.TraceError(error.ToString());
+            }
         }
 
         /// <summary>Occurs when script selection or source resolution produces a diagnostic.</summary>
@@ -189,6 +238,9 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
         {
             if (_disposed)
                 return;
+            _repository.Changed -= RepositoryChanged;
+            // Cancel queued repository callbacks before disposing their semaphore.
+            _repositoryLifetime.Cancel();
             List<ExecutionRecord> endedExecutions = null;
             _queue.Wait();
             try
@@ -211,6 +263,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
             {
                 _queue.Release();
                 _queue.Dispose();
+                _repositoryLifetime.Dispose();
             }
             NotifyExecutionsEnded(endedExecutions);
         }

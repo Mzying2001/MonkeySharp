@@ -8,37 +8,49 @@
 
 清理并验证源码基线可运行 `./scripts/compatibility/Run-Baseline.ps1 -Platform x64 -CefSharpVersion 84.4.10`（x64 包含 WPF）。完整原生/包消费门禁使用 `./scripts/compatibility/Run-Delivery.ps1`，隔离各版本/平台、核查包内容并运行公开 API 消费宿主。`-CorpusScript <path>` 可额外原样安装本地脚本，`-PackageOnly` 跳过基础门禁、仅供诊断。范围见[验证说明](compatibility/validation.md#reproduction)，参数见[工具说明](../scripts/compatibility/README.md)。
 
-CI 在目标分支为 `dev` 或 `main` 的 PR 上运行，覆盖 CefSharp `84.4.10`、`156.0.150` 的 x64/x86，WPF 仅 x64。工具链为 Windows Server 2022、.NET SDK `9.0.315` 和 Node.js `24`，这些是已测试版本而非最低要求。SDK 须支持 `MonkeySharp.slnx`；Core 测试目标为 `net8.0`，CefSharp 测试/应用目标为 `net462`。真实 Chromium 门禁需要 Windows 桌面会话。
+CI 在目标分支为 `dev` 或 `main` 的 PR 上运行，按 [CI 矩阵](../.github/workflows/ci.yml)中固定的版本覆盖旧版和当前发布版 CefSharp 的 x64/x86，WPF 仅 x64。工具链为 Windows Server 2022、.NET SDK `9.0.315` 和 Node.js `24`，这些是已测试版本而非最低要求。SDK 须支持 `MonkeySharp.slnx`；Core 测试目标为 `net8.0`，CefSharp 测试/应用目标为 `net462`。真实 Chromium 门禁需要 Windows 桌面会话。
 
 ## 构建与测试
 
 CI 与本地基线复用 `scripts/testing/Run-SourceTests.ps1`（清理构建、按项目保存 .NET TRX、有截止时间的 JavaScript 及 runner/报告校验）和 `scripts/testing/Run-NativeTests.ps1`（SmokeHost/CDP、OOPIF、corpus、x64 WPF）。两者均接受 `-Platform`、`-CefSharpVersion`、`-OutputDirectory`；`Run-Baseline.ps1` 组合调用这两个入口。每次运行保留独立证据目录和失败阶段日志。诊断时可运行 `Run-RepeatedNative.ps1 -Case webRequest -Repeat 30`，或用 `-Case navigation-menu -Platform x64` 检查菜单；每次尝试均被记录，任一次失败都会使整体失败。手动 **Test stability** 工作流使用相同入口。
 
-还原、构建、测试和打包必须使用相同的 `CefSharpVersion` 属性：
+源码默认使用各项目中固定的当前发布版；源码/原生测试及 corpus runner 的默认值来自[适配器项目](../Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj)。以下命令使用这些项目默认值：
 
 ```powershell
-dotnet restore MonkeySharp.slnx -p:Platform=x64 -p:CefSharpVersion=156.0.150
-dotnet build MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=156.0.150 --no-restore
-dotnet test MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=156.0.150 --no-build
+dotnet restore MonkeySharp.slnx -p:Platform=x64
+dotnet build MonkeySharp.slnx -c Release -p:Platform=x64 --no-restore
+dotnet test MonkeySharp.slnx -c Release -p:Platform=x64 --no-build
 node --test --test-timeout=30000 Mzying2001.MonkeySharp.Core.Tests/JavaScript/*.test.js
 ```
 
 使用 `-p:Platform=x86` 重复 .NET 命令；x86 配置会排除仅支持 x64 的 Demo 项目。不同原生版本或平台不能在同一个输出树中并发构建。
+
+选择其他引擎时，只设置一次三段数字版本号，并在还原、构建、测试和 runner 中使用同一值。例如，选择固定旧版：
+
+```powershell
+$cefSharpVersion = '84.4.10'
+dotnet restore MonkeySharp.slnx -p:Platform=x64 "-p:CefSharpVersion=$cefSharpVersion"
+dotnet build MonkeySharp.slnx -c Release -p:Platform=x64 "-p:CefSharpVersion=$cefSharpVersion" --no-restore
+dotnet test MonkeySharp.slnx -c Release -p:Platform=x64 "-p:CefSharpVersion=$cefSharpVersion" --no-build
+./scripts/compatibility/Run-Baseline.ps1 -Platform x64 -CefSharpVersion $cefSharpVersion
+```
+
+跟进当前发布版时，修改现有各项目的 `CefSharpVersion` 默认值、[CI 矩阵](../.github/workflows/ci.yml)和[稳定性工作流选项](../.github/workflows/test-stability.yml)，并保持这些值一致。Runner 默认读取项目配置，脚本和文档无需同步修改版本号。CI 和交付验证覆盖两条发布线；runner 接受其他显式版本并不代表已验证支持该版本。
 
 ## 打包
 
 使用 [Build-Packages.ps1](../scripts/Build-Packages.ps1) 构建发布包，需要 Windows PowerShell 5.1 或 PowerShell 7，以及 .NET SDK 8+：
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/Build-Packages.ps1 -Version 3.0.0
+powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/Build-Packages.ps1
 
-# 可选：指定一个平台、固定的新版引擎以及空输出目录。
-./scripts/Build-Packages.ps1 -Version 3.0.1 -Platforms x64 -CurrentCefSharpVersion 156.0.150 -OutputDirectory artifacts/release
+# 可选：指定一个平台和空输出目录。
+./scripts/Build-Packages.ps1 -Platforms x64 -OutputDirectory artifacts/release
 ```
 
-Windows 下可以双击 [Build-Packages.bat](../scripts/Build-Packages.bat) 按默认配置构建，也可以运行 `./scripts/Build-Packages.bat -Version 3.0.1 -Platforms x64 -OutputDirectory "artifacts/release packages"`。包装脚本不依赖当前工作目录，定位同目录的 PowerShell 脚本，通过 `-NoProfile -ExecutionPolicy Bypass` 绕过本次进程的执行限制，使用 `%*` 原样转发参数，并以 PowerShell 退出码作为自身结果。构建结束后直接退出，不暂停等待输入。
+Windows 下可以双击 [Build-Packages.bat](../scripts/Build-Packages.bat) 按默认配置构建，也可以运行 `./scripts/Build-Packages.bat -Platforms x64 -OutputDirectory "artifacts/release packages"`。包装脚本不依赖当前工作目录，定位同目录的 PowerShell 脚本，通过 `-NoProfile -ExecutionPolicy Bypass` 绕过本次进程的执行限制，使用 `%*` 原样转发参数，并以 PowerShell 退出码作为自身结果。构建结束后直接退出，不暂停等待输入。
 
-默认构建一个 `Mzying2001.MonkeySharp.Core` 包和四个适配包：面向 `84.4.10` 的 `Mzying2001.MonkeySharp.CefSharp84.x64`/`.x86`，以及面向固定新版 `156.0.150` 的 `Mzying2001.MonkeySharp.CefSharp.x64`/`.x86`。所有包使用相同的 MonkeySharp 版本。省略 `-Version` 或 `-CurrentCefSharpVersion` 时，脚本读取 Core 和适配器项目的默认值；不会动态解析最新版或执行发布。
+默认构建一个 `Mzying2001.MonkeySharp.Core` 包和四个适配包：面向 `84.4.10` 的 `Mzying2001.MonkeySharp.CefSharp84.x64`/`.x86`，以及面向适配器项目中固定的当前发布版的 `Mzying2001.MonkeySharp.CefSharp.x64`/`.x86`。Core 和全部适配包共用 [Version.props](../Version.props) 中的 MonkeySharp 包版本；升级 MonkeySharp 版本时只需修改该文件，也可通过 `-Version <version>` 覆盖单次构建，无需修改源码。省略 `-CurrentCefSharpVersion` 时，脚本读取适配器项目的默认值；可通过 `-CurrentCefSharpVersion <version>` 覆盖单次构建的新版引擎。脚本不会动态解析最新版或执行发布。
 
 脚本默认使用 Release 和两个平台，`-Configuration` 可选 Release 或 Debug。相对 `-OutputDirectory` 按仓库根目录解析，且必须为空；默认输出到新的 `artifacts/packages/<version>-<run>/` 目录。每次运行按引擎和平台将还原、构建产物隔离到 `artifacts/package-build/<run>/`，原生命令失败立即停止，并检查包标识、Core 目标框架、Core 传递依赖、CefSharp 精确版本依赖及符号包。`packages.json` 记录 `.nupkg` 和相应 `.snupkg` 的路径、版本、平台与 SHA-256。失败时保留部分产物用于诊断，仅完整成功后写入清单。生成包不会运行源码或原生门禁，发布前仍须验证；CI 在源码及真实 Chromium 作业通过后使用同一个脚本打包。
 
@@ -48,9 +60,10 @@ Windows 下可以双击 [Build-Packages.bat](../scripts/Build-Packages.bat) 按�
 
 ```powershell
 $packages = 'artifacts/packages/<version>-<run>'
-dotnet nuget push "$packages/Mzying2001.MonkeySharp.Core.3.0.0.nupkg" --source https://api.nuget.org/v3/index.json --api-key $env:NUGET_API_KEY
-dotnet nuget push "$packages/Mzying2001.MonkeySharp.CefSharp84.x64.3.0.0.nupkg" --source https://api.nuget.org/v3/index.json --api-key $env:NUGET_API_KEY
-dotnet nuget push "$packages/Mzying2001.MonkeySharp.CefSharp.x64.3.0.0.nupkg" --source https://api.nuget.org/v3/index.json --api-key $env:NUGET_API_KEY
+$version = (Get-Content -LiteralPath "$packages/packages.json" -Raw | ConvertFrom-Json).version
+dotnet nuget push "$packages/Mzying2001.MonkeySharp.Core.$version.nupkg" --source https://api.nuget.org/v3/index.json --api-key $env:NUGET_API_KEY
+dotnet nuget push "$packages/Mzying2001.MonkeySharp.CefSharp84.x64.$version.nupkg" --source https://api.nuget.org/v3/index.json --api-key $env:NUGET_API_KEY
+dotnet nuget push "$packages/Mzying2001.MonkeySharp.CefSharp.x64.$version.nupkg" --source https://api.nuget.org/v3/index.json --api-key $env:NUGET_API_KEY
 ```
 
 同时发布两个平台时，对 x86 重复发布。`dotnet nuget push` 也会推送相邻的符号包。已经发布的包名与版本组合无法覆盖，后续发布应使用新的 MonkeySharp 版本号。
@@ -60,14 +73,14 @@ dotnet nuget push "$packages/Mzying2001.MonkeySharp.CefSharp.x64.3.0.0.nupkg" --
 Solution 的两个平台均将 Core 映射到 AnyCPU，产物位于 `bin/Release/<framework>/`。打包 Core 时应使用 `-p:Platform=AnyCPU`，通过 `--no-build` 复用 solution 产物时也应如此。CefSharp 适配器则需要显式指定 x64 或 x86 平台。
 
 ```powershell
-dotnet pack Mzying2001.MonkeySharp.Core/Mzying2001.MonkeySharp.Core.csproj -c Release -p:Platform=AnyCPU -p:CefSharpVersion=156.0.150 -o artifacts/packages/core
-dotnet pack Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj -c Release -p:Platform=x64 -p:CefSharpVersion=156.0.150 -o artifacts/packages/x64
-dotnet pack Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj -c Release -p:Platform=x86 -p:CefSharpVersion=156.0.150 -o artifacts/packages/x86
+dotnet pack Mzying2001.MonkeySharp.Core/Mzying2001.MonkeySharp.Core.csproj -c Release -p:Platform=AnyCPU -o artifacts/packages/core
+dotnet pack Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj -c Release -p:Platform=x64 -o artifacts/packages/x64
+dotnet pack Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj -c Release -p:Platform=x86 -o artifacts/packages/x86
 ```
 
 ## 使用 GitHub Actions 发布到 NuGet
 
-[Publish NuGet](../.github/workflows/publish.yml) 是手动触发的工作流，复用现有 CI 执行 `84.4.10`/`156.0.150` 的 x64/x86 .NET/JavaScript、真实 Chromium 和 x64 WPF 门禁，再按输入版本构建五个包，并离线验证发布逻辑。发布作业下载同一批产物，检查清单、版本及 SHA-256 后，通过 `NuGet/login@v1` 用 GitHub OIDC 身份交换临时 NuGet 凭据。仅发布作业具有 `id-token: write` 和 `contents: write`，使用 GitHub 环境 `nuget`。认证机制见 [NuGet Trusted Publishing 官方指南](https://learn.microsoft.com/en-us/nuget/nuget-org/trusted-publishing)。
+[Publish NuGet](../.github/workflows/publish.yml) 是手动触发的工作流，复用现有 CI 执行固定旧版和当前发布版的 x64/x86 .NET/JavaScript、真实 Chromium 及 x64 WPF 门禁，再按输入版本构建五个包，并离线验证发布逻辑。发布作业下载同一批产物，检查清单、版本及 SHA-256 后，通过 `NuGet/login@v1` 用 GitHub OIDC 身份交换临时 NuGet 凭据。仅发布作业具有 `id-token: write` 和 `contents: write`，使用 GitHub 环境 `nuget`。认证机制见 [NuGet Trusted Publishing 官方指南](https://learn.microsoft.com/en-us/nuget/nuget-org/trusted-publishing)。
 
 首次使用时完成以下配置：
 
@@ -86,7 +99,7 @@ dotnet pack Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.cspr
 
 使用 fork 时，将仓库 Owner 和名称替换为实际值。`NUGET_USER` 中的 NuGet 用户必须有权使用所选策略 Owner。如果 NuGet 显示策略暂时激活，应在激活窗口内完成首次发布，或在运行工作流前重新激活。
 
-每次发布时，进入 GitHub **Actions → Publish NuGet → Run workflow**，选择源码分支/ref，输入新的版本号，例如 `3.0.1` 或 `3.0.1-rc.1`，不要添加 `v` 前缀。该输入覆盖本次构建的项目包版本，不修改项目文件。所有门禁通过后自动发布所选代码版本对应的产物。全部普通包和符号包推送成功后，工作流使用内置 `GITHUB_TOKEN` 创建 GitHub Release，标签和标题均为版本号，新标签指向本次构建的提交，资产包含五个 `.nupkg` 和五个 `.snupkg`。带预发布后缀的版本自动标记为 GitHub Prerelease；普通 PR CI 不会发布。
+每次发布时，进入 GitHub **Actions → Publish NuGet → Run workflow**，选择源码分支/ref，输入新的三段版本号（可带预发布后缀），不要添加 `v` 前缀。该输入覆盖本次构建的统一包版本，不修改项目文件。所有门禁通过后自动发布所选代码版本对应的产物。全部普通包和符号包推送成功后，工作流使用内置 `GITHUB_TOKEN` 创建 GitHub Release，标签和标题均为版本号，新标签指向本次构建的提交，资产包含五个 `.nupkg` 和五个 `.snupkg`。带预发布后缀的版本自动标记为 GitHub Prerelease；普通 PR CI 不会发布。
 
 [Publish-Packages.ps1](../scripts/Publish-Packages.ps1) 在任何上传前检查全部十个文件，并按下载后的产物目录解析清单路径，不使用构建机器的绝对路径。先上传 Core，再上传适配器；普通包关闭隐式符号上传，随后显式上传各 `.snupkg` 并传入符号凭据。两个阶段都使用 `--skip-duplicate`，已有普通包不会妨碍补传缺失的符号包。其他 CLI 失败立即停止，并写入不包含凭据的 `publish-results.json`，作为 `nuget-publish-results` 产物上传。其中 `accepted-or-existing` 表示推送被服务器接受或对应包已存在，不代表 NuGet 后台验证或索引已完成。
 
@@ -95,8 +108,10 @@ dotnet pack Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.cspr
 本地离线验证，不需要凭据，也不会上传：
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/Publish-Packages.ps1 -PackageDirectory artifacts/release -Version 3.0.1 -ValidateOnly
-powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/Test-PublishPackages.ps1 -PackageDirectory artifacts/release
+$packages = 'artifacts/release'
+$version = (Get-Content -LiteralPath "$packages/packages.json" -Raw | ConvertFrom-Json).version
+powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/Publish-Packages.ps1 -PackageDirectory $packages -Version $version -ValidateOnly
+powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/Test-PublishPackages.ps1 -PackageDirectory $packages
 ```
 
 测试脚本复制构建包到临时目录，并用进程内函数替代 `dotnet`，覆盖跨目录产物、缺少凭据、版本/哈希/包不完整时禁止上传、Core 优先与独立符号上传，以及失败后的部分结果报告。CI 对实际构建的包执行这些检查。
@@ -106,12 +121,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/Test-PublishPackag
 在 Windows 桌面会话中运行真实 Chromium 验证：
 
 ```powershell
-./Mzying2001.MonkeySharp.CefSharp.SmokeHost/Run-E2E.ps1 -Platform x64 -CefSharpVersion 156.0.150
-./Mzying2001.MonkeySharp.CefSharp.SmokeHost/Run-E2E.ps1 -Platform x86 -CefSharpVersion 156.0.150
-powershell -NoProfile -ExecutionPolicy Bypass -File Mzying2001.MonkeySharp.Demo/Run-E2E.ps1 -CefSharpVersion 156.0.150
+./Mzying2001.MonkeySharp.CefSharp.SmokeHost/Run-E2E.ps1 -Platform x64
+./Mzying2001.MonkeySharp.CefSharp.SmokeHost/Run-E2E.ps1 -Platform x86
+powershell -NoProfile -ExecutionPolicy Bypass -File Mzying2001.MonkeySharp.Demo/Run-E2E.ps1
 ```
 
-验证全过程应使用同一版本值：`dotnet restore/build/test/pack` 使用 `-p:CefSharpVersion=<版本>`，PowerShell runner 使用 `-CefSharpVersion <版本>`。SmokeHost 应分别对 x64/x86 和 `84.4.10`、`156.0.150` 运行；Demo gate 覆盖两个版本的 x64，每个版本只运行一次默认英文界面。每份报告记录 `environment.uiLanguage`，并验证英文窗口及权限控件；其他语言由本地化单元测试覆盖，详见[界面语言和部署](../Mzying2001.MonkeySharp.Demo/README.zh-CN.md#界面语言)。在已有工作区切换版本前，先执行 `dotnet clean MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=<目标版本>`（位数使用目标平台），避免混用不同 CefSharp 版本的增量构建产物。SmokeHost runner 已使用选定版本执行 restore、clean、build，并核对实际运行的程序集版本和进程位数。两个验证入口都使用隔离 profile 和 `TrustedPageWorld`；它们是集成测试，不是安全沙箱。
+验证全过程应使用同一版本值：`dotnet restore/build/test/pack` 使用 `-p:CefSharpVersion=<版本>`，PowerShell runner 使用 `-CefSharpVersion <版本>`。以上命令使用各宿主项目中固定的当前发布版；固定旧版还需传入 `-CefSharpVersion 84.4.10` 重复上述命令；Demo gate 覆盖两个版本的 x64，每个版本只运行一次默认英文界面。每份报告记录 `environment.uiLanguage`，并验证英文窗口及权限控件；其他语言由本地化单元测试覆盖，详见[界面语言和部署](../Mzying2001.MonkeySharp.Demo/README.zh-CN.md#界面语言)。在已有工作区切换版本前，先执行 `dotnet clean MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=<目标版本>`（位数使用目标平台），避免混用不同 CefSharp 版本的增量构建产物。SmokeHost runner 已使用选定版本执行 restore、clean、build，并核对实际运行的程序集版本和进程位数。两个验证入口都使用隔离 profile 和 `TrustedPageWorld`；它们是集成测试，不是安全沙箱。
 
 ## Chromium 兼容性脚本包
 
@@ -119,9 +134,15 @@ SmokeHost 通过正常安装流程，在 loopback HTTP fixture 上运行仓库�
 
 场景 ID、断言、超时、解析器检查及日志排查见 [SmokeHost 场景与结果验证](compatibility/validation.md#smokehost-cases-and-results)。[验证指南](compatibility/validation.md#latest-recorded-validation)维护已记录结果及剩余缺口，[工具说明](../scripts/compatibility/README.md)维护 runner 参数及固定参考环境前置条件。
 
+## 运行时实现
+
+`UserScriptBridgeGateway.cs` 负责认证分派、授权、请求预算和执行清理；其 `.Bootstrap.cs` partial 准备 hello 数据及资源包，`.Storage.cs` 集中快照、分块、回放和数值监听。存储传输及监听状态沿用 gateway 的 `_stateLock`，由统一释放和执行结束路径清理。
+
 ## 原生生命周期维护
 
 面向宿主的操作顺序及诊断预算见[集成参考](integration-reference.zh-CN.md#生命周期与诊断)。以下细节解释 [CefSharpUserScriptHost](../Mzying2001.MonkeySharp.CefSharp/CefSharpUserScriptHost.cs) 的原生 frame 恢复路径；[只读求值测试](../Mzying2001.MonkeySharp.CefSharp.IntegrationTests/ReadOnlyScriptEvaluatorTests.cs)与[原生 frame 测试](../Mzying2001.MonkeySharp.CefSharp.IntegrationTests/NativeFrameProbeTests.cs)验证相应失败边界。
+
+host 主 partial 文件负责附加和文档生命周期；`CefSharpUserScriptHost.NativeCompatibility.cs` 集中版本相关的原生查找，`.Menus.cs` 集中菜单身份验证与路由，`.FrameSession.cs` 保存每文档的取消和串行化状态。这些文件共享原有 host 锁和所有权，修改时应保持生命周期与清理顺序。
 
 同时运行页面和隔离世界的宿主通过异步页面标记探测区分文档导航与隔离 V8 上下文回调。旧版 CEF 可能复用 frame ID，并先完成释放探测、后完成创建探测。适配器在释放后保留帧代次编号，使待完成的创建探测仍可初始化新文档；后续文档、主页面替换或分离会使旧代次失效。这些记录不会保留已释放文档的能力或菜单注册。
 

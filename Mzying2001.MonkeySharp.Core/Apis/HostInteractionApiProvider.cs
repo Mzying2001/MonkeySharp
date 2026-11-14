@@ -400,7 +400,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 ProviderParameters.OptionalBoolean(context.Parameters, "saveAs"), ReadHeaders(context.Parameters),
                 ReadConflictAction(context.Parameters), ReadTimeout(context.Parameters),
                 ProviderParameters.OptionalBoolean(context.Parameters, "anonymous"),
-                (target, token) => context.AuthorizeTargetAsync == null ? Task.FromResult(true) : context.AuthorizeTargetAsync(target.AbsoluteUri, token), binary?.Buffer);
+                (target, token) => context.AuthorizeTargetAsync == null ? Task.FromResult(true) : context.AuthorizeTargetAsync(target.AbsoluteUri, token), binary?.Buffer, context.Frame);
             if (_downloads.DownloadMode == "disabled" ||
                 (_downloads.DownloadMode != "browser" && (request.SaveAs || request.ConflictAction != "uniquify")))
                 throw new UnsupportedApiException("The download backend does not support the requested destination options.");

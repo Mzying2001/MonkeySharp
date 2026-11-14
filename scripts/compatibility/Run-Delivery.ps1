@@ -1,6 +1,6 @@
 ﻿[CmdletBinding()]
 param(
-    [ValidateSet('84.4.10','156.0.150')][string[]]$CefSharpVersions = @('84.4.10','156.0.150'),
+    [ValidatePattern('^\d+\.\d+\.\d+$')][string[]]$CefSharpVersions = @(),
     [string[]]$Platforms = @('x64','x86'),
     [string]$CorpusScript = '',
     [switch]$PackageOnly,
@@ -9,6 +9,10 @@ param(
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot '../testing/TestProcess.ps1')
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
+if (!$CefSharpVersions.Count) {
+    [xml]$adapterXml = Get-Content -LiteralPath (Join-Path $root 'Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj') -Raw
+    $CefSharpVersions = @('84.4.10', $adapterXml.SelectSingleNode('//CefSharpVersion').InnerText)
+}
 $runId = [Guid]::NewGuid().ToString('N').Substring(0,12)
 $runRoot = Join-Path $root "artifacts/delivery/$runId"
 New-Item -ItemType Directory -Path $runRoot -Force | Out-Null
@@ -45,6 +49,10 @@ foreach ($version in $CefSharpVersions) {
         }
         $record = [ordered]@{ version=$version; platform=$platform; commit=$commit; sourcePatchSha256=$patchHash; status='failed'; checkout=$checkout }
         try {
+            [xml]$versionXml = Get-Content -LiteralPath (Join-Path $checkout 'Version.props') -Raw
+            $baseVersion = $versionXml.SelectSingleNode('/Project/PropertyGroup/Version').InnerText
+            $validationSeparator = if ($baseVersion.Contains('-')) { '.' } else { '-' }
+            $packageVersion = "${baseVersion}${validationSeparator}validation.$runId.$version.$platform"
             if ($PackageOnly) { $record.baseline = 'skipped-package-only' }
             else {
                 Invoke-Logged 'powershell' @('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $checkout 'scripts/compatibility/Run-Baseline.ps1'),'-Platform',$platform,'-CefSharpVersion',$version) $checkout (Join-Path $caseRoot 'baseline.log')
@@ -54,7 +62,6 @@ foreach ($version in $CefSharpVersions) {
                 Copy-Item -LiteralPath $baselineRoot.FullName -Destination (Join-Path $caseRoot 'baseline') -Recurse
             }
             $feed = Join-Path $caseRoot 'feed'
-            $packageVersion = "3.0.0-validation.$runId.$version.$platform"
             Invoke-Logged 'dotnet' @('pack',(Join-Path $checkout 'Mzying2001.MonkeySharp.Core/Mzying2001.MonkeySharp.Core.csproj'),'-c','Release','-p:Platform=AnyCPU',"-p:Version=$packageVersion","-p:PackageVersion=$packageVersion",'-o',$feed,'--nologo') $checkout (Join-Path $caseRoot 'pack-core.log')
             Invoke-Logged 'dotnet' @('pack',(Join-Path $checkout 'Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj'),'-c','Release',"-p:Platform=$platform","-p:CefSharpVersion=$version","-p:Version=$packageVersion","-p:PackageVersion=$packageVersion",'-o',$feed,'--nologo') $checkout (Join-Path $caseRoot 'pack-adapter.log')
             Add-Type -AssemblyName System.IO.Compression.FileSystem

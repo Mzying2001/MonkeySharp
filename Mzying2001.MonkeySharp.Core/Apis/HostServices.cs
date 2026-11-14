@@ -616,6 +616,14 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             IDictionary<string, string> headers = null, string conflictAction = "uniquify", TimeSpan? timeout = null,
             bool anonymous = false, Func<Uri, CancellationToken, Task<bool>> redirectAllowed = null,
             IUserScriptHttpBody body = null)
+            : this(scriptKey, url, name, saveAs, headers, conflictAction, timeout, anonymous, redirectAllowed, body, null)
+        {
+        }
+
+        internal DownloadRequest(ScriptKey scriptKey, Uri url, string name, bool saveAs,
+            IDictionary<string, string> headers, string conflictAction, TimeSpan? timeout,
+            bool anonymous, Func<Uri, CancellationToken, Task<bool>> redirectAllowed,
+            IUserScriptHttpBody body, DocumentFrame originFrame)
         {
             ScriptKey = scriptKey;
             Url = url ?? throw new ArgumentNullException(nameof(url));
@@ -630,7 +638,11 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             Anonymous = anonymous;
             RedirectAllowed = redirectAllowed ?? ((target, token) => Task.FromResult(true));
             Body = body;
+            OriginFrame = originFrame;
         }
+
+        /// <summary>Gets the authenticated originating document, if supplied by the runtime.</summary>
+        public DocumentFrame OriginFrame { get; }
 
         /// <summary>Gets renderer-provided bytes for a Blob/File download; null means network transfer.</summary>
         public IUserScriptHttpBody Body { get; }

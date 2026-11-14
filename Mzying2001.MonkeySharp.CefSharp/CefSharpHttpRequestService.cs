@@ -61,6 +61,10 @@ namespace Mzying2001.MonkeySharp.CefSharp
             "Content-Type", "Content-Encoding", "Content-Language", "Content-Location", "Digest"
         };
         private readonly Func<IRequestContext> _contextAccessor;
+        private readonly Action<Action> _queueUi = callback => Cef.UIThreadTaskFactory.StartNew(callback);
+        private readonly Func<IRequest> _createRequest = CreateNativeRequest;
+        private readonly Func<IRequest, IUrlRequestClient, IRequestContext, IUrlRequest> _sendRequest =
+            (request, client, context) => new global::CefSharp.UrlRequest(request, client, context);
         private readonly IWebRequestService _webRequestService;
         private readonly object _sync = new object();
         private readonly HashSet<Operation> _operations = new HashSet<Operation>();
@@ -94,6 +98,24 @@ namespace Mzying2001.MonkeySharp.CefSharp
         /// <summary>Gets the maximum number of redirects followed by a request.</summary>
         public int MaximumRedirects { get; } = 20;
 
+        internal CefSharpHttpRequestService(Func<IRequestContext> contextAccessor, Action<Action> queueUi,
+            Func<IRequest> createRequest, Func<IRequest, IUrlRequestClient, IRequestContext, IUrlRequest> sendRequest)
+            : this(contextAccessor)
+        {
+            _queueUi = queueUi;
+            _createRequest = createRequest;
+            _sendRequest = sendRequest;
+        }
+
+        private static IRequest CreateNativeRequest()
+        {
+#if CEF_SHARP_LEGACY_REQUEST_FACTORY
+            return new Request();
+#else
+            return Request.Create();
+#endif
+        }
+
         /// <inheritdoc />
         public event EventHandler<UserScriptDiagnostic> Diagnostic;
 
@@ -112,7 +134,12 @@ namespace Mzying2001.MonkeySharp.CefSharp
             if (request.Options.Cookie != null || request.Headers.Keys.Any(name =>
                 string.Equals(name, "Cookie", StringComparison.OrdinalIgnoreCase)))
                 throw new UnsupportedApiException("Explicit Cookie headers and the cookie option are not supported by CefSharp URLRequest. Use the actual RequestContext cookie jar or a host HTTP backend with verified explicit-cookie support.");
-            var operation = new Operation(this, request, observer, cancellationToken, _contextAccessor, _webRequestService);
+            // Capture before queuing native work: the host can attach another browser
+            // while this operation (including accepted downloads) is still running.
+            var context = _contextAccessor();
+            if (context == null)
+                throw new InvalidOperationException("No active CefSharp request context is attached.");
+            var operation = new Operation(this, request, observer, cancellationToken, context, _webRequestService);
             lock (_sync)
             {
                 if (_disposed) throw new ObjectDisposedException(nameof(CefSharpHttpRequestService));
@@ -183,7 +210,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             private readonly UserScriptHttpRequest _request;
             private readonly IUserScriptHttpObserver _observer;
             private readonly CancellationTokenSource _cancellation;
-            private readonly Func<IRequestContext> _contextAccessor;
+            private readonly IRequestContext _context;
             private readonly IWebRequestService _webRequests;
             private readonly TaskCompletionSource<UserScriptHttpResponse> _completion =
                 new TaskCompletionSource<UserScriptHttpResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -206,13 +233,13 @@ namespace Mzying2001.MonkeySharp.CefSharp
 
             public Operation(CefSharpHttpRequestService owner, UserScriptHttpRequest request,
                 IUserScriptHttpObserver observer,
-                CancellationToken cancellationToken, Func<IRequestContext> contextAccessor,
+                CancellationToken cancellationToken, IRequestContext context,
                 IWebRequestService webRequests)
             {
                 _owner = owner;
                 _request = request;
                 _observer = observer;
-                _contextAccessor = contextAccessor;
+                _context = context;
                 _webRequests = webRequests;
                 _cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 _currentMethod = request.Method;
@@ -249,15 +276,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 if (IsCompleted) return;
                 try
                 {
-                    var context = _contextAccessor();
-                    if (context == null)
-                        throw new InvalidOperationException("No active CefSharp request context is attached.");
-
-#if CEF_SHARP_LEGACY_REQUEST_FACTORY
-                    var cefRequest = new Request();
-#else
-                    var cefRequest = Request.Create();
-#endif
+                    var cefRequest = _owner._createRequest();
                     _cefRequest = cefRequest;
                     _currentUrl = url;
                     cefRequest.Url = url.AbsoluteUri;
@@ -314,7 +333,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
 
                     }
 
-                    _urlRequest = new global::CefSharp.UrlRequest(cefRequest, this, context);
+                    _urlRequest = _owner._sendRequest(cefRequest, this, _context);
                     if (_urlRequest == null)
                         throw new InvalidOperationException("CefSharp rejected the URL request.");
                 }
@@ -516,11 +535,11 @@ namespace Mzying2001.MonkeySharp.CefSharp
             {
                 try
                 {
-                    Cef.UIThreadTaskFactory.StartNew(callback).ContinueWith(task =>
+                    _owner._queueUi(() =>
                     {
-                        if (task.IsFaulted)
-                            Fail(MapException(task.Exception.InnerException), true);
-                    }, TaskScheduler.Default);
+                        try { callback(); }
+                        catch (Exception exception) { Fail(MapException(exception), true); }
+                    });
                 }
                 catch (Exception exception)
                 {

@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: NuGet version for Core and all four adapters (for example, 3.0.1 or 3.0.1-rc.1).
+        description: NuGet version for Core and all four adapters; three numeric parts with an optional prerelease suffix (no v prefix).
         required: true
         type: string
 

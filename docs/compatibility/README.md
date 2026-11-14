@@ -2,7 +2,7 @@
 
 This index describes maintained capabilities and evidence gaps. The [validation guide](validation.md#latest-recorded-validation) records the latest native/package matrix, and the [evidence index](../../scripts/compatibility/evidence/README.md) separates reference baselines, capability matrices and historical results.
 
-MonkeySharp targets the observable Chromium Tampermonkey contract while keeping CefSharp **84.4.10** as the minimum engine. The regression matrix also covers **121.3.70** and **151.3.240**, each on x64 and x86. The WPF Demo supports x64 only. Build the adapter against the exact CefSharp version shipped by the host.
+MonkeySharp targets the observable Chromium Tampermonkey contract while keeping CefSharp **84.4.10** as the minimum engine. The current CI and delivery matrix covers the fixed legacy and current release versions on x64/x86; see the [development guide](../development.md#environment-and-gate-selection). Dated results for other versions remain historical evidence in the validation guide. The WPF Demo supports x64 only. Build the adapter against the exact CefSharp version shipped by the host.
 
 The [reference baseline](api-contract.md) distinguishes official API descriptions, pinned observations and MonkeySharp guarantees, including legacy and modern calling forms. The [userscript guide](../usage-guide.md) / [中文](../usage-guide.zh-CN.md) owns parameters and examples; the [integration reference](../integration-reference.md) / [中文](../integration-reference.zh-CN.md) owns host interfaces and configuration.
 

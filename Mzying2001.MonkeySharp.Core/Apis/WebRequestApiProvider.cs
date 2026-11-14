@@ -457,7 +457,16 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             Func<WebRequestEvent, CancellationToken, Task<bool>> authorize = null, string installationId = null, bool isStatic = false)
         {
             if (string.IsNullOrEmpty(owner)) throw new ArgumentException("An owner is required.", nameof(owner));
-            var set = new RuleSet { Owner = owner, Rules = rules.ToArray(), Scope = scope ?? throw new ArgumentNullException(nameof(scope)), Listener = listener, Authorize = authorize, InstallationId = installationId, IsStatic = isStatic };
+            var set = new RuleSet
+            {
+                Owner = owner,
+                Rules = rules.ToArray(),
+                Scope = scope ?? throw new ArgumentNullException(nameof(scope)),
+                Listener = listener,
+                Authorize = authorize,
+                InstallationId = installationId,
+                IsStatic = isStatic
+            };
             lock (_sync)
             {
                 if (_disposed) throw new ObjectDisposedException(nameof(InMemoryWebRequestService));
@@ -465,7 +474,14 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                 _sets.RemoveAll(item => item.Owner == owner);
                 _sets.Add(set);
             }
-            return new Registration(owner, () => { lock (_sync) { set.Active = false; _sets.Remove(set); } });
+            return new Registration(owner, () =>
+            {
+                lock (_sync)
+                {
+                    set.Active = false;
+                    _sets.Remove(set);
+                }
+            });
         }
         /// <inheritdoc />
         public IWebRequestRegistration AddListener(WebRequestFilter filter, EventHandler<WebRequestEvent> listener)
@@ -482,8 +498,22 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         {
             RuleSet[] sets;
             Tuple<WebRequestFilter, EventHandler<WebRequestEvent>>[] observers;
-            lock (_sync) { if (_disposed) return new WebRequestDecision(); sets = _sets.ToArray(); observers = _observers.ToArray(); }
-            foreach (var observer in observers) try { if (observer.Item1.Matches(request)) observer.Item2(this, request); } catch { }
+            // Snapshot registry membership under the lock; host authorization and
+            // observer callbacks run outside it. Active flags still honor revocation.
+            lock (_sync)
+            {
+                if (_disposed) return new WebRequestDecision();
+                sets = _sets.ToArray();
+                observers = _observers.ToArray();
+            }
+            foreach (var observer in observers)
+            {
+                try
+                {
+                    if (observer.Item1.Matches(request)) observer.Item2(this, request);
+                }
+                catch { }
+            }
             if (request.Phase != WebRequestPhase.OnBeforeRequest || request.Frame == null ||
                 !new[] { "sub_frame", "script", "xhr", "websocket" }.Contains(request.ResourceType)) return new WebRequestDecision();
             foreach (var set in sets)
@@ -517,13 +547,20 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                         }
                         if (!set.Active) break;
                     }
-                    catch (RegexMatchTimeoutException) { decision = new WebRequestDecision(WebRequestActionKind.Block, description: "Rule regular expression timed out."); }
+                    catch (RegexMatchTimeoutException)
+                    {
+                        decision = new WebRequestDecision(WebRequestActionKind.Block, description: "Rule regular expression timed out.");
+                    }
                     if (set.Listener != null)
                     {
                         lock (_sync)
                             set.PendingNotifications = set.PendingNotifications.ContinueWith(_ =>
                             {
-                                if (set.Active) try { set.Listener(rule, request, decision); } catch { }
+                                if (set.Active)
+                                {
+                                    try { set.Listener(rule, request, decision); }
+                                    catch { }
+                                }
                             }, CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
                     }
                     return decision;
@@ -532,7 +569,16 @@ namespace Mzying2001.MonkeySharp.Core.Apis
             return new WebRequestDecision();
         }
         /// <inheritdoc />
-        public void Dispose() { lock (_sync) { _disposed = true; foreach (var set in _sets) set.Active = false; _sets.Clear(); _observers.Clear(); } }
+        public void Dispose()
+        {
+            lock (_sync)
+            {
+                _disposed = true;
+                foreach (var set in _sets) set.Active = false;
+                _sets.Clear();
+                _observers.Clear();
+            }
+        }
         private sealed class RuleSet
         {
             public string Owner;

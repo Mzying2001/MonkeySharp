@@ -2,7 +2,7 @@
 param(
     [ValidateSet('x64', 'x86')]
     [string]$Platform = 'x64',
-    [string]$CefSharpVersion = '156.0.150',
+    [ValidatePattern('^\d+\.\d+\.\d+$')][string]$CefSharpVersion = '',
     [ValidateSet('all', 'webRequest')][string]$Case = 'all',
     [switch]$NoBuild,
     [string]$OutputDirectory = ''
@@ -13,6 +13,10 @@ $Case = if ($Case -eq 'all') { 'all' } else { 'webRequest' }
 . (Join-Path $PSScriptRoot 'SmokeResults.ps1')
 . (Join-Path $PSScriptRoot '../scripts/testing/TestProcess.ps1')
 $project = Join-Path $PSScriptRoot 'Mzying2001.MonkeySharp.CefSharp.SmokeHost.csproj'
+if (!$CefSharpVersion) {
+    [xml]$projectXml = Get-Content -LiteralPath $project -Raw
+    $CefSharpVersion = $projectXml.SelectSingleNode('//CefSharpVersion').InnerText
+}
 if (!$OutputDirectory) { $OutputDirectory = Join-Path $PSScriptRoot ("../artifacts/smoke/$CefSharpVersion-$Platform/" + [Guid]::NewGuid().ToString('N')) }
 $OutputDirectory = [IO.Path]::GetFullPath($OutputDirectory)
 New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null

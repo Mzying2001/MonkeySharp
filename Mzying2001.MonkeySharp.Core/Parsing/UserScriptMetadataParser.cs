@@ -509,6 +509,7 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
             ICollection<MetadataDiagnostic> diagnostics)
         {
             var result = new List<AntifeatureDeclaration>();
+            var identities = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var pair in values.Where(item => item.Key == "antifeature" ||
                 item.Key.StartsWith("antifeature:", StringComparison.OrdinalIgnoreCase)))
             {
@@ -540,8 +541,16 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
                             entry.Line));
                         continue;
                     }
+                    var type = entry.Value.Substring(0, separator);
+                    if (!identities.Add(type + "\n" + (locale ?? "default")))
+                    {
+                        diagnostics.Add(new MetadataDiagnostic(
+                            "MSM063_DUPLICATE_ANTIFEATURE", DiagnosticSeverity.Warning,
+                            "Only the first @antifeature description for each type and locale is used.", entry.Line));
+                        continue;
+                    }
                     result.Add(new AntifeatureDeclaration(
-                        entry.Value.Substring(0, separator),
+                        type,
                         entry.Value.Substring(separator).Trim(),
                         locale));
                 }

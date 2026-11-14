@@ -3,9 +3,9 @@
 .SYNOPSIS
 Builds Core and the legacy/current CefSharp NuGet packages without publishing.
 .EXAMPLE
-./scripts/Build-Packages.ps1 -Version 3.0.0
+./scripts/Build-Packages.ps1
 .EXAMPLE
-./scripts/Build-Packages.ps1 -Platforms x64 -CurrentCefSharpVersion 156.0.150 -OutputDirectory artifacts/release
+./scripts/Build-Packages.ps1 -Platforms x64 -OutputDirectory artifacts/release
 #>
 [CmdletBinding()]
 param(
@@ -22,8 +22,8 @@ $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $coreProject = Join-Path $root 'Mzying2001.MonkeySharp.Core/Mzying2001.MonkeySharp.Core.csproj'
 $adapterProject = Join-Path $root 'Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj'
 if (!$Version) {
-    [xml]$coreXml = Get-Content -LiteralPath $coreProject -Raw
-    $Version = $coreXml.SelectSingleNode('//Version').InnerText
+    [xml]$versionXml = Get-Content -LiteralPath (Join-Path $root 'Version.props') -Raw
+    $Version = $versionXml.SelectSingleNode('/Project/PropertyGroup/Version').InnerText
 }
 if (!$CurrentCefSharpVersion) {
     [xml]$adapterXml = Get-Content -LiteralPath $adapterProject -Raw

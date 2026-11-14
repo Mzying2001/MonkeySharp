@@ -569,8 +569,10 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             }
         }
 
-        [Fact]
-        public async Task XmlHttpExecuteIsExemptFromGenericBridgeTimeoutButStillCancelable()
+        [Theory]
+        [InlineData("execute")]
+        [InlineData("readBody")]
+        public async Task LongRunningHttpIsExemptFromGenericBridgeTimeoutButStillCancelable(string operation)
         {
             var provider = new BlockingProvider("GM.xmlHttpRequest");
             using (var fixture = await BridgeFixture.CreateAsync(
@@ -582,7 +584,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 var requestId = Guid.NewGuid().ToString("D");
                 var request = fixture.RequestAsync(
                     "GM.xmlHttpRequest",
-                    new { operation = "execute", sessionId = "session" },
+                    new { operation, sessionId = "session" },
                     requestId: requestId);
                 await provider.Entered.Task;
                 await Task.Delay(80);

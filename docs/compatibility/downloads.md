@@ -4,7 +4,9 @@ Both calling forms share one client-identified operation. `GM.download` immediat
 
 `FileDownloadService` transfers through the `IHttpRequestService` supplied by its host. When composed through the CefSharp builder's download factory with the default HTTP service, as in the Demo, it shares CEF URLRequest/RequestContext credentials and webRequest composition with XHR. A custom HTTP service determines its own network behavior. Bounded chunks are written to a temporary file. Success follows flush, close and atomic move/replace; failure or cancellation removes staging files before terminal notification. Completion details are `{url, name, loaded}`, without local paths or internal IDs.
 
-Accepted tasks continue across document end, navigation, script disable and uninstall under captured authorization; redirect targets still need approval. Document callbacks are muted after execution ends. Host disposal cancels tasks, and the Demo drains them before releasing its browser context. This ownership policy is distinct from JavaScript callback delivery.
+Accepted tasks continue across document end, navigation, script update, disable and uninstall under captured installation authorization. Each redirect still checks the captured declarations and current host target policy; an ended execution cannot open a new permission prompt. Document callbacks are muted after execution ends. Host disposal cancels tasks, and the Demo drains them before releasing its browser context. This ownership policy is distinct from JavaScript callback delivery.
+
+Network downloads carry the runtime-authenticated originating document into the shared HTTP service, so applicable webRequest rules also cover downloads. The captured identity never changes to a newer document; dynamic rules still expire with their owning execution. Host-created requests using the existing public constructor have no authenticated origin and do not inherit a document's rules.
 
 ## Error causes
 

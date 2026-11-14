@@ -8,7 +8,7 @@
 
 同一个适配器二进制文件无法兼容任意 CefSharp 版本。CefSharp 程序集具有强名称，而且公开接口曾在版本间发生变化，例如 `IBrowser.GetFrame(long)` 改为 `GetFrameByIdentifier(string)`，`IFrame.Identifier` 也从 `long` 改为 `string`。
 
-适配器默认使用 `156.0.150`，旧版 `CefSharp84` 包面向 `84.4.10`。CI 和交付验证仅覆盖这两个版本的 x64/x86。其他版本的历史原生证据仍只适用于其记录的引擎和版本。应用程序应针对实际发布的版本重新构建并测试；使用[源码构建命令](development.zh-CN.md#构建与测试)并指定所选版本。
+源码默认使用[适配器项目](../Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj)中固定的当前发布版，旧版 `CefSharp84` 包面向 `84.4.10`。CI 和交付验证覆盖固定旧版与当前发布版的 x64/x86。其他版本的历史原生证据仍只适用于其记录的引擎和版本。应用程序应针对实际发布的版本重新构建并测试；使用[源码构建命令](development.zh-CN.md#构建与测试)并指定所选版本。
 
 每个适配器 NuGet 包均公开依赖其编译时使用的精确版本 `CefSharp.Common` 和共享 Core 包。使用者选择版本匹配的 `CefSharp.WinForms`、`CefSharp.Wpf` 等 UI 包，并在 .NET Framework 应用中允许常规绑定重定向。托管包、CEF 原生文件、MonkeySharp 适配器的版本和进程平台必须一致。应用程序只应安装一种适配器；绑定重定向无法解决 CefSharp API 不兼容。
 
@@ -154,7 +154,7 @@ renderer 将已确认镜像与有序 pending 变更分开维护，同步读取�
 
 记忆键是稳定安装身份、权限类型及 HTTP(S) origin，不保存凭据、path/query。允许一次仅对当前合并等待批次有效，不能授权后续请求。单个等待者取消不影响其他文档的同批请求，全部取消才关闭提示。导航取消交互等待，授权结束后再次检查安装版本及启用状态。
 
-普通调用超时在授权后开始；CEF 传输与下载的截止计时在重定向权限等待时暂停并恢复剩余预算。Demo 添加 SQLite 权限表而不删除原数据，使用真实异步窗口，并提供权限按钮及按脚本撤销。撤销取消等待并刷新执行状态；WPF E2E 操作真实按钮。
+普通调用超时在授权后开始；隔离传输复用 Core 的期限，不在用户决定前另行计时，文档结束仍会拒绝等待中的请求。CEF 传输与下载的截止计时在重定向权限等待时暂停并恢复剩余预算。Demo 添加 SQLite 权限表而不删除原数据，使用真实异步窗口，并提供权限按钮及按脚本撤销。撤销取消等待并刷新执行状态；WPF E2E 操作真实按钮。
 
 ## 网络 API
 
@@ -205,7 +205,7 @@ host.Attach(browser);
 
 适配器拒绝被非 multiplexer 处理器占用的槽位。禁用默认服务后，显式 `UseWebRequestService` 仍需遵循上述组合方式。渲染处理器另需 `RenderProcessMessageHandlerMultiplexer`，示例见 [README](../README.zh-CN.md#已有的浏览器处理器)。
 
-静态 `@webRequest` 在安装期编译，通过 `host.NavigateAsync` 在导航前激活；仓库变更撤销旧规则。静态加载遵循 URL、frame、run-in 及宿主策略，不能弹出交互授权。动态规则属于一个 browser/frame/document/execution，导航、更新、禁用、卸载及 detach 撤销。无法确定可信归属的请求不继承其他 frame 的规则。
+静态 `@webRequest` 在安装期编译，通过 `host.NavigateAsync` 在导航前激活；仓库变更撤销旧规则。静态加载遵循 URL、frame、run-in 及宿主策略，不能弹出交互授权。动态规则属于一个 browser/frame/document/execution，导航、更新、禁用、卸载及 detach 撤销。引擎将仓库变更加入执行队列，结束旧执行并清理其存储监听、菜单和 provider 回调，无需等待下一次 GM 调用或刷新页面；已接受下载继续，但文档回调静默。无法确定可信归属的请求不继承其他 frame 的规则。
 
 selector、action、替换/撤销及回调见[请求拦截指南](usage-guide.zh-CN.md#request-interception)。历史 MV2 一致性、OOPIF、isolated frame 动态页面拦截及 WebSocket 覆盖均有明确[证据限制](compatibility/README.md#historical-webrequest)。
 
