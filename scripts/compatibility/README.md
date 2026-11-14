@@ -48,7 +48,7 @@ The environment JSON pins `channel` (stable/beta), `version`, `manifestVersion`,
 
 ## WPF Demo E2E
 
-The x64 baseline also invokes the [WPF Demo E2E runner](../../Mzying2001.MonkeySharp.Demo/README.md#verification), which runs once using the application's default English UI. Run it directly with `./Mzying2001.MonkeySharp.Demo/Run-E2E.ps1 -CefSharpVersion 156.0.150`; `-NoBuild` reuses an already matching deployment. Demo JSON reports record `environment.uiLanguage` and English UI assertions under `artifacts/demo-smoke/`. Other languages are checked by localization unit tests without repeating the full browser suite.
+The x64 baseline also invokes the [WPF Demo E2E runner](../../Mzying2001.MonkeySharp.Demo/README.md#verification), which runs once using the application's default English UI. Run it directly with `./Mzying2001.MonkeySharp.Demo/Run-E2E.ps1 -CefSharpVersion 156.0.150`; `-NoBuild` reuses an already matching deployment. Add `-Case navigation-menu` to isolate cross-site, history, reload and tab-isolation menu checks. Demo JSON reports record the selected case, `environment.uiLanguage` and named assertions under `artifacts/demo-smoke/`; adjacent `.events.jsonl` files correlate steps, renderer observations, document identities, menu registrations/clicks/releases and bridge diagnostics without recording bridge credentials. Other languages are checked by localization unit tests without repeating the full browser suite.
 
 ## Pinned third-party corpus
 

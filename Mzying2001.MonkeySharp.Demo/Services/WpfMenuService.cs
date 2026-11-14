@@ -38,6 +38,7 @@ namespace Mzying2001.MonkeySharp.Demo.Services
                     _tab.MenuCommands.Add(command);
                 }
                 command.Subscribers.Add(invoked, request.AutoClose);
+                Runtime.SmokeTrace.Write("menu-registered", new { tab = _tab.TabId, command = System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(command), request.Name, documentId = request.OriginFrame?.DocumentId, frameId = request.OriginFrame?.FrameId, subscribers = command.Subscribers.Count });
                 command.Changed();
                 return (IMenuRegistration)new MenuRegistration(() =>
                     _dispatcher.BeginInvoke(new Action(() => RemoveSubscriber(key, command, invoked))));
@@ -48,6 +49,7 @@ namespace Mzying2001.MonkeySharp.Demo.Services
             Action<MenuCommandInvocation> invoked)
         {
             command.Subscribers.Remove(invoked);
+            Runtime.SmokeTrace.Write("menu-released", new { tab = _tab.TabId, command = System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(command), subscribers = command.Subscribers.Count });
             command.Changed();
             if (command.Subscribers.Count != 0) return;
             _groups.Remove(key);

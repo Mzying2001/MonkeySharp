@@ -29,6 +29,7 @@ namespace Mzying2001.MonkeySharp.Demo.Services
         [RelayCommand]
         private void Invoke(MenuCommandInvocation invocation)
         {
+            Runtime.SmokeTrace.Write("menu-invoked", new { command = System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(this), Label, subscribers = Subscribers.Count });
             foreach (var callback in Subscribers.Keys.ToArray())
             {
                 try { callback(invocation ?? new MenuCommandInvocation()); }

@@ -15,10 +15,12 @@ namespace Mzying2001.MonkeySharp.Demo
             ShutdownMode = ShutdownMode.OnExplicitShutdown;
             var smoke = e.Args.Contains("--smoke");
             var report = e.Args.SkipWhile(argument => argument != "--smoke-report").Skip(1).FirstOrDefault();
-            var smokeRun = smoke ? new DemoSmokeRun(report) : null;
+            var smokeCase = e.Args.SkipWhile(argument => argument != "--smoke-case").Skip(1).FirstOrDefault() ?? "all";
+            var smokeRun = smoke ? new DemoSmokeRun(report, smokeCase) : null;
             UiLanguage.Apply(UiLanguage.DefaultLanguage);
             try
             {
+                smokeRun?.StartTrace();
                 UiLanguage.Apply(UiLanguage.Resolve(e.Args, smokeRun?.ProfileDirectory ?? AppDomain.CurrentDomain.BaseDirectory));
                 Runtime = await DemoRuntime.CreateAsync(Dispatcher, smokeRun?.ProfileDirectory);
                 MainWindow = new MainWindow(Runtime);
@@ -44,6 +46,7 @@ namespace Mzying2001.MonkeySharp.Demo
                     "MonkeySharp Demo", MessageBoxButton.OK, MessageBoxImage.Error);
                 Shutdown(1);
             }
+            finally { smokeRun?.Dispose(); }
         }
     }
 }

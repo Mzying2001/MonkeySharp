@@ -26,6 +26,7 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
             var background = main.NewTab(firstUrl, false);
             try
             {
+                SmokeTrace.Step("navigation-menu: initial registration");
                 await WaitAsync(async () => await EvaluateBoolean(tab, "location.href === 'about:blank'"));
                 await ScriptMenuSmokeTest.WaitVisibilityAsync(false);
                 checks["emptyScriptMenuHidden"] = true;
@@ -35,15 +36,18 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                 await ScriptMenuSmokeTest.WaitVisibilityAsync(true);
                 checks["registeredScriptMenuVisible"] = true;
                 var backgroundMenu = await CurrentMenuAsync(background, firstUrl);
+                SmokeTrace.Step("navigation-menu: cross-site registration");
                 // Exercise the same command as typing a new URL into the address bar.
                 main.Address = secondUrl;
                 main.NavigateCommand.Execute(null);
                 var second = await CurrentMenuAsync(tab, secondUrl, first);
                 first.InvokeCommand.Execute(null);
                 checks["crossSiteMenuCleanup"] = await EvaluateBoolean(tab, "window.__navigationMenuClicks === 0");
+                SmokeTrace.Step("navigation-menu: cross-site callback exactly once");
                 second.InvokeCommand.Execute(null);
                 await WaitAsync(async () => await EvaluateBoolean(tab, "window.__navigationMenuClicks === 1"));
                 checks["crossSiteMenuCallback"] = true;
+                SmokeTrace.Step("navigation-menu: history");
 
                 await WaitAsync(() => Task.FromResult(tab.CanGoBack));
                 main.BackCommand.Execute(null);
@@ -52,18 +56,21 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                 main.ForwardCommand.Execute(null);
                 var restoredSecond = await CurrentMenuAsync(tab, secondUrl, restoredFirst);
                 checks["historyMenuRefresh"] = true;
+                SmokeTrace.Step("navigation-menu: reload callback exactly once");
 
                 main.ReloadCommand.Execute(null);
                 var reloaded = await CurrentMenuAsync(tab, secondUrl, restoredSecond);
                 reloaded.InvokeCommand.Execute(null);
                 await WaitAsync(async () => await EvaluateBoolean(tab, "window.__navigationMenuClicks === 1"));
                 checks["reloadMenuRefresh"] = true;
+                SmokeTrace.Step("navigation-menu: same-document preservation");
 
                 await Evaluate(tab, "(location.hash = 'same-document', true)");
                 await WaitAsync(() => Task.FromResult(tab.Address.EndsWith("#same-document", StringComparison.Ordinal)));
                 await Evaluate(tab, "(history.pushState({}, '', '?same-document'), true)");
                 await WaitAsync(() => Task.FromResult(tab.Address.EndsWith("?same-document", StringComparison.Ordinal)));
                 checks["sameDocumentMenuPreserved"] = tab.MenuCommands.Count == 1 && ReferenceEquals(reloaded, tab.MenuCommands[0]);
+                SmokeTrace.Step("navigation-menu: unmatched page and tab isolation");
 
                 main.Address = OtherSite(fixture) + "/frame";
                 main.NavigateCommand.Execute(null);
@@ -114,6 +121,7 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                     var command = tab.MenuCommands[0];
                     if (ReferenceEquals(previous, command) || !command.Label.StartsWith(label, StringComparison.Ordinal)) return false;
                     current = command;
+                    SmokeTrace.Write("menu-ready", new { tab = tab.TabId, url, tab.Address, command = System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(command), subscribers = command.Subscribers.Count });
                     return true;
                 });
             }

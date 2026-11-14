@@ -18,7 +18,7 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                 catch (TaskCanceledException) { }
                 await Task.Delay(150);
             }
-            throw new TimeoutException("A WPF/Chromium smoke assertion timed out.");
+            throw new TimeoutException("A WPF/Chromium smoke assertion timed out. " + SmokeTrace.Describe());
         }
         internal static async Task<bool> EvaluateBoolean(BrowserTabViewModel tab, string script)
         {
@@ -27,8 +27,13 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
         }
         internal static async Task<object> Evaluate(BrowserTabViewModel tab, string script)
         {
-            if (!(tab.Browser is BrowserTabView view) || !view.IsJavaScriptReady) return null;
+            if (!(tab.Browser is BrowserTabView view) || !view.IsJavaScriptReady)
+            {
+                SmokeTrace.Observe(script, "Browser not ready: " + tab.Address);
+                return null;
+            }
             var result = await view.EvaluateAsync(script);
+            SmokeTrace.Observe(script, new { tab = tab.TabId, tab.Address, result.Success, result.Result, result.Message });
             return result.Success ? result.Result : null;
         }
 

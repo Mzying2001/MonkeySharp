@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$CefSharpVersion = '156.0.150',
+    [ValidateSet('all', 'navigation-menu')][string]$Case = 'all',
     [switch]$NoBuild
 )
 
@@ -51,7 +52,7 @@ $reports = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../artifacts/demo-sm
 New-Item -ItemType Directory -Path $reports -Force | Out-Null
 $report = Join-Path $reports ('smoke-en-' + [Guid]::NewGuid().ToString('N') + '.json')
 # The isolated smoke profile has no saved preference; omit --lang to verify default English startup.
-$process = Start-Process -FilePath $executable -ArgumentList @('--smoke', '--smoke-report', ('"' + $report + '"')) -PassThru -WindowStyle Hidden
+$process = Start-Process -FilePath $executable -ArgumentList @('--smoke', '--smoke-case', $Case, '--smoke-report', ('"' + $report + '"')) -PassThru -WindowStyle Hidden
 if (!$process.WaitForExit(180000)) {
     Stop-Process -Id $process.Id -Force
     throw 'Demo smoke test exceeded 180 seconds.'
@@ -62,7 +63,8 @@ Get-Content -LiteralPath $report -Raw
 if (!$result.success -or $process.ExitCode -ne 0) { throw "Demo smoke failed. See $report and $($result.profile)/Data/Logs/demo.log" }
 if (!$result.environment -or $result.environment.platform -ne 'x64') { throw 'Demo smoke requires actual x64 process evidence.' }
 if ($result.environment.uiLanguage -ne 'en') { throw "Demo used UI language '$($result.environment.uiLanguage)', expected default English (en)." }
-foreach ($check in @('localizedResources', 'localizedBrowser', 'localizedScriptManager', 'localizedPermissionPrompt')) {
+$requiredChecks = if ($Case -eq 'all') { @('localizedResources', 'localizedBrowser', 'localizedScriptManager', 'localizedPermissionPrompt') } else { @('crossSiteMenuCleanup', 'crossSiteMenuCallback', 'historyMenuRefresh', 'reloadMenuRefresh', 'navigationMenuTabIsolation', 'finalDisposal') }
+foreach ($check in $requiredChecks) {
     if ($result.checks.$check -ne $true) { throw "Demo smoke is missing successful English UI assertion: $check" }
 }
 $actualVersion = [version]$result.environment.cefSharpVersion

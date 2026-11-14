@@ -88,7 +88,10 @@ namespace Mzying2001.MonkeySharp.Demo.Views
             });
         }
         private void ConsoleMessage(object sender, ConsoleMessageEventArgs args)
-            => Report("Console " + args.Level + ": " + args.Message);
+        {
+            Runtime.SmokeTrace.Write("console", new { tab = _tab.TabId, level = args.Level.ToString(), args.Message, args.Source, args.Line });
+            Report("Console " + args.Level + ": " + args.Message + " (" + args.Source + ":" + args.Line + ")");
+        }
         private void OpenTab(string url, bool active) => Post(() =>
         {
             try { _runtime.MainWindow.NewTab(MainWindowViewModel.NormalizeAddress(url), active, _tab, true, true); }
