@@ -48,6 +48,12 @@ namespace MonkeySharp.Testing
                     WorkingDirectory = directory, UseShellExecute = false, CreateNoWindow = true,
                     RedirectStandardOutput = true, RedirectStandardError = true
                 };
+                if (string.Equals(Path.GetFileNameWithoutExtension(executable), "powershell", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Process.Start bypasses PowerShell 7's native-command cleanup for WinPS.
+                    // Let Windows PowerShell rebuild its own module paths instead of loading Core modules.
+                    process.StartInfo.EnvironmentVariables.Remove("PSModulePath");
+                }
                 try
                 {
                     process.Start();
