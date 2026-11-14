@@ -65,7 +65,7 @@ dotnet pack Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.cspr
 
 ## 使用 GitHub Actions 发布到 NuGet
 
-[Publish NuGet](../.github/workflows/publish.yml) 是手动触发的工作流，复用现有 CI 执行 `84.4.10`/`156.0.150` 的 x64/x86 .NET/JavaScript、真实 Chromium 和 x64 WPF 门禁，再按输入版本构建五个包，并离线验证发布逻辑。发布作业下载同一批产物，检查清单、版本及 SHA-256 后，通过 `NuGet/login@v1` 用 GitHub OIDC 身份交换临时 NuGet 凭据。仅发布作业具有 `id-token: write`，使用 GitHub 环境 `nuget`。认证机制见 [NuGet Trusted Publishing 官方指南](https://learn.microsoft.com/en-us/nuget/nuget-org/trusted-publishing)。
+[Publish NuGet](../.github/workflows/publish.yml) 是手动触发的工作流，复用现有 CI 执行 `84.4.10`/`156.0.150` 的 x64/x86 .NET/JavaScript、真实 Chromium 和 x64 WPF 门禁，再按输入版本构建五个包，并离线验证发布逻辑。发布作业下载同一批产物，检查清单、版本及 SHA-256 后，通过 `NuGet/login@v1` 用 GitHub OIDC 身份交换临时 NuGet 凭据。仅发布作业具有 `id-token: write` 和 `contents: write`，使用 GitHub 环境 `nuget`。认证机制见 [NuGet Trusted Publishing 官方指南](https://learn.microsoft.com/en-us/nuget/nuget-org/trusted-publishing)。
 
 首次使用时完成以下配置：
 
@@ -84,11 +84,11 @@ dotnet pack Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.cspr
 
 使用 fork 时，将仓库 Owner 和名称替换为实际值。`NUGET_USER` 中的 NuGet 用户必须有权使用所选策略 Owner。如果 NuGet 显示策略暂时激活，应在激活窗口内完成首次发布，或在运行工作流前重新激活。
 
-每次发布时，进入 GitHub **Actions → Publish NuGet → Run workflow**，选择源码分支/ref，输入新的版本号，例如 `3.0.1` 或 `3.0.1-rc.1`，不要添加 `v` 前缀。该输入覆盖本次构建的项目包版本，不修改项目文件，也不创建 Git 标签或 GitHub Release。所有门禁通过后自动发布所选代码版本对应的产物；普通 PR CI 不会发布。
+每次发布时，进入 GitHub **Actions → Publish NuGet → Run workflow**，选择源码分支/ref，输入新的版本号，例如 `3.0.1` 或 `3.0.1-rc.1`，不要添加 `v` 前缀。该输入覆盖本次构建的项目包版本，不修改项目文件。所有门禁通过后自动发布所选代码版本对应的产物。全部普通包和符号包推送成功后，工作流使用内置 `GITHUB_TOKEN` 创建 GitHub Release，标签和标题均为版本号，新标签指向本次构建的提交，资产包含五个 `.nupkg` 和五个 `.snupkg`。带预发布后缀的版本自动标记为 GitHub Prerelease；普通 PR CI 不会发布。
 
 [Publish-Packages.ps1](../scripts/Publish-Packages.ps1) 在任何上传前检查全部十个文件，并按下载后的产物目录解析清单路径，不使用构建机器的绝对路径。先上传 Core，再上传适配器；普通包关闭隐式符号上传，随后显式上传各 `.snupkg` 并传入符号凭据。两个阶段都使用 `--skip-duplicate`，已有普通包不会妨碍补传缺失的符号包。其他 CLI 失败立即停止，并写入不包含凭据的 `publish-results.json`，作为 `nuget-publish-results` 产物上传。其中 `accepted-or-existing` 表示推送被服务器接受或对应包已存在，不代表 NuGet 后台验证或索引已完成。
 
-发布中断时，在同一次工作流运行中选择 **Re-run failed jobs**，复用已有 `nuget-packages` 产物并重新获取临时凭据。不要修改二进制内容后复用已经发布的版本号。NuGet 不支持将五个包作为一个事务一起发布；工作流完成后，在 nuget.org 查看包的可用性及验证状态。
+发布中断时，在同一次工作流运行中选择 **Re-run failed jobs**，复用已有 `nuget-packages` 产物并重新获取临时凭据。同版本的 GitHub Release 已存在时，复用该 Release，补传缺失资产并覆盖同名资产，已有标签不移动。NuGet 发布或 GitHub Release 步骤失败时，仍会上传 `nuget-publish-results` 产物。不要修改二进制内容后复用已经发布的版本号。NuGet 不支持将五个包作为一个事务一起发布；工作流完成后，在 nuget.org 查看包的可用性及验证状态。
 
 本地离线验证，不需要凭据，也不会上传：
 
