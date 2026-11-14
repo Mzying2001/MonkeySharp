@@ -24,16 +24,25 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
         internal static Task WaitVisibilityAsync(bool visible) => WaitAsync(() => Task.FromResult(
             Menu.Visibility == (visible ? Visibility.Visible : Visibility.Collapsed)));
 
-        private static async Task<MenuItem[]> OpenAsync()
+        private static Task<MenuItem[]> OpenAsync() => OpenAsync(Application.Current.MainWindow, Menu);
+
+        internal static async Task<MenuItem[]> OpenAsync(Window window, MenuItem menu)
         {
-            await WaitVisibilityAsync(true);
-            Application.Current.MainWindow.Activate();
-            Menu.Focus();
-            Menu.IsSubmenuOpen = true;
-            await Dispatcher.Yield(DispatcherPriority.Input);
-            await WaitAsync(() => Task.FromResult(Menu.Items.Count > 0 && Enumerable.Range(0, Menu.Items.Count)
-                .All(index => Menu.ItemContainerGenerator.ContainerFromIndex(index) is MenuItem)));
-            return Enumerable.Range(0, Menu.Items.Count).Select(index => (MenuItem)Menu.ItemContainerGenerator.ContainerFromIndex(index)).ToArray();
+            await WaitAsync(() => Task.FromResult(menu.Visibility == Visibility.Visible));
+            await WaitAsync(async () =>
+            {
+                if (!menu.IsSubmenuOpen)
+                {
+                    window.Activate();
+                    menu.Focus();
+                    menu.IsSubmenuOpen = true;
+                    await Dispatcher.Yield(DispatcherPriority.Input);
+                }
+                // Containers can remain generated after a popup closes while activation is pending.
+                return menu.IsSubmenuOpen && menu.Items.Count > 0 && Enumerable.Range(0, menu.Items.Count)
+                    .All(index => menu.ItemContainerGenerator.ContainerFromIndex(index) is MenuItem item && item.IsVisible);
+            });
+            return Enumerable.Range(0, menu.Items.Count).Select(index => (MenuItem)menu.ItemContainerGenerator.ContainerFromIndex(index)).ToArray();
         }
 
         internal static async Task VerifyGroupsAsync(BrowserTabViewModel tab, Dictionary<string, bool> checks, string screenshot)
@@ -97,7 +106,9 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
 
         internal static async Task<bool> InvokeAsync(ScriptMenuCommand command)
         {
+            SmokeTrace.Step("menu popup: " + command.Label);
             var item = (await OpenAsync()).Single(candidate => ReferenceEquals(((ScriptMenuRow)candidate.DataContext).Command, command));
+            SmokeTrace.Write("menu-popup-before-click", new { command.Label, Menu.IsSubmenuOpen, item.StaysOpenOnClick, item.IsVisible, active = Application.Current.MainWindow.IsActive });
             var clicked = false;
             RoutedEventHandler onClick = (_, __) => clicked = true;
             item.Click += onClick;
@@ -107,6 +118,7 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                 ((IInvokeProvider)new MenuItemAutomationPeer(item).GetPattern(PatternInterface.Invoke)).Invoke();
                 await WaitAsync(() => Task.FromResult(clicked));
                 await Dispatcher.Yield(DispatcherPriority.ApplicationIdle);
+                SmokeTrace.Write("menu-popup-after-click", new { command.Label, Menu.IsSubmenuOpen, item.StaysOpenOnClick, expected = command.StaysOpenOnClick, active = Application.Current.MainWindow.IsActive });
                 return Menu.IsSubmenuOpen == command.StaysOpenOnClick;
             }
             finally
