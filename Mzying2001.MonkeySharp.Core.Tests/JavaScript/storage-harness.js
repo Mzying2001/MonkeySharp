@@ -1,3 +1,4 @@
+const { waitFor } = require('./test-wait');
 const completePlan = require("./test-plan");
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -13,13 +14,6 @@ const methods = ["GM.getValue", "GM.setValue", "GM.deleteValue", "GM.listValues"
     "GM.getValues", "GM.setValues", "GM.deleteValues", "GM.addValueChangeListener", "GM.removeValueChangeListener"];
 let nextExecution = 0;
 
-async function waitFor(predicate) {
-    const deadline = Date.now() + 2000;
-    while (!predicate()) {
-        if (Date.now() > deadline) throw new Error("Timed out waiting for bulk storage.");
-        await new Promise(resolve => setTimeout(resolve, 5));
-    }
-}
 
 async function install(options = {}) {
     const executionId = "bulk-storage-" + ++nextExecution;

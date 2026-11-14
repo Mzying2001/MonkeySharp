@@ -135,14 +135,14 @@ Run the following from the repository root; real Chromium/WPF E2E requires a Win
 
 ```powershell
 dotnet test MonkeySharp.slnx -c Release -p:Platform=x64
-node --test Mzying2001.MonkeySharp.Core.Tests/JavaScript/*.test.js
+node --test --test-timeout=30000 Mzying2001.MonkeySharp.Core.Tests/JavaScript/*.test.js
 powershell -NoProfile -ExecutionPolicy Bypass -File Mzying2001.MonkeySharp.Demo/Run-E2E.ps1
 # Reuse an already matching build:
 ./Mzying2001.MonkeySharp.Demo/Run-E2E.ps1 -NoBuild
 ```
 
-The runner launches one process using default English in an isolated `SmokeRuns/<id>/Data` profile. It checks UI labels, permissions, tabs and frames, values and cookies, resources, XHR/webRequest, menus, notifications, real downloads, private contexts, script changes, and final disposal. Clipboard checks temporarily write Unicode text and HTML, then restore the previous contents. Test-project shadow copying is disabled so SQLite's native library resolves from the test output.
+The runner launches one process using default English in an isolated temporary profile. It checks UI labels, permissions, tabs and frames, values and cookies, resources, XHR/webRequest, menus, notifications, real downloads, private contexts, script changes, and final disposal. Add `-Case navigation-menu` to run only navigation/menu checks. Clipboard checks temporarily write Unicode text and HTML, then restore the previous contents. Test-project shadow copying is disabled so SQLite's native library resolves from the test output.
 
-JSON reports are written to `artifacts/demo-smoke`; `environment.uiLanguage` records the UI language, and `profile` identifies the run directory containing logs and screenshots. Other languages are checked by localization unit tests. CI runs the English Demo E2E once for each supported x64 CefSharp version: `84.4.10` and `156.0.150`. SmokeHost additionally covers x86. See the [validation guide](../docs/compatibility/validation.md) for the wider matrix.
+Evidence is written to fresh `artifacts/demo-smoke/<version>-x64/<run>/` directories; `-OutputDirectory` overrides the location. The schema-1 JSON report records the case, named checks, actual engine/platform/UI language and temporary profile. Adjacent event traces, stdout/stderr, process reports, copied logs and screenshots remain available on failure or timeout. The result parser requires every check for the selected case. Other languages are checked by localization unit tests. CI runs the English Demo E2E once for each supported x64 CefSharp version: `84.4.10` and `156.0.150`. SmokeHost additionally covers x86. See the [validation guide](../docs/compatibility/validation.md) for the wider matrix.
 
 Manual checks: switch language and restart; override it for one launch with `--lang`; install/edit/delete scripts; reject permission requests; close with unsaved edits; confirm/cancel Save As; verify login persistence after restart; test missing or locked source recovery; and launch a second process against the same profile to check the startup error.

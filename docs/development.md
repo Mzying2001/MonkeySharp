@@ -12,13 +12,15 @@ CI runs on PRs targeting `dev` or `main`, with CefSharp `84.4.10` and `156.0.150
 
 ## Build and test
 
+CI and local baselines share `scripts/testing/Run-SourceTests.ps1` (clean/build, per-project .NET TRX, bounded JavaScript and runner/parser checks) and `scripts/testing/Run-NativeTests.ps1` (SmokeHost/CDP, OOPIF, corpus and x64 WPF). Both accept `-Platform`, `-CefSharpVersion` and `-OutputDirectory`. `Run-Baseline.ps1` composes them. Fresh evidence directories preserve failed stages and process reports. Use `Run-RepeatedNative.ps1 -Case webRequest -Repeat 30` or `-Case navigation-menu -Platform x64` for diagnosis; all attempts remain recorded and any failure fails the run. The manual **Test stability** workflow uses the same runner.
+
 Use the same `CefSharpVersion` property for restore, build, test, and package commands:
 
 ```powershell
 dotnet restore MonkeySharp.slnx -p:Platform=x64 -p:CefSharpVersion=156.0.150
 dotnet build MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=156.0.150 --no-restore
 dotnet test MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=156.0.150 --no-build
-node --test Mzying2001.MonkeySharp.Core.Tests/JavaScript/*.test.js
+node --test --test-timeout=30000 Mzying2001.MonkeySharp.Core.Tests/JavaScript/*.test.js
 ```
 
 Repeat the .NET commands with `-p:Platform=x86`. The x86 solution configuration excludes the x64-only Demo projects. Do not build different native versions or platforms concurrently in the same output tree.
@@ -65,7 +67,7 @@ dotnet pack Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.cspr
 
 ## Publish to NuGet with GitHub Actions
 
-[Publish NuGet](../.github/workflows/publish.yml) is a manually dispatched workflow. It calls the existing CI workflow to run the `84.4.10`/`156.0.150` x64/x86 .NET/JavaScript and real-Chromium/WPF gates, builds all five packages with the requested version, and tests publication logic without network access. The publish job downloads those exact artifacts, validates their manifest/version/SHA-256 hashes, then exchanges GitHub OIDC identity for a temporary NuGet credential with `NuGet/login@v1`. Only that job has `id-token: write`; it uses the GitHub environment `nuget`. See the official [NuGet Trusted Publishing guide](https://learn.microsoft.com/en-us/nuget/nuget-org/trusted-publishing).
+[Publish NuGet](../.github/workflows/publish.yml) is a manually dispatched workflow. It calls the existing CI workflow to run the `84.4.10`/`156.0.150` x64/x86 .NET/JavaScript and real-Chromium/WPF gates, builds all five packages with the requested version, and tests publication logic without network access. The publish job downloads those exact artifacts, validates their manifest/version/SHA-256 hashes, then exchanges GitHub OIDC identity for a temporary NuGet credential with `NuGet/login@v1`. Only that job has `id-token: write` and `contents: write`; it uses the GitHub environment `nuget`. See the official [NuGet Trusted Publishing guide](https://learn.microsoft.com/en-us/nuget/nuget-org/trusted-publishing).
 
 Complete this setup once:
 
@@ -84,11 +86,11 @@ Complete this setup once:
 
 When using a fork, substitute its actual GitHub owner/repository. The NuGet profile in `NUGET_USER` must have access to the selected policy owner. If NuGet marks the policy as temporarily active, complete the first publication during that activation window or reactivate it before running the workflow.
 
-For each release, open GitHub **Actions → Publish NuGet → Run workflow**, choose the source branch/ref and enter a new version such as `3.0.1` or `3.0.1-rc.1` without a `v` prefix. The input overrides the project package versions for that build; it does not edit the project files, create a Git tag or a GitHub Release. Publication starts automatically after all gates pass, using the selected revision's artifacts. Ordinary PR CI cannot publish.
+For each release, open GitHub **Actions → Publish NuGet → Run workflow**, choose the source branch/ref and enter a new version such as `3.0.1` or `3.0.1-rc.1` without a `v` prefix. The input overrides the project package versions for that build without editing project files. Publication starts automatically after all gates pass, using the selected revision's artifacts. After all package and symbol pushes succeed, the workflow uses the built-in `GITHUB_TOKEN` to create a GitHub Release with the version as both its tag and title, a new tag pointing to the built commit, and all five `.nupkg` and five `.snupkg` files as assets. Versions with a prerelease suffix are marked as GitHub prereleases. Ordinary PR CI cannot publish.
 
 [Publish-Packages.ps1](../scripts/Publish-Packages.ps1) checks all ten files before any upload and resolves manifest paths relative to the downloaded artifact, so build-runner absolute paths are never reused. It uploads Core before the adapters, disables implicit symbols on main-package pushes, then explicitly uploads each `.snupkg` with its symbol credential. Both phases use `--skip-duplicate`, so a duplicate main package does not prevent a missing symbol package from being retried. It stops on other CLI failures and writes credential-free `publish-results.json`, uploaded as the `nuget-publish-results` artifact. Its `accepted-or-existing` status means the server accepted the push or the package already existed; it does not mean asynchronous NuGet validation/indexing has completed.
 
-If a publication is interrupted, use **Re-run failed jobs** on the same workflow run to reuse the existing `nuget-packages` artifact and obtain a new temporary credential. Do not change binaries while reusing an already published version. NuGet cannot publish the five packages as one transaction. Check package availability and validation status on nuget.org after the workflow completes.
+If a publication is interrupted, use **Re-run failed jobs** on the same workflow run to reuse the existing `nuget-packages` artifact and obtain a new temporary credential. An existing GitHub Release for that version is reused, with missing assets uploaded and same-name assets overwritten; an existing tag is not moved. The `nuget-publish-results` artifact is uploaded even if NuGet publication or the GitHub Release step fails. Do not change binaries while reusing an already published version. NuGet cannot publish the five packages as one transaction. Check package availability and validation status on nuget.org after the workflow completes.
 
 Local verification, without credentials or uploads:
 
@@ -113,7 +115,7 @@ Use the same version value throughout validation: `-p:CefSharpVersion=<version>`
 
 ## Chromium Compatibility Script Package
 
-The SmokeHost installs repository-owned userscripts against loopback HTTP fixtures. Its runner requires all 15 compatibility cases, checks actual CefSharp version/platform and cleanup, and preserves logs under `artifacts/smoke/<version>-<platform>/`. Override that path with `-OutputDirectory`.
+The SmokeHost installs repository-owned userscripts against loopback HTTP fixtures. Its runner requires all 15 compatibility cases by default (`-Case webRequest` isolates request rules/navigation cleanup), checks actual CefSharp version/platform and cleanup, and preserves logs under `artifacts/smoke/<version>-<platform>/<run>/`. Override that path with `-OutputDirectory`.
 
 See [SmokeHost cases and result validation](compatibility/validation.md#smokehost-cases-and-results) for case IDs, assertions, timeouts, parser checks and log triage. The [validation guide](compatibility/validation.md#latest-recorded-validation) owns recorded results and remaining gaps; [tooling instructions](../scripts/compatibility/README.md) own runner parameters and pinned-reference prerequisites.
 

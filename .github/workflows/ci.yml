@@ -17,6 +17,7 @@ permissions:
 jobs:
   build-test:
     runs-on: windows-2022
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -34,21 +35,22 @@ jobs:
         with:
           node-version: 24
 
-      - name: Restore
-        run: dotnet restore MonkeySharp.slnx -p:Platform=${{ matrix.platform }} -p:CefSharpVersion=${{ matrix.cefSharpVersion }}
+      - name: Run source checks
+        shell: pwsh
+        run: ./scripts/testing/Run-SourceTests.ps1 -Platform ${{ matrix.platform }} -CefSharpVersion ${{ matrix.cefSharpVersion }}
 
-      - name: Build
-        run: dotnet build MonkeySharp.slnx -c Release -p:Platform=${{ matrix.platform }} -p:CefSharpVersion=${{ matrix.cefSharpVersion }} --no-restore --nologo
-
-      - name: Test .NET
-        run: dotnet test MonkeySharp.slnx -c Release -p:Platform=${{ matrix.platform }} -p:CefSharpVersion=${{ matrix.cefSharpVersion }} --no-build --nologo
-
-      - name: Test JavaScript protocol
-        run: node --test Mzying2001.MonkeySharp.Core.Tests/JavaScript/*.test.js
+      - name: Upload source test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-${{ matrix.cefSharpVersion }}-${{ matrix.platform }}-attempt-${{ github.run_attempt }}
+          path: artifacts/source-tests/
+          if-no-files-found: error
 
   real-chromium-e2e:
     needs: build-test
     runs-on: windows-2022
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -62,41 +64,20 @@ jobs:
         with:
           dotnet-version: 9.0.315
 
-      - name: Run CefSharp Chromium smoke
-        shell: pwsh
-        run: >-
-          pwsh -NoProfile -ExecutionPolicy Bypass -File
-          Mzying2001.MonkeySharp.CefSharp.SmokeHost/Run-E2E.ps1
-          -Platform ${{ matrix.platform }}
-          -CefSharpVersion ${{ matrix.cefSharpVersion }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
 
-      - name: Validate smoke result parser
-        if: always()
+      - name: Run native checks
         shell: pwsh
-        run: ./Mzying2001.MonkeySharp.CefSharp.SmokeHost/Test-SmokeResults.ps1
+        run: ./scripts/testing/Run-NativeTests.ps1 -Platform ${{ matrix.platform }} -CefSharpVersion ${{ matrix.cefSharpVersion }}
 
-      - name: Upload Chromium compatibility evidence
+      - name: Upload native test evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: chromium-${{ matrix.cefSharpVersion }}-${{ matrix.platform }}
-          path: artifacts/smoke/${{ matrix.cefSharpVersion }}-${{ matrix.platform }}/
-          if-no-files-found: error
-
-      - name: Run WPF Demo Chromium baseline
-        if: matrix.platform == 'x64'
-        shell: pwsh
-        run: >-
-          pwsh -NoProfile -ExecutionPolicy Bypass -File
-          Mzying2001.MonkeySharp.Demo/Run-E2E.ps1
-          -CefSharpVersion ${{ matrix.cefSharpVersion }}
-
-      - name: Upload Demo evidence
-        if: always() && matrix.platform == 'x64'
-        uses: actions/upload-artifact@v4
-        with:
-          name: demo-${{ matrix.cefSharpVersion }}-x64
-          path: artifacts/demo-smoke/
+          name: native-${{ matrix.cefSharpVersion }}-${{ matrix.platform }}-attempt-${{ github.run_attempt }}
+          path: artifacts/native-tests/
           if-no-files-found: error
 
   packages:

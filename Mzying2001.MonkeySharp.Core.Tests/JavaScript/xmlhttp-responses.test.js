@@ -1,3 +1,4 @@
+const { waitFor } = require('./test-wait');
 const completePlan = require("./test-plan");
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -121,7 +122,7 @@ test("XHR exposes response types, ordered lifecycle events, context, and streams
     };
     vm.runInThisContext(template.replace(
         "__MONKEYSHARP_PAYLOAD_BASE64__", Buffer.from(JSON.stringify(completePlan(payload))).toString("base64")));
-    while (!globalThis.__responsesPromise) await new Promise(resolve => setTimeout(resolve, 5));
+    await waitFor(() => !!(globalThis.__responsesPromise), 'XHR response bootstrap');
     await globalThis.__responsesPromise;
 
     assert.equal(globalThis.__text.response, "text");

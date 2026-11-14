@@ -1,3 +1,4 @@
+const { waitFor } = require('./test-wait');
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const vm = require("node:vm");
@@ -30,7 +31,7 @@ for (const failure of [null, "missing", "duplicate", "truncated", "overBudget"])
             source: "globalThis.result = [GM_getResourceText('text'), GM_getResourceURL('text')];"
         }] });
         vm.runInContext(template.replace("__MONKEYSHARP_PAYLOAD_BASE64__", Buffer.from(JSON.stringify(plan)).toString("base64")), context);
-        for (let tries = 0; tries < 100 && !context.result && !errors.length; tries++) await new Promise(resolve => setTimeout(resolve, 5));
+        await waitFor(() => context.result || errors.length, 'resource bootstrap result');
         if (failure) { assert.equal(context.result, undefined); assert.equal(errors.length, 1); }
         else { assert.deepEqual(Array.from(context.result), ["café".repeat(100), "data:application/octet-stream;base64,AP8B"]); assert.equal(errors.length, 0); }
     });

@@ -1,3 +1,4 @@
+const { waitFor } = require('./test-wait');
 const completePlan = require('./test-plan');
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -21,20 +22,20 @@ test('audio preserves callback/Promise returns and removes the exact listener du
         grants:['GM.audio'],declaredGrants:['GM_audio'],info:{},capability:'cap',deliveryToken:'delivery'
     }]});
     vm.runInThisContext(template.replace('__MONKEYSHARP_PAYLOAD_BASE64__', Buffer.from(JSON.stringify(payload)).toString('base64')));
-    await new Promise(resolve => setTimeout(resolve, 10));
+    await waitFor(() => globalThis.audio, 'audio bootstrap');
     assert.deepEqual(await audio.getState(), {isMuted:false});
     assert.deepEqual(await audio.setMute({isMuted:true}), {isMuted:true});
     assert.equal(typeof legacyAudio, 'function');
     await assert.rejects(audio.setMute({isMuted:'true'}), TypeError);
     let callbackState;
     assert.equal(legacyAudio.getState(value => { callbackState = value; }), undefined);
-    await new Promise(resolve => setTimeout(resolve, 10));
+    await waitFor(() => callbackState, 'audio callback');
     assert.deepEqual(callbackState, {isMuted:false});
     const events = [];
     const listener = event => events.push(event);
     const ready = audio.addStateChangeListener(listener);
     assert.equal(audio.addStateChangeListener(listener), ready);
-    await new Promise(resolve => setTimeout(resolve, 10));
+    await waitFor(() => pendingAdd, 'audio listener registration');
     const id = calls.find(item => item.params.operation === 'addListener').params.listenerId;
     const receive = () => __MonkeySharpRuntime.receive({type:'notification',protocol:2,executionId:'audio-execution',deliveryToken:'delivery',event:'audio-state',data:{listenerId:id,change:{muted:'extension'}}});
     assert.equal(receive(), true);

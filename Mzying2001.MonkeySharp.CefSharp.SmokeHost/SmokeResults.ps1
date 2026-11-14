@@ -14,7 +14,7 @@ function Assert-CdpProbeRecords {
 }
 
 function Assert-SmokeRecords {
-    param([object[]]$Records, [string]$Platform, [string]$CefSharpVersion, [int]$RunExitCode = 0)
+    param([object[]]$Records, [string]$Platform, [string]$CefSharpVersion, [int]$RunExitCode = 0, [ValidateSet('all', 'webRequest')][string]$Case = 'all')
 
     if ($RunExitCode -ne 0) { throw "SmokeHost exited with code $RunExitCode." }
     if (@($Records | Where-Object { $_.type -in @('smoke-timeout', 'runner-timeout') }).Count -gt 0) { throw 'SmokeHost timed out.' }
@@ -22,6 +22,7 @@ function Assert-SmokeRecords {
     $finals = @($Records | Where-Object { $_.type -eq 'final-disposal' })
     if ($summaries.Count -ne 1 -or $summaries[0].success -isnot [bool] -or !$summaries[0].success) { throw 'Exactly one successful smoke-summary is required.' }
     $summary = $summaries[0]
+    if (($Case -ne 'all' -or $summary.compatibilityCase) -and $summary.compatibilityCase -ne $Case) { throw 'Smoke case does not match this invocation.' }
     if ($summary.hostAttachedAfterDetach -isnot [bool] -or $summary.hostAttachedAfterDetach) { throw 'Host was not detached.' }
     if ($finals.Count -ne 1 -or $finals[0].disposed -isnot [bool] -or !$finals[0].disposed) { throw 'Final disposal is required.' }
     $final = $finals[0]
@@ -38,8 +39,9 @@ function Assert-SmokeRecords {
         if ($fixtures.Count -ne 1 -or $fixtures[0].success -isnot [bool] -or !$fixtures[0].success) { throw "Legacy fixture failed or missing: $phase." }
     }
     $cases = @($Records | Where-Object { $_.type -eq 'compatibility-case' })
-    if ($cases.Count -ne 15) { throw 'Exactly fifteen compatibility cases are required.' }
-    foreach ($id in @('prepared', 'conditions', 'isolated', 'replay', 'csp', 'permissions', 'binary', 'pageHelpers', 'frames', 'spaUrl', 'download', 'cookie', 'webRequest', 'audio', 'partitions')) {
+    $requiredCases = if ($Case -eq 'all') { @('prepared', 'conditions', 'isolated', 'replay', 'csp', 'permissions', 'binary', 'pageHelpers', 'frames', 'spaUrl', 'download', 'cookie', 'webRequest', 'audio', 'partitions') } else { @('webRequest') }
+    if ($cases.Count -ne $requiredCases.Count) { throw 'Compatibility case count does not match the selected scope.' }
+    foreach ($id in $requiredCases) {
         $matches = @($cases | Where-Object { $_.caseId -eq $id })
         if ($matches.Count -ne 1 -or $matches[0].success -isnot [bool] -or !$matches[0].success -or $matches[0].error) { throw "Compatibility case failed or missing: $id." }
         $checks = @($matches[0].checks.PSObject.Properties)

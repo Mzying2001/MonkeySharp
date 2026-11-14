@@ -1,3 +1,4 @@
+const { waitFor } = require('./test-wait');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const vm = require('node:vm');
@@ -21,7 +22,7 @@ async function install() {
         capability: 'proof', deliveryToken: 'delivery', declaredGrants: ['GM.xmlHttpRequest'], grants: ['GM.xmlHttpRequest'],
         info: {}, source: 'capture(GM.xmlHttpRequest);' }] };
     vm.runInContext(template.replace('__MONKEYSHARP_PAYLOAD_BASE64__', Buffer.from(JSON.stringify(payload)).toString('base64')), context);
-    while (!api) await new Promise(resolve => setTimeout(resolve, 2));
+    await waitFor(() => api, 'renderer binary bootstrap');
     return { api, requests, types };
 }
 

@@ -1,3 +1,4 @@
+const { waitFor } = require('./test-wait');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const vm = require('node:vm');
@@ -23,7 +24,7 @@ async function install(read, options = {}) {
         capability: 'proof', deliveryToken: 'delivery', declaredGrants: ['GM.xmlHttpRequest'], grants: ['GM.xmlHttpRequest'],
         info: {}, source: 'capture(GM.xmlHttpRequest);' }] };
     vm.runInContext(template.replace('__MONKEYSHARP_PAYLOAD_BASE64__', Buffer.from(JSON.stringify(payload)).toString('base64')), context);
-    while (!api) await new Promise(resolve => setTimeout(resolve, 1));
+    await waitFor(() => api, 'XHR progress bootstrap');
     runtime = context.__MonkeySharpRuntime;
     return { api, requests, notify(event, data) { runtime.receive({ type: 'notification', protocol: 2,
         executionId: 'progress', deliveryToken: 'delivery', event, data: { xhrId: requests[0].xhrId, ...data } }); } };

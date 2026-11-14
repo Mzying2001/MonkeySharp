@@ -8,7 +8,7 @@ Core/JavaScript tests use the tracked fixtures and evidence and require no CefSh
 
 ```powershell
 dotnet test Mzying2001.MonkeySharp.Core.Tests/Mzying2001.MonkeySharp.Core.Tests.csproj -c Release
-node --test Mzying2001.MonkeySharp.Core.Tests/JavaScript/*.test.js
+node --test --test-timeout=30000 Mzying2001.MonkeySharp.Core.Tests/JavaScript/*.test.js
 ```
 
 ## Reproduction
@@ -29,7 +29,7 @@ Choose the gate by the claim being checked. Source build/package commands and en
 # One engine/platform baseline, including native OOPIF and source corpus.
 ./scripts/compatibility/Run-Baseline.ps1 -Platform x64 -CefSharpVersion 84.4.10
 
-# Six isolated native combinations, packaging and public-API consumers.
+# Four isolated native combinations, packaging and public-API consumers.
 ./scripts/compatibility/Run-Delivery.ps1
 
 # Optional: additionally install an existing local script without source edits.
@@ -42,7 +42,7 @@ The WPF gate runs once per selected x64 version using default English in an isol
 
 ## SmokeHost cases and results
 
-The SmokeHost embeds repository-owned `.user.js` fixtures and installs them through the normal repository. Two ephemeral loopback HTTP servers supply runtime inputs; [fixture notes](../../Mzying2001.MonkeySharp.CefSharp.SmokeHost/Fixtures/README.md) explain its test-only TLS certificate and process-local policy. These cases validate MonkeySharp contracts; they are separate from third-party corpus and Tampermonkey differential runs.
+The SmokeHost embeds repository-owned `.user.js` fixtures and installs them through the normal repository. Two ephemeral loopback HTTP servers supply runtime inputs; [fixture notes](../../Mzying2001.MonkeySharp.CefSharp.SmokeHost/Fixtures/README.md) explain its test-only TLS certificate and process-local policy. Dynamic webRequest tests await host-side registration acknowledgements through a test-only HTTP barrier, then observe actual callbacks; they do not infer registration from elapsed time. These cases validate MonkeySharp contracts; they are separate from third-party corpus and Tampermonkey differential runs.
 
 | Result ID | Required evidence |
 | --- | --- |
@@ -66,13 +66,13 @@ The download service is test-only: Chromium executes GM calls and the supplied h
 
 Each case emits a `compatibility-case` JSON record containing `caseId`, `success`, named `checks`, and failure context (`frameId`, `documentId`, `url`, `state`, `error`). `smoke-summary.compatibility` must contain all 15 successful results. The runner independently rejects missing/duplicate cases, failed assertions, wrong process architecture or CefSharp assembly version, missing detach/disposal and nonzero exits. Polling has a 15-second deadline; the host has a 90-second watchdog and the runner kills a stalled process tree after 120 seconds.
 
-The `frames` child-navigation check accepts either `ContextReleased` or `NavigationSuperseded` for the old document ID. Both transitions retire the document in the runtime; native callback order can make Chromium 84 report supersession first. A terminal event for another document on the same native frame does not satisfy this check. The replacement must still have a new document ID, run once and preserve the required storage snapshot.
+The `frames` child-navigation and `webRequest` main-navigation cleanup checks accept either `ContextReleased` or `NavigationSuperseded` for the old document ID. Both transitions retire the document in the runtime; native callback order can report supersession without a later release event. A terminal event for another document on the same native frame does not satisfy these checks. The replacement must still have a new document ID, run once and preserve the required storage snapshot.
 
 Read-only adapter initialization and fixture-result polling retry evaluation cancellations within a 15-second phase budget. They stop for caller cancellation, document replacement, detach or native frame retirement; script assertion failures are not retried. Exhaustion retains a `TimeoutException` and the last cancellation. See [native lifecycle maintenance](../development.md#native-lifecycle-maintenance) for retry timing and [adapter tests](../../Mzying2001.MonkeySharp.CefSharp.IntegrationTests/ReadOnlyScriptEvaluatorTests.cs) for deterministic failure coverage.
 
 Run `powershell -NoProfile -ExecutionPolicy Bypass -File Mzying2001.MonkeySharp.CefSharp.SmokeHost/Test-SmokeResults.ps1` to check result validation without launching a browser. Both Windows PowerShell and PowerShell 7 can run the scripts.
 
-Logs are written to `artifacts/smoke/<version>-<platform>/` (`restore.log`, `clean.log`, `build.log` when output is present, `stdout.log`, `stderr.log`, and `results.jsonl`); `-OutputDirectory` overrides the location. CI uploads that directory as `chromium-<version>-<platform>` even on failure. Inspect failed `compatibility-case` records first, then the adjacent lifecycle, console and diagnostic records.
+Logs are written to fresh `artifacts/smoke/<version>-<platform>/<run>/` directories (`restore.log`, `clean.log`, `build.log` when output is present, `stdout.log`, `stderr.log`, `results.jsonl` and process runner reports); `-OutputDirectory` overrides the location. CI retains these directories even on failure. Inspect failed `compatibility-case` records first, then the adjacent lifecycle, console and diagnostic records. Shared [process checks](../../scripts/testing/README.md) verify timeout cleanup and output capture.
 
 ## Pinned reference and evidence
 

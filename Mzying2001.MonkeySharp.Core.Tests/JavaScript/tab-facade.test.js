@@ -1,3 +1,4 @@
+const { waitFor } = require('./test-wait');
 const completePlan = require("./test-plan");
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -64,7 +65,7 @@ test("openInTab handles are local, default inactive, and close before id is queu
     const encoded = Buffer.from(JSON.stringify(completePlan(payload)), "utf8").toString("base64");
     vm.runInThisContext(template.replace("__MONKEYSHARP_PAYLOAD_BASE64__", encoded));
     await globalThis.__tabPromise;
-    await new Promise(resolve => setTimeout(resolve, 30));
+    await waitFor(() => globalThis.__modernClosed === 1, 'tab closure acknowledgement');
 
     assert.equal(starts.length, 2);
     assert.equal(starts[0].active, false);
@@ -95,7 +96,7 @@ test("legacy tab callbacks receive structured bridge errors", async () => {
             error: { code: "MSP005_PERMISSION_DENIED", message: "denied" } });
     }};
     vm.runInThisContext(template.replace("__MONKEYSHARP_PAYLOAD_BASE64__", Buffer.from(JSON.stringify(completePlan(payload))).toString("base64")));
-    while (!globalThis.__tabError) await new Promise(resolve => setTimeout(resolve, 5));
+    await waitFor(() => globalThis.__tabError, 'tab error callback');
     assert.equal(globalThis.__tabError[0], null);
     assert.equal(globalThis.__tabError[1].error, "not_permitted");
     assert.equal(globalThis.__tabError[1].code, "MSP005_PERMISSION_DENIED");

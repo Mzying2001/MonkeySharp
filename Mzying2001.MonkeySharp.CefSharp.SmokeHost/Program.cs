@@ -23,9 +23,17 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
     internal static class Program
     {
         internal static bool EnableBackForwardCacheProbe { get; private set; }
+        internal static string CompatibilityCase { get; private set; } = "all";
         [STAThread]
         private static void Main(string[] args)
         {
+            var caseIndex = Array.IndexOf(args, "--compatibility-case");
+            if (caseIndex >= 0)
+            {
+                if (caseIndex + 1 >= args.Length || (args[caseIndex + 1] != "all" && args[caseIndex + 1] != "webRequest"))
+                    throw new ArgumentException("Expected --compatibility-case all or webRequest.");
+                CompatibilityCase = args[caseIndex + 1];
+            }
             if (args.Length == 3 && args[0] == "--corpus") { Environment.ExitCode = global::MonkeySharp.Compatibility.CorpusHost.Run(args[1], args[2]); return; }
             CefSharpSettings.WcfEnabled = false;
             CefSharpSettings.ConcurrentTaskExecution = true;
@@ -69,6 +77,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             using (var fixture = new LocalHttpFixture())
             using (var otherFixture = new LocalHttpFixture())
             using (var values = new PreparedValueStore())
+            using (var webRequests = new ObservedWebRequestService())
             {
                 var startUri = fixture.Start();
                 otherFixture.Start();
@@ -81,6 +90,8 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                     true,
                     CancellationToken.None);
                 await CompatibilitySuite.InstallAsync(repository, fixture.Port, otherFixture.Port);
+                webRequests.InstallationId = (await repository.GetSnapshotAsync(CancellationToken.None)).Single(script => script.Definition.Metadata.Name == "Compatibility request effects").ScriptKey.ToString();
+                fixture.WebRequestBarrier = webRequests;
                 preparedContent.Offline = true;
                 foreach (var script in await repository.GetSnapshotAsync(CancellationToken.None))
                     if (script.Definition.Metadata.Name.StartsWith("Replay ", StringComparison.Ordinal)) values.SnapshotDelays[script.ScriptKey.ToString()] = TimeSpan.FromMilliseconds(500);
@@ -92,6 +103,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                 {
                     using (var host = new CefSharpUserScriptHostBuilder(repository)
                         .UseValueStore(values)
+                        .UseWebRequestService(webRequests)
                         .UsePermissionPolicy(permissions)
                         .UseNotificationService(new SmokeNotificationService())
                         .UseTabService(new SmokeTabService())
@@ -439,7 +451,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             _timeoutTimer.Stop();
             await _host.DetachAsync(CancellationToken.None).ConfigureAwait(true);
             var success = _initialFixturePassed && _mainFrameLoads >= 2 && _childFrameLoads >= 1 && _contextReleased >= 1 &&
-                !_host.IsAttached && _compatibilityResults != null && _compatibilityResults.Count == 15 && _compatibilityResults.Values.All(value => value);
+                !_host.IsAttached && _compatibilityResults != null && _compatibilityResults.Count == (Program.CompatibilityCase == "all" ? 15 : 1) && _compatibilityResults.Values.All(value => value);
             object fixture = null;
             if (!string.IsNullOrEmpty(_initialFixtureJson))
             {
@@ -448,7 +460,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             }
             Console.WriteLine(JsonSerializer.Serialize(new
             {
-                type = "smoke-summary",
+                type = "smoke-summary", compatibilityCase = Program.CompatibilityCase,
                 success,
                 compatibility = _compatibilityResults,
                 fixtureResult = fixture,
@@ -518,6 +530,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
 
         public int Port { get; private set; }
         public int OtherPort { get; set; }
+        internal ObservedWebRequestService WebRequestBarrier { get; set; }
         public static readonly byte[] DownloadBytes = Enumerable.Range(0, 32768).Select(index => (byte)(index % 251)).ToArray();
         public int RequestCount(string path) => _requests.TryGetValue(path, out var count) ? count : 0;
 
@@ -582,6 +595,17 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                     var request = await ReadRequestAsync(stream).ConfigureAwait(false);
                     if (request == null) return;
                     _requests.AddOrUpdate(request.Path, 1, (_, count) => count + 1);
+                    if (request.Path.StartsWith("/compat/barrier/", StringComparison.Ordinal))
+                    {
+                        try { await WebRequestBarrier.WaitAsync(int.Parse(request.Path.Substring("/compat/barrier/".Length)), _cancellation.Token).ConfigureAwait(false); }
+                        catch (TimeoutException error)
+                        {
+                            await WriteResponseAsync(stream, 504, "Gateway Timeout", "text/plain", new Dictionary<string, string>(), Encoding.UTF8.GetBytes(error.Message)).ConfigureAwait(false);
+                            return;
+                        }
+                        await WriteResponseAsync(stream, 200, "OK", "text/plain", new Dictionary<string, string>(), Encoding.UTF8.GetBytes("ready")).ConfigureAwait(false);
+                        return;
+                    }
                     if (request.Path == "/compat/files/bytes" || request.Path == "/compat/files/slow")
                     {
                         await WriteDownloadAsync(stream, request.Path.EndsWith("slow"), _cancellation.Token).ConfigureAwait(false);
@@ -765,6 +789,8 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                             contentType = "text/javascript"; body = Encoding.UTF8.GetBytes("globalThis.staticBlocked=true;"); break;
                         case "/compat/net/static-target.js":
                             contentType = "text/javascript"; body = Encoding.UTF8.GetBytes("globalThis.staticTarget=true;"); break;
+                        case "/compat/net/static-old.js":
+                            contentType = "text/javascript"; body = Encoding.UTF8.GetBytes("globalThis.staticOriginal=true;"); break;
                         case "/partition-receive":
                             request.Headers.TryGetValue("Cookie", out var partitionCookie);
                             body = Encoding.UTF8.GetBytes(partitionCookie ?? string.Empty);

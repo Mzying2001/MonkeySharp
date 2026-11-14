@@ -10,6 +10,7 @@ namespace Mzying2001.MonkeySharp.Demo.Browser
 {
     internal sealed class BrowserFavicon : IDisposable
     {
+        internal const string ProbeScript = "(function(){var icon=document.querySelector('link[rel~=\"icon\"],link[rel=\"shortcut icon\"]');return icon ? icon.href : null;})()";
         private readonly ChromiumWebBrowser _browser;
         private readonly BrowserTabViewModel _tab;
         private readonly Action<Action> _post;
@@ -63,8 +64,7 @@ namespace Mzying2001.MonkeySharp.Demo.Browser
                         continue;
                     }
                     var response = await _browser.EvaluateScriptAsync(
-                        "(function(){var icon=document.querySelector('link[rel~=" +
-                        "\"icon\"],link[rel=\"shortcut icon\"]);return icon ? icon.href : null;})()",
+                        ProbeScript,
                         timeout: TimeSpan.FromSeconds(5));
                     if (!response.Success)
                     {

@@ -150,7 +150,18 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
             host.Diagnostic += (sender, diagnostic) =>
             {
                 if (!context.IsIncognito)
+                {
+                    SmokeTrace.Write("diagnostic", new { tab = tab.TabId, diagnostic.Code, diagnostic.Message, diagnostic.DocumentId, diagnostic.FrameId, diagnostic.RequestId, exception = diagnostic.Exception?.ToString() });
                     MainWindow.Diagnostics.Report("[" + tab.TabId.Substring(0, 8) + "] " + diagnostic.Code + " " + diagnostic.Message);
+                }
+            };
+            host.DocumentLifecycle += (sender, lifecycle) =>
+            {
+                if (!context.IsIncognito) SmokeTrace.Write("lifecycle", new { tab = tab.TabId, kind = lifecycle.Kind.ToString(), lifecycle.Frame.DocumentId, lifecycle.Frame.FrameId, url = lifecycle.Frame.Url.AbsoluteUri });
+            };
+            host.Gateway.Notification += (sender, notification) =>
+            {
+                if (!context.IsIncognito) SmokeTrace.Write("notification", new { tab = tab.TabId, notification.EventName, notification.ExecutionId, notification.Frame.DocumentId, notification.Frame.FrameId });
             };
             try { host.Attach(browser); }
             catch

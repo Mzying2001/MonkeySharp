@@ -45,7 +45,7 @@ jobs:
     timeout-minutes: 20
     environment: nuget
     permissions:
-      contents: read
+      contents: write
       id-token: write
     steps:
       - uses: actions/checkout@v4
@@ -77,6 +77,19 @@ jobs:
           PACKAGE_VERSION: ${{ inputs.version }}
           NUGET_API_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
         run: ./scripts/Publish-Packages.ps1 -PackageDirectory artifacts/nuget -Version $env:PACKAGE_VERSION
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ inputs.version }}
+          name: ${{ inputs.version }}
+          target_commitish: ${{ github.sha }}
+          prerelease: ${{ contains(inputs.version, '-') }}
+          fail_on_unmatched_files: true
+          overwrite_files: true
+          files: |
+            artifacts/nuget/*.nupkg
+            artifacts/nuget/*.snupkg
 
       - name: Upload publication results
         if: always()

@@ -1,3 +1,4 @@
+const { waitFor } = require('./test-wait');
 const completePlan = require("./test-plan");
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -62,7 +63,7 @@ test("XHR serializes Tampermonkey request inputs and exposes abort", async () =>
     };
     vm.runInThisContext(template.replace(
         "__MONKEYSHARP_PAYLOAD_BASE64__", Buffer.from(JSON.stringify(completePlan(payload))).toString("base64")));
-    while (!globalThis.__inputsPromise) await new Promise(resolve => setTimeout(resolve, 5));
+    await waitFor(() => !!(globalThis.__inputsPromise), 'XHR input bootstrap');
     await globalThis.__inputsPromise;
 
     assert.equal(globalThis.__abortType, "function");
@@ -132,7 +133,7 @@ test("XHR accepts binary request bodies and parses responseXML", async () => {
     };
     vm.runInThisContext(template.replace(
         "__MONKEYSHARP_PAYLOAD_BASE64__", Buffer.from(JSON.stringify(completePlan(payload))).toString("base64")));
-    while (!globalThis.__xmlPromise && !globalThis.__xmlErr) await new Promise(resolve => setTimeout(resolve, 5));
+    await waitFor(() => !!(globalThis.__xmlPromise || globalThis.__xmlErr), 'XML bootstrap');
     assert.equal(globalThis.__xmlErr, undefined);
     await globalThis.__xmlPromise;
     const xmlResult = await globalThis.__xmlPromise;
@@ -161,7 +162,7 @@ test("legacy XHR delivers immediate validation errors once", async () => {
         return JSON.stringify({ type: "response", protocol: 2, requestId: request.requestId, ok: true, result: { sessionId: "unused" } });
     }};
     vm.runInThisContext(template.replace("__MONKEYSHARP_PAYLOAD_BASE64__", Buffer.from(JSON.stringify(completePlan(payload))).toString("base64")));
-    while (!globalThis.__legacyXhrPromise) await new Promise(resolve => setTimeout(resolve, 5));
+    await waitFor(() => !!(globalThis.__legacyXhrPromise), 'legacy XHR bootstrap');
     await globalThis.__legacyXhrPromise;
     assert.equal(globalThis.__legacyXhrErrorCount, 1);
     assert.equal(globalThis.__legacyXhrError.error, "not_succeeded");

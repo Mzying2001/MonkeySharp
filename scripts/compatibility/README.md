@@ -29,7 +29,7 @@ Use Windows, a desktop session for real Chromium/WPF gates, an SDK supporting `.
 
 Baseline defaults are x64 and 84.4.10; accepted versions are 84.4.10 and 156.0.150. WPF runs for x64 only. Delivery defaults to these two versions and both platforms. `-CefSharpVersions` and `-Platforms` select subsets; `-CorpusScript <path>` adds an existing local script, `-KeepWorktrees` keeps successful checkouts, and `-PackageOnly` skips baseline checks for diagnostics. Keep different native versions in separate output trees. Historical evidence for 121/151 remains archived. For release package generation without native gates, use [Build-Packages.ps1](../../docs/development.md#package).
 
-Raw baseline output is printed by the runner; SmokeHost saves its logs under `artifacts/smoke/<version>-<platform>/`. Delivery stores reports/packages under `artifacts/delivery/<run>/`. These generated directories and temporary browser profiles are ignored by Git.
+Baseline composes the same source/native runners as CI and retains per-stage logs under `artifacts/baseline/<version>-<platform>/<run>/`; `-OutputDirectory` overrides the root. Direct SmokeHost runs use `artifacts/smoke/<version>-<platform>/<run>/`. Delivery stores reports/packages under `artifacts/delivery/<run>/`, including baseline evidence and native OOPIF records. These generated directories and temporary browser profiles are ignored by Git.
 
 Delivery creates independent short-path worktrees, assets, profiles and unique package versions. It snapshots tracked changes against the base commit and records the source-patch SHA-256; untracked files are not included in that patch. It stops on failure and preserves failed worktrees. Successful worktrees are removed after validating their resolved paths unless `-KeepWorktrees` is set. The public consumer resolves the generated NuGet packages rather than project references. An omitted `-CorpusScript` does not require local notes or an uncommitted script.
 
@@ -48,7 +48,7 @@ The environment JSON pins `channel` (stable/beta), `version`, `manifestVersion`,
 
 ## WPF Demo E2E
 
-The x64 baseline also invokes the [WPF Demo E2E runner](../../Mzying2001.MonkeySharp.Demo/README.md#verification), which runs once using the application's default English UI. Run it directly with `./Mzying2001.MonkeySharp.Demo/Run-E2E.ps1 -CefSharpVersion 156.0.150`; `-NoBuild` reuses an already matching deployment. Demo JSON reports record `environment.uiLanguage` and English UI assertions under `artifacts/demo-smoke/`. Other languages are checked by localization unit tests without repeating the full browser suite.
+The x64 baseline also invokes the [WPF Demo E2E runner](../../Mzying2001.MonkeySharp.Demo/README.md#verification), which runs once using the application's default English UI. Run it directly with `./Mzying2001.MonkeySharp.Demo/Run-E2E.ps1 -CefSharpVersion 156.0.150`; `-NoBuild` reuses an already matching deployment. Add `-Case navigation-menu` to isolate cross-site, history, reload and tab-isolation menu checks. Demo JSON reports record the selected case, `environment.uiLanguage` and named assertions under `artifacts/demo-smoke/`; adjacent `.events.jsonl` files correlate steps, renderer observations, document identities, menu registrations/clicks/releases and bridge diagnostics without recording bridge credentials. Other languages are checked by localization unit tests without repeating the full browser suite.
 
 ## Pinned third-party corpus
 

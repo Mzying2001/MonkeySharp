@@ -12,13 +12,15 @@ CI 在目标分支为 `dev` 或 `main` 的 PR 上运行，覆盖 CefSharp `84.4.
 
 ## 构建与测试
 
+CI 与本地基线复用 `scripts/testing/Run-SourceTests.ps1`（清理构建、按项目保存 .NET TRX、有截止时间的 JavaScript 及 runner/报告校验）和 `scripts/testing/Run-NativeTests.ps1`（SmokeHost/CDP、OOPIF、corpus、x64 WPF）。两者均接受 `-Platform`、`-CefSharpVersion`、`-OutputDirectory`；`Run-Baseline.ps1` 组合调用这两个入口。每次运行保留独立证据目录和失败阶段日志。诊断时可运行 `Run-RepeatedNative.ps1 -Case webRequest -Repeat 30`，或用 `-Case navigation-menu -Platform x64` 检查菜单；每次尝试均被记录，任一次失败都会使整体失败。手动 **Test stability** 工作流使用相同入口。
+
 还原、构建、测试和打包必须使用相同的 `CefSharpVersion` 属性：
 
 ```powershell
 dotnet restore MonkeySharp.slnx -p:Platform=x64 -p:CefSharpVersion=156.0.150
 dotnet build MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=156.0.150 --no-restore
 dotnet test MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=156.0.150 --no-build
-node --test Mzying2001.MonkeySharp.Core.Tests/JavaScript/*.test.js
+node --test --test-timeout=30000 Mzying2001.MonkeySharp.Core.Tests/JavaScript/*.test.js
 ```
 
 使用 `-p:Platform=x86` 重复 .NET 命令；x86 配置会排除仅支持 x64 的 Demo 项目。不同原生版本或平台不能在同一个输出树中并发构建。
@@ -65,7 +67,7 @@ dotnet pack Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.cspr
 
 ## 使用 GitHub Actions 发布到 NuGet
 
-[Publish NuGet](../.github/workflows/publish.yml) 是手动触发的工作流，复用现有 CI 执行 `84.4.10`/`156.0.150` 的 x64/x86 .NET/JavaScript、真实 Chromium 和 x64 WPF 门禁，再按输入版本构建五个包，并离线验证发布逻辑。发布作业下载同一批产物，检查清单、版本及 SHA-256 后，通过 `NuGet/login@v1` 用 GitHub OIDC 身份交换临时 NuGet 凭据。仅发布作业具有 `id-token: write`，使用 GitHub 环境 `nuget`。认证机制见 [NuGet Trusted Publishing 官方指南](https://learn.microsoft.com/en-us/nuget/nuget-org/trusted-publishing)。
+[Publish NuGet](../.github/workflows/publish.yml) 是手动触发的工作流，复用现有 CI 执行 `84.4.10`/`156.0.150` 的 x64/x86 .NET/JavaScript、真实 Chromium 和 x64 WPF 门禁，再按输入版本构建五个包，并离线验证发布逻辑。发布作业下载同一批产物，检查清单、版本及 SHA-256 后，通过 `NuGet/login@v1` 用 GitHub OIDC 身份交换临时 NuGet 凭据。仅发布作业具有 `id-token: write` 和 `contents: write`，使用 GitHub 环境 `nuget`。认证机制见 [NuGet Trusted Publishing 官方指南](https://learn.microsoft.com/en-us/nuget/nuget-org/trusted-publishing)。
 
 首次使用时完成以下配置：
 
@@ -84,11 +86,11 @@ dotnet pack Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.cspr
 
 使用 fork 时，将仓库 Owner 和名称替换为实际值。`NUGET_USER` 中的 NuGet 用户必须有权使用所选策略 Owner。如果 NuGet 显示策略暂时激活，应在激活窗口内完成首次发布，或在运行工作流前重新激活。
 
-每次发布时，进入 GitHub **Actions → Publish NuGet → Run workflow**，选择源码分支/ref，输入新的版本号，例如 `3.0.1` 或 `3.0.1-rc.1`，不要添加 `v` 前缀。该输入覆盖本次构建的项目包版本，不修改项目文件，也不创建 Git 标签或 GitHub Release。所有门禁通过后自动发布所选代码版本对应的产物；普通 PR CI 不会发布。
+每次发布时，进入 GitHub **Actions → Publish NuGet → Run workflow**，选择源码分支/ref，输入新的版本号，例如 `3.0.1` 或 `3.0.1-rc.1`，不要添加 `v` 前缀。该输入覆盖本次构建的项目包版本，不修改项目文件。所有门禁通过后自动发布所选代码版本对应的产物。全部普通包和符号包推送成功后，工作流使用内置 `GITHUB_TOKEN` 创建 GitHub Release，标签和标题均为版本号，新标签指向本次构建的提交，资产包含五个 `.nupkg` 和五个 `.snupkg`。带预发布后缀的版本自动标记为 GitHub Prerelease；普通 PR CI 不会发布。
 
 [Publish-Packages.ps1](../scripts/Publish-Packages.ps1) 在任何上传前检查全部十个文件，并按下载后的产物目录解析清单路径，不使用构建机器的绝对路径。先上传 Core，再上传适配器；普通包关闭隐式符号上传，随后显式上传各 `.snupkg` 并传入符号凭据。两个阶段都使用 `--skip-duplicate`，已有普通包不会妨碍补传缺失的符号包。其他 CLI 失败立即停止，并写入不包含凭据的 `publish-results.json`，作为 `nuget-publish-results` 产物上传。其中 `accepted-or-existing` 表示推送被服务器接受或对应包已存在，不代表 NuGet 后台验证或索引已完成。
 
-发布中断时，在同一次工作流运行中选择 **Re-run failed jobs**，复用已有 `nuget-packages` 产物并重新获取临时凭据。不要修改二进制内容后复用已经发布的版本号。NuGet 不支持将五个包作为一个事务一起发布；工作流完成后，在 nuget.org 查看包的可用性及验证状态。
+发布中断时，在同一次工作流运行中选择 **Re-run failed jobs**，复用已有 `nuget-packages` 产物并重新获取临时凭据。同版本的 GitHub Release 已存在时，复用该 Release，补传缺失资产并覆盖同名资产，已有标签不移动。NuGet 发布或 GitHub Release 步骤失败时，仍会上传 `nuget-publish-results` 产物。不要修改二进制内容后复用已经发布的版本号。NuGet 不支持将五个包作为一个事务一起发布；工作流完成后，在 nuget.org 查看包的可用性及验证状态。
 
 本地离线验证，不需要凭据，也不会上传：
 
@@ -113,7 +115,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File Mzying2001.MonkeySharp.Demo/
 
 ## Chromium 兼容性脚本包
 
-SmokeHost 通过正常安装流程，在 loopback HTTP fixture 上运行仓库原创脚本。runner 要求全部 15 个兼容性场景，核验实际 CefSharp 版本、平台及清理，并将日志保存在 `artifacts/smoke/<version>-<platform>/`；可通过 `-OutputDirectory` 覆盖。
+SmokeHost 通过正常安装流程，在 loopback HTTP fixture 上运行仓库原创脚本。runner 要求全部 15 个兼容性场景，核验实际 CefSharp 版本、平台及清理，并将日志保存在 `artifacts/smoke/<version>-<platform>/<run>/`；可通过 `-OutputDirectory` 覆盖。
 
 场景 ID、断言、超时、解析器检查及日志排查见 [SmokeHost 场景与结果验证](compatibility/validation.md#smokehost-cases-and-results)。[验证指南](compatibility/validation.md#latest-recorded-validation)维护已记录结果及剩余缺口，[工具说明](../scripts/compatibility/README.md)维护 runner 参数及固定参考环境前置条件。
 

@@ -9,6 +9,15 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
     public sealed class SmokePollingTests
     {
         [Fact]
+        public async Task AStalledEvaluationCannotOutliveThePollingBudget()
+        {
+            var evaluation = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            await Assert.ThrowsAsync<TimeoutException>(() => SmokeBrowser.WaitAsync(() => evaluation.Task, TimeSpan.FromMilliseconds(20)));
+            Assert.False(evaluation.Task.IsCompleted);
+            evaluation.SetResult(false);
+        }
+
+        [Fact]
         public async Task NavigationCanceledEvaluationIsRetriedUntilTheConditionIsTrue()
         {
             var attempts = 0;

@@ -28,6 +28,30 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
     public sealed class HostServiceTests
     {
         [Fact]
+        public Task MenuReadinessRejectsCachedContainersAfterThePopupCloses() => OnDispatcher(async () =>
+        {
+            var menu = new MenuItem { Header = "Scripts" };
+            menu.Items.Add(new MenuItem { Header = "Command", StaysOpenOnClick = true });
+            var bar = new Menu();
+            bar.Items.Add(menu);
+            var window = new System.Windows.Window { Content = bar, Width = 320, Height = 150 };
+            var opens = 0;
+            menu.SubmenuOpened += (_, __) =>
+            {
+                if (++opens == 1) window.Dispatcher.BeginInvoke(new Action(() => menu.IsSubmenuOpen = false), DispatcherPriority.Normal);
+            };
+            try
+            {
+                window.Show();
+                var items = await Mzying2001.MonkeySharp.Demo.Runtime.ScriptMenuSmokeTest.OpenAsync(window, menu);
+                Assert.Single(items);
+                Assert.True(menu.IsSubmenuOpen);
+                Assert.True(opens >= 2);
+            }
+            finally { window.Close(); }
+        });
+
+        [Fact]
         public Task PermissionWindowUsesExplicitChoicesAndClosesOnCancellation() => OnDispatcher(async () =>
         {
             var repository = new Mzying2001.MonkeySharp.Core.Repository.InMemoryUserScriptRepository();
@@ -498,14 +522,19 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
             var thread = new Thread(() =>
             {
                 var dispatcher = Dispatcher.CurrentDispatcher;
+                Exception failure = null;
                 SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext(dispatcher));
                 dispatcher.BeginInvoke(new Action(async () =>
                 {
-                    try { await action(); completion.TrySetResult(null); }
-                    catch (Exception exception) { completion.TrySetException(exception); }
+                    try { await action(); }
+                    catch (Exception exception) { failure = exception; }
                     finally { dispatcher.BeginInvokeShutdown(DispatcherPriority.Background); }
                 }));
-                Dispatcher.Run();
+                try { Dispatcher.Run(); }
+                catch (Exception exception) { failure = failure ?? exception; }
+                // Finish native input/COM teardown before the test host can unload the AppDomain.
+                if (failure == null) completion.TrySetResult(null);
+                else completion.TrySetException(failure);
             })
             { IsBackground = true };
             thread.SetApartmentState(ApartmentState.STA); thread.Start();

@@ -1,0 +1,56 @@
+name: Test stability
+
+on:
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: Native scenario to repeat without masking failures
+        required: true
+        type: choice
+        options: [webRequest, navigation-menu]
+        default: webRequest
+      cef-version:
+        description: CefSharp version
+        required: true
+        type: choice
+        options: ['84.4.10', '156.0.150']
+        default: '84.4.10'
+      platform:
+        description: Platform (navigation-menu requires x64)
+        required: true
+        type: choice
+        options: [x64, x86]
+        default: x64
+      repeat:
+        description: Number of fresh-process attempts
+        required: true
+        type: number
+        default: 30
+
+permissions:
+  contents: read
+
+jobs:
+  repeat:
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.315
+      - name: Repeat native scenario
+        shell: pwsh
+        env:
+          SCENARIO: ${{ inputs.scenario }}
+          CEF_VERSION: ${{ inputs.cef-version }}
+          TEST_PLATFORM: ${{ inputs.platform }}
+          TEST_REPEAT: ${{ inputs.repeat }}
+        run: ./scripts/testing/Run-RepeatedNative.ps1 -Case $env:SCENARIO -CefSharpVersion $env:CEF_VERSION -Platform $env:TEST_PLATFORM -Repeat $env:TEST_REPEAT
+      - name: Upload every attempt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stability-${{ inputs.scenario }}-${{ inputs.cef-version }}-${{ inputs.platform }}-attempt-${{ github.run_attempt }}
+          path: artifacts/repeated-tests/
+          if-no-files-found: error
