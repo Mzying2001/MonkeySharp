@@ -30,7 +30,7 @@ Repeat the .NET commands with `-p:Platform=x86`. The x86 solution configuration 
 Build release packages with [Build-Packages.ps1](../scripts/Build-Packages.ps1), using Windows PowerShell 5.1 or PowerShell 7 and .NET SDK 8+:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/Build-Packages.ps1 -Version 3.0.0
+powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/Build-Packages.ps1 -Version 3.0.1
 
 # Optional: choose one platform, a pinned current engine and an empty output directory.
 ./scripts/Build-Packages.ps1 -Version 3.0.1 -Platforms x64 -CurrentCefSharpVersion 156.0.150 -OutputDirectory artifacts/release
@@ -48,9 +48,9 @@ After reviewing and validating the generated packages, create a nuget.org API ke
 
 ```powershell
 $packages = 'artifacts/packages/<version>-<run>'
-dotnet nuget push "$packages/Mzying2001.MonkeySharp.Core.3.0.0.nupkg" --source https://api.nuget.org/v3/index.json --api-key $env:NUGET_API_KEY
-dotnet nuget push "$packages/Mzying2001.MonkeySharp.CefSharp84.x64.3.0.0.nupkg" --source https://api.nuget.org/v3/index.json --api-key $env:NUGET_API_KEY
-dotnet nuget push "$packages/Mzying2001.MonkeySharp.CefSharp.x64.3.0.0.nupkg" --source https://api.nuget.org/v3/index.json --api-key $env:NUGET_API_KEY
+dotnet nuget push "$packages/Mzying2001.MonkeySharp.Core.3.0.1.nupkg" --source https://api.nuget.org/v3/index.json --api-key $env:NUGET_API_KEY
+dotnet nuget push "$packages/Mzying2001.MonkeySharp.CefSharp84.x64.3.0.1.nupkg" --source https://api.nuget.org/v3/index.json --api-key $env:NUGET_API_KEY
+dotnet nuget push "$packages/Mzying2001.MonkeySharp.CefSharp.x64.3.0.1.nupkg" --source https://api.nuget.org/v3/index.json --api-key $env:NUGET_API_KEY
 ```
 
 Repeat for x86 when releasing both platforms. `dotnet nuget push` also pushes the adjacent symbol package. Published package ID/version pairs cannot be replaced; use a new MonkeySharp version for a subsequent release.

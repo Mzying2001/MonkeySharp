@@ -54,7 +54,7 @@ foreach ($version in $CefSharpVersions) {
                 Copy-Item -LiteralPath $baselineRoot.FullName -Destination (Join-Path $caseRoot 'baseline') -Recurse
             }
             $feed = Join-Path $caseRoot 'feed'
-            $packageVersion = "3.0.0-validation.$runId.$version.$platform"
+            $packageVersion = "3.0.1-validation.$runId.$version.$platform"
             Invoke-Logged 'dotnet' @('pack',(Join-Path $checkout 'Mzying2001.MonkeySharp.Core/Mzying2001.MonkeySharp.Core.csproj'),'-c','Release','-p:Platform=AnyCPU',"-p:Version=$packageVersion","-p:PackageVersion=$packageVersion",'-o',$feed,'--nologo') $checkout (Join-Path $caseRoot 'pack-core.log')
             Invoke-Logged 'dotnet' @('pack',(Join-Path $checkout 'Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj'),'-c','Release',"-p:Platform=$platform","-p:CefSharpVersion=$version","-p:Version=$packageVersion","-p:PackageVersion=$packageVersion",'-o',$feed,'--nologo') $checkout (Join-Path $caseRoot 'pack-adapter.log')
             Add-Type -AssemblyName System.IO.Compression.FileSystem

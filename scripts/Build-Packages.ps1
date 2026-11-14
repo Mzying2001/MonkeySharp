@@ -3,7 +3,7 @@
 .SYNOPSIS
 Builds Core and the legacy/current CefSharp NuGet packages without publishing.
 .EXAMPLE
-./scripts/Build-Packages.ps1 -Version 3.0.0
+./scripts/Build-Packages.ps1 -Version 3.0.1
 .EXAMPLE
 ./scripts/Build-Packages.ps1 -Platforms x64 -CurrentCefSharpVersion 156.0.150 -OutputDirectory artifacts/release
 #>

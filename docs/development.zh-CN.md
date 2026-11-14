@@ -30,7 +30,7 @@ node --test --test-timeout=30000 Mzying2001.MonkeySharp.Core.Tests/JavaScript/*.
 使用 [Build-Packages.ps1](../scripts/Build-Packages.ps1) 构建发布包，需要 Windows PowerShell 5.1 或 PowerShell 7，以及 .NET SDK 8+：
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/Build-Packages.ps1 -Version 3.0.0
+powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/Build-Packages.ps1 -Version 3.0.1
 
 # 可选：指定一个平台、固定的新版引擎以及空输出目录。
 ./scripts/Build-Packages.ps1 -Version 3.0.1 -Platforms x64 -CurrentCefSharpVersion 156.0.150 -OutputDirectory artifacts/release
@@ -48,9 +48,9 @@ Windows 下可以双击 [Build-Packages.bat](../scripts/Build-Packages.bat) 按�
 
 ```powershell
 $packages = 'artifacts/packages/<version>-<run>'
-dotnet nuget push "$packages/Mzying2001.MonkeySharp.Core.3.0.0.nupkg" --source https://api.nuget.org/v3/index.json --api-key $env:NUGET_API_KEY
-dotnet nuget push "$packages/Mzying2001.MonkeySharp.CefSharp84.x64.3.0.0.nupkg" --source https://api.nuget.org/v3/index.json --api-key $env:NUGET_API_KEY
-dotnet nuget push "$packages/Mzying2001.MonkeySharp.CefSharp.x64.3.0.0.nupkg" --source https://api.nuget.org/v3/index.json --api-key $env:NUGET_API_KEY
+dotnet nuget push "$packages/Mzying2001.MonkeySharp.Core.3.0.1.nupkg" --source https://api.nuget.org/v3/index.json --api-key $env:NUGET_API_KEY
+dotnet nuget push "$packages/Mzying2001.MonkeySharp.CefSharp84.x64.3.0.1.nupkg" --source https://api.nuget.org/v3/index.json --api-key $env:NUGET_API_KEY
+dotnet nuget push "$packages/Mzying2001.MonkeySharp.CefSharp.x64.3.0.1.nupkg" --source https://api.nuget.org/v3/index.json --api-key $env:NUGET_API_KEY
 ```
 
 同时发布两个平台时，对 x86 重复发布。`dotnet nuget push` 也会推送相邻的符号包。已经发布的包名与版本组合无法覆盖，后续发布应使用新的 MonkeySharp 版本号。
