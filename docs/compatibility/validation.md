@@ -42,7 +42,7 @@ The WPF gate runs once per selected x64 version using default English in an isol
 
 ## SmokeHost cases and results
 
-The SmokeHost embeds repository-owned `.user.js` fixtures and installs them through the normal repository. Two ephemeral loopback HTTP servers supply runtime inputs; [fixture notes](../../Mzying2001.MonkeySharp.CefSharp.SmokeHost/Fixtures/README.md) explain its test-only TLS certificate and process-local policy. These cases validate MonkeySharp contracts; they are separate from third-party corpus and Tampermonkey differential runs.
+The SmokeHost embeds repository-owned `.user.js` fixtures and installs them through the normal repository. Two ephemeral loopback HTTP servers supply runtime inputs; [fixture notes](../../Mzying2001.MonkeySharp.CefSharp.SmokeHost/Fixtures/README.md) explain its test-only TLS certificate and process-local policy. Dynamic webRequest tests await host-side registration acknowledgements through a test-only HTTP barrier, then observe actual callbacks; they do not infer registration from elapsed time. These cases validate MonkeySharp contracts; they are separate from third-party corpus and Tampermonkey differential runs.
 
 | Result ID | Required evidence |
 | --- | --- |

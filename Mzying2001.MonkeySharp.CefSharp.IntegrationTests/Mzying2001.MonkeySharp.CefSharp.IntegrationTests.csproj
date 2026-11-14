@@ -27,6 +27,7 @@
   <ItemGroup>
     <Compile Include="..\Mzying2001.MonkeySharp.CefSharp.SmokeHost\SmokeLifecycleAssertions.cs" Link="SmokeLifecycleAssertions.cs" />
     <Compile Include="..\Mzying2001.MonkeySharp.CefSharp.SmokeHost\NativeFrameProbe.cs" Link="NativeFrameProbe.cs" />
+    <Compile Include="..\Mzying2001.MonkeySharp.CefSharp.SmokeHost\ObservedWebRequestService.cs" Link="ObservedWebRequestService.cs" />
     <ProjectReference Include="..\Mzying2001.MonkeySharp.CefSharp\Mzying2001.MonkeySharp.CefSharp.csproj" />
   </ItemGroup>
 </Project>

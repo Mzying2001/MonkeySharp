@@ -1,4 +1,5 @@
-﻿const completePlan = require("./test-plan");
+const { nextTurn } = require('./test-wait');
+const completePlan = require("./test-plan");
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -30,7 +31,7 @@ test("GM.webRequest uses Tampermonkey selectors, actions, and listener arguments
     }]};
     vm.runInThisContext(template.replace("__MONKEYSHARP_PAYLOAD_BASE64__", Buffer.from(JSON.stringify(completePlan(payload))).toString("base64")));
     await globalThis.__webPromise;
-    await new Promise(resolve => setTimeout(resolve, 10));
+    await nextTurn();
     assert.equal(calls.filter(item => item.params.operation === "register").length, 2);
     const registration = calls.filter(item => item.params.operation === "register")[1];
     assert.equal(registration.params.rules[0].action, "cancel");

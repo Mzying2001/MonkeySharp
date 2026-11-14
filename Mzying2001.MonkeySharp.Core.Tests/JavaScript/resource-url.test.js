@@ -1,3 +1,4 @@
+const { waitFor } = require('./test-wait');
 const completePlan = require("./test-plan");
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -50,11 +51,7 @@ async function install({ snapshot = false,
     };
     const encoded = Buffer.from(JSON.stringify(completePlan(payload)), "utf8").toString("base64");
     vm.runInContext(template.replace("__MONKEYSHARP_PAYLOAD_BASE64__", encoded), context);
-    const deadline = Date.now() + 2000;
-    while (!context.resourceApi) {
-        if (Date.now() > deadline) throw new Error("Timed out waiting for resource APIs.");
-        await new Promise(resolve => setTimeout(resolve, 5));
-    }
+    await waitFor(() => context.resourceApi, 'resource URL bootstrap');
     return { ...context.resourceApi, requests };
 }
 

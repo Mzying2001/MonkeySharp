@@ -1,3 +1,4 @@
+const { waitFor } = require('./test-wait');
 const completePlan = require("./test-plan");
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -7,15 +8,6 @@ const vm = require("node:vm");
 
 const template = require("./bootstrap-template");
 
-function waitFor(predicate) {
-    return new Promise((resolve, reject) => {
-        const deadline = Date.now() + 2000;
-        const timer = setInterval(() => {
-            if (predicate()) { clearInterval(timer); resolve(); }
-            else if (Date.now() > deadline) { clearInterval(timer); reject(new Error("Timed out waiting for cookie facade.")); }
-        }, 5);
-    });
-}
 
 test("modern GM.cookie and legacy GM_cookie share CRUD without listener extensions", async () => {
     const cookies = [];
@@ -72,7 +64,7 @@ test("modern GM.cookie and legacy GM_cookie share CRUD without listener extensio
     // Use a second invocation through the captured facade to verify callback failures are isolated.
     assert.equal(typeof globalThis.__cookieNamespace, "function");
     globalThis.__cookieNamespace.set({name:'callback',value:'yes'}, globalThis.__cookieCallback);
-    await new Promise(resolve => setTimeout(resolve, 20));
+    await waitFor(() => callbackCount === 1, 'cookie callback');
     assert.equal(callbackCount, 1);
     const key = { topLevelSite: 'https://top.test', hasCrossSiteAncestor: true };
     await new Promise((resolve, reject) => globalThis.__cookieNamespace.list({partitionKey:key}, (value, error) => error ? reject(error) : resolve(value)));

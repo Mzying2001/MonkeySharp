@@ -1,6 +1,8 @@
 using Mzying2001.MonkeySharp.Demo.ViewModels;
 using Mzying2001.MonkeySharp.Demo.Views;
 using System;
+using System.Diagnostics;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Mzying2001.MonkeySharp.Demo.Runtime
@@ -9,14 +11,27 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
     {
         internal static async Task WaitAsync(Func<Task<bool>> condition, TimeSpan? timeout = null)
         {
-            var deadline = DateTime.UtcNow + (timeout ?? TimeSpan.FromSeconds(25));
-            while (DateTime.UtcNow < deadline)
+            var budget = timeout ?? TimeSpan.FromSeconds(25);
+            var timer = Stopwatch.StartNew();
+            while (timer.Elapsed < budget)
             {
-                try { if (await condition()) return; }
+                try
+                {
+                    var pending = condition();
+                    using (var deadline = new CancellationTokenSource())
+                    {
+                        var remaining = budget - timer.Elapsed;
+                        if (remaining <= TimeSpan.Zero) break;
+                        if (await Task.WhenAny(pending, Task.Delay(remaining, deadline.Token)) != pending) break;
+                        deadline.Cancel();
+                        if (await pending) return;
+                    }
+                }
                 // A reload can destroy the V8 context between the ready check and evaluation.
                 // Only polling retries cancellation; direct evaluations and assertion errors still fail.
                 catch (TaskCanceledException) { }
-                await Task.Delay(150);
+                var pause = budget - timer.Elapsed;
+                if (pause > TimeSpan.Zero) await Task.Delay(pause < TimeSpan.FromMilliseconds(150) ? pause : TimeSpan.FromMilliseconds(150));
             }
             throw new TimeoutException("A WPF/Chromium smoke assertion timed out. " + SmokeTrace.Describe());
         }

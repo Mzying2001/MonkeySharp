@@ -1,3 +1,4 @@
+const { waitFor } = require('./test-wait');
 const completePlan = require("./test-plan");
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -104,7 +105,7 @@ test("XHR classifies HTTP, timeout, network, abort, and stream cancellation outc
     };
     vm.runInThisContext(template.replace(
         "__MONKEYSHARP_PAYLOAD_BASE64__", Buffer.from(JSON.stringify(completePlan(payload))).toString("base64")));
-    while (!globalThis.__errorsPromise) await new Promise(resolve => setTimeout(resolve, 5));
+    await waitFor(() => !!(globalThis.__errorsPromise), 'XHR error bootstrap');
     await globalThis.__errorsPromise;
 
     assert.equal(globalThis.__status.status, 404);

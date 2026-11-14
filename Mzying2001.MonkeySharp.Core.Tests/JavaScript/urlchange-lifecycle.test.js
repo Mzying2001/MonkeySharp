@@ -1,3 +1,4 @@
+const { waitFor } = require('./test-wait');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const vm = require('node:vm');
@@ -15,7 +16,7 @@ async function harness() {
         grants: ['window.onurlchange'], declaredGrants: ['window.onurlchange'], info: {}, source: 'capture(window);'
     }] });
     vm.runInContext(template.replace('__MONKEYSHARP_PAYLOAD_BASE64__', Buffer.from(JSON.stringify(payload)).toString('base64')), context);
-    for (let i = 0; !window && i < 200; i++) await new Promise(resolve => setTimeout(resolve, 5));
+    await waitFor(() => window, 'URL facade bootstrap');
     assert.ok(window);
     const runtime = context.__MonkeySharpRuntime;
     let previous = '/start';

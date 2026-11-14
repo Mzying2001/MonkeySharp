@@ -1,3 +1,4 @@
+const { waitFor } = require('./test-wait');
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const vm = require("node:vm");
@@ -43,12 +44,12 @@ for (const mode of ["complete", "missing", "duplicate", "truncated", "gap", "inc
             source: "globalThis.firstValue = GM_getValue('key'); globalThis.readValue = () => GM_getValue('key');"
         }] });
         vm.runInContext(template.replace("__MONKEYSHARP_PAYLOAD_BASE64__", Buffer.from(JSON.stringify(plan)).toString("base64")), context);
-        for (let tries = 0; tries < 100 && !context.readValue && !errors.length; tries++) await new Promise(resolve => setTimeout(resolve, 5));
+        await waitFor(() => context.readValue || errors.length, 'storage bootstrap result');
         if (mode !== "complete") { assert.equal(context.readValue, undefined); assert.equal(errors.length, 1); return; }
         assert.equal(context.firstValue, "new");
         live = true;
         deliver({ ...change, sequence: 4, newValue: "sfour" });
-        for (let tries = 0; tries < 100 && context.readValue() !== "four"; tries++) await new Promise(resolve => setTimeout(resolve, 5));
+        await waitFor(() => context.readValue() === 'four', 'storage replay');
         assert.equal(context.readValue(), "four");
         assert.equal(freshSnapshot, true);
         assert.equal(errors.length, 0);

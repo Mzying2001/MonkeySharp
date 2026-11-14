@@ -1,3 +1,4 @@
+const { waitFor, nextTurn } = require('./test-wait');
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const vm = require("node:vm");
@@ -27,13 +28,6 @@ async function install(onRequest) {
     vm.runInContext(template.replace("__MONKEYSHARP_PAYLOAD_BASE64__", Buffer.from(JSON.stringify(payload)).toString("base64")), context);
     await waitFor(() => api);
     return { ...api, requests, notify, errors };
-}
-async function waitFor(predicate) {
-    const deadline = Date.now() + 2000;
-    while (!predicate()) {
-        if (Date.now() > deadline) throw new Error("Download condition timed out.");
-        await new Promise(resolve => setTimeout(resolve, 2));
-    }
 }
 const starts = harness => harness.requests.filter(request => request.params.operation === "start");
 
@@ -178,7 +172,7 @@ test("Blob download stages bounded chunks with backpressure and releases on tran
     const pending = h.modern({ url: new Blob([bytes]), name: "blob.bin" });
     const rejected = assert.rejects(pending, error => error.details.includes("destination failed"));
     await waitFor(() => acknowledge);
-    await new Promise(resolve => setTimeout(resolve, 10));
+    await nextTurn();
     assert.equal(appends, 1);
     acknowledge(); await rejected;
     const parts = h.requests.filter(r => r.params.operation === "appendBody").map(r => r.params);

@@ -1,3 +1,4 @@
+const { nextTurn } = require('./test-wait');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const vm = require('node:vm');
@@ -28,7 +29,7 @@ async function install(dispatch = () => undefined) {
     await tick();
     return { ...api, requests, notify };
 }
-const tick = () => new Promise(resolve => setTimeout(resolve, 10));
+const tick = nextTurn;
 
 test('notification waits for terminal UI and acknowledges preventDefault despite callback errors', async () => {
     const h = await install();

@@ -1,3 +1,5 @@
+const { nextTurn } = require('./test-wait');
+const { waitFor } = require('./test-wait');
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const vm = require('node:vm');
@@ -22,10 +24,10 @@ async function install(dispatch, document) {
         capability: 'proof', deliveryToken: 'delivery', grants, declaredGrants: grants.concat(['GM_log', 'GM_addElement', 'GM_addStyle', 'GM_openInTab', 'GM_saveTab']),
         info: {}, source: 'capture({GM, log: GM_log, element: GM_addElement, style: GM_addStyle, tab: GM_openInTab, save: GM_saveTab});' }] };
     vm.runInContext(template.replace('__MONKEYSHARP_PAYLOAD_BASE64__', Buffer.from(JSON.stringify(payload)).toString('base64')), context);
-    while (!api) await tick();
+    await waitFor(() => api, 'page facade bootstrap');
     return { ...api, logs, requests, notify };
 }
-const tick = () => new Promise(resolve => setTimeout(resolve, 5));
+const tick = nextTurn;
 
 test('logs preserve original console arguments and cycles while host failure cannot reject the local log', async () => {
     const h = await install(() => { throw new Error('sink failed'); });
