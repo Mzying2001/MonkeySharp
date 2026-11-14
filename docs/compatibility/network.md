@@ -6,6 +6,8 @@
 
 Ordinary authenticated requests use the actual browser Cookie jar; anonymous requests suppress it. Initial and redirected targets remain subject to script declarations, host policy and permission decisions. The default backend rejects explicit `cookie`, `headers.Cookie` and request `cookiePartition` before network dispatch. See [explicit Cookie observations](cookies.md#explicit-request-cookies) and [partition limits](cookies.md#partitioned-cookie-scope). Cookie CRUD support does not establish request-partition selection.
 
+The HTTP service captures the attached RequestContext when it accepts a request and reuses it for every redirect, even if the host later attaches another browser. The application owns that context and must retain it until accepted downloads have drained; the service does not dispose it.
+
 ## Incremental response text
 
 Non-fetch text, JSON, document and XML responses expose cumulative `responseText` during progress. Text also exposes cumulative `response`; JSON/document parsing remains final-only. Binary and stream responses expose no partial text. The renderer pulls at most 64 KiB at a time, uses a persistent decoder across chunk boundaries and bounds progress frequency without resending the complete prefix over the bridge. Malformed UTF-8 uses replacement characters; unsupported charset names retain the existing UTF-8 fallback.
