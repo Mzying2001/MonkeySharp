@@ -3,6 +3,7 @@ using Mzying2001.MonkeySharp.Core.Compatibility;
 using Mzying2001.MonkeySharp.Core.Matching;
 using Mzying2001.MonkeySharp.Core.Parsing;
 using System;
+using System.Linq;
 using Xunit;
 
 namespace Mzying2001.MonkeySharp.Core.Tests
@@ -28,6 +29,20 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             Assert.True(result.CanEnable);
             Assert.Equal("first", result.Metadata.Name);
             Assert.Contains(result.Diagnostics, item => item.Code == "MSM010_DUPLICATE_SINGLETON");
+        }
+
+        [Fact]
+        public void DuplicateAntifeaturesKeepFirstDescriptionForEachTypeAndNormalizedLocale()
+        {
+            var result = _parser.Parse(Script("// @name disclosures\n// @match https://example.com/*\n" +
+                "// @antifeature tracking first\n// @antifeature Tracking second\n" +
+                "// @antifeature:en-US tracking English\n// @antifeature:EN-us TRACKING ignored\n" +
+                "// @antifeature:de tracking Deutsch\n// @antifeature ads advertising"));
+            Assert.True(result.CanEnable);
+            Assert.Equal(4, result.Metadata.Antifeatures.Count);
+            Assert.Equal("first", result.Metadata.Antifeatures[0].Description);
+            Assert.Equal("English", Assert.Single(result.Metadata.Antifeatures, item => item.Locale == "en-US").Description);
+            Assert.Equal(2, result.Diagnostics.Count(item => item.Code == "MSM063_DUPLICATE_ANTIFEATURE" && item.Severity == DiagnosticSeverity.Warning));
         }
 
         [Fact]

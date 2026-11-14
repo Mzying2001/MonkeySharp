@@ -113,7 +113,7 @@ The header begins with `// ==UserScript==` and ends with `// ==/UserScript==`. P
 | `@resource name url` | Named resource prepared by the host at installation, then read through resource APIs. Names are case-sensitive. |
 | `@homepage`, `@homepageURL`, `@website`, `@source`, `@supportURL` | Source/support links. Homepage priority is `homepageURL`, `homepage`, `website`, then `source`. |
 | `@downloadURL`, `@updateURL` | Update information. The Demo offers manual check/install; the runtime does not schedule automatic updates. `@downloadURL none` disables checking. |
-| `@antifeature type description` | Disclosure information, including localized `@antifeature:locale` declarations. |
+| `@antifeature type description` | Disclosure information, including localized `@antifeature:locale` declarations. For the same type and normalized locale, the first description wins and later descriptions produce a warning. |
 | `@webRequest JSON` | Prepared selector/action JSON; activated before navigation and exposed in `GM.info.script.webRequest`. |
 | `@run-in selector` | Repeatable `normal-tabs`/`incognito-tabs` conditions, combined with OR. Restricted execution requires a known host privacy context; declaring both covers either supported context. Container selectors are diagnosed and do not match Chromium contexts. |
 | `@inject-into`, `@sandbox`, `@unwrap` | Execution-world declarations; see the documented adapter limits. |

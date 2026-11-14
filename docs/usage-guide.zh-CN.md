@@ -117,7 +117,7 @@
 | `@resource name url` | 命名资源，由宿主在安装时准备，再通过资源 API 读取。名称区分大小写。 |
 | `@homepage`、`@homepageURL`、`@website`、`@source`、`@supportURL` | 项目及支持链接。主页优先级为 homepageURL、homepage、website、source。 |
 | `@downloadURL`、`@updateURL` | 更新信息。Demo 提供手动检查并安装，运行时不安排自动更新。`@downloadURL none` 禁止检查。 |
-| `@antifeature type description` | 功能披露信息，支持 `@antifeature:locale` 本地化声明。 |
+| `@antifeature type description` | 功能披露信息，支持 `@antifeature:locale` 本地化声明。同一类型和归一化语言保留首条描述，后续描述给出 warning。 |
 | `@webRequest JSON` | 安装期编译 selector/action JSON，导航前激活；同时写入 `GM.info.script.webRequest`。 |
 | `@run-in selector` | 可重复 normal-tabs/incognito-tabs，按 OR 合并。单一隐私条件要求宿主明确实际上下文；两者同时声明覆盖支持的两种环境。容器选择会诊断且不匹配 Chromium 上下文。 |
 | `@inject-into`、`@sandbox`、`@unwrap` | 执行世界声明，遵循适配器公布的限制。 |

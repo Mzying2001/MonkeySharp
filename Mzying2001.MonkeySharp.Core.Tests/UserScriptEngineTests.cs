@@ -14,6 +14,22 @@ namespace Mzying2001.MonkeySharp.Core.Tests
     public sealed class UserScriptEngineTests
     {
         [Fact]
+        public async Task DuplicateAntifeaturesDoNotInterruptInjectionOrOtherScripts()
+        {
+            var repository = new InMemoryUserScriptRepository();
+            await repository.InstallAsync(MetadataAndMatchingTests.Script("// @name disclosures\n// @match https://example.com/*\n// @grant none\n// @run-at document-end\n" +
+                "// @antifeature tracking first\n// @antifeature tracking second\n// @antifeature:en-US tracking English\n// @antifeature:EN-us tracking ignored"), "test", true, CancellationToken.None);
+            await repository.InstallAsync(Script("document-end"), "test", true, CancellationToken.None);
+            using var engine = new UserScriptEngine(repository);
+            var plan = await engine.ProcessLifecycleAsync(new DocumentLifecycleEventArgs(DocumentLifecycleKind.DomContentLoaded, Frame("disclosures", true)), CancellationToken.None);
+            Assert.Equal(2, plan.Invocations.Count);
+            using var info = JsonDocument.Parse(plan.Invocations[0].SerializedInfo);
+            var descriptions = info.RootElement.GetProperty("script").GetProperty("antifeatures").GetProperty("tracking");
+            Assert.Equal("first", descriptions.GetProperty("default").GetString());
+            Assert.Equal("English", descriptions.GetProperty("en-US").GetString());
+        }
+
+        [Fact]
         public async Task ARunAtExecutesOnlyOncePerDocumentAndScript()
         {
             var repository = new InMemoryUserScriptRepository();
