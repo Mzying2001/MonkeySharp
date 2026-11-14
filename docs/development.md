@@ -119,6 +119,10 @@ The SmokeHost installs repository-owned userscripts against loopback HTTP fixtur
 
 See [SmokeHost cases and result validation](compatibility/validation.md#smokehost-cases-and-results) for case IDs, assertions, timeouts, parser checks and log triage. The [validation guide](compatibility/validation.md#latest-recorded-validation) owns recorded results and remaining gaps; [tooling instructions](../scripts/compatibility/README.md) own runner parameters and pinned-reference prerequisites.
 
+## Runtime implementation
+
+`UserScriptBridgeGateway.cs` owns authenticated dispatch, authorization, request budgets and execution cleanup. Its `.Bootstrap.cs` partial prepares hello data and resource packages; `.Storage.cs` groups snapshot/chunk/replay handling and value listeners. Storage transfer and listener state use the gateway's existing `_stateLock` and are removed by its central disposal and execution-ended paths.
+
 ## Native lifecycle maintenance
 
 The host-facing sequence and diagnostic budgets belong to the [integration reference](integration-reference.md#lifecycle-and-diagnostics). The details below explain the native frame recovery paths in [CefSharpUserScriptHost](../Mzying2001.MonkeySharp.CefSharp/CefSharpUserScriptHost.cs); [read-only evaluation tests](../Mzying2001.MonkeySharp.CefSharp.IntegrationTests/ReadOnlyScriptEvaluatorTests.cs) and [native frame tests](../Mzying2001.MonkeySharp.CefSharp.IntegrationTests/NativeFrameProbeTests.cs) cover their failure boundaries.

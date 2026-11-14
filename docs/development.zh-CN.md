@@ -119,6 +119,10 @@ SmokeHost 通过正常安装流程，在 loopback HTTP fixture 上运行仓库�
 
 场景 ID、断言、超时、解析器检查及日志排查见 [SmokeHost 场景与结果验证](compatibility/validation.md#smokehost-cases-and-results)。[验证指南](compatibility/validation.md#latest-recorded-validation)维护已记录结果及剩余缺口，[工具说明](../scripts/compatibility/README.md)维护 runner 参数及固定参考环境前置条件。
 
+## 运行时实现
+
+`UserScriptBridgeGateway.cs` 负责认证分派、授权、请求预算和执行清理；其 `.Bootstrap.cs` partial 准备 hello 数据及资源包，`.Storage.cs` 集中快照、分块、回放和数值监听。存储传输及监听状态沿用 gateway 的 `_stateLock`，由统一释放和执行结束路径清理。
+
 ## 原生生命周期维护
 
 面向宿主的操作顺序及诊断预算见[集成参考](integration-reference.zh-CN.md#生命周期与诊断)。以下细节解释 [CefSharpUserScriptHost](../Mzying2001.MonkeySharp.CefSharp/CefSharpUserScriptHost.cs) 的原生 frame 恢复路径；[只读求值测试](../Mzying2001.MonkeySharp.CefSharp.IntegrationTests/ReadOnlyScriptEvaluatorTests.cs)与[原生 frame 测试](../Mzying2001.MonkeySharp.CefSharp.IntegrationTests/NativeFrameProbeTests.cs)验证相应失败边界。
