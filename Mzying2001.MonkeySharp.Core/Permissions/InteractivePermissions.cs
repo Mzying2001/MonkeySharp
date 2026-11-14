@@ -97,7 +97,10 @@ namespace Mzying2001.MonkeySharp.Core.Permissions
         /// <inheritdoc />
         public async Task<PermissionDecision> AuthorizeAsync(ApiAuthorizationRequest request, CancellationToken cancellationToken)
         {
-            lock (_sync) if (_disposed) throw new ObjectDisposedException(nameof(InteractiveUserScriptPermissionPolicy));
+            lock (_sync)
+            {
+                if (_disposed) throw new ObjectDisposedException(nameof(InteractiveUserScriptPermissionPolicy));
+            }
             if (!UserScriptPermissionTargets.IsDeclared(request)) return PermissionDecision.Deny;
             var decision = await _policy.AuthorizeAsync(request, cancellationToken).ConfigureAwait(false);
             if (decision != PermissionDecision.Prompt) return decision;
@@ -109,7 +112,13 @@ namespace Mzying2001.MonkeySharp.Core.Permissions
             lock (_sync)
             {
                 if (_disposed) throw new ObjectDisposedException(nameof(InteractiveUserScriptPermissionPolicy));
-                if (_pending.TryGetValue(scope.Key, out pending) && pending.Task.IsCompleted) { _pending.Remove(scope.Key); pending = null; }
+                // The lock owns batch membership and its waiter count. A completed
+                // allow-once batch cannot authorize a later request.
+                if (_pending.TryGetValue(scope.Key, out pending) && pending.Task.IsCompleted)
+                {
+                    _pending.Remove(scope.Key);
+                    pending = null;
+                }
                 if (pending == null)
                 {
                     pending = new Pending();
@@ -134,7 +143,8 @@ namespace Mzying2001.MonkeySharp.Core.Permissions
                     pending.Waiters--;
                     if (pending.Waiters == 0)
                     {
-                        if (_pending.TryGetValue(scope.Key, out var current) && ReferenceEquals(current, pending)) _pending.Remove(scope.Key);
+                        if (_pending.TryGetValue(scope.Key, out var current) && ReferenceEquals(current, pending))
+                            _pending.Remove(scope.Key);
                         if (!pending.Task.IsCompleted) pending.Cancel();
                     }
                 }
@@ -154,20 +164,40 @@ namespace Mzying2001.MonkeySharp.Core.Permissions
                 if (choice.Remember) await _store.SetAsync(scope, choice.Decision, pending.Cancellation.Token).ConfigureAwait(false);
                 return choice.Decision;
             }
-            finally { pending.Cancellation.Dispose(); }
+            finally
+            {
+                pending.Cancellation.Dispose();
+            }
         }
 
         /// <summary>Cancels outstanding prompts, for example when remembered decisions are revoked.</summary>
         public void CancelPending()
-        { lock (_sync) foreach (var value in _pending.Values) if (!value.Task.IsCompleted) value.Cancel(); }
+        {
+            lock (_sync)
+            {
+                foreach (var value in _pending.Values)
+                    if (!value.Task.IsCompleted) value.Cancel();
+            }
+        }
         /// <inheritdoc />
-        public void Dispose() { lock (_sync) { _disposed = true; CancelPending(); } }
+        public void Dispose()
+        {
+            lock (_sync)
+            {
+                _disposed = true;
+                CancelPending();
+            }
+        }
         private sealed class Pending
         {
             internal readonly CancellationTokenSource Cancellation = new CancellationTokenSource();
             internal Task<PermissionDecision> Task;
             internal int Waiters;
-            internal void Cancel() { try { Cancellation.Cancel(); } catch (ObjectDisposedException) { } }
+            internal void Cancel()
+            {
+                try { Cancellation.Cancel(); }
+                catch (ObjectDisposedException) { }
+            }
         }
     }
 

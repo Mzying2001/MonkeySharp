@@ -252,7 +252,11 @@ namespace Mzying2001.MonkeySharp.CefSharp
         }
 
         private void RepositoryChanged(object sender, UserScriptRepositoryChangedEventArgs args)
-        { lock (_sync) _repositoryEpoch++; Track(RefreshAsync()); }
+        {
+            lock (_sync)
+                _repositoryEpoch++;
+            Track(RefreshAsync());
+        }
 
         private async Task RefreshAsync()
         {
@@ -265,7 +269,10 @@ namespace Mzying2001.MonkeySharp.CefSharp
             {
                 if (epoch != _repositoryEpoch || _disposed || _stopping) return;
                 foreach (var world in _documents.Values.ToArray())
-                    if (!eligible.Any(script => script.ScriptKey == world.Script.ScriptKey && script.RevisionId == world.Script.RevisionId)) Track(EndWorldAsync(world));
+                {
+                    if (!eligible.Any(script => script.ScriptKey == world.Script.ScriptKey && script.RevisionId == world.Script.RevisionId))
+                        Track(EndWorldAsync(world));
+                }
                 frames = _frames.Values.ToArray();
             }
             foreach (var frame in frames)
@@ -273,11 +280,20 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 {
                     if (!frame.Main && script.Definition.Metadata.NoFrames) continue;
                     bool matches;
-                    try { matches = script.PreparedRevision.UrlRules.IsMatch(frame.Url, script.Definition.Metadata.RunAt == UserScriptRunAt.ContextMenu); }
-                    catch (System.Text.RegularExpressions.RegexMatchTimeoutException) { matches = false; }
+                    try
+                    {
+                        matches = script.PreparedRevision.UrlRules.IsMatch(frame.Url, script.Definition.Metadata.RunAt == UserScriptRunAt.ContextMenu);
+                    }
+                    catch (System.Text.RegularExpressions.RegexMatchTimeoutException)
+                    {
+                        matches = false;
+                    }
                     if (!matches) continue;
                     if (!script.PreparedRevision.UrlRules.AllowsEnvironment(_privacy(), out var reason))
-                    { Report("MSR211_RUN_IN_UNAVAILABLE", reason, script, frame); continue; }
+                    {
+                        Report("MSR211_RUN_IN_UNAVAILABLE", reason, script, frame);
+                        continue;
+                    }
                     World world;
                     lock (_sync)
                     {
@@ -434,8 +450,13 @@ namespace Mzying2001.MonkeySharp.CefSharp
 
         internal bool OwnsNativeMenuFrame(DocumentFrame frame, string nativeFrameId, bool main)
         {
-            lock (_sync) return _documents.TryGetValue(frame.DocumentId, out var world) && CefSharpDocumentIdentity.Matches(world.Frame, frame) &&
-                (main && world.Native.Main || !main && world.Native.CefFrameId == nativeFrameId) && world.Ready && Alive(world);
+            lock (_sync)
+            {
+                return _documents.TryGetValue(frame.DocumentId, out var world) &&
+                    CefSharpDocumentIdentity.Matches(world.Frame, frame) &&
+                    (main && world.Native.Main || !main && world.Native.CefFrameId == nativeFrameId) &&
+                    world.Ready && Alive(world);
+            }
         }
 
         internal async Task<IReadOnlyList<CefSharpMenuTarget>> MenuAsync(string nativeFrameId, bool main)
@@ -493,12 +514,15 @@ namespace Mzying2001.MonkeySharp.CefSharp
             lock (_sync)
             {
                 if (world.Revoked) return;
+                // Retire every identity index together before notifying Core.
                 world.Revoked = true;
                 world.Cancellation.Cancel();
                 world.Cancellation.Dispose();
                 var key = world.Name + "\n" + world.Native.Id;
-                if (_requested.TryGetValue(key, out var request) && ReferenceEquals(request, world)) _requested.Remove(key);
-                if (_contexts.TryGetValue(world.ContextId, out var current) && ReferenceEquals(current, world)) _contexts.Remove(world.ContextId);
+                if (_requested.TryGetValue(key, out var request) && ReferenceEquals(request, world))
+                    _requested.Remove(key);
+                if (_contexts.TryGetValue(world.ContextId, out var current) && ReferenceEquals(current, world))
+                    _contexts.Remove(world.ContextId);
                 _documents.Remove(world.Frame.DocumentId);
                 _menuProofs.Remove(world.MenuProof);
             }
@@ -538,7 +562,14 @@ namespace Mzying2001.MonkeySharp.CefSharp
         {
             World[] worlds;
             CefSharpIsolatedExecutor[] children;
-            lock (_sync) { if (_disposed || _stopping) return; _stopping = true; worlds = _documents.Values.ToArray(); children = _children.Values.ToArray(); _children.Clear(); }
+            lock (_sync)
+            {
+                if (_disposed || _stopping) return;
+                _stopping = true;
+                worlds = _documents.Values.ToArray();
+                children = _children.Values.ToArray();
+                _children.Clear();
+            }
             _repository.Changed -= RepositoryChanged;
             _session.EventReceived -= EventReceived;
             _session.Closed -= SessionClosed;
@@ -551,7 +582,11 @@ namespace Mzying2001.MonkeySharp.CefSharp
             lock (_sync)
             {
                 _disposed = true;
-                foreach (var frame in _frames.Values) { frame.Cancellation.Cancel(); frame.Cancellation.Dispose(); }
+                foreach (var frame in _frames.Values)
+                {
+                    frame.Cancellation.Cancel();
+                    frame.Cancellation.Dispose();
+                }
                 _frames.Clear();
             }
             _lifetime.Cancel();
