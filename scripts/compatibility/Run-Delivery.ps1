@@ -1,6 +1,6 @@
 ﻿[CmdletBinding()]
 param(
-    [ValidateSet('84.4.10','156.0.150')][string[]]$CefSharpVersions = @('84.4.10','156.0.150'),
+    [ValidatePattern('^\d+\.\d+\.\d+$')][string[]]$CefSharpVersions = @(),
     [string[]]$Platforms = @('x64','x86'),
     [string]$CorpusScript = '',
     [switch]$PackageOnly,
@@ -9,6 +9,10 @@ param(
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot '../testing/TestProcess.ps1')
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
+if (!$CefSharpVersions.Count) {
+    [xml]$adapterXml = Get-Content -LiteralPath (Join-Path $root 'Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj') -Raw
+    $CefSharpVersions = @('84.4.10', $adapterXml.SelectSingleNode('//CefSharpVersion').InnerText)
+}
 $runId = [Guid]::NewGuid().ToString('N').Substring(0,12)
 $runRoot = Join-Path $root "artifacts/delivery/$runId"
 New-Item -ItemType Directory -Path $runRoot -Force | Out-Null

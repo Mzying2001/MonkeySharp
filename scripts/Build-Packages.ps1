@@ -5,7 +5,7 @@ Builds Core and the legacy/current CefSharp NuGet packages without publishing.
 .EXAMPLE
 ./scripts/Build-Packages.ps1
 .EXAMPLE
-./scripts/Build-Packages.ps1 -Platforms x64 -CurrentCefSharpVersion 156.0.150 -OutputDirectory artifacts/release
+./scripts/Build-Packages.ps1 -Platforms x64 -OutputDirectory artifacts/release
 #>
 [CmdletBinding()]
 param(

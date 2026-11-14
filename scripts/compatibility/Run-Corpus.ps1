@@ -1,12 +1,16 @@
 [CmdletBinding()]
 param(
     [ValidateSet('x64','x86')][string]$Platform = 'x64',
-    [ValidateSet('84.4.10','156.0.150')][string]$CefSharpVersion = '156.0.150',
+    [ValidatePattern('^\d+\.\d+\.\d+$')][string]$CefSharpVersion = '',
     [string]$OutputDirectory = '',
     [switch]$NoBuild
 )
 $ErrorActionPreference = 'Stop'
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
+if (!$CefSharpVersion) {
+    [xml]$adapterXml = Get-Content -LiteralPath (Join-Path $root 'Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj') -Raw
+    $CefSharpVersion = $adapterXml.SelectSingleNode('//CefSharpVersion').InnerText
+}
 $project = Join-Path $root 'Mzying2001.MonkeySharp.CefSharp.SmokeHost/Mzying2001.MonkeySharp.CefSharp.SmokeHost.csproj'
 if (!$NoBuild) {
     foreach ($operation in @('restore','clean','build')) {

@@ -1,6 +1,6 @@
 ﻿[CmdletBinding()]
 param(
-    [string]$CefSharpVersion = '156.0.150',
+    [ValidatePattern('^\d+\.\d+\.\d+$')][string]$CefSharpVersion = '',
     [ValidateSet('all', 'navigation-menu')][string]$Case = 'all',
     [string]$OutputDirectory = '',
     [switch]$NoBuild
@@ -11,6 +11,10 @@ $Case = $Case.ToLowerInvariant()
 . (Join-Path $PSScriptRoot '../scripts/testing/TestProcess.ps1')
 . (Join-Path $PSScriptRoot 'SmokeResults.ps1')
 $project = Join-Path $PSScriptRoot 'Mzying2001.MonkeySharp.Demo.csproj'
+if (!$CefSharpVersion) {
+    [xml]$projectXml = Get-Content -LiteralPath $project -Raw
+    $CefSharpVersion = $projectXml.SelectSingleNode('//CefSharpVersion').InnerText
+}
 if (!$NoBuild) {
     & dotnet restore $project -p:Platform=x64 "-p:CefSharpVersion=$CefSharpVersion" --nologo
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

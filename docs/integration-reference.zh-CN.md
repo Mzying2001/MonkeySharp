@@ -8,7 +8,7 @@
 
 同一个适配器二进制文件无法兼容任意 CefSharp 版本。CefSharp 程序集具有强名称，而且公开接口曾在版本间发生变化，例如 `IBrowser.GetFrame(long)` 改为 `GetFrameByIdentifier(string)`，`IFrame.Identifier` 也从 `long` 改为 `string`。
 
-适配器默认使用 `156.0.150`，旧版 `CefSharp84` 包面向 `84.4.10`。CI 和交付验证仅覆盖这两个版本的 x64/x86。其他版本的历史原生证据仍只适用于其记录的引擎和版本。应用程序应针对实际发布的版本重新构建并测试；使用[源码构建命令](development.zh-CN.md#构建与测试)并指定所选版本。
+源码默认使用[适配器项目](../Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj)中固定的当前发布版，旧版 `CefSharp84` 包面向 `84.4.10`。CI 和交付验证覆盖固定旧版与当前发布版的 x64/x86。其他版本的历史原生证据仍只适用于其记录的引擎和版本。应用程序应针对实际发布的版本重新构建并测试；使用[源码构建命令](development.zh-CN.md#构建与测试)并指定所选版本。
 
 每个适配器 NuGet 包均公开依赖其编译时使用的精确版本 `CefSharp.Common` 和共享 Core 包。使用者选择版本匹配的 `CefSharp.WinForms`、`CefSharp.Wpf` 等 UI 包，并在 .NET Framework 应用中允许常规绑定重定向。托管包、CEF 原生文件、MonkeySharp 适配器的版本和进程平台必须一致。应用程序只应安装一种适配器；绑定重定向无法解决 CefSharp API 不兼容。
 

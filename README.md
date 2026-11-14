@@ -20,7 +20,7 @@ Scripts can use modern `GM.*` methods and legacy `GM_*` names. Availability depe
 | Package | Target frameworks | Purpose |
 | --- | --- | --- |
 | `Mzying2001.MonkeySharp.Core` | `net462`, `netstandard2.0`, `net8.0` | Browser-independent runtime and host contracts. |
-| `Mzying2001.MonkeySharp.CefSharp.x64` | `net462` x64 | Adapter targeting CefSharp `156.0.150` for 64-bit hosts. |
+| `Mzying2001.MonkeySharp.CefSharp.x64` | `net462` x64 | Current-release CefSharp adapter for 64-bit hosts. |
 | `Mzying2001.MonkeySharp.CefSharp.x86` | `net462` x86 | Current CefSharp adapter for 32-bit hosts. |
 | `Mzying2001.MonkeySharp.CefSharp84.x64` | `net462` x64 | Adapter targeting CefSharp `84.4.10` for 64-bit hosts. |
 | `Mzying2001.MonkeySharp.CefSharp84.x86` | `net462` x86 | Legacy CefSharp 84 adapter for 32-bit hosts. |
@@ -33,7 +33,7 @@ All adapter packages expose the `Mzying2001.MonkeySharp.CefSharp` assembly and n
 </ItemGroup>
 ```
 
-Each adapter package declares an exact `CefSharp.Common` dependency. The host chooses a matching `CefSharp.WinForms`, `CefSharp.Wpf`, or other UI package and uses the same explicit `x64` or `x86` process platform. Source builds default to CefSharp `156.0.150`; compile and test against the exact version you ship. See the [integration reference](docs/integration-reference.md#cefsharp-version-compatibility) for compatibility limits and binding details. Use [the package build script](docs/development.md#package) to build Core and both adapter product lines.
+Each adapter package declares an exact `CefSharp.Common` dependency. The host chooses a matching `CefSharp.WinForms`, `CefSharp.Wpf`, or other UI package and uses the same explicit `x64` or `x86` process platform. Source builds use the `CefSharpVersion` default in the [adapter project](Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj). For a published package, its exact `CefSharp.Common` dependency identifies the required engine; compile and test against the exact version you ship. See the [integration reference](docs/integration-reference.md#cefsharp-version-compatibility) for compatibility limits and binding details. Use [the package build script](docs/development.md#package) to build Core and both adapter product lines.
 
 ## Quick Start
 
@@ -192,10 +192,10 @@ See the [integration reference](docs/integration-reference.md#lifecycle-and-diag
 
 Build on Windows using a .NET SDK that supports `MonkeySharp.slnx` and Node.js for JavaScript tests. The [development guide](docs/development.md) owns restore/build/test commands, packaging, version switching and the CI matrix.
 
-For one clean engine/platform baseline, including real Chromium and WPF on x64, run:
+For one clean baseline of the fixed legacy engine, including real Chromium and WPF on x64, run:
 
 ```powershell
-./scripts/compatibility/Run-Baseline.ps1 -Platform x64 -CefSharpVersion 156.0.150
+./scripts/compatibility/Run-Baseline.ps1 -Platform x64
 ```
 
 The [validation guide](docs/compatibility/validation.md) distinguishes native gates, fixed-Tampermonkey comparisons and third-party corpus results. Consult the dated matrix for recorded outcomes.

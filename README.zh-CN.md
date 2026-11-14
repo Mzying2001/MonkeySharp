@@ -20,7 +20,7 @@ MonkeySharp 是面向 CefSharp 嵌入式应用的用户脚本运行时。Core �
 | 软件包 | 目标框架 | 用途 |
 | --- | --- | --- |
 | `Mzying2001.MonkeySharp.Core` | `net462`、`netstandard2.0`、`net8.0` | 与浏览器无关的运行时和宿主契约。 |
-| `Mzying2001.MonkeySharp.CefSharp.x64` | `net462` x64 | 面向 CefSharp `156.0.150` 的 64 位宿主适配器。 |
+| `Mzying2001.MonkeySharp.CefSharp.x64` | `net462` x64 | 面向当前发布版 CefSharp 的 64 位宿主适配器。 |
 | `Mzying2001.MonkeySharp.CefSharp.x86` | `net462` x86 | 新版 CefSharp 的 32 位宿主适配器。 |
 | `Mzying2001.MonkeySharp.CefSharp84.x64` | `net462` x64 | 面向 CefSharp `84.4.10` 的 64 位宿主适配器。 |
 | `Mzying2001.MonkeySharp.CefSharp84.x86` | `net462` x86 | 旧版 CefSharp 84 的 32 位宿主适配器。 |
@@ -33,7 +33,7 @@ MonkeySharp 是面向 CefSharp 嵌入式应用的用户脚本运行时。Core �
 </ItemGroup>
 ```
 
-每个适配器包均声明精确版本的 `CefSharp.Common` 依赖。宿主选择版本匹配的 `CefSharp.WinForms`、`CefSharp.Wpf` 等 UI 包，并与适配器使用同一个显式 `x64` 或 `x86` 进程平台。源码默认使用 CefSharp `156.0.150`；发布前应针对实际版本编译和测试。兼容性限制及绑定说明见[集成参考](docs/integration-reference.zh-CN.md#cefsharp-版本兼容性)。使用[打包脚本](docs/development.zh-CN.md#打包)可构建 Core 和两条适配器产品线。
+每个适配器包均声明精确版本的 `CefSharp.Common` 依赖。宿主选择版本匹配的 `CefSharp.WinForms`、`CefSharp.Wpf` 等 UI 包，并与适配器使用同一个显式 `x64` 或 `x86` 进程平台。源码默认使用[适配器项目](Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj)中的 `CefSharpVersion`；已发布包所需的引擎版本以其 `CefSharp.Common` 精确依赖为准。发布前应针对实际版本编译和测试。兼容性限制及绑定说明见[集成参考](docs/integration-reference.zh-CN.md#cefsharp-版本兼容性)。使用[打包脚本](docs/development.zh-CN.md#打包)可构建 Core 和两条适配器产品线。
 
 ## 快速开始
 
@@ -192,10 +192,10 @@ host.Diagnostic += (_, diagnostic) =>
 
 在 Windows 上使用支持 `MonkeySharp.slnx` 的 .NET SDK，并安装 Node.js 运行 JavaScript 测试。[开发指南](docs/development.zh-CN.md)集中维护还原、构建、测试、打包、版本切换及 CI 矩阵。
 
-验证单个引擎/平台的干净基线（包括真实 Chromium，x64 还包含 WPF）：
+验证固定旧版引擎的单平台干净基线（包括真实 Chromium，x64 还包含 WPF）：
 
 ```powershell
-./scripts/compatibility/Run-Baseline.ps1 -Platform x64 -CefSharpVersion 156.0.150
+./scripts/compatibility/Run-Baseline.ps1 -Platform x64
 ```
 
 [验证指南](docs/compatibility/validation.md)区分原生门禁、固定 Tampermonkey 对照和第三方语料结果；已记录结论见注明日期的矩阵。
