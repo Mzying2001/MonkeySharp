@@ -62,6 +62,11 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
         public async Task<Dictionary<string, bool>> RunAsync()
         {
             var results = new Dictionary<string, bool>();
+            if (Program.CompatibilityCase == "webRequest")
+            {
+                results["webRequest"] = await RunCaseAsync("webRequest", WebRequestAsync);
+                return results;
+            }
             results["prepared"] = await RunCaseAsync("prepared", PreparedAsync);
             results["conditions"] = await RunCaseAsync("conditions", ConditionsAsync);
             results["isolated"] = await RunCaseAsync("isolated", IsolatedAsync);

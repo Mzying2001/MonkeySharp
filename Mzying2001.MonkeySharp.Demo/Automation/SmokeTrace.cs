@@ -8,7 +8,7 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
     /// <summary>Opt-in, ordered test evidence outside the application's profile logs.</summary>
     internal sealed class SmokeTrace : IDisposable
     {
-        private static SmokeTrace _current;
+        private static volatile SmokeTrace _current;
         private readonly object _sync = new object();
         private readonly Stopwatch _timer = Stopwatch.StartNew();
         private readonly StreamWriter _writer;

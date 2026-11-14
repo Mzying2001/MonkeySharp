@@ -12,13 +12,15 @@ CI runs on PRs targeting `dev` or `main`, with CefSharp `84.4.10` and `156.0.150
 
 ## Build and test
 
+CI and local baselines share `scripts/testing/Run-SourceTests.ps1` (clean/build, per-project .NET TRX, bounded JavaScript and runner/parser checks) and `scripts/testing/Run-NativeTests.ps1` (SmokeHost/CDP, OOPIF, corpus and x64 WPF). Both accept `-Platform`, `-CefSharpVersion` and `-OutputDirectory`. `Run-Baseline.ps1` composes them. Fresh evidence directories preserve failed stages and process reports. Use `Run-RepeatedNative.ps1 -Case webRequest -Repeat 30` or `-Case navigation-menu -Platform x64` for diagnosis; all attempts remain recorded and any failure fails the run. The manual **Test stability** workflow uses the same runner.
+
 Use the same `CefSharpVersion` property for restore, build, test, and package commands:
 
 ```powershell
 dotnet restore MonkeySharp.slnx -p:Platform=x64 -p:CefSharpVersion=156.0.150
 dotnet build MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=156.0.150 --no-restore
 dotnet test MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=156.0.150 --no-build
-node --test Mzying2001.MonkeySharp.Core.Tests/JavaScript/*.test.js
+node --test --test-timeout=30000 Mzying2001.MonkeySharp.Core.Tests/JavaScript/*.test.js
 ```
 
 Repeat the .NET commands with `-p:Platform=x86`. The x86 solution configuration excludes the x64-only Demo projects. Do not build different native versions or platforms concurrently in the same output tree.
@@ -113,7 +115,7 @@ Use the same version value throughout validation: `-p:CefSharpVersion=<version>`
 
 ## Chromium Compatibility Script Package
 
-The SmokeHost installs repository-owned userscripts against loopback HTTP fixtures. Its runner requires all 15 compatibility cases, checks actual CefSharp version/platform and cleanup, and preserves logs under `artifacts/smoke/<version>-<platform>/`. Override that path with `-OutputDirectory`.
+The SmokeHost installs repository-owned userscripts against loopback HTTP fixtures. Its runner requires all 15 compatibility cases by default (`-Case webRequest` isolates request rules/navigation cleanup), checks actual CefSharp version/platform and cleanup, and preserves logs under `artifacts/smoke/<version>-<platform>/<run>/`. Override that path with `-OutputDirectory`.
 
 See [SmokeHost cases and result validation](compatibility/validation.md#smokehost-cases-and-results) for case IDs, assertions, timeouts, parser checks and log triage. The [validation guide](compatibility/validation.md#latest-recorded-validation) owns recorded results and remaining gaps; [tooling instructions](../scripts/compatibility/README.md) own runner parameters and pinned-reference prerequisites.
 

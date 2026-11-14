@@ -7,6 +7,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$Case = $Case.ToLowerInvariant()
 . (Join-Path $PSScriptRoot '../scripts/testing/TestProcess.ps1')
 . (Join-Path $PSScriptRoot 'SmokeResults.ps1')
 $project = Join-Path $PSScriptRoot 'Mzying2001.MonkeySharp.Demo.csproj'

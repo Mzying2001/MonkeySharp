@@ -8,7 +8,7 @@ Core/JavaScript tests use the tracked fixtures and evidence and require no CefSh
 
 ```powershell
 dotnet test Mzying2001.MonkeySharp.Core.Tests/Mzying2001.MonkeySharp.Core.Tests.csproj -c Release
-node --test Mzying2001.MonkeySharp.Core.Tests/JavaScript/*.test.js
+node --test --test-timeout=30000 Mzying2001.MonkeySharp.Core.Tests/JavaScript/*.test.js
 ```
 
 ## Reproduction
@@ -29,7 +29,7 @@ Choose the gate by the claim being checked. Source build/package commands and en
 # One engine/platform baseline, including native OOPIF and source corpus.
 ./scripts/compatibility/Run-Baseline.ps1 -Platform x64 -CefSharpVersion 84.4.10
 
-# Six isolated native combinations, packaging and public-API consumers.
+# Four isolated native combinations, packaging and public-API consumers.
 ./scripts/compatibility/Run-Delivery.ps1
 
 # Optional: additionally install an existing local script without source edits.

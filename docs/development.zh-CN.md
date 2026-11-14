@@ -12,13 +12,15 @@ CI 在目标分支为 `dev` 或 `main` 的 PR 上运行，覆盖 CefSharp `84.4.
 
 ## 构建与测试
 
+CI 与本地基线复用 `scripts/testing/Run-SourceTests.ps1`（清理构建、按项目保存 .NET TRX、有截止时间的 JavaScript 及 runner/报告校验）和 `scripts/testing/Run-NativeTests.ps1`（SmokeHost/CDP、OOPIF、corpus、x64 WPF）。两者均接受 `-Platform`、`-CefSharpVersion`、`-OutputDirectory`；`Run-Baseline.ps1` 组合调用这两个入口。每次运行保留独立证据目录和失败阶段日志。诊断时可运行 `Run-RepeatedNative.ps1 -Case webRequest -Repeat 30`，或用 `-Case navigation-menu -Platform x64` 检查菜单；每次尝试均被记录，任一次失败都会使整体失败。手动 **Test stability** 工作流使用相同入口。
+
 还原、构建、测试和打包必须使用相同的 `CefSharpVersion` 属性：
 
 ```powershell
 dotnet restore MonkeySharp.slnx -p:Platform=x64 -p:CefSharpVersion=156.0.150
 dotnet build MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=156.0.150 --no-restore
 dotnet test MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=156.0.150 --no-build
-node --test Mzying2001.MonkeySharp.Core.Tests/JavaScript/*.test.js
+node --test --test-timeout=30000 Mzying2001.MonkeySharp.Core.Tests/JavaScript/*.test.js
 ```
 
 使用 `-p:Platform=x86` 重复 .NET 命令；x86 配置会排除仅支持 x64 的 Demo 项目。不同原生版本或平台不能在同一个输出树中并发构建。
@@ -113,7 +115,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File Mzying2001.MonkeySharp.Demo/
 
 ## Chromium 兼容性脚本包
 
-SmokeHost 通过正常安装流程，在 loopback HTTP fixture 上运行仓库原创脚本。runner 要求全部 15 个兼容性场景，核验实际 CefSharp 版本、平台及清理，并将日志保存在 `artifacts/smoke/<version>-<platform>/`；可通过 `-OutputDirectory` 覆盖。
+SmokeHost 通过正常安装流程，在 loopback HTTP fixture 上运行仓库原创脚本。runner 要求全部 15 个兼容性场景，核验实际 CefSharp 版本、平台及清理，并将日志保存在 `artifacts/smoke/<version>-<platform>/<run>/`；可通过 `-OutputDirectory` 覆盖。
 
 场景 ID、断言、超时、解析器检查及日志排查见 [SmokeHost 场景与结果验证](compatibility/validation.md#smokehost-cases-and-results)。[验证指南](compatibility/validation.md#latest-recorded-validation)维护已记录结果及剩余缺口，[工具说明](../scripts/compatibility/README.md)维护 runner 参数及固定参考环境前置条件。
 

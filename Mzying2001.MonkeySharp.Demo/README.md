@@ -135,7 +135,7 @@ Run the following from the repository root; real Chromium/WPF E2E requires a Win
 
 ```powershell
 dotnet test MonkeySharp.slnx -c Release -p:Platform=x64
-node --test Mzying2001.MonkeySharp.Core.Tests/JavaScript/*.test.js
+node --test --test-timeout=30000 Mzying2001.MonkeySharp.Core.Tests/JavaScript/*.test.js
 powershell -NoProfile -ExecutionPolicy Bypass -File Mzying2001.MonkeySharp.Demo/Run-E2E.ps1
 # Reuse an already matching build:
 ./Mzying2001.MonkeySharp.Demo/Run-E2E.ps1 -NoBuild

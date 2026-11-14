@@ -18,6 +18,12 @@ foreach ($name in @('partitionA','partitionB','siteNormalization','partitionDele
 }
 $sampleJson = ConvertTo-Json -InputObject $sample -Depth 20
 Assert-SmokeRecords -Records ($sampleJson | ConvertFrom-Json) -Platform x64 -CefSharpVersion 121.3.70
+$focused = @(($sampleJson | ConvertFrom-Json) | Where-Object { $_.type -ne 'compatibility-case' -or $_.caseId -eq 'webRequest' })
+($focused | Where-Object type -eq 'smoke-summary') | Add-Member NoteProperty compatibilityCase webRequest
+Assert-SmokeRecords -Records $focused -Platform x64 -CefSharpVersion 121.3.70 -Case webRequest
+$focusedRejected = $false
+try { Assert-SmokeRecords -Records $focused -Platform x64 -CefSharpVersion 121.3.70 } catch { $focusedRejected = $true }
+if (!$focusedRejected) { throw 'A focused result was accepted as the full suite.' }
 $tests = [ordered]@{
     missingCase = { param($r) @($r | Where-Object { $_.caseId -ne 'frames' }) }
     duplicateCase = { param($r) $r + @($r | Where-Object { $_.caseId -eq 'frames' }) }

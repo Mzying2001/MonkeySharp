@@ -23,9 +23,17 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
     internal static class Program
     {
         internal static bool EnableBackForwardCacheProbe { get; private set; }
+        internal static string CompatibilityCase { get; private set; } = "all";
         [STAThread]
         private static void Main(string[] args)
         {
+            var caseIndex = Array.IndexOf(args, "--compatibility-case");
+            if (caseIndex >= 0)
+            {
+                if (caseIndex + 1 >= args.Length || (args[caseIndex + 1] != "all" && args[caseIndex + 1] != "webRequest"))
+                    throw new ArgumentException("Expected --compatibility-case all or webRequest.");
+                CompatibilityCase = args[caseIndex + 1];
+            }
             if (args.Length == 3 && args[0] == "--corpus") { Environment.ExitCode = global::MonkeySharp.Compatibility.CorpusHost.Run(args[1], args[2]); return; }
             CefSharpSettings.WcfEnabled = false;
             CefSharpSettings.ConcurrentTaskExecution = true;
@@ -443,7 +451,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             _timeoutTimer.Stop();
             await _host.DetachAsync(CancellationToken.None).ConfigureAwait(true);
             var success = _initialFixturePassed && _mainFrameLoads >= 2 && _childFrameLoads >= 1 && _contextReleased >= 1 &&
-                !_host.IsAttached && _compatibilityResults != null && _compatibilityResults.Count == 15 && _compatibilityResults.Values.All(value => value);
+                !_host.IsAttached && _compatibilityResults != null && _compatibilityResults.Count == (Program.CompatibilityCase == "all" ? 15 : 1) && _compatibilityResults.Values.All(value => value);
             object fixture = null;
             if (!string.IsNullOrEmpty(_initialFixtureJson))
             {
@@ -452,7 +460,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             }
             Console.WriteLine(JsonSerializer.Serialize(new
             {
-                type = "smoke-summary",
+                type = "smoke-summary", compatibilityCase = Program.CompatibilityCase,
                 success,
                 compatibility = _compatibilityResults,
                 fixtureResult = fixture,

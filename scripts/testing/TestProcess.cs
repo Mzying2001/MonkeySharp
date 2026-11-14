@@ -39,8 +39,8 @@ namespace MonkeySharp.Testing
             var timer = Stopwatch.StartNew();
             var result = new ProcessResult { ExitCode = -1 };
             var quoted = Array.ConvertAll(arguments, Quote);
-            using (var output = File.Create(stdout))
-            using (var error = File.Create(stderr))
+            using (var output = new FileStream(stdout, FileMode.Create, FileAccess.Write, FileShare.ReadWrite))
+            using (var error = new FileStream(stderr, FileMode.Create, FileAccess.Write, FileShare.ReadWrite))
             using (var process = new Process())
             {
                 process.StartInfo = new ProcessStartInfo(executable, string.Join(" ", quoted))
