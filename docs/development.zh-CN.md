@@ -30,15 +30,15 @@ node --test --test-timeout=30000 Mzying2001.MonkeySharp.Core.Tests/JavaScript/*.
 使用 [Build-Packages.ps1](../scripts/Build-Packages.ps1) 构建发布包，需要 Windows PowerShell 5.1 或 PowerShell 7，以及 .NET SDK 8+：
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/Build-Packages.ps1 -Version 3.0.1
+powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/Build-Packages.ps1
 
 # 可选：指定一个平台、固定的新版引擎以及空输出目录。
-./scripts/Build-Packages.ps1 -Version 3.0.1 -Platforms x64 -CurrentCefSharpVersion 156.0.150 -OutputDirectory artifacts/release
+./scripts/Build-Packages.ps1 -Platforms x64 -CurrentCefSharpVersion 156.0.150 -OutputDirectory artifacts/release
 ```
 
-Windows 下可以双击 [Build-Packages.bat](../scripts/Build-Packages.bat) 按默认配置构建，也可以运行 `./scripts/Build-Packages.bat -Version 3.0.1 -Platforms x64 -OutputDirectory "artifacts/release packages"`。包装脚本不依赖当前工作目录，定位同目录的 PowerShell 脚本，通过 `-NoProfile -ExecutionPolicy Bypass` 绕过本次进程的执行限制，使用 `%*` 原样转发参数，并以 PowerShell 退出码作为自身结果。构建结束后直接退出，不暂停等待输入。
+Windows 下可以双击 [Build-Packages.bat](../scripts/Build-Packages.bat) 按默认配置构建，也可以运行 `./scripts/Build-Packages.bat -Platforms x64 -OutputDirectory "artifacts/release packages"`。包装脚本不依赖当前工作目录，定位同目录的 PowerShell 脚本，通过 `-NoProfile -ExecutionPolicy Bypass` 绕过本次进程的执行限制，使用 `%*` 原样转发参数，并以 PowerShell 退出码作为自身结果。构建结束后直接退出，不暂停等待输入。
 
-默认构建一个 `Mzying2001.MonkeySharp.Core` 包和四个适配包：面向 `84.4.10` 的 `Mzying2001.MonkeySharp.CefSharp84.x64`/`.x86`，以及面向固定新版 `156.0.150` 的 `Mzying2001.MonkeySharp.CefSharp.x64`/`.x86`。所有包使用相同的 MonkeySharp 版本。省略 `-Version` 或 `-CurrentCefSharpVersion` 时，脚本读取 Core 和适配器项目的默认值；不会动态解析最新版或执行发布。
+默认构建一个 `Mzying2001.MonkeySharp.Core` 包和四个适配包：面向 `84.4.10` 的 `Mzying2001.MonkeySharp.CefSharp84.x64`/`.x86`，以及面向固定新版 `156.0.150` 的 `Mzying2001.MonkeySharp.CefSharp.x64`/`.x86`。Core 和全部适配包共用 [Version.props](../Version.props) 中的版本；升级版本时只需修改该文件，也可通过 `-Version <version>` 覆盖单次构建，无需修改源码。省略 `-CurrentCefSharpVersion` 时，脚本读取适配器项目的默认值；不会动态解析最新版或执行发布。
 
 脚本默认使用 Release 和两个平台，`-Configuration` 可选 Release 或 Debug。相对 `-OutputDirectory` 按仓库根目录解析，且必须为空；默认输出到新的 `artifacts/packages/<version>-<run>/` 目录。每次运行按引擎和平台将还原、构建产物隔离到 `artifacts/package-build/<run>/`，原生命令失败立即停止，并检查包标识、Core 目标框架、Core 传递依赖、CefSharp 精确版本依赖及符号包。`packages.json` 记录 `.nupkg` 和相应 `.snupkg` 的路径、版本、平台与 SHA-256。失败时保留部分产物用于诊断，仅完整成功后写入清单。生成包不会运行源码或原生门禁，发布前仍须验证；CI 在源码及真实 Chromium 作业通过后使用同一个脚本打包。
 
@@ -48,9 +48,10 @@ Windows 下可以双击 [Build-Packages.bat](../scripts/Build-Packages.bat) 按�
 
 ```powershell
 $packages = 'artifacts/packages/<version>-<run>'
-dotnet nuget push "$packages/Mzying2001.MonkeySharp.Core.3.0.1.nupkg" --source https://api.nuget.org/v3/index.json --api-key $env:NUGET_API_KEY
-dotnet nuget push "$packages/Mzying2001.MonkeySharp.CefSharp84.x64.3.0.1.nupkg" --source https://api.nuget.org/v3/index.json --api-key $env:NUGET_API_KEY
-dotnet nuget push "$packages/Mzying2001.MonkeySharp.CefSharp.x64.3.0.1.nupkg" --source https://api.nuget.org/v3/index.json --api-key $env:NUGET_API_KEY
+$version = (Get-Content -LiteralPath "$packages/packages.json" -Raw | ConvertFrom-Json).version
+dotnet nuget push "$packages/Mzying2001.MonkeySharp.Core.$version.nupkg" --source https://api.nuget.org/v3/index.json --api-key $env:NUGET_API_KEY
+dotnet nuget push "$packages/Mzying2001.MonkeySharp.CefSharp84.x64.$version.nupkg" --source https://api.nuget.org/v3/index.json --api-key $env:NUGET_API_KEY
+dotnet nuget push "$packages/Mzying2001.MonkeySharp.CefSharp.x64.$version.nupkg" --source https://api.nuget.org/v3/index.json --api-key $env:NUGET_API_KEY
 ```
 
 同时发布两个平台时，对 x86 重复发布。`dotnet nuget push` 也会推送相邻的符号包。已经发布的包名与版本组合无法覆盖，后续发布应使用新的 MonkeySharp 版本号。
@@ -86,7 +87,7 @@ dotnet pack Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.cspr
 
 使用 fork 时，将仓库 Owner 和名称替换为实际值。`NUGET_USER` 中的 NuGet 用户必须有权使用所选策略 Owner。如果 NuGet 显示策略暂时激活，应在激活窗口内完成首次发布，或在运行工作流前重新激活。
 
-每次发布时，进入 GitHub **Actions → Publish NuGet → Run workflow**，选择源码分支/ref，输入新的版本号，例如 `3.0.1` 或 `3.0.1-rc.1`，不要添加 `v` 前缀。该输入覆盖本次构建的项目包版本，不修改项目文件。所有门禁通过后自动发布所选代码版本对应的产物。全部普通包和符号包推送成功后，工作流使用内置 `GITHUB_TOKEN` 创建 GitHub Release，标签和标题均为版本号，新标签指向本次构建的提交，资产包含五个 `.nupkg` 和五个 `.snupkg`。带预发布后缀的版本自动标记为 GitHub Prerelease；普通 PR CI 不会发布。
+每次发布时，进入 GitHub **Actions → Publish NuGet → Run workflow**，选择源码分支/ref，输入新的三段版本号（可带预发布后缀），不要添加 `v` 前缀。该输入覆盖本次构建的统一包版本，不修改项目文件。所有门禁通过后自动发布所选代码版本对应的产物。全部普通包和符号包推送成功后，工作流使用内置 `GITHUB_TOKEN` 创建 GitHub Release，标签和标题均为版本号，新标签指向本次构建的提交，资产包含五个 `.nupkg` 和五个 `.snupkg`。带预发布后缀的版本自动标记为 GitHub Prerelease；普通 PR CI 不会发布。
 
 [Publish-Packages.ps1](../scripts/Publish-Packages.ps1) 在任何上传前检查全部十个文件，并按下载后的产物目录解析清单路径，不使用构建机器的绝对路径。先上传 Core，再上传适配器；普通包关闭隐式符号上传，随后显式上传各 `.snupkg` 并传入符号凭据。两个阶段都使用 `--skip-duplicate`，已有普通包不会妨碍补传缺失的符号包。其他 CLI 失败立即停止，并写入不包含凭据的 `publish-results.json`，作为 `nuget-publish-results` 产物上传。其中 `accepted-or-existing` 表示推送被服务器接受或对应包已存在，不代表 NuGet 后台验证或索引已完成。
 
@@ -95,8 +96,10 @@ dotnet pack Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.cspr
 本地离线验证，不需要凭据，也不会上传：
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/Publish-Packages.ps1 -PackageDirectory artifacts/release -Version 3.0.1 -ValidateOnly
-powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/Test-PublishPackages.ps1 -PackageDirectory artifacts/release
+$packages = 'artifacts/release'
+$version = (Get-Content -LiteralPath "$packages/packages.json" -Raw | ConvertFrom-Json).version
+powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/Publish-Packages.ps1 -PackageDirectory $packages -Version $version -ValidateOnly
+powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/Test-PublishPackages.ps1 -PackageDirectory $packages
 ```
 
 测试脚本复制构建包到临时目录，并用进程内函数替代 `dotnet`，覆盖跨目录产物、缺少凭据、版本/哈希/包不完整时禁止上传、Core 优先与独立符号上传，以及失败后的部分结果报告。CI 对实际构建的包执行这些检查。

@@ -6,7 +6,7 @@ on:
   workflow_call:
     inputs:
       package-version:
-        description: NuGet version override; empty uses the Core project version.
+        description: NuGet version override; empty uses Version.props.
         required: false
         type: string
         default: ''

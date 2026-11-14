@@ -3,7 +3,9 @@
 .SYNOPSIS
 Validates a release artifact and publishes its packages using NUGET_API_KEY.
 .EXAMPLE
-./scripts/Publish-Packages.ps1 -PackageDirectory artifacts/packages -Version 3.0.1 -ValidateOnly
+$packages = 'artifacts/release'
+$version = (Get-Content -LiteralPath "$packages/packages.json" -Raw | ConvertFrom-Json).version
+./scripts/Publish-Packages.ps1 -PackageDirectory $packages -Version $version -ValidateOnly
 #>
 [CmdletBinding()]
 param(

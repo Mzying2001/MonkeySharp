@@ -30,15 +30,15 @@ Repeat the .NET commands with `-p:Platform=x86`. The x86 solution configuration 
 Build release packages with [Build-Packages.ps1](../scripts/Build-Packages.ps1), using Windows PowerShell 5.1 or PowerShell 7 and .NET SDK 8+:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/Build-Packages.ps1 -Version 3.0.1
+powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/Build-Packages.ps1
 
 # Optional: choose one platform, a pinned current engine and an empty output directory.
-./scripts/Build-Packages.ps1 -Version 3.0.1 -Platforms x64 -CurrentCefSharpVersion 156.0.150 -OutputDirectory artifacts/release
+./scripts/Build-Packages.ps1 -Platforms x64 -CurrentCefSharpVersion 156.0.150 -OutputDirectory artifacts/release
 ```
 
-On Windows, double-click [Build-Packages.bat](../scripts/Build-Packages.bat) to build with the defaults, or run `./scripts/Build-Packages.bat -Version 3.0.1 -Platforms x64 -OutputDirectory "artifacts/release packages"`. The wrapper locates the adjacent PowerShell script independently of the working directory, uses `-NoProfile -ExecutionPolicy Bypass` for that process, forwards the original arguments with `%*`, and returns the PowerShell exit code. It exits immediately when the build finishes, without pausing.
+On Windows, double-click [Build-Packages.bat](../scripts/Build-Packages.bat) to build with the defaults, or run `./scripts/Build-Packages.bat -Platforms x64 -OutputDirectory "artifacts/release packages"`. The wrapper locates the adjacent PowerShell script independently of the working directory, uses `-NoProfile -ExecutionPolicy Bypass` for that process, forwards the original arguments with `%*`, and returns the PowerShell exit code. It exits immediately when the build finishes, without pausing.
 
-The default invocation builds one `Mzying2001.MonkeySharp.Core` package and four adapters: `Mzying2001.MonkeySharp.CefSharp84.x64`/`.x86` targeting `84.4.10`, and `Mzying2001.MonkeySharp.CefSharp.x64`/`.x86` targeting the pinned current version `156.0.150`. All share the selected MonkeySharp version. With no `-Version` or `-CurrentCefSharpVersion`, the script reads the Core and adapter project defaults. It never resolves a floating latest version or publishes packages.
+The default invocation builds one `Mzying2001.MonkeySharp.Core` package and four adapters: `Mzying2001.MonkeySharp.CefSharp84.x64`/`.x86` targeting `84.4.10`, and `Mzying2001.MonkeySharp.CefSharp.x64`/`.x86` targeting the pinned current version `156.0.150`. Core and all adapters share the version in [Version.props](../Version.props); update that file for a version bump, or pass `-Version <version>` to override one build without editing source. With no `-CurrentCefSharpVersion`, the script reads the adapter project default. It never resolves a floating latest version or publishes packages.
 
 The script defaults to Release and both platforms; `-Configuration` selects Release or Debug. Relative `-OutputDirectory` paths are repository-relative and must be empty. The default is a new `artifacts/packages/<version>-<run>/` directory. Each invocation isolates restore/build outputs by engine/platform under `artifacts/package-build/<run>/`, stops on native-command failures, and checks every package identity, Core target framework, transitive Core dependency, exact CefSharp dependency and symbol package. `packages.json` records paths, versions, platforms and SHA-256 hashes for the `.nupkg` files and their `.snupkg` files. Failed runs retain partial outputs for diagnosis; only a completed run writes the manifest. Package generation does not run the source/native gates; run validation before publication. CI runs this same script after its source and real-Chromium jobs pass.
 
@@ -48,9 +48,10 @@ After reviewing and validating the generated packages, create a nuget.org API ke
 
 ```powershell
 $packages = 'artifacts/packages/<version>-<run>'
-dotnet nuget push "$packages/Mzying2001.MonkeySharp.Core.3.0.1.nupkg" --source https://api.nuget.org/v3/index.json --api-key $env:NUGET_API_KEY
-dotnet nuget push "$packages/Mzying2001.MonkeySharp.CefSharp84.x64.3.0.1.nupkg" --source https://api.nuget.org/v3/index.json --api-key $env:NUGET_API_KEY
-dotnet nuget push "$packages/Mzying2001.MonkeySharp.CefSharp.x64.3.0.1.nupkg" --source https://api.nuget.org/v3/index.json --api-key $env:NUGET_API_KEY
+$version = (Get-Content -LiteralPath "$packages/packages.json" -Raw | ConvertFrom-Json).version
+dotnet nuget push "$packages/Mzying2001.MonkeySharp.Core.$version.nupkg" --source https://api.nuget.org/v3/index.json --api-key $env:NUGET_API_KEY
+dotnet nuget push "$packages/Mzying2001.MonkeySharp.CefSharp84.x64.$version.nupkg" --source https://api.nuget.org/v3/index.json --api-key $env:NUGET_API_KEY
+dotnet nuget push "$packages/Mzying2001.MonkeySharp.CefSharp.x64.$version.nupkg" --source https://api.nuget.org/v3/index.json --api-key $env:NUGET_API_KEY
 ```
 
 Repeat for x86 when releasing both platforms. `dotnet nuget push` also pushes the adjacent symbol package. Published package ID/version pairs cannot be replaced; use a new MonkeySharp version for a subsequent release.
@@ -86,7 +87,7 @@ Complete this setup once:
 
 When using a fork, substitute its actual GitHub owner/repository. The NuGet profile in `NUGET_USER` must have access to the selected policy owner. If NuGet marks the policy as temporarily active, complete the first publication during that activation window or reactivate it before running the workflow.
 
-For each release, open GitHub **Actions → Publish NuGet → Run workflow**, choose the source branch/ref and enter a new version such as `3.0.1` or `3.0.1-rc.1` without a `v` prefix. The input overrides the project package versions for that build without editing project files. Publication starts automatically after all gates pass, using the selected revision's artifacts. After all package and symbol pushes succeed, the workflow uses the built-in `GITHUB_TOKEN` to create a GitHub Release with the version as both its tag and title, a new tag pointing to the built commit, and all five `.nupkg` and five `.snupkg` files as assets. Versions with a prerelease suffix are marked as GitHub prereleases. Ordinary PR CI cannot publish.
+For each release, open GitHub **Actions → Publish NuGet → Run workflow**, choose the source branch/ref and enter a new three-part version, optionally with a prerelease suffix, without a `v` prefix. The input overrides the shared package version for that build without editing project files. Publication starts automatically after all gates pass, using the selected revision's artifacts. After all package and symbol pushes succeed, the workflow uses the built-in `GITHUB_TOKEN` to create a GitHub Release with the version as both its tag and title, a new tag pointing to the built commit, and all five `.nupkg` and five `.snupkg` files as assets. Versions with a prerelease suffix are marked as GitHub prereleases. Ordinary PR CI cannot publish.
 
 [Publish-Packages.ps1](../scripts/Publish-Packages.ps1) checks all ten files before any upload and resolves manifest paths relative to the downloaded artifact, so build-runner absolute paths are never reused. It uploads Core before the adapters, disables implicit symbols on main-package pushes, then explicitly uploads each `.snupkg` with its symbol credential. Both phases use `--skip-duplicate`, so a duplicate main package does not prevent a missing symbol package from being retried. It stops on other CLI failures and writes credential-free `publish-results.json`, uploaded as the `nuget-publish-results` artifact. Its `accepted-or-existing` status means the server accepted the push or the package already existed; it does not mean asynchronous NuGet validation/indexing has completed.
 
@@ -95,8 +96,10 @@ If a publication is interrupted, use **Re-run failed jobs** on the same workflow
 Local verification, without credentials or uploads:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/Publish-Packages.ps1 -PackageDirectory artifacts/release -Version 3.0.1 -ValidateOnly
-powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/Test-PublishPackages.ps1 -PackageDirectory artifacts/release
+$packages = 'artifacts/release'
+$version = (Get-Content -LiteralPath "$packages/packages.json" -Raw | ConvertFrom-Json).version
+powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/Publish-Packages.ps1 -PackageDirectory $packages -Version $version -ValidateOnly
+powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/Test-PublishPackages.ps1 -PackageDirectory $packages
 ```
 
 The test runner uses a temporary copy of built packages and shadows `dotnet` with an in-process stub; it verifies relocated artifacts, missing credentials, version/hash/incomplete-release rejection before uploads, Core-first independent symbol uploads, and partial failure reports. CI executes these checks against the packages it builds.
