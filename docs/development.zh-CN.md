@@ -123,6 +123,8 @@ SmokeHost 通过正常安装流程，在 loopback HTTP fixture 上运行仓库�
 
 面向宿主的操作顺序及诊断预算见[集成参考](integration-reference.zh-CN.md#生命周期与诊断)。以下细节解释 [CefSharpUserScriptHost](../Mzying2001.MonkeySharp.CefSharp/CefSharpUserScriptHost.cs) 的原生 frame 恢复路径；[只读求值测试](../Mzying2001.MonkeySharp.CefSharp.IntegrationTests/ReadOnlyScriptEvaluatorTests.cs)与[原生 frame 测试](../Mzying2001.MonkeySharp.CefSharp.IntegrationTests/NativeFrameProbeTests.cs)验证相应失败边界。
 
+host 主 partial 文件负责附加和文档生命周期；`CefSharpUserScriptHost.NativeCompatibility.cs` 集中版本相关的原生查找，`.Menus.cs` 集中菜单身份验证与路由，`.FrameSession.cs` 保存每文档的取消和串行化状态。这些文件共享原有 host 锁和所有权，修改时应保持生命周期与清理顺序。
+
 同时运行页面和隔离世界的宿主通过异步页面标记探测区分文档导航与隔离 V8 上下文回调。旧版 CEF 可能复用 frame ID，并先完成释放探测、后完成创建探测。适配器在释放后保留帧代次编号，使待完成的创建探测仍可初始化新文档；后续文档、主页面替换或分离会使旧代次失效。这些记录不会保留已释放文档的能力或菜单注册。
 
 CEF 84 在跨站 context-created 回调中还可能提供上一个进程的主帧包装。若加载完成事件标识了另一个从未初始化过、且与浏览器当前原生主帧一致的 frame，适配器会结束旧页面并初始化该帧，再推进 load 生命周期阶段。已在新页面创建的子帧会话仅在原生父帧链确认其属于新主帧时保留。此恢复不会重试已知失败或已释放的帧，也不提供 document-start 时序保证。

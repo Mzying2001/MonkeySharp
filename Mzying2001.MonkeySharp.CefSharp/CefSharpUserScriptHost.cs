@@ -7,21 +7,19 @@ using Mzying2001.MonkeySharp.Core.Repository;
 using Mzying2001.MonkeySharp.Core.Permissions;
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Reflection;
 
 namespace Mzying2001.MonkeySharp.CefSharp
 {
     /// <summary>
     /// Connects the MonkeySharp runtime to the lifecycle and JavaScript binding facilities of one CefSharp browser.
     /// </summary>
-    public sealed class CefSharpUserScriptHost : IUserScriptHost, IDisposable
+    public sealed partial class CefSharpUserScriptHost : IUserScriptHost, IDisposable
     {
         /// <summary>The JavaScript binding name reserved for the MonkeySharp bridge.</summary>
         public const string BridgeObjectName = "__MonkeySharpBridge";
@@ -549,72 +547,6 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     refreshedFrame.Dispose();
             }
             return Task.CompletedTask;
-        }
-
-        // IBrowser.GetFrame(long) was renamed to GetFrameByIdentifier(string)
-        // in newer CefSharp releases. Resolve either shape at runtime so the
-        // adapter can be compiled against the host application's CefSharp.
-        internal static IFrame GetFrameByIdentifier(IBrowser browser, string frameId)
-        {
-            if (browser == null || frameId == null)
-                return null;
-
-            var byString = typeof(IBrowser).GetMethod(
-                "GetFrameByIdentifier",
-                new[] { typeof(string) });
-            if (byString != null)
-                return byString.Invoke(browser, new object[] { frameId }) as IFrame;
-
-            if (long.TryParse(frameId, NumberStyles.Integer, CultureInfo.InvariantCulture, out var identifier))
-            {
-                var byLong = typeof(IBrowser).GetMethod(
-                    "GetFrame",
-                    new[] { typeof(long) });
-                if (byLong != null)
-                    return byLong.Invoke(browser, new object[] { identifier }) as IFrame;
-            }
-
-            // Some transitional releases expose only the string overload
-            // under the original GetFrame name.
-            var legacyByString = typeof(IBrowser).GetMethod(
-                "GetFrame",
-                new[] { typeof(string) });
-            return legacyByString?.Invoke(browser, new object[] { frameId }) as IFrame;
-        }
-
-        private static void EnsureCompatibleCefSharp()
-        {
-            var identifier = typeof(IFrame).GetProperty("Identifier");
-            if (identifier == null ||
-                (identifier.PropertyType != typeof(long) && identifier.PropertyType != typeof(string)))
-            {
-                throw new NotSupportedException(
-                    "The loaded CefSharp version exposes an unsupported IFrame.Identifier type. " +
-                    "Build MonkeySharp against the CefSharp version used by the host.");
-            }
-
-            var browser = typeof(IBrowser);
-            var hasFrameLookup = browser.GetMethod("GetFrameByIdentifier", new[] { typeof(string) }) != null ||
-                browser.GetMethod("GetFrame", new[] { typeof(string) }) != null ||
-                browser.GetMethod("GetFrame", new[] { typeof(long) }) != null;
-            if (!hasFrameLookup)
-            {
-                throw new NotSupportedException(
-                    "The loaded CefSharp version does not expose a supported frame lookup API. " +
-                    "Build MonkeySharp against the CefSharp version used by the host.");
-            }
-        }
-
-        // IFrame.Identifier changed from Int64 to String in newer CefSharp
-        // releases. Reading it through reflection keeps lifecycle code source
-        // compatible when the adapter is compiled against either interface shape.
-        private static string GetFrameIdentifier(IFrame frame)
-        {
-            if (frame == null)
-                return string.Empty;
-            var property = typeof(IFrame).GetProperty("Identifier");
-            var value = property?.GetValue(frame, null);
-            return Convert.ToString(value, CultureInfo.InvariantCulture) ?? string.Empty;
         }
 
         /// <inheritdoc />
@@ -1275,92 +1207,6 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 return _sessions.Values.FirstOrDefault(item => item.Frame.DocumentId == documentId);
         }
 
-        private static PropertyInfo GetContextMenuHandlerProperty(IWebBrowser browser)
-        {
-            if (browser == null)
-                return null;
-            var flags = BindingFlags.Instance | BindingFlags.Public;
-            return browser.GetType().GetProperty("MenuHandler", flags) ??
-                browser.GetType().GetProperty("ContextMenuHandler", flags);
-        }
-
-        private void BrowserJavascriptMessageReceived(object sender, JavascriptMessageReceivedEventArgs args)
-        {
-            if (args.Message is string proof && args.Frame != null && !args.Frame.IsDisposed)
-                _isolated?.ConfirmNativeMenuFrame(proof, GetFrameIdentifier(args.Frame), args.Frame.IsMain);
-        }
-
-        /// <summary>Resolves a menu subscriber against a native menu event frame, rejecting stale documents and unknown mappings.</summary>
-        /// <param name="nativeFrame">The native CEF event frame; never construct it from page-supplied IDs.</param>
-        /// <param name="request">The authenticated registration received by the menu service.</param>
-        /// <returns>The current subscribing frame to place in MenuCommandInvocation.Frame, or null if it cannot be attested.</returns>
-        public DocumentFrame ResolveMenuFrame(IFrame nativeFrame, MenuCommandRequest request)
-        {
-            var frame = request?.OriginFrame;
-            CefSharpIsolatedExecutor isolated;
-            string id;
-            bool main;
-            lock (_sync)
-            {
-                if (_browser == null || nativeFrame == null || nativeFrame.IsDisposed || frame == null ||
-                    frame.BrowserSessionId != _browserSessionId || nativeFrame.Browser.Identifier != _browser.GetBrowser().Identifier) return null;
-                id = GetFrameIdentifier(nativeFrame);
-                if (frame.ExecutionWorld != "isolated") return _sessions.TryGetValue(id, out var session) && session.Initialized &&
-                    !session.Token.IsCancellationRequested && CefSharpDocumentIdentity.Matches(session.Frame, frame) ? session.Frame : null;
-                isolated = _isolated;
-                main = nativeFrame.IsMain;
-            }
-            return isolated?.OwnsNativeMenuFrame(frame, id, main) == true ? frame : null;
-        }
-
-        internal IReadOnlyList<CefSharpMenuTarget> GetContextMenuEntries(IFrame cefFrame)
-        {
-            FrameSession session;
-            lock (_sync)
-                _sessions.TryGetValue(GetFrameIdentifier(cefFrame), out session);
-            var entries = new List<CefSharpMenuTarget>();
-            if (session != null && session.Initialized)
-                entries.AddRange(_engine.GetContextMenuEntriesAsync(session.Frame, CancellationToken.None).GetAwaiter().GetResult()
-                    .Select(entry => new CefSharpMenuTarget(entry, session.Frame, GetFrameIdentifier(cefFrame))));
-            if (_isolated != null) entries.AddRange(_isolated.MenuAsync(GetFrameIdentifier(cefFrame), cefFrame.IsMain).GetAwaiter().GetResult());
-            return entries;
-        }
-
-        internal void ExecuteContextMenu(IFrame cefFrame, CefSharpMenuTarget target)
-        {
-            if (GetFrameIdentifier(cefFrame) != target.NativeFrameId) return;
-            if (target.Frame.ExecutionWorld == "isolated")
-            {
-                var executor = _isolated;
-                if (executor != null) Observe(executor.ExecuteMenuAsync(target.Frame.DocumentId, target.NativeFrameId, target.Entry.ScriptKey), "MSC104_CONTEXT_MENU_FAILED", null);
-                return;
-            }
-            FrameSession session;
-            lock (_sync)
-                _sessions.TryGetValue(GetFrameIdentifier(cefFrame), out session);
-            if (session == null || session.Frame.DocumentId != target.Frame.DocumentId)
-                return;
-            Observe(ExecuteContextMenuAsync(session, target.Entry.ScriptKey), "MSC104_CONTEXT_MENU_FAILED", session);
-        }
-
-        private async Task ExecuteContextMenuAsync(FrameSession session, ScriptKey scriptKey)
-        {
-            session.Token.ThrowIfCancellationRequested();
-            await session.OperationGate.WaitAsync(session.Token).ConfigureAwait(false);
-            try
-            {
-                var plan = await _engine.ProcessContextMenuAsync(
-                    session.Frame, scriptKey, session.Token).ConfigureAwait(false);
-                if (plan.Invocations.Count != 0)
-                    await ExecuteAsync(session.Frame, BridgeScriptBuilder.BuildInjection(plan), session.Token)
-                        .ConfigureAwait(false);
-            }
-            finally
-            {
-                session.OperationGate.Release();
-            }
-        }
-
         private CancellationToken GetAttachmentToken()
         {
             lock (_sync)
@@ -1464,122 +1310,5 @@ namespace Mzying2001.MonkeySharp.CefSharp
             }
         }
 
-        private sealed class ContextMenuHandler : IContextMenuHandler
-        {
-            private readonly CefSharpUserScriptHost _host;
-            private readonly IContextMenuHandler _inner;
-            private readonly object _sync = new object();
-            private readonly Dictionary<CefMenuCommand, CefSharpMenuTarget> _commands =
-                new Dictionary<CefMenuCommand, CefSharpMenuTarget>();
-
-            public ContextMenuHandler(CefSharpUserScriptHost host, IContextMenuHandler inner)
-            {
-                _host = host;
-                _inner = inner;
-            }
-
-            public IContextMenuHandler Previous => _inner;
-
-            public void OnBeforeContextMenu(IWebBrowser browser, IBrowser cefBrowser, IFrame frame,
-                IContextMenuParams parameters, IMenuModel model)
-            {
-                _inner?.OnBeforeContextMenu(browser, cefBrowser, frame, parameters, model);
-                lock (_sync) _commands.Clear();
-                var entries = _host.GetContextMenuEntries(frame);
-                if (entries.Count == 0)
-                    return;
-                model.AddSeparator();
-                for (var index = 0; index < entries.Count; index++)
-                {
-                    var command = (CefMenuCommand)((int)CefMenuCommand.UserFirst + index);
-                    lock (_sync) _commands[command] = entries[index];
-                    model.AddItem(command, entries[index].Entry.Title);
-                }
-            }
-
-            public bool OnContextMenuCommand(IWebBrowser browser, IBrowser cefBrowser, IFrame frame,
-                IContextMenuParams parameters, CefMenuCommand commandId, CefEventFlags eventFlags)
-            {
-                if (_inner != null && _inner.OnContextMenuCommand(browser, cefBrowser, frame, parameters, commandId, eventFlags))
-                    return true;
-                CefSharpMenuTarget target;
-                lock (_sync)
-                {
-                    if (!_commands.TryGetValue(commandId, out target))
-                        return false;
-                }
-                _host.ExecuteContextMenu(frame, target);
-                return true;
-            }
-
-            public void OnContextMenuDismissed(IWebBrowser browser, IBrowser cefBrowser, IFrame frame)
-            {
-                lock (_sync) _commands.Clear();
-                _inner?.OnContextMenuDismissed(browser, cefBrowser, frame);
-            }
-
-            public bool RunContextMenu(IWebBrowser browser, IBrowser cefBrowser, IFrame frame,
-                IContextMenuParams parameters, IMenuModel model, IRunContextMenuCallback callback)
-            {
-                return _inner != null && _inner.RunContextMenu(browser, cefBrowser, frame, parameters, model, callback);
-            }
-        }
-
-        private sealed class FrameSession : IDisposable
-        {
-            private bool _disposed;
-            public FrameSession(IFrame cefFrame, DocumentFrame frame, string lifecycleToken)
-            {
-                CefFrame = cefFrame;
-                Frame = frame;
-                LifecycleToken = lifecycleToken;
-                Token = Cancellation.Token;
-            }
-
-            public long AttachmentGeneration { get; set; }
-            public long ContextGeneration { get; set; }
-            public bool HasDocumentMarker { get; set; }
-            public IFrame CefFrame { get; }
-            public DocumentFrame Frame { get; private set; }
-            public string LifecycleToken { get; }
-            public CancellationTokenSource Cancellation { get; } = new CancellationTokenSource();
-            public CancellationToken Token { get; }
-            public object LifetimeSync { get; } = new object();
-            public Task ReleaseTask { get; set; }
-            public Task PredecessorsReleased { get; set; } = Task.CompletedTask;
-            public Task Initialization { get; set; } = Task.CompletedTask;
-            public SemaphoreSlim OperationGate { get; } = new SemaphoreSlim(1, 1);
-            public int CompletedRank { get; set; }
-            public bool Initialized { get; set; }
-
-            public void UpdateUrl(Uri url)
-            {
-                Frame = new DocumentFrame(
-                    Frame.BrowserSessionId,
-                    Frame.DocumentId,
-                    Frame.FrameId,
-                    url,
-                    Frame.IsMainFrame,
-                    Frame.TimingGuarantee,
-                    Frame.BridgeIntegrity);
-            }
-
-            public void Cancel()
-            {
-                lock (LifetimeSync)
-                    if (!_disposed) Cancellation.Cancel();
-            }
-
-            public void Dispose()
-            {
-                lock (LifetimeSync)
-                {
-                    if (_disposed) return;
-                    _disposed = true;
-                    Cancellation.Dispose();
-                    OperationGate.Dispose();
-                }
-            }
-        }
     }
 }
