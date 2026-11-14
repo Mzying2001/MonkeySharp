@@ -162,7 +162,8 @@ namespace Mzying2001.MonkeySharp.Core.Apis
                     {
                         var request = new UserScriptHttpRequest("GET", _request.Url,
                             _request.Headers.ToDictionary(item => item.Key, item => item.Value), null, null, null,
-                            async (target, token) => { using (_deadline.Pause()) return await _request.RedirectAllowed(target, token).ConfigureAwait(false); }, new UserScriptHttpRequestOptions { Anonymous = _request.Anonymous });
+                            async (target, token) => { using (_deadline.Pause()) return await _request.RedirectAllowed(target, token).ConfigureAwait(false); },
+                            new UserScriptHttpRequestOptions { Anonymous = _request.Anonymous }, _request.OriginFrame);
                         var network = _owner._http.SendAsync(request, this, _cancellation.Token);
                         var response = await network.Completion.ConfigureAwait(false);
                         if (_responseError != null) throw _responseError;
