@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [ValidateSet('84.4.10','156.0.150')][string[]]$CefSharpVersions = @('84.4.10','156.0.150'),
     [string[]]$Platforms = @('x64','x86'),
@@ -7,6 +7,7 @@ param(
     [switch]$KeepWorktrees
 )
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot '../testing/TestProcess.ps1')
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 $runId = [Guid]::NewGuid().ToString('N').Substring(0,12)
 $runRoot = Join-Path $root "artifacts/delivery/$runId"
@@ -25,12 +26,8 @@ if ($CorpusScript) { $CorpusScript = (Resolve-Path -LiteralPath $CorpusScript).P
 $results = @()
 
 function Invoke-Logged([string]$Executable, [string[]]$Arguments, [string]$WorkingDirectory, [string]$Log) {
-    $quoted = @($Arguments | ForEach-Object { '"' + $_.Replace('"','\"') + '"' })
-    $process = Start-Process -FilePath $Executable -ArgumentList $quoted -WorkingDirectory $WorkingDirectory -WindowStyle Hidden -PassThru `
-        -RedirectStandardOutput $Log -RedirectStandardError ($Log + '.stderr')
-    $null = $process.Handle
-    try { $process.WaitForExit(); $code = $process.ExitCode } finally { $process.Dispose() }
-    if ($code -ne 0) { throw "Command failed ($code): $Executable. See $Log" }
+    $run = Invoke-TestProcess -FilePath $Executable -ArgumentList $Arguments -WorkingDirectory $WorkingDirectory -StdoutPath $Log -TimeoutSeconds 900
+    Assert-TestProcess $run $Executable
 }
 
 foreach ($version in $CefSharpVersions) {
@@ -89,8 +86,10 @@ foreach ($version in $CefSharpVersions) {
                 (Join-Path $consumer "bin/$platform/Release/net462/MonkeySharp.PackageConsumer.exe"),'--expected-cef-version',$version,'--expected-platform',$platform,'--output',$corpusOutput) $checkout (Join-Path $caseRoot 'consumer-corpus.log')
             $record.consumerCorpus = Get-Content -LiteralPath (Join-Path $corpusOutput 'results.json') -Raw -Encoding UTF8 | ConvertFrom-Json
             if (!$PackageOnly) {
-                Copy-Item -LiteralPath (Join-Path $checkout "artifacts/smoke/$version-$platform/results.jsonl") -Destination (Join-Path $caseRoot 'smoke-results.jsonl')
-                Copy-Item -LiteralPath (Join-Path $checkout "artifacts/smoke/$version-$platform/cdp-probe.jsonl") -Destination (Join-Path $caseRoot 'cdp-probe.jsonl')
+                $smokeResults = Get-ChildItem -LiteralPath (Join-Path $checkout "artifacts/smoke/$version-$platform") -Filter results.jsonl -Recurse | Select-Object -First 1
+                if (!$smokeResults) { throw 'Native smoke evidence is missing.' }
+                Copy-Item -LiteralPath $smokeResults.FullName -Destination (Join-Path $caseRoot 'smoke-results.jsonl')
+                Copy-Item -LiteralPath (Join-Path $smokeResults.DirectoryName 'cdp-probe.jsonl') -Destination (Join-Path $caseRoot 'cdp-probe.jsonl')
                 $nativeProbes = Join-Path $checkout 'artifacts/native-probes'
                 if (!(Test-Path -LiteralPath $nativeProbes)) { throw 'Native OOPIF evidence is missing.' }
                 Copy-Item -LiteralPath $nativeProbes -Destination (Join-Path $caseRoot 'native-probes') -Recurse

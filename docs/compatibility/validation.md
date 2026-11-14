@@ -72,7 +72,7 @@ Read-only adapter initialization and fixture-result polling retry evaluation can
 
 Run `powershell -NoProfile -ExecutionPolicy Bypass -File Mzying2001.MonkeySharp.CefSharp.SmokeHost/Test-SmokeResults.ps1` to check result validation without launching a browser. Both Windows PowerShell and PowerShell 7 can run the scripts.
 
-Logs are written to `artifacts/smoke/<version>-<platform>/` (`restore.log`, `clean.log`, `build.log` when output is present, `stdout.log`, `stderr.log`, and `results.jsonl`); `-OutputDirectory` overrides the location. CI uploads that directory as `chromium-<version>-<platform>` even on failure. Inspect failed `compatibility-case` records first, then the adjacent lifecycle, console and diagnostic records.
+Logs are written to fresh `artifacts/smoke/<version>-<platform>/<run>/` directories (`restore.log`, `clean.log`, `build.log` when output is present, `stdout.log`, `stderr.log`, `results.jsonl` and process runner reports); `-OutputDirectory` overrides the location. CI retains these directories even on failure. Inspect failed `compatibility-case` records first, then the adjacent lifecycle, console and diagnostic records. Shared [process checks](../../scripts/testing/README.md) verify timeout cleanup and output capture.
 
 ## Pinned reference and evidence
 

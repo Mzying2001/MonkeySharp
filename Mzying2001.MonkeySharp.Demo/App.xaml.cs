@@ -16,7 +16,8 @@ namespace Mzying2001.MonkeySharp.Demo
             var smoke = e.Args.Contains("--smoke");
             var report = e.Args.SkipWhile(argument => argument != "--smoke-report").Skip(1).FirstOrDefault();
             var smokeCase = e.Args.SkipWhile(argument => argument != "--smoke-case").Skip(1).FirstOrDefault() ?? "all";
-            var smokeRun = smoke ? new DemoSmokeRun(report, smokeCase) : null;
+            var profile = e.Args.SkipWhile(argument => argument != "--smoke-profile").Skip(1).FirstOrDefault();
+            var smokeRun = smoke ? new DemoSmokeRun(report, smokeCase, profile) : null;
             UiLanguage.Apply(UiLanguage.DefaultLanguage);
             try
             {

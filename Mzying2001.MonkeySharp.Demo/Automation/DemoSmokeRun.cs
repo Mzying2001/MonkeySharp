@@ -14,12 +14,12 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
         private readonly Dictionary<string, bool> _checks = new Dictionary<string, bool>();
         private SmokeTrace _trace;
 
-        internal DemoSmokeRun(string reportPath, string smokeCase = "all")
+        internal DemoSmokeRun(string reportPath, string smokeCase = "all", string profileDirectory = null)
         {
             if (smokeCase != "all" && smokeCase != "navigation-menu") throw new ArgumentException("Unknown smoke case: " + smokeCase, nameof(smokeCase));
             _reportPath = reportPath;
             Case = smokeCase;
-            ProfileDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "SmokeRuns", Guid.NewGuid().ToString("N"));
+            ProfileDirectory = profileDirectory ?? Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "SmokeRuns", Guid.NewGuid().ToString("N"));
         }
 
         internal string ProfileDirectory { get; }
@@ -47,6 +47,7 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
             WriteReport(new
             {
                 success = true,
+                schemaVersion = 1,
                 smokeCase = Case,
                 trace = TracePath,
                 checks = _checks,
@@ -65,6 +66,7 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
             WriteReport(new
             {
                 success = false,
+                schemaVersion = 1,
                 smokeCase = Case,
                 trace = TracePath,
                 context = SmokeTrace.Describe(),
