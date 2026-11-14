@@ -6,7 +6,7 @@
 
 Ordinary authenticated requests use the actual browser Cookie jar; anonymous requests suppress it. Initial and redirected targets remain subject to script declarations, host policy and permission decisions. The default backend rejects explicit `cookie`, `headers.Cookie` and request `cookiePartition` before network dispatch. See [explicit Cookie observations](cookies.md#explicit-request-cookies) and [partition limits](cookies.md#partitioned-cookie-scope). Cookie CRUD support does not establish request-partition selection.
 
-The HTTP service captures the attached RequestContext when it accepts a request and reuses it for every redirect, even if the host later attaches another browser. The application owns that context and must retain it until accepted downloads have drained; the service does not dispose it.
+The HTTP service captures the attached RequestContext when it accepts a request and reuses it for every redirect, even if the host later attaches another browser. The application owns that context and must retain it until accepted downloads have drained; the service does not dispose it. SmokeHost's Cookie case checks 302/307 downloads against two distinct jars while changing the context accessor during redirect authorization, verifies saved contents, and drains transfers before releasing the contexts.
 
 ## Incremental response text
 

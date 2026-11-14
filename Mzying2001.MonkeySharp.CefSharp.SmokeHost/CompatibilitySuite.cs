@@ -184,6 +184,9 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             await WaitAsync(async () => (await ReadAsync(readA + ".tail === 2"))?.GetBoolean() == true);
             var urlState = (await ReadAsync(readA)).Value;
             Check("isolatedUrlOptions", urlState.GetProperty("once").GetInt32() == 1 && urlState.GetProperty("aborted").GetInt32() == 0 && urlState.GetProperty("changes").GetArrayLength() == 2);
+            using (var native = _browser.GetBrowser().MainFrame)
+                Check("sameDocumentMenuAttestation", main.All(frame => _host.ResolveMenuFrame(native,
+                    new MenuCommandRequest(frame.ScriptScope.Value, "snapshot", null, originFrame: frame, clickedFrame: true)) != null));
             await ReadAsync("(function(){var f=document.createElement('iframe');f.src='/compat/isolated-child';document.body.appendChild(f);return true;})()");
             await WaitAsync(() => Task.FromResult(FindFrame("/compat/isolated-child") != null));
             var child = await WaitResultAsync(readA, FindFrame("/compat/isolated-child"));
@@ -532,6 +535,31 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                     var observer = new CookieHttpObserver();
                     await http.SendAsync(new UserScriptHttpRequest("GET", url, new Dictionary<string, string>(), null, null, null, (_, __) => Task.FromResult(true)), observer, CancellationToken.None).Completion;
                     Check("contextHttpEffect", observer.Text.Contains("context-proof=secondary") && !observer.Text.Contains("context-proof=primary"));
+                    foreach (var status in new[] { 302, 307 })
+                    {
+                        IRequestContext current = context;
+                        var path = Path.Combine(_downloads.DirectoryPath, "context-redirect-" + status + ".txt");
+                        using (var redirectHttp = new CefSharpHttpRequestService(() => current))
+                        using (var files = new FileDownloadService(redirectHttp, (_, __) => Task.FromResult(new DownloadDestination(path, false))))
+                        {
+                            var switched = false;
+                            var request = new DownloadRequest(default, new Uri(url, "/compat/context-redirect-" + status), null, false,
+                                redirectAllowed: (_, __) =>
+                                {
+                                    current = _host.CurrentRequestContext;
+                                    switched = true;
+                                    return Task.FromResult(true);
+                                });
+                            var operation = await files.CreateAsync(request, CancellationToken.None);
+                            operation.Start();
+                            await operation.Completion;
+                            await files.DrainAsync();
+                            var saved = File.ReadAllText(path);
+                            Check("redirectContext" + status, switched && saved.Contains("context-proof=secondary") && !saved.Contains("context-proof=primary"));
+                        }
+                    }
+                    Check("redirectJarsUnchanged", (await primary.ListAsync(new UserScriptCookieQuery(url, "context-proof"), CancellationToken.None)).Single().Value == "primary" &&
+                        (await secondary.ListAsync(new UserScriptCookieQuery(url, "context-proof"), CancellationToken.None)).Single().Value == "secondary");
                     await secondary.DeleteAsync(new UserScriptCookieMutation(url, "context-proof"), CancellationToken.None);
                 }
                 await primary.DeleteAsync(new UserScriptCookieMutation(url, "context-proof"), CancellationToken.None);

@@ -717,6 +717,13 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                     byte[] body;
                     switch (request.Path)
                     {
+                        case "/compat/context-redirect-302":
+                        case "/compat/context-redirect-307":
+                            status = request.Path.EndsWith("302", StringComparison.Ordinal) ? 302 : 307;
+                            statusText = "Redirect";
+                            headers.Add(new KeyValuePair<string, string>("Location", "/cookie"));
+                            body = new byte[0];
+                            break;
                         case "/compat/files/auth":
                             request.Headers.TryGetValue("Cookie", out var downloadCookie);
                             if (downloadCookie != null && downloadCookie.Contains("download-login=ready")) body = DownloadBytes;
