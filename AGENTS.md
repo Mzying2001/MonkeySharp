@@ -6,15 +6,15 @@ MonkeySharp is a userscript runtime for applications that embed CefSharp. It sep
 
 ## Project Structure
 
-- `docs/`: Integration and userscript guides plus compatibility contracts and validation; see `integration-reference.md` for build, packaging, and E2E commands.
-- `scripts/compatibility/`: Validation runners, package consumer, shared fixtures, pinned third-party corpus, and versioned evidence; see its `README.md` for commands.
-- `Mzying2001.MonkeySharp.Core/`: Browser-independent runtime, GM APIs, repository/storage abstractions, and bridge protocol.
+- `docs/`: Guides and compatibility contracts; see `docs/README.md` for navigation and `docs/development.md` for build, packaging, and test commands.
+- `scripts/`: Package build and publishing, test runners, and compatibility validation; see subdirectory READMEs for usage.
+- `Mzying2001.MonkeySharp.Core/`: Browser-independent runtime and host contracts; `Js/` implements the GM JavaScript APIs.
 - `Mzying2001.MonkeySharp.CefSharp/`: Browser lifecycle, JavaScript binding, CDP sessions and isolated execution, and CefSharp host services.
-- `Mzying2001.MonkeySharp.Demo/`: WPF browser and script manager with SQLite persistence, host services, and a real-Chromium `Run-E2E.ps1` gate.
-- `Mzying2001.MonkeySharp.Core.Tests/`: Core unit tests and JavaScript bridge/API tests.
+- `Mzying2001.MonkeySharp.Demo/`: WPF browser and script manager with SQLite persistence and host-service implementations.
+- `Mzying2001.MonkeySharp.Core.Tests/`: Core unit tests; `JavaScript/` contains JavaScript bridge/API tests.
 - `Mzying2001.MonkeySharp.CefSharp.IntegrationTests/`: Adapter integration tests using mocked CefSharp interfaces.
-- `Mzying2001.MonkeySharp.Demo.Tests/`: Persistence, host-service, and script-manager tests.
-- `Mzying2001.MonkeySharp.CefSharp.SmokeHost/`: Standalone WinForms host and `Run-E2E.ps1` for real-Chromium validation; built outside the main solution.
+- `Mzying2001.MonkeySharp.Demo.Tests/`: Demo persistence, host services, and UI logic tests.
+- `Mzying2001.MonkeySharp.CefSharp.SmokeHost/`: Standalone WinForms host for real-Chromium validation; built outside the main solution.
 
 Use an explicit `x64` or `x86` platform for CefSharp builds. The Demo and its tests support only `x64` and are excluded from `x86` solution builds. Keep `CefSharpVersion` consistent across projects.
 
