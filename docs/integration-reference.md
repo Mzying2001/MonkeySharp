@@ -203,7 +203,7 @@ host.Attach(browser);
 
 The adapter rejects occupied non-multiplexer slots. Explicitly supplying `UseWebRequestService` still requires this composition when defaults are disabled. Render handlers separately require a `RenderProcessMessageHandlerMultiplexer`, as shown in the [README](../README.md#existing-browser-handlers).
 
-Static `@webRequest` rules compile at installation and activate before navigation through `host.NavigateAsync`; repository changes revoke old rules. Static loading follows URL/frame/run-in/host policy and cannot open interactive permission prompts. Dynamic rules belong to one browser/frame/document/execution and are revoked on navigation, update, disable, uninstall or detach. Unowned requests do not inherit another frame's rules.
+Static `@webRequest` rules compile at installation and activate before navigation through `host.NavigateAsync`; repository changes revoke old rules. Static loading follows URL/frame/run-in/host policy and cannot open interactive permission prompts. Dynamic rules belong to one browser/frame/document/execution and are revoked on navigation, update, disable, uninstall or detach. The engine queues repository changes to end obsolete executions and release their storage listeners, menus and provider callbacks, without waiting for another GM call or requiring a page reload. Accepted downloads continue with document callbacks muted. Unowned requests do not inherit another frame's rules.
 
 Selectors, actions, replacement/revocation and callbacks are documented in the [request interception guide](usage-guide.md#request-interception). Historical MV2 parity, OOPIF, isolated-frame dynamic page interception and WebSocket coverage have explicit [evidence limits](compatibility/README.md#historical-webrequest).
 

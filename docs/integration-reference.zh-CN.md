@@ -205,7 +205,7 @@ host.Attach(browser);
 
 适配器拒绝被非 multiplexer 处理器占用的槽位。禁用默认服务后，显式 `UseWebRequestService` 仍需遵循上述组合方式。渲染处理器另需 `RenderProcessMessageHandlerMultiplexer`，示例见 [README](../README.zh-CN.md#已有的浏览器处理器)。
 
-静态 `@webRequest` 在安装期编译，通过 `host.NavigateAsync` 在导航前激活；仓库变更撤销旧规则。静态加载遵循 URL、frame、run-in 及宿主策略，不能弹出交互授权。动态规则属于一个 browser/frame/document/execution，导航、更新、禁用、卸载及 detach 撤销。无法确定可信归属的请求不继承其他 frame 的规则。
+静态 `@webRequest` 在安装期编译，通过 `host.NavigateAsync` 在导航前激活；仓库变更撤销旧规则。静态加载遵循 URL、frame、run-in 及宿主策略，不能弹出交互授权。动态规则属于一个 browser/frame/document/execution，导航、更新、禁用、卸载及 detach 撤销。引擎将仓库变更加入执行队列，结束旧执行并清理其存储监听、菜单和 provider 回调，无需等待下一次 GM 调用或刷新页面；已接受下载继续，但文档回调静默。无法确定可信归属的请求不继承其他 frame 的规则。
 
 selector、action、替换/撤销及回调见[请求拦截指南](usage-guide.zh-CN.md#request-interception)。历史 MV2 一致性、OOPIF、isolated frame 动态页面拦截及 WebSocket 覆盖均有明确[证据限制](compatibility/README.md#historical-webrequest)。
 
