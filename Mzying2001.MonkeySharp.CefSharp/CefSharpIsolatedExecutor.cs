@@ -308,7 +308,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 world.ObjectId = global.GetProperty("result").GetProperty("objectId").GetString();
                 await ConfirmDocumentAsync(world).ConfigureAwait(false);
                 await CallAsync(world, IsolatedScriptBuilder.Build(world.Generation, _binding, world.Frame.DocumentId,
-                    _options.MaxPendingRequestsPerDocument, _options.RequestTimeout), false).ConfigureAwait(false);
+                    _options.MaxPendingRequestsPerDocument), false).ConfigureAwait(false);
                 await _session.ExecuteAsync("Runtime.addBinding", new { name = _binding, executionContextId = id }, world.Token).ConfigureAwait(false);
                 // The one-shot nonce is sent before user source, solely through this private context.
                 // JavascriptMessageReceived supplies the CEF frame; the payload supplies no frame identity.

@@ -152,7 +152,7 @@ For consent-based hosts, share `InteractiveUserScriptPermissionPolicy(new Sensit
 
 Scopes use stable installation key + permission kind + canonical HTTP(S) origin, with no credentials, path or query. Allow-once applies only to the currently coalesced batch; completed prompts cannot authorize later requests. Remembered decisions can be revoked. One canceled waiter does not cancel another document's joined request; all canceled waiters close the prompt. Navigation cancels interactive waits, and installation revision/enabled state is checked again after consent.
 
-Generic execution timeout starts after authorization. CEF transfer and download deadlines pause while redirect permission waits and then resume their remaining active budget. Providers validate declarations before effects as well. Demo uses an additive SQLite decision table, real asynchronous permission windows and a permission-management button; revocation cancels pending prompts and reloads affected execution state. Its scripted E2E clicks the actual permission window and checks persistence.
+Generic execution timeout starts after authorization. Isolated transport uses Core's deadlines rather than starting a second timer before consent; document end still rejects its pending waits. CEF transfer and download deadlines pause while redirect permission waits and then resume their remaining active budget. Providers validate declarations before effects as well. Demo uses an additive SQLite decision table, real asynchronous permission windows and a permission-management button; revocation cancels pending prompts and reloads affected execution state. Its scripted E2E clicks the actual permission window and checks persistence.
 
 ## Network APIs
 

@@ -47,14 +47,13 @@
             const item = pending.get(id);
             if (!item) return;
             pending.delete(id);
-            if (item.timer) clearTimeout(item.timer);
             item.resolve(json);
         },
         dispose() {
             disposed = true;
             observer.disconnect();
             lifecycleEvents.dispose();
-            pending.forEach(item => { if (item.timer) clearTimeout(item.timer); item.reject(new Error("The isolated document ended.")); });
+            pending.forEach(item => item.reject(new Error("The isolated document ended.")));
             pending.clear();
             if (root.__MonkeySharpRuntime) root.__MonkeySharpRuntime.endDocument(proof.documentId);
         },
@@ -65,9 +64,9 @@
             let request;
             try { request = JSON.parse(json); } catch (error) { return Promise.reject(error); }
             return new Promise((resolve, reject) => {
-                const longHttp = request.method === "GM.xmlHttpRequest" && request.params && request.params.operation === "execute";
-                const timer = longHttp ? null : setTimeout(() => { pending.delete(id); reject(new Error("The isolated bridge response timed out.")); }, proof.timeout);
-                pending.set(id, { resolve, reject, timer });
+                // Core starts ordinary deadlines after consent and owns HTTP deadlines.
+                // A transport timer here would also expire while the user is deciding.
+                pending.set(id, { resolve, reject });
                 send({ kind: "api", id, request: json });
             });
         }
