@@ -8,13 +8,15 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
     public sealed class SmokeLifecycleAssertionsTests
     {
         [Theory]
-        [InlineData(DocumentLifecycleKind.ContextReleased)]
-        [InlineData(DocumentLifecycleKind.NavigationSuperseded)]
-        public void ChildNavigationAcceptsEitherOldDocumentTermination(DocumentLifecycleKind terminal)
+        [InlineData(DocumentLifecycleKind.ContextReleased, false)]
+        [InlineData(DocumentLifecycleKind.NavigationSuperseded, false)]
+        [InlineData(DocumentLifecycleKind.ContextReleased, true)]
+        [InlineData(DocumentLifecycleKind.NavigationSuperseded, true)]
+        public void NavigationAcceptsEitherOldDocumentTermination(DocumentLifecycleKind terminal, bool mainFrame)
         {
             // Chromium 84 can report supersession before the native release callback.
-            var old = Frame("old", "same");
-            var next = Frame("next", "same-next");
+            var old = Frame("old", "same", mainFrame);
+            var next = Frame("next", "same-next", mainFrame);
             var events = new[]
             {
                 new DocumentLifecycleEventArgs(DocumentLifecycleKind.ContextCreated, old),
@@ -39,10 +41,10 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
             Assert.False(SmokeLifecycleAssertions.HasDocumentEnded(events, "target"));
         }
 
-        private static DocumentFrame Frame(string documentId, string path)
+        private static DocumentFrame Frame(string documentId, string path, bool mainFrame = false)
         {
             return new DocumentFrame("browser", documentId, "child-frame", new Uri("http://127.0.0.1/compat/frames/" + path),
-                false, TimingGuarantee.BestEffortDocumentStart);
+                mainFrame, TimingGuarantee.BestEffortDocumentStart);
         }
     }
 }

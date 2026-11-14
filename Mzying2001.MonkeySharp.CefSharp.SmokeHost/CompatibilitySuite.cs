@@ -576,7 +576,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                 status = _fixture.RequestCount("/compat/net/websocket") == 0 ? "passed" : "expected-engine-limitation" }));
             var old = FindFrame("/compat/webrequest");
             await NavigateAsync("/compat/cleanup");
-            await WaitAsync(() => Task.FromResult(EventCount(DocumentLifecycleKind.ContextReleased, old.DocumentId) > 0));
+            await WaitAsync(() => Task.FromResult(HasDocumentEnded(old.DocumentId)));
             await ReadAsync("(globalThis.__cleanup = null, fetch('/compat/net/cleanup', { cache: 'no-store' }).then(function (response) { return response.text(); }).then(function (text) { globalThis.__cleanup = text; }), true)");
             await WaitAsync(async () => (await ReadAsync("globalThis.__cleanup || null"))?.GetString() == "cleanup");
             Check("navigationCleanup", _fixture.RequestCount("/compat/net/cleanup") == 1);
