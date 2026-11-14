@@ -434,7 +434,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
 
         internal bool OwnsNativeMenuFrame(DocumentFrame frame, string nativeFrameId, bool main)
         {
-            lock (_sync) return _documents.TryGetValue(frame.DocumentId, out var world) && ReferenceEquals(world.Frame, frame) &&
+            lock (_sync) return _documents.TryGetValue(frame.DocumentId, out var world) && CefSharpDocumentIdentity.Matches(world.Frame, frame) &&
                 (main && world.Native.Main || !main && world.Native.CefFrameId == nativeFrameId) && world.Ready && Alive(world);
         }
 

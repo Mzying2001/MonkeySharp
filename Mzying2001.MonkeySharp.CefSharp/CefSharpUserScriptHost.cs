@@ -1305,7 +1305,8 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 if (_browser == null || nativeFrame == null || nativeFrame.IsDisposed || frame == null ||
                     frame.BrowserSessionId != _browserSessionId || nativeFrame.Browser.Identifier != _browser.GetBrowser().Identifier) return null;
                 id = GetFrameIdentifier(nativeFrame);
-                if (frame.ExecutionWorld != "isolated") return _sessions.TryGetValue(id, out var session) && session.Initialized && ReferenceEquals(session.Frame, frame) ? frame : null;
+                if (frame.ExecutionWorld != "isolated") return _sessions.TryGetValue(id, out var session) && session.Initialized &&
+                    !session.Token.IsCancellationRequested && CefSharpDocumentIdentity.Matches(session.Frame, frame) ? session.Frame : null;
                 isolated = _isolated;
                 main = nativeFrame.IsMain;
             }

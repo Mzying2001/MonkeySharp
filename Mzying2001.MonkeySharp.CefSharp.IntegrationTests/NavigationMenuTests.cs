@@ -6,6 +6,7 @@ using Mzying2001.MonkeySharp.Core.Domain;
 using Mzying2001.MonkeySharp.Core.Repository;
 using Mzying2001.MonkeySharp.Core.Runtime;
 using System;
+using System.Collections;
 using System.Collections.Concurrent;
 using System.Linq;
 using System.Reflection;
@@ -18,6 +19,62 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
 {
     public sealed class NavigationMenuTests
     {
+        [Fact]
+        public async Task RawMenuSurvivesSameDocumentUrlChangesAndExpiresOnNavigation()
+        {
+            using (var fixture = await Fixture.CreateAsync())
+            {
+                var frame = new Frame(42);
+                await fixture.CreateContextAsync(frame);
+                var menu = await fixture.RegisterAsync(frame);
+                Assert.NotNull(fixture.Host.ResolveMenuFrame(frame.Native.Object, menu.Registration.Request));
+                var sessions = (IDictionary)typeof(CefSharpUserScriptHost).GetField("_sessions", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(fixture.Host);
+                var session = sessions[frame.Id];
+                session.GetType().GetMethod("UpdateUrl").Invoke(session, new object[] { new Uri("https://example.com/page#next") });
+                Assert.NotNull(fixture.Host.ResolveMenuFrame(frame.Native.Object, menu.Registration.Request));
+                await fixture.CreateContextAsync(new Frame(42));
+                Assert.Null(fixture.Host.ResolveMenuFrame(frame.Native.Object, menu.Registration.Request));
+            }
+        }
+
+        [Fact]
+        public async Task IsolatedMenuKeepsDocumentIdentityAcrossRequestSnapshots()
+        {
+            var repository = new InMemoryUserScriptRepository();
+            var script = await repository.InstallAsync("// ==UserScript==\n// @name isolated menu\n// @match *://*/*\n// @sandbox DOM\n// ==/UserScript==", "test", true, CancellationToken.None);
+            var executor = new CefSharpIsolatedExecutor(null, repository, null, null, "browser", () => false, new BridgeOptions(), null, null, CancellationToken.None);
+            var flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
+            var nativeType = typeof(CefSharpIsolatedExecutor).GetNestedType("NativeFrame", BindingFlags.NonPublic);
+            var worldType = typeof(CefSharpIsolatedExecutor).GetNestedType("World", BindingFlags.NonPublic);
+            var native = Activator.CreateInstance(nativeType, flags, null, new object[] { "frame", "loader", new Uri("https://example.com/page"), true, CancellationToken.None }, null);
+            var world = Activator.CreateInstance(worldType, flags, null, new[] { native, script, "world", "browser", "root" }, null);
+            worldType.GetField("Ready", flags).SetValue(world, true);
+            var original = (DocumentFrame)worldType.GetField("Frame", flags).GetValue(world);
+            var documents = (IDictionary)typeof(CefSharpIsolatedExecutor).GetField("_documents", flags).GetValue(executor);
+            documents.Add(original.DocumentId, world);
+            Assert.True(executor.OwnsNativeMenuFrame(original, "native", true));
+            worldType.GetMethod("UpdateUrl", flags).Invoke(world, null);
+            Assert.True(executor.OwnsNativeMenuFrame(original, "native", true));
+            nativeType.GetField("Url", flags).SetValue(native, new Uri("https://example.com/page#next"));
+            worldType.GetMethod("UpdateUrl", flags).Invoke(world, null);
+            Assert.True(executor.OwnsNativeMenuFrame(original, "native", true));
+            Assert.False(executor.OwnsNativeMenuFrame(original, "unknown-child", false));
+            foreach (var mismatched in new[]
+            {
+                new DocumentFrame("other", original.DocumentId, original.FrameId, original.Url, true, original.TimingGuarantee, original.BridgeIntegrity, "isolated", script.ScriptKey, script.RevisionId),
+                new DocumentFrame("browser", original.DocumentId, "other", original.Url, true, original.TimingGuarantee, original.BridgeIntegrity, "isolated", script.ScriptKey, script.RevisionId),
+                new DocumentFrame("browser", original.DocumentId, original.FrameId, original.Url, true, original.TimingGuarantee, original.BridgeIntegrity),
+                new DocumentFrame("browser", original.DocumentId, original.FrameId, original.Url, true, original.TimingGuarantee, original.BridgeIntegrity, "isolated", script.ScriptKey, Guid.NewGuid())
+            }) Assert.False(executor.OwnsNativeMenuFrame(mismatched, "native", true));
+            worldType.GetField("Ready", flags).SetValue(world, false);
+            Assert.False(executor.OwnsNativeMenuFrame(original, "native", true));
+            worldType.GetField("Ready", flags).SetValue(world, true);
+            documents.Clear();
+            Assert.False(executor.OwnsNativeMenuFrame(original, "native", true));
+            ((CancellationTokenSource)worldType.GetField("Cancellation", flags).GetValue(world)).Dispose();
+            ((CancellationTokenSource)nativeType.GetField("Cancellation", flags).GetValue(native)).Dispose();
+        }
+
         [Fact]
         public async Task MainFrameLoadRecoveryKeepsChildrenAlreadyCreatedInTheNewPage()
         {
@@ -268,6 +325,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
 #else
                 _native.Setup(browser => browser.GetFrame(long.Parse(frame.Id))).Returns(frame.Native.Object);
 #endif
+                frame.Native.SetupGet(value => value.Browser).Returns(_native.Object);
                 _browser.Object.RenderProcessMessageHandler.OnContextCreated(_browser.Object, _native.Object, frame.Native.Object);
             }
             public void ReleaseContext(Frame frame) => _browser.Object.RenderProcessMessageHandler.OnContextReleased(_browser.Object, _native.Object, frame.Native.Object);
@@ -354,7 +412,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
             public int ActiveCount => Registrations.Count(item => item.DisposeCount == 0);
             public Task<IMenuRegistration> RegisterAsync(MenuCommandRequest request, Action<MenuCommandInvocation> invoked, CancellationToken cancellationToken)
             {
-                var registration = new MenuRegistration(invoked);
+                var registration = new MenuRegistration(request, invoked);
                 Registrations.Enqueue(registration);
                 return Task.FromResult<IMenuRegistration>(registration);
             }
@@ -364,7 +422,8 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
         {
             private readonly Action<MenuCommandInvocation> _invoked;
             public int DisposeCount;
-            public MenuRegistration(Action<MenuCommandInvocation> invoked) { _invoked = invoked; }
+            public MenuCommandRequest Request { get; }
+            public MenuRegistration(MenuCommandRequest request, Action<MenuCommandInvocation> invoked) { Request = request; _invoked = invoked; }
             public void Invoke() => _invoked(new MenuCommandInvocation());
             public void Dispose() => Interlocked.Increment(ref DisposeCount);
         }
