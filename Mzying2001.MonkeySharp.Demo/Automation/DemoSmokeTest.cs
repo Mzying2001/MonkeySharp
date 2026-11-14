@@ -54,6 +54,7 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                 var primary = runtime.MainWindow.NewTab(fixture.BaseUrl + "/page?primary");
                 await WaitAsync(async () => await EvaluateBoolean(primary, "!!(window.__demo && window.__demo.ready)"));
                 await WaitAsync(() => Task.FromResult(string.Equals(primary.IconUrl, fixture.BaseUrl + "/favicon.ico", StringComparison.OrdinalIgnoreCase)));
+                checks["faviconDomProbe"] = (await Evaluate(primary, Browser.BrowserFavicon.ProbeScript)) as string == fixture.BaseUrl + "/favicon.ico";
                 checks["permissionPrompt"] = permissionPrompts > 0;
                 checks["permissionRemembered"] = (await runtime.PermissionDecisions.ListAsync(CancellationToken.None)).Any(scope => scope.ScriptKey == installation.ScriptKey.ToString());
                 checks["storageResourcesXhrCookieWebRequest"] = await EvaluateBoolean(primary,
