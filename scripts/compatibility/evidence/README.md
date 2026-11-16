@@ -68,7 +68,8 @@ Pinned sources, licenses and seven functional categories are described in [corpu
 
 | Snapshot | Implementation and acceptance |
 | --- | --- |
-| [Latest enhanced delivery, 2026-11-11](enhanced-follow-up-delivery.json) | Implementation 1ef4c4f; six native/package combinations and three x64 WPF gates passed selected scope. Full stable-reference acceptance and menu acceptance remain incomplete. |
+| [Version 4 persistence delivery, 2026-11-17](persistence-v4-delivery.json) | Implementation 338f18b; typed storage, source/recovery tests and all four current source/native/package combinations passed. Five local 4.0.0 packages and symbols validated; no publication. |
+| [Historical enhanced delivery, 2026-11-11](enhanced-follow-up-delivery.json) | Implementation 1ef4c4f; six native/package combinations and three x64 WPF gates passed selected scope. Full stable-reference acceptance and menu acceptance remain incomplete. |
 | [Stable scoped delivery, 2026-11-11](stable-follow-up-delivery.json) | Implementation fe3c8df; historical stable scope. Full stable-reference acceptance and comprehensive acceptance remain incomplete. |
 | [Original delivery, 2026-11-07](delivery.json) | Historical six-combination result with original counts and limits; does not establish complete compatibility. |
 

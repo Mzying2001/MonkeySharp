@@ -82,7 +82,20 @@ Run shared fixtures through [Run-Reference.cjs](../../scripts/compatibility/Run-
 
 ## Latest recorded validation
 
-The latest committed [enhanced delivery evidence](../../scripts/compatibility/evidence/enhanced-follow-up-delivery.json) records implementation `1ef4c4f`, a documentation-only source patch and raw run `artifacts/p2-delivery/1d2373523e2f`. The matrix below describes that recorded run on 2026-11-11; documentation reorganization does not constitute another native run.
+The [version 4 persistence delivery](../../scripts/compatibility/evidence/persistence-v4-delivery.json) records implementation `338f18b` with no source patch on 2026-11-17. All four currently supported engine/platform combinations passed the source/native/package gates. Raw results are retained in `artifacts/delivery/659817d49bfd/`; five release packages and symbols are in `artifacts/packages/4.0.0-0f2b5d5f7a60/`. Package validation and seven publication-flow checks ran offline; nothing was published.
+
+| CefSharp | Platform | .NET | JavaScript | SmokeHost + normal/private OOPIF | WPF | NuGet consumer | Source + package corpus |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 84.4.10 | x64 | 609 passed | 135 passed | Passed | Passed | Passed | 10 + 10, declared scope |
+| 84.4.10 | x86 | 480 passed | 135 passed | Passed | N/A | Passed | 10 + 10, declared scope |
+| 156.0.150 | x64 | 609 passed | 135 passed | Passed | Passed | Passed | 10 + 10, declared scope |
+| 156.0.150 | x86 | 480 passed | 135 passed | Passed | N/A | Passed | 10 + 10, declared scope |
+
+Each x64 .NET total contains 341 Core, 139 adapter and 129 Demo tests; x86 excludes Demo. Each 84 corpus run has six functional passes and four expected engine limitations; each 156 run has eight functional passes and two expected engine limitations. Core and Demo tests cover typed records, cache reuse, source conflicts, readiness, cancellation, recovery and collection. The native gates also verify existing execution and package-consumer behavior; expected engine limitations do not count as functional passes or establish new fixed-reference parity.
+
+### Historical enhanced delivery
+
+The historical [enhanced delivery evidence](../../scripts/compatibility/evidence/enhanced-follow-up-delivery.json) records implementation `1ef4c4f`, a documentation-only source patch and raw run `artifacts/p2-delivery/1d2373523e2f`. The matrix below describes that recorded run on 2026-11-11; documentation reorganization does not constitute another native run.
 
 | CefSharp | Platform | .NET | JavaScript | SmokeHost/CDP + normal/private OOPIF | WPF | NuGet/public consumer | Source + package corpus |
 | --- | --- | --- | --- | --- | --- | --- | --- |
