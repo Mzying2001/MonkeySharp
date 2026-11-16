@@ -24,7 +24,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         public async Task PreparedResourceApisCheckDeclarationAndResponseBudget()
         {
             var resources = new FakeResourceProvider(new ResourceContent(Encoding.UTF8.GetBytes("hello"), "text/plain"));
-            var repository = new InMemoryUserScriptRepository(preparer: new UserScriptPreparer(resources: resources));
+            var repository = TestRepository.Create(preparer: new UserScriptPreparer(resources: resources));
             var installation = await repository.InstallAsync(MetadataAndMatchingTests.Script(
                 "// @name resources\n// @match https://example.com/*\n// @resource logo https://cdn.example/logo.txt"), "test", true, CancellationToken.None);
             using (var provider = new ResourceAndNetworkApiProvider(options: new BridgeOptions(maxResourceBytes: 8)))
@@ -770,7 +770,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
 
         private static async Task<UserScriptInstallation> InstallAsync(string extraMetadata)
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             return await repository.InstallAsync(MetadataAndMatchingTests.Script(
                 "// @name advanced\n// @match https://example.com/*\n// @run-at document-end\n" + extraMetadata,
                 "window.test = true;"), "test", true, CancellationToken.None);

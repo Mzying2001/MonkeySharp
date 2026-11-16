@@ -24,7 +24,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 var cases = evidence.RootElement.GetProperty("effects").GetProperty("cases").EnumerateArray().ToArray();
                 var source = Read("matching.source").Replace("__PORT__", new Uri(cases[0].GetProperty("url").GetString()).Port.ToString())
                     .Replace("__IPV6_PORT__", new Uri(cases.Single(item => item.GetProperty("id").GetString() == "ipv6").GetProperty("url").GetString()).Port.ToString());
-                var installation = await new InMemoryUserScriptRepository().InstallAsync(source, "reference", true, CancellationToken.None);
+                var installation = await TestRepository.Create().InstallAsync(source, "reference", true, CancellationToken.None);
                 Assert.Same(installation.PreparedRevision.UrlRules, UserScriptUrlRules.Compile(installation.Definition.Metadata));
                 Assert.Contains(installation.Definition.ParseResult.Diagnostics, value => value.Code == "MSM084_UNSUPPORTED_IDN_MATCH");
                 foreach (var item in cases)
@@ -44,7 +44,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         [InlineData("container-id-2;normal-tabs", false, true)]
         public async Task RunInUsesActualPrivacyContextAndRejectsUnknownRequirements(string selectors, bool? privateContext, bool allowed)
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             var installation = await repository.InstallAsync(Source("// @run-in " + selectors.Replace(";", "\n// @run-in ")), "test", true, CancellationToken.None);
             Assert.Equal(selectors.Split(';'), installation.Definition.Metadata.RunIn);
             using (var engine = new UserScriptEngine(repository, options: new UserScriptEngineOptions {
@@ -61,7 +61,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         [Fact]
         public async Task ContextMenuIgnoresIncludeAndExcludeWhileRetainingMatchAndContextConditions()
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             var script = await repository.InstallAsync(MetadataAndMatchingTests.Script(
                 "// @name menu\n// @include https://elsewhere.test/*\n// @exclude *\n// @grant none\n// @run-at context-menu"), "test", true, CancellationToken.None);
             using (var engine = new UserScriptEngine(repository))
@@ -90,7 +90,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         [Fact]
         public async Task ExclusionTimeoutFailsClosedAndDoesNotBlockOtherScripts()
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             await repository.InstallAsync(Source("// @exclude /(a+)+$/"), "test", true, CancellationToken.None);
             await repository.InstallAsync(Source(), "test", true, CancellationToken.None);
             using (var engine = new UserScriptEngine(repository))

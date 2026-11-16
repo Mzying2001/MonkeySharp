@@ -14,7 +14,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         [Fact]
         public async Task DuplicateMetadataCreatesIndependentInstallationsAndValues()
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             var source = MetadataAndMatchingTests.Script(
                 "// @name same\n// @namespace same\n// @match https://example.com/*");
             var first = await repository.InstallAsync(source, "one", true, CancellationToken.None);
@@ -32,7 +32,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         [Fact]
         public async Task ConditionalRepositoryUpdateRejectsStaleRevisionWithoutReplacingLatestSource()
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             var source = MetadataAndMatchingTests.Script(
                 "// @name conditional\n// @namespace test\n// @version 1\n// @match https://example.com/*");
             var installation = await repository.InstallAsync(source, "origin", true, CancellationToken.None);

@@ -1044,7 +1044,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             public static async Task<BridgeFixture> CreateWithStoreAsync(
                 IUserScriptValueStore store, params string[] grants)
             {
-                var repository = new InMemoryUserScriptRepository();
+                var repository = TestRepository.Create();
                 var grantLines = string.Join("\n", grants.Select(item => "// @grant " + item));
                 var source = MetadataAndMatchingTests.Script(
                     "// @name bridge\n// @match https://example.com/*\n// @connect example.com\n// @run-at document-end\n" + grantLines,
@@ -1065,7 +1065,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 BridgeOptions options,
                 params string[] grants)
             {
-                var repository = new InMemoryUserScriptRepository();
+                var repository = TestRepository.Create();
                 var grantLines = string.Join("\n", grants.Select(item => "// @grant " + item));
                 var source = MetadataAndMatchingTests.Script(
                     "// @name bridge\n// @match https://example.com/*\n// @connect example.com\n// @run-at document-end\n" + grantLines,
@@ -1085,7 +1085,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 string source,
                 IEnumerable<IUserScriptApiProvider> providers)
             {
-                var repository = new InMemoryUserScriptRepository(preparer: new UserScriptPreparer(new FixtureDependencyProvider(), new FixtureResourceProvider()));
+                var repository = TestRepository.Create(preparer: new UserScriptPreparer(new FixtureDependencyProvider(), new FixtureResourceProvider()));
                 await repository.InstallAsync(source, "fixture", true, CancellationToken.None);
                 var engine = new UserScriptEngine(repository);
                 var frame = CreateFrame("legacy-fixture-document");

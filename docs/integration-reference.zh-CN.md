@@ -122,7 +122,10 @@ await repository.InitializeAsync(CancellationToken.None);
 
 安装前通过 `new InMemoryUserScriptRepository(preparer: new UserScriptPreparer(dependencyProvider, resourceProvider))` 配置内容服务，持久化仓库接受相同的 preparer。安装、编辑和更新会先完整准备，再原子发布；失败保留原版本。所有 frame 消费捕获的不可变版本，执行时不再调用内容提供程序。依赖共享作用域并保留指令/严格模式语义，段间加入换行和分号。
 
-`ResourceContent` 保留原始字节、MIME 和可选 charset。文本按 charset 派生，默认 UTF-8；依赖严格解码，资源使用替换回退，两者只移除一个开头 U+FEFF，不改变换行；二进制 data URL 使用原始字节。Demo 将准备内容与脚本原子持久化，重载时验证内容摘要，并为格式 2 数据库添加表而不删除数据。已有记录在初始化时一次性准备；内容不可用会明确中止初始化并保留数据库。安装内容服务的可信网络政策与 GM 请求授权分别处理。
+`ResourceContent` 保留原始字节、MIME 和可选 charset。文本按 charset 派生，默认 UTF-8；依赖严格解码，资源使用替换回退，两者只移除一个开头 U+FEFF，不改变换行；二进制 data URL 使用原始字节。
+
+持久化接口通过 `IUserScriptPersistence` 交换不可变的源码与资产记录，不规定 JSON 存储格式。使用持久化适配器（包括 `InMemoryUserScriptPersistence`）构造 `UserScriptRepository`，并显式初始化。`IsEnabled` 保留用户启用意图，`IsReady` 和 `CanExecute` 分别表示准备与执行状态。编辑源码使用条件替换，重载与资产刷新保留源码文件字节。局部源码或资产错误以单安装诊断呈现。
+
 
 默认安装源码/内容总预算为 32 MiB；序列化资源包预算为 64 MiB，必要时按索引分块传输。用户代码只在完整重组后启动，缺块、重复索引或截断都会失败。详见 [资源与存储证据](compatibility/README.md#storage-and-resources)。
 

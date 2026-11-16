@@ -5,7 +5,6 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -51,53 +50,6 @@ namespace Mzying2001.MonkeySharp.Core.Repository
 
         internal string ResourcePackageJson { get; }
 
-        internal string Serialize(string originalSource) => JsonSerializer.Serialize(new
-        {
-            format = 1,
-            source = originalSource,
-            dependencies = Dependencies.Select(Encode).ToArray(),
-            resources = Resources.ToDictionary(item => item.Key, item => Encode(item.Value), StringComparer.Ordinal)
-        });
-
-        private static object Encode(ResourceContent content) => new
-        { bytes = Convert.ToBase64String(content.Bytes), digest = Digest(content.Bytes), mime = content.MediaType, charset = content.Charset };
-
-        private static string Digest(byte[] bytes)
-        {
-            using (var hash = SHA256.Create()) return Convert.ToBase64String(hash.ComputeHash(bytes));
-        }
-
-        internal static PreparedScriptRevision Restore(UserScriptDefinition definition, string json)
-        {
-            using (var document = JsonDocument.Parse(json))
-            {
-                var root = document.RootElement;
-                if (root.GetProperty("format").GetInt32() != 1)
-                    throw new InvalidOperationException("Unsupported prepared revision format.");
-                if (root.GetProperty("source").GetString() != definition.Source)
-                    throw new InvalidOperationException("The prepared payload does not belong to this source revision.");
-                var dependencies = root.GetProperty("dependencies").EnumerateArray().Select(Decode).ToArray();
-                var resources = root.GetProperty("resources").EnumerateObject()
-                    .ToDictionary(item => item.Name, item => Decode(item.Value), StringComparer.Ordinal);
-                if (dependencies.Length != definition.Metadata.Requires.Count ||
-                    resources.Count != definition.Metadata.Resources.Count)
-                    throw new InvalidOperationException("The prepared payload is incomplete.");
-                for (var index = 0; index < dependencies.Length; index++)
-                    ResourceIntegrityVerifier.Verify(dependencies[index].Bytes, definition.Metadata.Requires[index].Integrity);
-                foreach (var declaration in definition.Metadata.Resources)
-                    ResourceIntegrityVerifier.Verify(resources[declaration.Name].Bytes, declaration.Integrity);
-                return new PreparedScriptRevision(definition, dependencies, resources);
-            }
-        }
-
-        private static ResourceContent Decode(JsonElement item)
-        {
-            var bytes = Convert.FromBase64String(item.GetProperty("bytes").GetString());
-            if (Digest(bytes) != item.GetProperty("digest").GetString())
-                throw new InvalidOperationException("The persisted content digest does not match.");
-            return new ResourceContent(bytes, item.GetProperty("mime").GetString(),
-                item.GetProperty("charset").GetString());
-        }
     }
 
     /// <summary>Fetches and validates all external content before a repository publishes a revision.</summary>
@@ -116,42 +68,108 @@ namespace Mzying2001.MonkeySharp.Core.Repository
             _maxContentBytes = maxContentBytes;
         }
 
-        internal async Task<UserScriptInstallation> PrepareAsync(UserScriptInstallation installation, CancellationToken token)
+        internal async Task<PreparationResult> PrepareAsync(UserScriptInstallation installation,
+            IReadOnlyList<UserScriptAsset> previous, PreparationMode mode, CancellationToken token)
         {
-            if (installation.PreparedRevision != null) return installation;
             var definition = installation.Definition;
-            var dependencies = new List<ResourceContent>();
-            var resources = new Dictionary<string, ResourceContent>(StringComparer.Ordinal);
+            if (!definition.ParseResult.CanEnable) throw new MetadataValidationException(definition.ParseResult);
+            var assets = new List<UserScriptAsset>();
+            var downloads = new Dictionary<string, ResourceContent>(StringComparer.Ordinal);
             long total = Encoding.UTF8.GetByteCount(definition.Source);
-            if (total > _maxContentBytes) throw new InvalidOperationException("MSR411_PREPARED_REVISION_LIMIT: source exceeds the configured content budget.");
-            Action<ResourceContent, IReadOnlyList<ResourceIntegrityDeclaration>, string> validate = (content, integrity, url) =>
-            {
-                if (content == null) throw new InvalidOperationException("The content provider returned no content for '" + url + "'.");
-                ResourceIntegrityVerifier.Verify(content.Bytes, integrity, url);
-                total += content.Bytes.Length + Encoding.UTF8.GetByteCount(content.DecodeText());
-                if (total > _maxContentBytes)
-                    throw new InvalidOperationException("MSR411_PREPARED_REVISION_LIMIT: prepared content exceeds " + _maxContentBytes + " bytes; increase the installation content budget.");
-            };
-            foreach (var declaration in definition.Metadata.Requires)
+            CheckBudget(total);
+            var downloaded = false;
+
+            async Task Add(UserScriptAssetKind kind, int ordinal, string name, string url,
+                IReadOnlyList<ResourceIntegrityDeclaration> integrity, Func<Task<ResourceContent>> fetch)
             {
                 token.ThrowIfCancellationRequested();
-                if (_dependencies == null) throw new InvalidOperationException("Configure an installation dependency provider before installing @require.");
-                var content = await _dependencies.GetScriptAsync(installation, declaration, token).ConfigureAwait(false);
-                validate(content, declaration.Integrity, declaration.Url);
-                content.DecodeText(strict: true);
-                dependencies.Add(content);
+                ResourceContent selected = null;
+                if (mode != PreparationMode.Refresh)
+                {
+                    var candidates = previous.Where(asset => asset.Kind == kind && asset.Url == url && asset.Content != null)
+                        .OrderBy(asset => kind == UserScriptAssetKind.Require ? (asset.Ordinal == ordinal ? 0 : 1) : (asset.Name == name ? 0 : 1))
+                        .ThenBy(asset => asset.Ordinal);
+                    foreach (var candidate in candidates)
+                    {
+                        try { Validate(candidate.Content, integrity, url, kind); selected = candidate.Content; break; }
+                        catch (ResourceIntegrityException) { }
+                        catch (PreparationException) { }
+                    }
+                }
+                if (selected == null)
+                {
+                    if (mode == PreparationMode.CachedOnly)
+                        throw new PreparationException("MSR421_ASSET_UNAVAILABLE", "Cached asset unavailable: " + url);
+                    var key = ((int)kind).ToString() + ":" + url;
+                    if (!downloads.TryGetValue(key, out selected))
+                    {
+                        try { selected = await fetch().ConfigureAwait(false); }
+                        catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+                        catch (Exception error) { throw new PreparationException("MSR425_ASSET_FETCH_FAILED", "Asset fetch failed: " + url, error); }
+                        if (selected == null) throw new PreparationException("MSR425_ASSET_FETCH_FAILED", "Asset provider returned no content: " + url);
+                        downloads.Add(key, selected);
+                        downloaded = true;
+                    }
+                    Validate(selected, integrity, url, kind);
+                }
+                total += selected.ByteLength + Encoding.UTF8.GetByteCount(selected.DecodeText(kind == UserScriptAssetKind.Require));
+                CheckBudget(total);
+                assets.Add(new UserScriptAsset(kind, ordinal, name, url, selected));
             }
-            foreach (var declaration in definition.Metadata.Resources)
+
+            for (var index = 0; index < definition.Metadata.Requires.Count; index++)
             {
-                token.ThrowIfCancellationRequested();
-                if (_resources == null) throw new InvalidOperationException("Configure an installation resource provider before installing @resource.");
-                var content = await _resources.GetAsync(installation, declaration, token).ConfigureAwait(false);
-                validate(content, declaration.Integrity, declaration.Url);
-                content.DecodeText();
-                resources.Add(declaration.Name, content);
+                var declaration = definition.Metadata.Requires[index];
+                await Add(UserScriptAssetKind.Require, index, null, declaration.Url, declaration.Integrity,
+                    () => _dependencies != null ? _dependencies.GetScriptAsync(installation, declaration, token) :
+                    throw new PreparationException("MSR425_ASSET_FETCH_FAILED", "Configure a dependency provider for " + declaration.Url)).ConfigureAwait(false);
+            }
+            for (var index = 0; index < definition.Metadata.Resources.Count; index++)
+            {
+                var declaration = definition.Metadata.Resources[index];
+                await Add(UserScriptAssetKind.Resource, index, declaration.Name, declaration.Url, declaration.Integrity,
+                    () => _resources != null ? _resources.GetAsync(installation, declaration, token) :
+                    throw new PreparationException("MSR425_ASSET_FETCH_FAILED", "Configure a resource provider for " + declaration.Url)).ConfigureAwait(false);
             }
             token.ThrowIfCancellationRequested();
-            return installation.WithPreparedRevision(new PreparedScriptRevision(definition, dependencies, resources));
+            PreparedScriptRevision revision;
+            try
+            {
+                revision = new PreparedScriptRevision(definition,
+                    assets.Where(asset => asset.Kind == UserScriptAssetKind.Require).Select(asset => asset.Content),
+                    assets.Where(asset => asset.Kind == UserScriptAssetKind.Resource).ToDictionary(asset => asset.Name, asset => asset.Content, StringComparer.Ordinal));
+            }
+            catch (BridgeProtocolException error) { throw new PreparationException("MSR421_ASSET_UNAVAILABLE", error.Message, error); }
+            return new PreparationResult(revision, Array.AsReadOnly(assets.ToArray()), downloaded);
         }
+
+        private void CheckBudget(long total)
+        {
+            if (total > _maxContentBytes) throw new PreparationException("MSR411_PREPARED_REVISION_LIMIT", "Prepared content exceeds " + _maxContentBytes + " bytes.");
+        }
+
+        private static void Validate(ResourceContent content, IReadOnlyList<ResourceIntegrityDeclaration> integrity, string url, UserScriptAssetKind kind)
+        {
+            ResourceIntegrityVerifier.Verify(content.Bytes, integrity, url);
+            try { content.DecodeText(kind == UserScriptAssetKind.Require); }
+            catch (ArgumentException error) { throw new PreparationException("MSR421_ASSET_UNAVAILABLE", "Asset decoding failed: " + url, error); }
+        }
+    }
+
+    internal enum PreparationMode { Reuse, Refresh, CachedOnly }
+
+    internal sealed class PreparationResult
+    {
+        internal PreparationResult(PreparedScriptRevision revision, IReadOnlyList<UserScriptAsset> assets, bool downloaded)
+        { Revision = revision; Assets = assets; Downloaded = downloaded; }
+        internal PreparedScriptRevision Revision { get; }
+        internal IReadOnlyList<UserScriptAsset> Assets { get; }
+        internal bool Downloaded { get; }
+    }
+
+    internal sealed class PreparationException : InvalidOperationException
+    {
+        internal PreparationException(string code, string message, Exception innerException = null) : base(code + ": " + message, innerException) { Code = code; }
+        internal string Code { get; }
     }
 }

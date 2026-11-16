@@ -66,7 +66,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
 
         private static async Task<ApiInvocationContext> Context(object parameters)
         {
-            var script = await new InMemoryUserScriptRepository().InstallAsync(MetadataAndMatchingTests.Script("// @name audio\n// @match https://example.com/*\n// @grant GM_audio"), "test", true, CancellationToken.None);
+            var script = await TestRepository.Create().InstallAsync(MetadataAndMatchingTests.Script("// @name audio\n// @match https://example.com/*\n// @grant GM_audio"), "test", true, CancellationToken.None);
             return new ApiInvocationContext(script, new DocumentFrame("tab", "doc", "frame", new Uri("https://example.com/"), true,
                 TimingGuarantee.BestEffortDocumentStart), "audio-execution", Guid.NewGuid().ToString(), "GM.audio", JsonSerializer.SerializeToElement(parameters));
         }

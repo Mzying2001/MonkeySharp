@@ -92,7 +92,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             return new ApiInvocationContext(installation, new DocumentFrame("browser", "document", "frame", new Uri("https://example.com"), true,
                 TimingGuarantee.BestEffortDocumentStart, BridgeIntegrityGuarantee.Verified), "execution", Guid.NewGuid().ToString(), "GM.notification", json.RootElement.Clone());
         }
-        private static Task<UserScriptInstallation> Install() => new InMemoryUserScriptRepository().InstallAsync(
+        private static Task<UserScriptInstallation> Install() => TestRepository.Create().InstallAsync(
             MetadataAndMatchingTests.Script("// @name notifications\n// @match https://example.com/*\n// @grant GM.notification"), "test", true, CancellationToken.None);
         private sealed class Service : INotificationService
         {

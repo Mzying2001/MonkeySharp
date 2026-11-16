@@ -476,8 +476,12 @@ namespace Mzying2001.MonkeySharp.Core.Domain
             string sourceOrigin,
             bool isEnabled,
             DateTimeOffset installedAt,
-            DateTimeOffset updatedAt)
+            DateTimeOffset updatedAt,
+            Repository.PreparedScriptRevision preparedRevision = null,
+            IEnumerable<UserScriptDiagnostic> diagnostics = null)
         {
+            PreparedRevision = preparedRevision;
+            Diagnostics = Array.AsReadOnly((diagnostics ?? Array.Empty<UserScriptDiagnostic>()).ToArray());
             ScriptKey = scriptKey;
             RevisionId = Guid.NewGuid();
             Definition = definition ?? throw new ArgumentNullException(nameof(definition));
@@ -494,12 +498,20 @@ namespace Mzying2001.MonkeySharp.Core.Domain
         public Guid RevisionId { get; }
 
         /// <summary>Gets the verified immutable content activated with this revision.</summary>
-        public Repository.PreparedScriptRevision PreparedRevision { get; private set; }
+        public Repository.PreparedScriptRevision PreparedRevision { get; }
+
+        /// <summary>Gets whether this installation has a complete prepared snapshot.</summary>
+        public bool IsReady => PreparedRevision != null;
+
+        /// <summary>Gets whether persisted intent and current readiness allow execution.</summary>
+        public bool CanExecute => IsEnabled && IsReady;
+
+        /// <summary>Gets diagnostics describing the current loaded state.</summary>
+        public IReadOnlyList<UserScriptDiagnostic> Diagnostics { get; }
 
         internal UserScriptInstallation WithPreparedRevision(Repository.PreparedScriptRevision prepared)
         {
-            PreparedRevision = prepared;
-            return this;
+            return new UserScriptInstallation(ScriptKey, Definition, SourceOrigin, IsEnabled, InstalledAt, UpdatedAt, prepared, Diagnostics);
         }
 
         /// <summary>Gets the installed script definition.</summary>
@@ -524,8 +536,7 @@ namespace Mzying2001.MonkeySharp.Core.Domain
 
         internal UserScriptInstallation WithEnabled(bool enabled, DateTimeOffset updatedAt)
         {
-            return new UserScriptInstallation(ScriptKey, Definition, SourceOrigin, enabled, InstalledAt, updatedAt)
-                .WithPreparedRevision(PreparedRevision);
+            return new UserScriptInstallation(ScriptKey, Definition, SourceOrigin, enabled, InstalledAt, updatedAt, PreparedRevision, Diagnostics);
         }
     }
 }
