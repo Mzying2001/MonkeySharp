@@ -333,6 +333,76 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
             }
         }
 
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public Task ConditionalSavePreservesDraftOnDiskOrRepositoryConflict(bool externalFile) => HostServiceTests.OnDispatcher(async () =>
+        {
+            using (var fixture = await PersistenceTests.Fixture.Create())
+            using (var content = new HttpContentService())
+            {
+                var script = await fixture.Repository.InstallAsync(Source, null, true, CancellationToken.None);
+                using (var manager = CreateManager(fixture.Repository, content, _ => true, fixture.Paths.LogsDirectory))
+                {
+                    await manager.RefreshAsync(); manager.SelectedScript = Assert.Single(manager.Scripts);
+                    var draft = Source + "draft();"; manager.Editor.Source = draft;
+                    var newer = Source + "external();";
+                    if (externalFile) File.WriteAllText(fixture.SourcePath(script.ScriptKey.ToString()), newer);
+                    else await fixture.Repository.UpdateAsync(script.ScriptKey, newer, null, CancellationToken.None);
+                    await manager.SaveCommand.ExecuteAsync(null);
+                    Assert.Equal(draft, manager.Editor.Source); Assert.True(manager.Editor.IsDirty);
+                    Assert.Contains("draft is preserved", manager.Status);
+                    Assert.Equal(newer, File.ReadAllText(fixture.SourcePath(script.ScriptKey.ToString())));
+                    await manager.ReloadSourceCommand.ExecuteAsync(null);
+                    Assert.Equal("Source reloaded. Navigate or refresh a page to run this version.", manager.Status);
+                    Assert.Equal(newer, manager.Editor.Source); Assert.False(manager.Editor.IsDirty);
+                }
+            }
+        });
+
+        [Fact]
+        public Task UnavailableInstallationShowsIntentAndDiagnosticsAndCanBeDisabled() => HostServiceTests.OnDispatcher(async () =>
+        {
+            using (var fixture = await PersistenceTests.Fixture.Create())
+            using (var content = new HttpContentService())
+            {
+                var script = await fixture.Repository.InstallAsync(Source, null, true, CancellationToken.None);
+                File.Delete(fixture.SourcePath(script.ScriptKey.ToString()));
+                await fixture.Repository.ReloadAsync(script.ScriptKey, CancellationToken.None);
+                using (var manager = CreateManager(fixture.Repository, content, _ => true, fixture.Paths.LogsDirectory))
+                {
+                    await manager.RefreshAsync(); manager.SelectedScript = Assert.Single(manager.Scripts);
+                    Assert.Equal("Enabled · Unavailable", manager.SelectedScript.StatusLabel);
+                    Assert.True(manager.SelectedScript.CanToggle);
+                    Assert.Contains(manager.Details.Diagnostics, item => item.Contains("MSR420_SOURCE_UNAVAILABLE"));
+                    manager.StatusFilter = ScriptStatusFilter.Enabled; Assert.Equal(1, manager.FilteredCount);
+                    manager.StatusFilter = ScriptStatusFilter.Unavailable; Assert.Equal(1, manager.FilteredCount);
+                    await manager.ToggleScriptCommand.ExecuteAsync(manager.SelectedScript);
+                    Assert.False((await fixture.Repository.GetAsync(script.ScriptKey, CancellationToken.None)).IsEnabled);
+                    Assert.Equal("Disabled · Unavailable", manager.SelectedScript.StatusLabel);
+                }
+            }
+        });
+
+        [Fact]
+        public Task DecliningDraftDiscardDoesNotReloadExternalSource() => HostServiceTests.OnDispatcher(async () =>
+        {
+            using (var fixture = await PersistenceTests.Fixture.Create())
+            using (var content = new HttpContentService())
+            {
+                var script = await fixture.Repository.InstallAsync(Source, null, true, CancellationToken.None);
+                using (var manager = CreateManager(fixture.Repository, content, _ => false, fixture.Paths.LogsDirectory))
+                {
+                    await manager.RefreshAsync(); manager.SelectedScript = Assert.Single(manager.Scripts);
+                    manager.Editor.Source = Source + "draft();";
+                    File.WriteAllText(fixture.SourcePath(script.ScriptKey.ToString()), Source + "external();");
+                    await manager.ReloadSourceCommand.ExecuteAsync(null);
+                    Assert.True(manager.Editor.IsDirty); Assert.Equal(Source + "draft();", manager.Editor.Source);
+                    Assert.Same(script, await fixture.Repository.GetAsync(script.ScriptKey, CancellationToken.None));
+                }
+            }
+        });
+
         private static ScriptManagerViewModel CreateManager(IUserScriptRepository repository, HttpContentService content,
             Func<string, bool> confirm, string logsDirectory)
         {

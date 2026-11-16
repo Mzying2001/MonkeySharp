@@ -52,6 +52,7 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
         private bool _busy;
 
         private bool _refreshing;
+        private Guid _editorRevision;
 
         public ScriptManagerViewModel(IUserScriptRepository repository, HttpContentService content, UserScriptUpdateService updates,
             Func<string, bool> confirm, DiagnosticsViewModel diagnostics)
@@ -88,6 +89,25 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
 
         [RelayCommand]
         private async Task Refresh() => await RunAsync(async () => { if (ConfirmDiscard()) await RefreshAsync(); });
+
+        [RelayCommand]
+        private Task ReloadSource() => RunAsync(async () =>
+        {
+            if (SelectedScript == null || !ConfirmDiscard()) return;
+            var installation = await _repository.ReloadAsync(SelectedScript.Installation.ScriptKey, _cancellation.Token);
+            await RefreshAsync();
+            Status = Strings.Get(installation.IsReady ? "SourceReloaded" : "ReloadUnavailable");
+        });
+
+        [RelayCommand]
+        private Task RefreshAssets() => RunAsync(async () =>
+        {
+            if (SelectedScript == null || !ConfirmDiscard()) return;
+            var installation = SelectedScript.Installation;
+            await _repository.RefreshAssetsAsync(installation.ScriptKey, installation.RevisionId, _cancellation.Token);
+            await RefreshAsync();
+            Status = Strings.Get("AssetsRefreshed");
+        });
 
         [RelayCommand]
         private Task Save() => RunAsync(SaveAsync);
@@ -127,9 +147,10 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
                 return;
             }
             if (value == null) return;
+            _editorRevision = value.Installation.RevisionId;
             _origin = value.Installation.SourceOrigin;
             Editor.Load(value.Installation.Definition.Source);
-            Details.Update(value.Installation.Definition.ParseResult, _origin, value.Installation.Definition.Source);
+            Details.Update(value.Installation.Definition.ParseResult, _origin, value.Installation.Definition.Source, value.Installation.Diagnostics);
         }
 
         public bool ConfirmDiscard() => !Editor.IsDirty || _confirm(Strings.Get("DiscardChanges"));
@@ -178,7 +199,7 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
             Status = status;
         }
 
-        private void UpdateDetails() => Details.Update(Editor.Parse(), _origin, Editor.Source);
+        private void UpdateDetails() => Details.Update(Editor.Parse(), _origin, Editor.Source, SelectedScript?.Installation.Diagnostics);
 
         private async Task CheckUpdatesAsync()
         {
@@ -227,7 +248,7 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
             if (!_confirm(Strings.Format("ConfirmInstall", Details.ToConfirmationText()))) return;
             var installation = SelectedScript == null
                 ? await _repository.InstallAsync(Editor.Source, _origin, true, _cancellation.Token)
-                : await _repository.UpdateAsync(SelectedScript.Installation.ScriptKey, Editor.Source, _origin, _cancellation.Token);
+                : await _repository.UpdateIfUnchangedAsync(SelectedScript.Installation.ScriptKey, _editorRevision, Editor.Source, _origin, _cancellation.Token);
             Editor.Load(installation.Definition.Source);
             await RefreshAsync();
             SelectedScript = Scripts.First(item => item.Installation.ScriptKey == installation.ScriptKey);
@@ -236,9 +257,15 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
 
         private async Task ToggleAsync(ScriptItemViewModel item)
         {
-            if (item == null || !item.Installation.Definition.ParseResult.CanEnable) return;
+            if (item == null) return;
             var installation = item.Installation;
-            item.Update(await _repository.SetEnabledAsync(installation.ScriptKey, !installation.IsEnabled, _cancellation.Token));
+            var updated = await _repository.SetEnabledAsync(installation.ScriptKey, !installation.IsEnabled, _cancellation.Token);
+            item.Update(updated);
+            if (SelectedScript == item)
+            {
+                if (_editorRevision == installation.RevisionId && updated.Definition.Source == installation.Definition.Source) _editorRevision = updated.RevisionId;
+                UpdateDetails();
+            }
             RefreshFilter();
             Status = Strings.Format(item.Installation.IsEnabled ? "ScriptEnabled" : "ScriptDisabled", item.Name);
         }
@@ -258,6 +285,11 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
             Busy = true;
             try { await action(); }
             catch (OperationCanceledException) { Status = Strings.Get("OperationCanceled"); }
+            catch (Exception exception) when (exception is RepositoryRevisionMismatchException || exception is UserScriptSourceConflictException)
+            {
+                Status = Strings.Get("SourceSaveConflict");
+                _diagnostics.Report(Status);
+            }
             catch (Exception exception)
             {
                 Status = exception.Message;
@@ -272,6 +304,11 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
             item.IsBusy = true;
             try { await action(); }
             catch (OperationCanceledException) { Status = Strings.Get("OperationCanceled"); }
+            catch (Exception exception) when (exception is RepositoryRevisionMismatchException || exception is UserScriptSourceConflictException)
+            {
+                Status = Strings.Get("SourceSaveConflict");
+                _diagnostics.Report(Status);
+            }
             catch (Exception exception)
             {
                 Status = exception.Message;
@@ -283,9 +320,9 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
         private bool FilterScript(object value)
         {
             var item = (ScriptItemViewModel)value;
-            if (StatusFilter == ScriptStatusFilter.Enabled && (!item.Installation.IsEnabled || !item.Installation.Definition.ParseResult.CanEnable)) return false;
-            if (StatusFilter == ScriptStatusFilter.Disabled && (item.Installation.IsEnabled || !item.Installation.Definition.ParseResult.CanEnable)) return false;
-            if (StatusFilter == ScriptStatusFilter.Unavailable && item.Installation.Definition.ParseResult.CanEnable) return false;
+            if (StatusFilter == ScriptStatusFilter.Enabled && !item.Installation.IsEnabled) return false;
+            if (StatusFilter == ScriptStatusFilter.Disabled && item.Installation.IsEnabled) return false;
+            if (StatusFilter == ScriptStatusFilter.Unavailable && item.Installation.IsReady) return false;
             if (string.IsNullOrWhiteSpace(Search)) return true;
             return item.SearchText.IndexOf(Search.Trim(), StringComparison.OrdinalIgnoreCase) >= 0;
         }

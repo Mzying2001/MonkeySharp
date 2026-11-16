@@ -45,6 +45,8 @@ Windows-owned file-dialog controls follow the operating system's language. Scrip
 - Installing, editing, enabling, disabling, or deleting a script reloads **all open tabs**, including frames, to revoke old execution state and rerun matching scripts.
 - Registered commands appear under **Script menu**, grouped beneath non-interactive script-name headings, and support Alt+access key. Command labels show their names without installation identifiers. The menu is hidden when the selected tab has no registered commands. Matching `@run-at context-menu` entries appear in the native page context menu and start a fresh execution when selected. **Tools** provides diagnostics, download cancellation controls, DevTools, data/download folders, and language preferences.
 
+Use **Reload from file** to adopt external source changes and **Update dependencies and resources** to force fresh assets independently. Conditional editor saves preserve the draft on source or revision conflicts. The list shows enabled intent separately from unavailable preparation state; diagnostics remain visible for scripts with missing source or assets. Reload does not refresh browser tabs automatically.
+
 ## Portable data and recovery
 
 The profile is stored beside the executable, independently of the process working directory:

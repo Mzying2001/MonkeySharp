@@ -92,7 +92,7 @@
   <data name="DownloadFailed" xml:space="preserve"><value>Failed</value></data>
   <data name="BrowserDownloadComplete" xml:space="preserve"><value>Browser download complete: {0}</value></data>
   <data name="TrustWarning" xml:space="preserve"><value>TrustedPageWorld demo: pages may observe and use the bridge capabilities granted to scripts. Only run trusted scripts and visit trusted sites; this is not a security sandbox.</value></data>
-  <data name="ScriptsChanged" xml:space="preserve"><value>Scripts changed ({0}): open tabs reloaded.</value></data>
+  <data name="ScriptsChanged" xml:space="preserve"><value>Scripts changed ({0}).</value></data>
   <data name="All" xml:space="preserve"><value>All</value></data>
   <data name="Enabled" xml:space="preserve"><value>Enabled</value></data>
   <data name="Disabled" xml:space="preserve"><value>Disabled</value></data>
@@ -177,4 +177,11 @@ Resource: {10}
   <data name="EditorCopy" xml:space="preserve"><value>Copy</value></data>
   <data name="EditorPaste" xml:space="preserve"><value>Paste</value></data>
   <data name="EditorSelectAll" xml:space="preserve"><value>Select all</value></data>
+  <data name="ReloadSource" xml:space="preserve"><value>Reload from file</value></data>
+  <data name="RefreshAssets" xml:space="preserve"><value>Update dependencies and resources</value></data>
+  <data name="SourceReloaded" xml:space="preserve"><value>Source reloaded. Navigate or refresh a page to run this version.</value></data>
+  <data name="ReloadUnavailable" xml:space="preserve"><value>Reloaded source is unavailable. See diagnostics; the file has been preserved.</value></data>
+  <data name="AssetsRefreshed" xml:space="preserve"><value>Dependencies and resources updated.</value></data>
+  <data name="SourceSaveConflict" xml:space="preserve"><value>The script changed. Your draft is preserved; reload before saving.</value></data>
+  <data name="UnavailableWithIntent" xml:space="preserve"><value>{0} · Unavailable</value></data>
 </root>

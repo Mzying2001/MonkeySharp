@@ -21,7 +21,7 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
                 OnPropertyChanged(nameof(CanToggle));
             }
         }
-        public bool CanToggle => !_isBusy && Installation.Definition.ParseResult.CanEnable;
+        public bool CanToggle => !_isBusy;
         public string Name => Installation.Definition.Metadata?.Name ?? Installation.ScriptKey.ToString();
         public string Version => string.IsNullOrWhiteSpace(Installation.Definition.Metadata?.Version) ? Strings.Get("NoVersion") : "v" + Installation.Definition.Metadata.Version;
         public string Description => string.IsNullOrWhiteSpace(Installation.Definition.Metadata?.Description) ? Strings.Get("NoDescription") : Installation.Definition.Metadata.Description;
@@ -36,10 +36,10 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
             }
         }
         public string IconFallbackText => string.IsNullOrWhiteSpace(Name) ? "?" : Name.Substring(0, 1).ToUpperInvariant();
-        public string StatusLabel => !Installation.Definition.ParseResult.CanEnable ? Strings.Get("Unavailable") : Installation.IsEnabled ? Strings.Get("Enabled") : Strings.Get("Disabled");
+        public string StatusLabel => !Installation.IsReady ? Strings.Format("UnavailableWithIntent", Strings.Get(Installation.IsEnabled ? "Enabled" : "Disabled")) : Installation.IsEnabled ? Strings.Get("Enabled") : Strings.Get("Disabled");
         public string ToggleLabel => Installation.IsEnabled ? Strings.Get("Disable") : Strings.Get("Enable");
         public string ToggleAutomationName => Installation.IsEnabled ? "Disable script" : "Enable script";
-        public string StatusBrush => !Installation.Definition.ParseResult.CanEnable ? "#B42318" : Installation.IsEnabled ? "#2F855A" : "#94A3B8";
+        public string StatusBrush => !Installation.IsReady ? "#B42318" : Installation.IsEnabled ? "#2F855A" : "#94A3B8";
         public string DisplayName => StatusLabel + " " + Name + "  " + Version;
 
         public void Update(UserScriptInstallation installation)

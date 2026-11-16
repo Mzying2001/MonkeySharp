@@ -516,7 +516,7 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
             }
         }
 
-        private static Task OnDispatcher(Func<Task> action)
+        internal static Task OnDispatcher(Func<Task> action)
         {
             var completion = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
             var thread = new Thread(() =>

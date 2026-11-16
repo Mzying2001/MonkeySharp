@@ -27,6 +27,8 @@
         <WrapPanel DockPanel.Dock="Top" IsEnabled="{Binding CanEdit}">
             <Button Content="{loc:Text New}" Command="{Binding NewCommand}" /><Button Content="{loc:Text ImportFile}" Click="ImportFile" />
             <Button Content="{loc:Text Delete}" Command="{Binding DeleteCommand}" />
+            <Button Content="{loc:Text ReloadSource}" Command="{Binding ReloadSourceCommand}" />
+            <Button Content="{loc:Text RefreshAssets}" Command="{Binding RefreshAssetsCommand}" />
             <Button Content="{loc:Text CheckUpdates}" Command="{Binding CheckUpdatesCommand}" />
             <Button Content="{loc:Text InstallSave}" Command="{Binding SaveCommand}" />
         </WrapPanel>
