@@ -23,7 +23,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         [Fact]
         public async Task PreparedResourceApisCheckDeclarationAndResponseBudget()
         {
-            var resources = new FakeResourceProvider(new ResourceContent(Encoding.UTF8.GetBytes("hello"), "text/plain", "hello"));
+            var resources = new FakeResourceProvider(new ResourceContent(Encoding.UTF8.GetBytes("hello"), "text/plain"));
             var repository = new InMemoryUserScriptRepository(preparer: new UserScriptPreparer(resources: resources));
             var installation = await repository.InstallAsync(MetadataAndMatchingTests.Script(
                 "// @name resources\n// @match https://example.com/*\n// @resource logo https://cdn.example/logo.txt"), "test", true, CancellationToken.None);
@@ -849,7 +849,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             private readonly IDictionary<string, string> _sources;
             public FakeDependencyProvider(IDictionary<string, string> sources) { _sources = sources; }
             public Task<ResourceContent> GetScriptAsync(UserScriptInstallation installation, UserScriptDependencyDeclaration dependency, CancellationToken cancellationToken)
-                => Task.FromResult(new ResourceContent(Encoding.UTF8.GetBytes(_sources[dependency.Url]), "application/javascript", _sources[dependency.Url]));
+                => Task.FromResult(new ResourceContent(Encoding.UTF8.GetBytes(_sources[dependency.Url]), "application/javascript"));
         }
 
         private sealed class FakeHostServices :

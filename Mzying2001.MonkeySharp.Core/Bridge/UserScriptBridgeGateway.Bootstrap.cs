@@ -134,7 +134,7 @@ namespace Mzying2001.MonkeySharp.Core.Bridge
         {
             foreach (var content in execution.Installation.PreparedRevision.Resources.Values)
                 if (content.ByteLength > _options.MaxResourceBytes ||
-                    content.Text != null && Encoding.UTF8.GetByteCount(content.Text) > _options.MaxResourceBytes)
+                    Encoding.UTF8.GetByteCount(content.DecodeText()) > _options.MaxResourceBytes)
                     throw new BridgeProtocolException(BridgeErrorCodes.PayloadTooLarge, "A prepared resource exceeds MaxResourceBytes.");
             var json = execution.Installation.PreparedRevision.ResourcePackageJson;
             if (Encoding.UTF8.GetByteCount(json) > _options.MaxCompatibilityBootstrapBytes)

@@ -39,7 +39,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
         private sealed class ProbeResources : IResourceProvider
         {
             public Task<ResourceContent> GetAsync(UserScriptInstallation installation, ResourceDeclaration resource, CancellationToken cancellationToken)
-                => Task.FromResult(new ResourceContent(Encoding.UTF8.GetBytes("resource"), "text/plain", "resource"));
+                => Task.FromResult(new ResourceContent(Encoding.UTF8.GetBytes("resource"), "text/plain"));
         }
 
         private sealed class ProbeForm : Form

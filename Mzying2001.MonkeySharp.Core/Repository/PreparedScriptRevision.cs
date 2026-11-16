@@ -1,4 +1,4 @@
-﻿using Mzying2001.MonkeySharp.Core.Apis;
+using Mzying2001.MonkeySharp.Core.Apis;
 using Mzying2001.MonkeySharp.Core.Domain;
 using Mzying2001.MonkeySharp.Core.Security;
 using System;
@@ -27,7 +27,7 @@ namespace Mzying2001.MonkeySharp.Core.Repository
             var source = new StringBuilder();
             for (var index = 0; index < Dependencies.Count; index++)
                 source.Append("// @require ").Append(definition.Metadata.Requires[index].Url).Append('\n')
-                    .Append(Dependencies[index].DecodeText()).Append("\n;\n");
+                    .Append(Dependencies[index].DecodeText(strict: true)).Append("\n;\n");
             source.Append(definition.Source);
             Source = source.Append("\n//# sourceURL=monkeysharp://scripts/")
                 .Append(Uri.EscapeDataString(definition.Metadata.Name ?? "script"))
@@ -60,7 +60,7 @@ namespace Mzying2001.MonkeySharp.Core.Repository
         });
 
         private static object Encode(ResourceContent content) => new
-        { bytes = Convert.ToBase64String(content.Bytes), digest = Digest(content.Bytes), mime = content.MediaType, charset = content.Charset, text = content.Text };
+        { bytes = Convert.ToBase64String(content.Bytes), digest = Digest(content.Bytes), mime = content.MediaType, charset = content.Charset };
 
         private static string Digest(byte[] bytes)
         {
@@ -96,7 +96,7 @@ namespace Mzying2001.MonkeySharp.Core.Repository
             if (Digest(bytes) != item.GetProperty("digest").GetString())
                 throw new InvalidOperationException("The persisted content digest does not match.");
             return new ResourceContent(bytes, item.GetProperty("mime").GetString(),
-                item.GetProperty("text").GetString(), item.GetProperty("charset").GetString());
+                item.GetProperty("charset").GetString());
         }
     }
 
@@ -128,7 +128,7 @@ namespace Mzying2001.MonkeySharp.Core.Repository
             {
                 if (content == null) throw new InvalidOperationException("The content provider returned no content for '" + url + "'.");
                 ResourceIntegrityVerifier.Verify(content.Bytes, integrity, url);
-                total += content.Bytes.Length + (content.Text == null ? 0 : Encoding.UTF8.GetByteCount(content.Text));
+                total += content.Bytes.Length + Encoding.UTF8.GetByteCount(content.DecodeText());
                 if (total > _maxContentBytes)
                     throw new InvalidOperationException("MSR411_PREPARED_REVISION_LIMIT: prepared content exceeds " + _maxContentBytes + " bytes; increase the installation content budget.");
             };
@@ -138,7 +138,7 @@ namespace Mzying2001.MonkeySharp.Core.Repository
                 if (_dependencies == null) throw new InvalidOperationException("Configure an installation dependency provider before installing @require.");
                 var content = await _dependencies.GetScriptAsync(installation, declaration, token).ConfigureAwait(false);
                 validate(content, declaration.Integrity, declaration.Url);
-                content.DecodeText();
+                content.DecodeText(strict: true);
                 dependencies.Add(content);
             }
             foreach (var declaration in definition.Metadata.Resources)

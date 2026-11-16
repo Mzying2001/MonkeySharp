@@ -1,4 +1,4 @@
-﻿using Mzying2001.MonkeySharp.Core.Domain;
+using Mzying2001.MonkeySharp.Core.Domain;
 using Mzying2001.MonkeySharp.Core.Runtime;
 using System;
 using System.Collections.Generic;
@@ -47,22 +47,20 @@ namespace Mzying2001.MonkeySharp.Core.Apis
     }
 
     /// <summary>
-    /// Contains the binary and optional decoded text returned for a declared userscript resource.
+    /// Contains immutable bytes and response metadata returned for a declared userscript resource.
     /// </summary>
     public sealed class ResourceContent
     {
         /// <summary>Initializes resource content.</summary>
         /// <param name="bytes">The resource bytes.</param>
         /// <param name="mediaType">The media type used for generated data URLs.</param>
-        /// <param name="text">An optional host-decoded text representation.</param>
         /// <param name="charset">The optional declared character encoding.</param>
-        public ResourceContent(byte[] bytes, string mediaType = "application/octet-stream", string text = null, string charset = null)
+        public ResourceContent(byte[] bytes, string mediaType = "application/octet-stream", string charset = null)
         {
             _bytes = bytes != null ? (byte[])bytes.Clone() : throw new ArgumentNullException(nameof(bytes));
             MediaType = string.IsNullOrWhiteSpace(mediaType) ? "application/octet-stream" : mediaType;
             if (MediaType.IndexOfAny(new[] { '\r', '\n' }) >= 0)
                 throw new ArgumentException("The media type cannot contain line breaks.", nameof(mediaType));
-            Text = text;
             Charset = charset;
         }
 
@@ -76,16 +74,32 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         /// <summary>Gets the resource media type.</summary>
         public string MediaType { get; }
 
-        /// <summary>Gets the host-decoded text representation, if available.</summary>
-        public string Text { get; }
-
         /// <summary>Gets the declared character encoding, if available.</summary>
         public string Charset { get; }
 
-        /// <summary>Decodes text using the provider's representation, declared charset or UTF-8.</summary>
-        public string DecodeText() => Text ?? (string.IsNullOrWhiteSpace(Charset)
-            ? Encoding.UTF8 : CodePagesEncodingProvider.Instance.GetEncoding(Charset.Trim('"')) ??
-                Encoding.GetEncoding(Charset.Trim('"'))).GetString(_bytes).TrimStart('\uFEFF');
+        private readonly object _textLock = new object();
+        private string _strictText;
+        private string _text;
+
+        /// <summary>Decodes the original bytes; strict mode rejects invalid byte sequences.</summary>
+        public string DecodeText(bool strict = false)
+        {
+            lock (_textLock)
+            {
+                var cached = strict ? _strictText : _text;
+                if (cached != null) return cached;
+                var encoding = string.IsNullOrWhiteSpace(Charset) ? Encoding.UTF8 :
+                    CodePagesEncodingProvider.Instance.GetEncoding(Charset.Trim('"')) ?? Encoding.GetEncoding(Charset.Trim('"'));
+                encoding = (Encoding)encoding.Clone();
+                encoding.DecoderFallback = strict ? DecoderFallback.ExceptionFallback : new DecoderReplacementFallback("\ufffd");
+                var decoded = encoding.GetString(_bytes);
+                if (decoded.Length > 0 && decoded[0] == '\uFEFF') decoded = decoded.Substring(1);
+                if (strict) _strictText = decoded;
+                else _text = decoded;
+                return decoded;
+            }
+        }
+
     }
 
     /// <summary>
@@ -105,7 +119,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
     }
 
     /// <summary>
-    /// Loads the bytes and decoded text for JavaScript dependencies declared with <c>@require</c>.
+    /// Loads the original bytes and response metadata for JavaScript dependencies declared with <c>@require</c>.
     /// </summary>
     public interface IUserScriptDependencyProvider
     {
@@ -113,7 +127,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         /// <param name="installation">The userscript requesting the dependency.</param>
         /// <param name="dependency">The dependency declaration from metadata.</param>
         /// <param name="cancellationToken">A token that cancels dependency loading.</param>
-        /// <returns>The dependency bytes and optional decoded text.</returns>
+        /// <returns>The dependency bytes and response metadata.</returns>
         Task<ResourceContent> GetScriptAsync(
             UserScriptInstallation installation,
             UserScriptDependencyDeclaration dependency,

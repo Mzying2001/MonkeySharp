@@ -20,7 +20,7 @@ Read support claims with their conditions: **implemented** describes a MonkeySha
 
 ## Storage and resources
 
-Installation prepares immutable source, dependencies and original resource bytes before atomic activation. Failed preparation leaves an existing revision active. Execution consumes complete prepared resources and an atomic storage snapshot before starting user code. Resource text follows host text, declared charset, then UTF-8; the pinned reference does not establish equivalent decoding across every Tampermonkey fetch path.
+Installation prepares immutable source, dependencies and original resource bytes before atomic activation. Failed preparation leaves an existing revision active. Execution consumes complete prepared resources and an atomic storage snapshot before starting user code. Resource text is derived from original bytes using the declared charset or UTF-8 with replacement fallback; the pinned reference does not establish equivalent decoding across every Tampermonkey fetch path.
 
 Storage uses per-script watermarks, bounded replay and a confirmed mirror plus ordered pending writes. Local listeners run synchronously, local echoes are suppressed, and modern writes wait for host commit/replay confirmation. Lost history can recover values through a fresh snapshot but cannot reconstruct unavailable listener events. Atomic batches are a MonkeySharp store guarantee, not a claimed Tampermonkey transaction guarantee.
 

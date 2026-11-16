@@ -1008,7 +1008,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             public Task<ResourceContent> GetAsync(
                 UserScriptInstallation installation, ResourceDeclaration resource, CancellationToken cancellationToken)
             {
-                return Task.FromResult(new ResourceContent(Encoding.UTF8.GetBytes("hello"), "text/plain", "hello"));
+                return Task.FromResult(new ResourceContent(Encoding.UTF8.GetBytes("hello"), "text/plain"));
             }
         }
 
@@ -1186,7 +1186,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                     CancellationToken cancellationToken)
                 {
                     var text = "/* legacy fixture dependency */";
-                    return Task.FromResult(new ResourceContent(Encoding.UTF8.GetBytes(text), "application/javascript", text));
+                    return Task.FromResult(new ResourceContent(Encoding.UTF8.GetBytes(text), "application/javascript"));
                 }
             }
         }

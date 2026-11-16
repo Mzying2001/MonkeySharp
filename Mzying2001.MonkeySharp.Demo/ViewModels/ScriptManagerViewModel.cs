@@ -164,7 +164,7 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
         {
             if (!ConfirmDiscard()) return;
             var content = await _content.FetchAsync(Url, _cancellation.Token);
-            LoadDraft(content.Text, Url, Strings.Get("DownloadedDraft"));
+            LoadDraft(new ResourceContent(content.Bytes, charset: "utf-8").DecodeText(strict: true), Url, Strings.Get("DownloadedDraft"));
         }
 
         private void LoadDraft(string source, string origin, string status)

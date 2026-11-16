@@ -232,7 +232,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
         private sealed class ProbeResources : IResourceProvider
         {
             public Task<ResourceContent> GetAsync(UserScriptInstallation installation, ResourceDeclaration resource, CancellationToken token) =>
-                Task.FromResult(new ResourceContent(Encoding.UTF8.GetBytes("offline-resource"), "text/plain", "offline-resource"));
+                Task.FromResult(new ResourceContent(Encoding.UTF8.GetBytes("offline-resource"), "text/plain"));
         }
         private sealed class ProbePolicy : IUserScriptPermissionPolicy
         {

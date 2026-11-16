@@ -1,4 +1,4 @@
-﻿using CefSharp;
+using CefSharp;
 using Moq;
 using Mzying2001.MonkeySharp.Core.Apis;
 using Mzying2001.MonkeySharp.Core.Bridge;
@@ -1230,7 +1230,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
                 UserScriptInstallation installation,
                 ResourceDeclaration resource,
                 CancellationToken cancellationToken)
-                => Task.FromResult(new ResourceContent(Encoding.UTF8.GetBytes("resource"), "text/plain", "resource"));
+                => Task.FromResult(new ResourceContent(Encoding.UTF8.GetBytes("resource"), "text/plain"));
 
             public IHttpRequestOperation SendAsync(
                 UserScriptHttpRequest request,
