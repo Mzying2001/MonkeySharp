@@ -21,7 +21,7 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
         [Fact]
         public async Task ScriptItemExposesReadableStateAndUpdatesAfterToggle()
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             var installation = await repository.InstallAsync(Source, "application://test", true, CancellationToken.None);
             var item = new ScriptItemViewModel(installation);
 
@@ -44,7 +44,7 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
         [Fact]
         public async Task ScriptItemDisablesToggleWhileBusy()
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             var installation = await repository.InstallAsync(Source, "application://test", true, CancellationToken.None);
             var item = new ScriptItemViewModel(installation);
 
@@ -56,7 +56,7 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
         [Fact]
         public async Task ScriptItemPrefersThe64PixelIconAndProvidesFallbackText()
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             var installation = await repository.InstallAsync(SourceWithIcons, "application://test", true, CancellationToken.None);
             var item = new ScriptItemViewModel(installation);
 
@@ -67,7 +67,7 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
         [Fact]
         public async Task ScriptItemFallsBackToTheRegularIcon()
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             var installation = await repository.InstallAsync(SourceWithIconOnly, "application://test", true, CancellationToken.None);
 
             Assert.Equal("https://example.com/icon.png", new ScriptItemViewModel(installation).IconUrl);
@@ -120,7 +120,7 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
         public async Task ManagerFiltersSearchesAndSortsTheScriptView()
         {
             using (var fixture = await PersistenceTests.Fixture.Create())
-            using (var content = new HttpContentService(fixture.Paths))
+            using (var content = new HttpContentService())
             {
                 var enabled = await fixture.Repository.InstallAsync(Source.Replace("Manager sample", "Zeta"), "application://zeta", true, CancellationToken.None);
                 await fixture.Repository.InstallAsync(Source.Replace("Manager sample", "Alpha"), "application://alpha", false, CancellationToken.None);
@@ -147,9 +147,9 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
         public async Task ToggleScriptCommandUpdatesRepositoryAndListState()
         {
             using (var fixture = await PersistenceTests.Fixture.Create())
-            using (var content = new HttpContentService(fixture.Paths))
+            using (var content = new HttpContentService())
             {
-                var repository = new InMemoryUserScriptRepository();
+                var repository = TestRepository.Create();
                 using (var manager = CreateManager(repository, content, _ => true, fixture.Paths.LogsDirectory))
                 {
                     var installation = await repository.InstallAsync(Source, "application://test", true, CancellationToken.None);
@@ -177,9 +177,9 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
         public async Task ToggleScriptCommandChangesStateWithoutConfirmation()
         {
             using (var fixture = await PersistenceTests.Fixture.Create())
-            using (var content = new HttpContentService(fixture.Paths))
+            using (var content = new HttpContentService())
             {
-                var repository = new InMemoryUserScriptRepository();
+                var repository = TestRepository.Create();
                 var installation = await repository.InstallAsync(Source, "application://test", true, CancellationToken.None);
                 var confirmationCount = 0;
                 using (var manager = CreateManager(repository, content, _ => { confirmationCount++; return true; }, fixture.Paths.LogsDirectory))
@@ -215,9 +215,9 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
         public async Task ToggleScriptCommandIgnoresRepeatedExecutionWhileItemIsBusy()
         {
             using (var fixture = await PersistenceTests.Fixture.Create())
-            using (var content = new HttpContentService(fixture.Paths))
+            using (var content = new HttpContentService())
             {
-                var repository = new InMemoryUserScriptRepository();
+                var repository = TestRepository.Create();
                 var installation = await repository.InstallAsync(Source, "application://test", false, CancellationToken.None);
                 var stateChangeCount = 0;
                 ScriptManagerViewModel manager = null;
@@ -255,9 +255,9 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
         public async Task SavingAfterToggleKeepsTheSameInstallationAndEnabledState()
         {
             using (var fixture = await PersistenceTests.Fixture.Create())
-            using (var content = new HttpContentService(fixture.Paths))
+            using (var content = new HttpContentService())
             {
-                var repository = new InMemoryUserScriptRepository();
+                var repository = TestRepository.Create();
                 var installation = await repository.InstallAsync(Source, "application://test", true, CancellationToken.None);
                 using (var manager = CreateManager(repository, content, _ => true, fixture.Paths.LogsDirectory))
                 {
@@ -280,9 +280,9 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
         public async Task ImportingIdenticalDraftsRefreshesTheSourceOriginWithoutInstalling()
         {
             using (var fixture = await PersistenceTests.Fixture.Create())
-            using (var content = new HttpContentService(fixture.Paths))
+            using (var content = new HttpContentService())
             {
-                var repository = new InMemoryUserScriptRepository();
+                var repository = TestRepository.Create();
                 using (var manager = CreateManager(repository, content, _ => true, fixture.Paths.LogsDirectory))
                 {
                     var first = Path.Combine(fixture.Paths.BaseDirectory, "first.user.js");
@@ -308,9 +308,9 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
         public async Task RefusingToDiscardEditsPreservesTheSelectedInstallationAndDraft()
         {
             using (var fixture = await PersistenceTests.Fixture.Create())
-            using (var content = new HttpContentService(fixture.Paths))
+            using (var content = new HttpContentService())
             {
-                var repository = new InMemoryUserScriptRepository();
+                var repository = TestRepository.Create();
                 await repository.InstallAsync(Source, "application://original", true, CancellationToken.None);
                 using (var manager = CreateManager(repository, content, _ => false, fixture.Paths.LogsDirectory))
                 {

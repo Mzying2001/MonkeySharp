@@ -208,6 +208,7 @@ namespace Mzying2001.MonkeySharp.Core.Repository
         {
             var entry = FromLoad(loaded, loaded.Diagnostics);
             var installation = entry.Installation;
+            token.ThrowIfCancellationRequested();
             if (!entry.SourceAvailable || entry.Version == null || !installation.Definition.ParseResult.CanEnable) return entry;
             try
             {
