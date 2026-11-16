@@ -28,7 +28,8 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                 using (var values = new InMemoryUserScriptValueStore())
                 {
                     var content = new Content();
-                    var repository = new InMemoryUserScriptRepository(preparer: new UserScriptPreparer(content, content));
+                    var repository = new UserScriptRepository(new InMemoryUserScriptPersistence(), preparer: new UserScriptPreparer(content, content));
+                    await repository.InitializeAsync(CancellationToken.None);
                     foreach (var world in new[] { "raw", "isolated" })
                     {
                         var header = "// ==UserScript==\n// @name Full GM " + world + "\n// @match http://127.0.0.1/probe/start-full*\n// @match http://b.monkeysharp-other.test/probe/start-full*\n// @run-at document-start\n" +
@@ -60,7 +61,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
         private sealed class ProbeForm : Form
         {
             private readonly Uri _origin;
-            private readonly InMemoryUserScriptRepository _repository;
+            private readonly UserScriptRepository _repository;
             private readonly InMemoryUserScriptValueStore _values;
             private readonly IRequestContext _context;
             private readonly bool _private;
@@ -70,7 +71,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             private string _phase = "create";
             private readonly System.Collections.Generic.Dictionary<string, object> _observations = new System.Collections.Generic.Dictionary<string, object>();
             private readonly System.Windows.Forms.Timer _watchdog = new System.Windows.Forms.Timer { Interval = 60000 };
-            internal ProbeForm(Uri origin, InMemoryUserScriptRepository repository, InMemoryUserScriptValueStore values, IRequestContext context, bool privateContext)
+            internal ProbeForm(Uri origin, UserScriptRepository repository, InMemoryUserScriptValueStore values, IRequestContext context, bool privateContext)
             {
                 _origin = origin; _repository = repository; _values = values; _context = context; _private = privateContext;
                 Shown += async (_, __) => await ExecuteAsync();

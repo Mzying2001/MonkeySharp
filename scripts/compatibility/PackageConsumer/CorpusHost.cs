@@ -46,7 +46,8 @@ namespace MonkeySharp.Compatibility
                 using (var store = new InMemoryUserScriptValueStore())
                 using (var form = new Form { Width = 1100, Height = 800, Text = "MonkeySharp corpus" })
                 {
-                    var repository = new InMemoryUserScriptRepository();
+                    var repository = new UserScriptRepository(new InMemoryUserScriptPersistence());
+                    repository.InitializeAsync(CancellationToken.None).GetAwaiter().GetResult();
                     repository.InstallAsync(File.ReadAllText(input.RootElement.GetProperty("source").GetString(), Encoding.UTF8), "corpus://unmodified-upstream", true, CancellationToken.None).GetAwaiter().GetResult();
                     var active = 0;
                     form.Shown += async (_, __) =>
@@ -156,7 +157,7 @@ namespace MonkeySharp.Compatibility
                 File.WriteAllText(outputPath, JsonSerializer.Serialize(new
                 {
                     status = error == null ? "passed" : "failed", error, checks, observations, diagnostics, events, failedAction,
-                    environment = new { manager = "MonkeySharp", managerVersion = typeof(InMemoryUserScriptRepository).Assembly.GetName().Version.ToString(3), chromiumVersion = Cef.ChromiumVersion, manifestVersion = (int?)null,
+                    environment = new { manager = "MonkeySharp", managerVersion = typeof(UserScriptRepository).Assembly.GetName().Version.ToString(3), chromiumVersion = Cef.ChromiumVersion, manifestVersion = (int?)null,
                         cefSharpVersion = typeof(Cef).Assembly.GetName().Version.ToString(), platform = Environment.Is64BitProcess ? "x64" : "x86", menuInput = "WinForms ToolStripMenuItem.PerformClick; no trusted DOM activation claimed" }
                 }));
                 input.Dispose();
@@ -190,7 +191,7 @@ namespace MonkeySharp.Compatibility
             public FileDownloadService Downloads;
             public BrowserDownloads BrowserDownloads;
             public readonly List<object> DownloadEvents = new List<object>();
-            public Session(Form form, InMemoryUserScriptRepository repository, InMemoryUserScriptValueStore store, string output, bool cancel, bool deny)
+            public Session(Form form, UserScriptRepository repository, InMemoryUserScriptValueStore store, string output, bool cancel, bool deny)
             {
                 Menus = new Menus(form);
                 Host = new CefSharpUserScriptHostBuilder(repository).UseValueStore(store).UseMenuService(Menus)

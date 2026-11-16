@@ -1,4 +1,4 @@
-﻿using CefSharp;
+using CefSharp;
 using Mzying2001.MonkeySharp.Core.Apis;
 using Mzying2001.MonkeySharp.Core.Bridge;
 using Mzying2001.MonkeySharp.Core.Domain;
@@ -124,7 +124,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
         private async Task InitializeIsolatedIfNeededAsync()
         {
             var scripts = await _repository.GetSnapshotAsync(CancellationToken.None).ConfigureAwait(false);
-            if (!scripts.Any(script => script.IsEnabled && UserScriptEngine.RequestedWorld(script.Definition.Metadata) == "isolated")) return;
+            if (!scripts.Any(script => script.CanExecute && UserScriptEngine.RequestedWorld(script.Definition.Metadata) == "isolated")) return;
             var session = await GetCdpSessionAsync(GetAttachmentToken()).ConfigureAwait(false);
             Task preparation;
             lock (_sync)

@@ -83,7 +83,8 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                 otherFixture.Start();
                 fixture.OtherPort = otherFixture.Port;
                 var preparedContent = new PreparedContent();
-                var repository = new InMemoryUserScriptRepository(preparer: new UserScriptPreparer(preparedContent, preparedContent));
+                var repository = new UserScriptRepository(new InMemoryUserScriptPersistence(), preparer: new UserScriptPreparer(preparedContent, preparedContent));
+                await repository.InitializeAsync(CancellationToken.None);
                 await repository.InstallAsync(
                     LegacyFixture.Replace("__PORT__", fixture.Port.ToString()),
                     "smoke://fixture",
@@ -237,7 +238,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
         private readonly System.Windows.Forms.Timer _timeoutTimer;
         private readonly CancellationTokenSource _fixtureCancellation = new CancellationTokenSource();
 
-        public SmokeForm(CefSharpUserScriptHost host, Uri startUri, LocalHttpFixture fixture, SmokeHttpDownloadService downloads, LocalHttpFixture otherFixture, SmokePermissionPolicy permissions, InMemoryUserScriptRepository repository)
+        public SmokeForm(CefSharpUserScriptHost host, Uri startUri, LocalHttpFixture fixture, SmokeHttpDownloadService downloads, LocalHttpFixture otherFixture, SmokePermissionPolicy permissions, UserScriptRepository repository)
         {
             _host = host ?? throw new ArgumentNullException(nameof(host));
             _startUri = startUri ?? throw new ArgumentNullException(nameof(startUri));

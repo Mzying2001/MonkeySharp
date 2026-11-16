@@ -125,7 +125,8 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             {
                 using (var values = new InMemoryUserScriptValueStore())
                 {
-                    var repository = new InMemoryUserScriptRepository(preparer: new UserScriptPreparer(resources: new ProbeResources()));
+                    var repository = new UserScriptRepository(new InMemoryUserScriptPersistence(), preparer: new UserScriptPreparer(resources: new ProbeResources()));
+                    await repository.InitializeAsync(CancellationToken.None);
                     var script = await repository.InstallAsync("// ==UserScript==\n// @name Real OOPIF GM\n// @match http://b.monkeysharp-other.test/*\n// @match http://a.monkeysharp.test/probe/oopif-nested*\n" +
                         "// @sandbox DOM\n// @run-at document-end\n// @grant GM_getValue\n// @grant GM.setValue\n// @grant GM_getResourceText\n// @grant GM.xmlHttpRequest\n" +
                         "// @resource text http://b.monkeysharp-other.test/resource\n// @connect b.monkeysharp-other.test\n// @connect a.monkeysharp.test\n// ==/UserScript==\n" +

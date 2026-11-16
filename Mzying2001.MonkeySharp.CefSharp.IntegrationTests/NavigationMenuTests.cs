@@ -40,7 +40,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
         [Fact]
         public async Task IsolatedMenuKeepsDocumentIdentityAcrossRequestSnapshots()
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             var script = await repository.InstallAsync("// ==UserScript==\n// @name isolated menu\n// @match *://*/*\n// @sandbox DOM\n// ==/UserScript==", "test", true, CancellationToken.None);
             var executor = new CefSharpIsolatedExecutor(null, repository, null, null, "browser", () => false, new BridgeOptions(), null, null, CancellationToken.None);
             var flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
@@ -288,7 +288,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
                 // executor enables the same marker path used by mixed-world hosts.
                 var cdp = new CefSharpCdpSession(Mock.Of<IBrowserHost>(), action => { action(); return Task.CompletedTask; });
                 cdp.Dispose();
-                var executor = new CefSharpIsolatedExecutor(cdp, new InMemoryUserScriptRepository(), Host.Engine, Host.Gateway,
+                var executor = new CefSharpIsolatedExecutor(cdp, TestRepository.Create(), Host.Engine, Host.Gateway,
                     "test", () => false, new BridgeOptions(), _ => { }, _ => { }, CancellationToken.None);
                 typeof(CefSharpUserScriptHost).GetField("_isolated", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(Host, executor);
                 _browser.Setup(browser => browser.GetBrowser()).Returns(_native.Object);
@@ -297,7 +297,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
             public static async Task<Fixture> CreateAsync()
             {
                 var fixture = new Fixture();
-                var repository = new InMemoryUserScriptRepository();
+                var repository = TestRepository.Create();
                 fixture._installation = await repository.InstallAsync("// ==UserScript==\n// @name navigation menu\n// @match *://*/*\n// @grant GM.registerMenuCommand\n// @run-at document-end\n// ==/UserScript==", "test", true, CancellationToken.None);
                 fixture.Provider = new HostInteractionApiProvider(menu: fixture.Menu);
                 fixture.Host = new CefSharpUserScriptHostBuilder(repository).AddApiProvider(fixture.Provider)

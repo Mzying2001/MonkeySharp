@@ -45,13 +45,14 @@ internal static class Program
             if (!initialized) throw new InvalidOperationException("CEF initialization failed.");
             var actual = typeof(Cef).Assembly.GetName().Version;
             checks["cefVersion"] = actual.Major == expected.Major && actual.Minor == expected.Minor && actual.Build == expected.Build;
-            checks["coreAnyCpu"] = typeof(InMemoryUserScriptRepository).Assembly.GetName().ProcessorArchitecture == System.Reflection.ProcessorArchitecture.MSIL;
+            checks["coreAnyCpu"] = typeof(UserScriptRepository).Assembly.GetName().ProcessorArchitecture == System.Reflection.ProcessorArchitecture.MSIL;
             using (var privateContext = CefSharpRequestContexts.CreatePrivate())
                 checks["privateContextFactory"] = !privateContext.IsGlobal && privateContext.CachePath == string.Empty;
             using (var fixture = new Fixture())
             using (var values = new InMemoryUserScriptValueStore())
             {
-                var repository = new InMemoryUserScriptRepository();
+                var repository = new UserScriptRepository(new InMemoryUserScriptPersistence());
+                repository.InitializeAsync(CancellationToken.None).GetAwaiter().GetResult();
                 // Independently assert the documented minimum version through the packaged public API.
                 var partitionsAvailable = expected.Major >= 114;
                 repository.InstallAsync(Source.Replace("__BASE__", fixture.Url).Replace("__PARTITIONS__", partitionsAvailable ? "true" : "false"), "consumer://public-api", true, CancellationToken.None).GetAwaiter().GetResult();

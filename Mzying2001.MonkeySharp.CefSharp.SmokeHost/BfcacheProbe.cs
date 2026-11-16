@@ -21,7 +21,8 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                 foreach (var attached in new[] { false, true })
                 using (var values = new InMemoryUserScriptValueStore())
                 {
-                    var repository = new InMemoryUserScriptRepository();
+                    var repository = new UserScriptRepository(new InMemoryUserScriptPersistence());
+                    await repository.InitializeAsync(CancellationToken.None);
                     foreach (var world in new[] { "raw", "isolated" })
                     {
                         var script = await repository.InstallAsync("// ==UserScript==\n// @name BFCache " + world +

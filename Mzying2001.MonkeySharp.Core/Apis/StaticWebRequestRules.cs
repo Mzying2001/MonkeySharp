@@ -1,4 +1,4 @@
-﻿using Mzying2001.MonkeySharp.Core.Domain;
+using Mzying2001.MonkeySharp.Core.Domain;
 using Mzying2001.MonkeySharp.Core.Permissions;
 using Mzying2001.MonkeySharp.Core.Repository;
 using System;
@@ -57,7 +57,7 @@ namespace Mzying2001.MonkeySharp.Core.Apis
         private void Replace(UserScriptInstallation installation, bool removed)
         {
             if (_registrations.TryGetValue(installation.ScriptKey, out var old)) { old.Dispose(); _registrations.Remove(installation.ScriptKey); }
-            if (removed || !installation.IsEnabled || installation.PreparedRevision.WebRequestRules.Count == 0) return;
+            if (removed || !installation.CanExecute || installation.PreparedRevision.WebRequestRules.Count == 0) return;
             var metadata = installation.Definition.Metadata;
             _registrations[installation.ScriptKey] = _service.SetRules(_browserId + ":static:" + installation.ScriptKey,
                 installation.PreparedRevision.WebRequestRules,
