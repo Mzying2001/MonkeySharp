@@ -161,6 +161,23 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             Assert.Equal(current.Definition.Source, (await repository.GetAsync(current.ScriptKey, CancellationToken.None)).Definition.Source);
         }
 
+        [Fact]
+        public async Task ExternalSourceConflictExpiresUpdateCandidateAndPreservesCurrentSnapshot()
+        {
+            var storage = new PersistentRepositoryTests.Storage();
+            var repository = new UserScriptRepository(storage);
+            await repository.InitializeAsync(CancellationToken.None);
+            var current = await InstallAsync(repository, "// @name same\n// @namespace tests\n// @version 1\n// @updateURL https://updates.example/check.user.js\n// @downloadURL https://cdn.example/download.user.js");
+            var fetcher = new FakeUpdateFetcher(Pair("https://updates.example/check.user.js", Script("2", "check")), Pair("https://cdn.example/download.user.js", Script("2", "download")));
+            var updates = new UserScriptUpdateService(repository, fetcher);
+            var candidate = await updates.CheckAsync(current.ScriptKey, CancellationToken.None);
+            await storage.Change(current.ScriptKey, current.Definition.Source + "external();");
+            var error = await Assert.ThrowsAsync<UserScriptUpdateException>(() => updates.ApplyAsync(candidate, CancellationToken.None));
+            Assert.Equal("MSU005_STALE_CHECK", error.Code);
+            Assert.IsType<UserScriptSourceConflictException>(error.InnerException);
+            Assert.Same(current, await repository.GetAsync(current.ScriptKey, CancellationToken.None));
+        }
+
         private static Task<UserScriptInstallation> InstallAsync(
             UserScriptRepository repository,
             string extraMetadata,

@@ -66,7 +66,12 @@ namespace Mzying2001.MonkeySharp.Demo.Persistence
             using (var connection = _database.OpenReady())
             {
                 var row = Find(connection, scriptKey);
-                if (row == null) throw new KeyNotFoundException("Script not found: " + scriptKey);
+                if (row == null)
+                {
+                    try { _sources.Recover(scriptKey, null); }
+                    catch (Exception error) when (IsFileError(error)) { throw new UserScriptPersistenceException(scriptKey, "Orphan source recovery failed.", error); }
+                    throw new KeyNotFoundException("Script not found: " + scriptKey);
+                }
                 return LoadOne(connection, row);
             }
         }, cancellationToken);
@@ -93,18 +98,17 @@ namespace Mzying2001.MonkeySharp.Demo.Persistence
                 new UserScriptPersistenceRecord(row.Key, null, row.Origin, row.Enabled, row.Installed, row.Updated, assets);
                 try
                 {
-                    var hash = _sources.Hash(row.Key);
+                    var bytes = _sources.Read(row.Key);
+                    var hash = ContentHash.Sha256(bytes);
                     version = UserScriptSourceFiles.VersionOf(hash);
-                    if (hash == null) diagnostics.Add(Diagnostic(row.Key, "MSR420_SOURCE_UNAVAILABLE", "Source file is missing.", null));
-                    else
-                    {
-                        var bytes = _sources.Read(row.Key);
-                        hash = ContentHash.Sha256(bytes); // The version belongs to these exact bytes, not an earlier file read.
-                        version = UserScriptSourceFiles.VersionOf(hash);
-                        changed = hash != row.Hash;
-                        try { source = UserScriptSourceFile.Decode(bytes); }
-                        catch (DecoderFallbackException error) { diagnostics.Add(Diagnostic(row.Key, "MSR420_SOURCE_UNAVAILABLE", "Source is not valid UTF-8.", error)); }
-                    }
+                    changed = hash != row.Hash;
+                    try { source = UserScriptSourceFile.Decode(bytes); }
+                    catch (DecoderFallbackException error) { diagnostics.Add(Diagnostic(row.Key, "MSR420_SOURCE_UNAVAILABLE", "Source is not valid UTF-8.", error)); }
+                }
+                catch (Exception error) when (error is FileNotFoundException || error is DirectoryNotFoundException)
+                {
+                    version = "missing";
+                    diagnostics.Add(Diagnostic(row.Key, "MSR420_SOURCE_UNAVAILABLE", "Source file is missing.", error));
                 }
                 catch (Exception error) when (IsFileError(error))
                 {
@@ -334,8 +338,13 @@ namespace Mzying2001.MonkeySharp.Demo.Persistence
                 if (key.HasValue) command.Parameters.AddWithValue("$key", key.Value.ToString());
                 var result = new List<Row>();
                 using (var reader = command.ExecuteReader())
-                    while (reader.Read()) result.Add(new Row { Key = ScriptKey.Parse(reader.GetString(0)), Origin = Text(reader, 1), Enabled = reader.GetBoolean(2),
-                        Installed = DateTimeOffset.Parse(reader.GetString(3), CultureInfo.InvariantCulture), Updated = DateTimeOffset.Parse(reader.GetString(4), CultureInfo.InvariantCulture), Hash = Text(reader, 5), Commit = Text(reader, 6) });
+                    while (reader.Read())
+                    {
+                        var scriptKey = ScriptKey.Parse(reader.GetString(0));
+                        if (reader.GetString(0) != scriptKey.ToString()) throw new FormatException("The installation directory contains a noncanonical script key.");
+                        result.Add(new Row { Key = scriptKey, Origin = Text(reader, 1), Enabled = reader.GetBoolean(2),
+                            Installed = DateTimeOffset.Parse(reader.GetString(3), CultureInfo.InvariantCulture), Updated = DateTimeOffset.Parse(reader.GetString(4), CultureInfo.InvariantCulture), Hash = Text(reader, 5), Commit = Text(reader, 6) });
+                    }
                 return result;
             }
         }

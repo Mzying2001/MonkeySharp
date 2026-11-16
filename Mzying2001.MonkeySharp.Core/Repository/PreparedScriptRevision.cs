@@ -16,11 +16,10 @@ namespace Mzying2001.MonkeySharp.Core.Repository
     public sealed class PreparedScriptRevision
     {
         internal PreparedScriptRevision(UserScriptDefinition definition, IEnumerable<ResourceContent> dependencies,
-            IDictionary<string, ResourceContent> resources)
+            IDictionary<string, ResourceContent> resources, Matching.UserScriptUrlRules urlRules, IReadOnlyList<WebRequestRule> webRequestRules)
         {
-            WebRequestRules = Array.AsReadOnly(definition.Metadata.WebRequest.Select(rule =>
-                Apis.WebRequestApiProvider.CompileRule(JsonSerializer.SerializeToElement(new { selector = rule.Selector, action = rule.Action }), definition.Metadata)).ToArray());
-            UrlRules = Matching.UserScriptUrlRules.Compile(definition.Metadata);
+            WebRequestRules = webRequestRules;
+            UrlRules = urlRules;
             Dependencies = new ReadOnlyCollection<ResourceContent>(dependencies.ToArray());
             Resources = new ReadOnlyDictionary<string, ResourceContent>(new Dictionary<string, ResourceContent>(resources, StringComparer.Ordinal));
             var source = new StringBuilder();
@@ -73,6 +72,14 @@ namespace Mzying2001.MonkeySharp.Core.Repository
         {
             var definition = installation.Definition;
             if (!definition.ParseResult.CanEnable) throw new MetadataValidationException(definition.ParseResult);
+            var urlRules = Matching.UserScriptUrlRules.Compile(definition.Metadata);
+            IReadOnlyList<WebRequestRule> webRequestRules;
+            try
+            {
+                webRequestRules = Array.AsReadOnly(definition.Metadata.WebRequest.Select(rule => WebRequestApiProvider.CompileRule(
+                    JsonSerializer.SerializeToElement(new { selector = rule.Selector, action = rule.Action }), definition.Metadata)).ToArray());
+            }
+            catch (BridgeProtocolException error) { throw new PreparationException("MSR421_ASSET_UNAVAILABLE", error.Message, error); }
             var assets = new List<UserScriptAsset>();
             var downloads = new Dictionary<string, ResourceContent>(StringComparer.Ordinal);
             long total = Encoding.UTF8.GetByteCount(definition.Source);
@@ -132,14 +139,9 @@ namespace Mzying2001.MonkeySharp.Core.Repository
                     throw new PreparationException("MSR425_ASSET_FETCH_FAILED", "Configure a resource provider for " + declaration.Url)).ConfigureAwait(false);
             }
             token.ThrowIfCancellationRequested();
-            PreparedScriptRevision revision;
-            try
-            {
-                revision = new PreparedScriptRevision(definition,
-                    assets.Where(asset => asset.Kind == UserScriptAssetKind.Require).Select(asset => asset.Content),
-                    assets.Where(asset => asset.Kind == UserScriptAssetKind.Resource).ToDictionary(asset => asset.Name, asset => asset.Content, StringComparer.Ordinal));
-            }
-            catch (BridgeProtocolException error) { throw new PreparationException("MSR421_ASSET_UNAVAILABLE", error.Message, error); }
+            var revision = new PreparedScriptRevision(definition,
+                assets.Where(asset => asset.Kind == UserScriptAssetKind.Require).Select(asset => asset.Content),
+                assets.Where(asset => asset.Kind == UserScriptAssetKind.Resource).ToDictionary(asset => asset.Name, asset => asset.Content, StringComparer.Ordinal), urlRules, webRequestRules);
             return new PreparationResult(revision, Array.AsReadOnly(assets.ToArray()), downloaded);
         }
 

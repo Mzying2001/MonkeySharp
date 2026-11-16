@@ -45,6 +45,15 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         }
 
         [Fact]
+        public async Task InvalidStaticRulesAreRejectedBeforeAnyAssetFetch()
+        {
+            var provider = new Provider(); var repository = TestRepository.Create(preparer: new UserScriptPreparer(provider, provider));
+            var source = Script("// @require https://cdn.example/a\n// @webRequest [{\"selector\":\"*\",\"action\":{\"redirect\":\"ftp://example.com/a\"}}]");
+            await Assert.ThrowsAnyAsync<UserScriptException>(() => repository.InstallAsync(source, null, true, None));
+            Assert.Equal(0, provider.Calls);
+        }
+
+        [Fact]
         public async Task DuplicateUrlsDownloadOnceButEveryIntegrityDeclarationIsChecked()
         {
             var provider = new Provider(); var repository = TestRepository.Create(preparer: new UserScriptPreparer(provider, provider));

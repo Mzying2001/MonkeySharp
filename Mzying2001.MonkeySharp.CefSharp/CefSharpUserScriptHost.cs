@@ -118,6 +118,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
         private void RepositoryChanged(object sender, UserScriptRepositoryChangedEventArgs args)
         {
             lock (_sync) if (_browser == null || _disposed) return;
+            if (args.Kind == RepositoryChangeKind.Reloaded) return;
             Observe(InitializeIsolatedIfNeededAsync(), "MSC230_ISOLATED_PREPARATION_FAILED", null);
         }
 

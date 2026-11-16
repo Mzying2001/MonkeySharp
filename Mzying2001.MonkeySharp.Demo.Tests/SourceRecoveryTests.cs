@@ -142,6 +142,19 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
             }
         }
 
+        [Fact]
+        public async Task SingleLoadRecoversAnOrphanBeforeReportingMissingInstallation()
+        {
+            using (var fixture = await PersistenceTests.Fixture.Create())
+            {
+                var key = ScriptKey.Parse(Guid.NewGuid().ToString()); var files = Files(fixture);
+                var journal = files.Stage(key, "install", null, NewBytes); files.Switch(key, journal);
+                await Assert.ThrowsAsync<System.Collections.Generic.KeyNotFoundException>(() => fixture.Persistence.LoadAsync(key, None));
+                Assert.False(File.Exists(files.PathFor(key)));
+                Assert.False(File.Exists(Path.Combine(Path.GetDirectoryName(files.PathFor(key)), "transaction.json")));
+            }
+        }
+
         [Theory]
         [InlineData(false, false)]
         [InlineData(false, true)]

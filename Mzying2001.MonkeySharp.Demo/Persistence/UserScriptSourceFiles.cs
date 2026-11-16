@@ -126,7 +126,7 @@ namespace Mzying2001.MonkeySharp.Demo.Persistence
                 if (actual != journal.PreviousFileHash)
                 {
                     if (actual != null) throw Conflict(path, "Unknown source appeared during deletion.");
-                    if (journal.PreviousFileHash != null) RestoreFile(path + ".deleted", path, journal.PreviousFileHash);
+                    if (journal.PreviousFileHash != null) RestoreFile(path + ".deleted", path, journal.PreviousFileHash, actual);
                 }
                 Complete(path, journal);
                 return;
@@ -136,7 +136,7 @@ namespace Mzying2001.MonkeySharp.Demo.Persistence
                 if (actual != journal.NewFileHash)
                 {
                     if (actual != null && actual != journal.PreviousFileHash) throw Conflict(path, "Source is neither the old nor the committed new content.");
-                    RestoreFile(path + ".pending", path, journal.NewFileHash);
+                    RestoreFile(path + ".pending", path, journal.NewFileHash, actual);
                 }
                 Complete(path, journal);
                 return;
@@ -146,7 +146,7 @@ namespace Mzying2001.MonkeySharp.Demo.Persistence
                 if (actual != null)
                 {
                     if (actual != journal.NewFileHash) throw Conflict(path, "Unregistered source has unknown content.");
-                    File.Delete(path);
+                    DeleteSource(path, journal.NewFileHash);
                 }
                 Complete(path, journal);
                 return;
@@ -157,9 +157,9 @@ namespace Mzying2001.MonkeySharp.Demo.Persistence
                 if (actual != null && actual != journal.NewFileHash) throw Conflict(path, "External content prevents rollback.");
                 if (journal.PreviousFileHash == null)
                 {
-                    if (actual == journal.NewFileHash) File.Delete(path);
+                    if (actual == journal.NewFileHash) DeleteSource(path, journal.NewFileHash);
                 }
-                else RestoreFile(path + ".backup", path, journal.PreviousFileHash);
+                else RestoreFile(path + ".backup", path, journal.PreviousFileHash, actual);
             }
             Complete(path, journal);
         }
@@ -204,12 +204,24 @@ namespace Mzying2001.MonkeySharp.Demo.Persistence
             catch (Exception error) when (error is JsonException || error is FormatException || error is KeyNotFoundException || error is InvalidOperationException)
             { throw Conflict(path, "Invalid transaction marker: " + error.Message); }
         }
-        private static void RestoreFile(string candidate, string path, string hash)
+        private static void RestoreFile(string candidate, string path, string hash, string expectedCurrentHash)
         {
             StorageFiles.CheckPath(candidate);
             if (!StorageFiles.Exists(candidate) || ContentHash.Sha256(UserScriptSourceFile.ReadBytes(candidate)) != hash) throw Conflict(path, "A verified recovery candidate is unavailable: " + candidate);
+            CheckCurrentHash(path, expectedCurrentHash);
             if (StorageFiles.Exists(path)) File.Replace(candidate, path, null);
             else File.Move(candidate, path);
+        }
+        private static void CheckCurrentHash(string path, string expected)
+        {
+            StorageFiles.CheckPath(path);
+            var actual = StorageFiles.Exists(path) ? ContentHash.Sha256(UserScriptSourceFile.ReadBytes(path)) : null;
+            if (actual != expected) throw Conflict(path, "Source changed during recovery; preserve all transaction material.");
+        }
+        private static void DeleteSource(string path, string expected)
+        {
+            CheckCurrentHash(path, expected);
+            File.Delete(path);
         }
         private static void CleanupKnown(string path, string hash)
         {
