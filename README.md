@@ -66,7 +66,8 @@ using Mzying2001.MonkeySharp.CefSharp;
 using Mzying2001.MonkeySharp.Core.Repository;
 using System.Threading;
 
-var repository = new InMemoryUserScriptRepository();
+var repository = new UserScriptRepository(new InMemoryUserScriptPersistence());
+await repository.InitializeAsync(CancellationToken.None);
 await repository.InstallAsync(@"
 // ==UserScript==
 // @name Add a marker
