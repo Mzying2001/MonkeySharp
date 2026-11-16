@@ -102,7 +102,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         [Fact]
         public async Task PromptWaitDoesNotConsumeGenericRequestTimeoutAndDisabledRevisionsLoseAccess()
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             var script = await repository.InstallAsync(MetadataAndMatchingTests.Script("// @name permissions\n// @match https://api.example/*\n// @grant GM.download\n// @run-at document-end"), "test", true, CancellationToken.None);
             var prompt = new ControlledPrompt();
             using (var policy = new InteractiveUserScriptPermissionPolicy(new SensitiveUserScriptPermissionsPolicy(), new InMemoryUserScriptPermissionDecisionStore(), prompt))
@@ -131,7 +131,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
 
         private static async Task<ApiAuthorizationRequest> Request(string method, string target)
         {
-            var script = await new InMemoryUserScriptRepository().InstallAsync(MetadataAndMatchingTests.Script("// @name prompt\n// @match https://api.example/*\n// @connect api.example\n// @grant GM.xmlHttpRequest"), "test", true, CancellationToken.None);
+            var script = await TestRepository.Create().InstallAsync(MetadataAndMatchingTests.Script("// @name prompt\n// @match https://api.example/*\n// @connect api.example\n// @grant GM.xmlHttpRequest"), "test", true, CancellationToken.None);
             return new ApiAuthorizationRequest(script, Frame(), method, target, "safe summary", new[] { method });
         }
         private static ApiAuthorizationRequest Copy(ApiAuthorizationRequest source, string method, string target) => new ApiAuthorizationRequest(source.Installation, source.Frame, method, target, "safe summary", new[] { method });

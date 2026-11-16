@@ -1,4 +1,4 @@
-﻿using Mzying2001.MonkeySharp.Core.Apis;
+using Mzying2001.MonkeySharp.Core.Apis;
 using Mzying2001.MonkeySharp.Core.Bridge;
 using Mzying2001.MonkeySharp.Core.Domain;
 using Mzying2001.MonkeySharp.Core.Repository;
@@ -130,7 +130,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         [Fact]
         public async Task StaticRulesAreReadyWithoutExecutingScriptAndTrackRepositoryChanges()
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             var script = await repository.InstallAsync(MetadataAndMatchingTests.Script("// @name static request\n// @match https://example.com/*\n// @webRequest [{\"selector\":\"*\",\"action\":{\"cancel\":true}}]"), "test", true, CancellationToken.None);
             using (var service = new InMemoryWebRequestService())
             using (var rules = new StaticWebRequestRules(repository, service, new Permissions.AllowDeclaredPermissionsPolicy(), "browser", () => false))
@@ -170,7 +170,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
 
         private static async Task<UserScriptInstallation> InstallAsync()
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             return await repository.InstallAsync(MetadataAndMatchingTests.Script(
                 "// @name request\n// @match https://example.com/*\n// @run-at document-end\n// @grant GM.webRequest",
                 "window.request = true;"), "test", true, CancellationToken.None);

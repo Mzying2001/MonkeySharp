@@ -23,8 +23,8 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         [Fact]
         public async Task PreparedResourceApisCheckDeclarationAndResponseBudget()
         {
-            var resources = new FakeResourceProvider(new ResourceContent(Encoding.UTF8.GetBytes("hello"), "text/plain", "hello"));
-            var repository = new InMemoryUserScriptRepository(preparer: new UserScriptPreparer(resources: resources));
+            var resources = new FakeResourceProvider(new ResourceContent(Encoding.UTF8.GetBytes("hello"), "text/plain"));
+            var repository = TestRepository.Create(preparer: new UserScriptPreparer(resources: resources));
             var installation = await repository.InstallAsync(MetadataAndMatchingTests.Script(
                 "// @name resources\n// @match https://example.com/*\n// @resource logo https://cdn.example/logo.txt"), "test", true, CancellationToken.None);
             using (var provider = new ResourceAndNetworkApiProvider(options: new BridgeOptions(maxResourceBytes: 8)))
@@ -770,7 +770,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
 
         private static async Task<UserScriptInstallation> InstallAsync(string extraMetadata)
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             return await repository.InstallAsync(MetadataAndMatchingTests.Script(
                 "// @name advanced\n// @match https://example.com/*\n// @run-at document-end\n" + extraMetadata,
                 "window.test = true;"), "test", true, CancellationToken.None);
@@ -849,7 +849,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             private readonly IDictionary<string, string> _sources;
             public FakeDependencyProvider(IDictionary<string, string> sources) { _sources = sources; }
             public Task<ResourceContent> GetScriptAsync(UserScriptInstallation installation, UserScriptDependencyDeclaration dependency, CancellationToken cancellationToken)
-                => Task.FromResult(new ResourceContent(Encoding.UTF8.GetBytes(_sources[dependency.Url]), "application/javascript", _sources[dependency.Url]));
+                => Task.FromResult(new ResourceContent(Encoding.UTF8.GetBytes(_sources[dependency.Url]), "application/javascript"));
         }
 
         private sealed class FakeHostServices :

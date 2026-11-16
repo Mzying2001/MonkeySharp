@@ -101,9 +101,9 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
             try
             {
                 using (var fixture = await PersistenceTests.Fixture.Create())
-                using (var content = new HttpContentService(fixture.Paths))
+                using (var content = new HttpContentService())
                 {
-                    var repository = new InMemoryUserScriptRepository();
+                    var repository = TestRepository.Create();
                     const string source = "// ==UserScript==\n// @name Localization sample\n// @match https://example.com/*\n// @grant none\n// ==/UserScript==\n";
                     await repository.InstallAsync(source, "fixture://enabled", true, CancellationToken.None);
                     await repository.InstallAsync(source.Replace("sample", "disabled"), "fixture://disabled", false, CancellationToken.None);

@@ -45,6 +45,8 @@ Windows-owned file-dialog controls follow the operating system's language. Scrip
 - Installing, editing, enabling, disabling, or deleting a script reloads **all open tabs**, including frames, to revoke old execution state and rerun matching scripts.
 - Registered commands appear under **Script menu**, grouped beneath non-interactive script-name headings, and support Alt+access key. Command labels show their names without installation identifiers. The menu is hidden when the selected tab has no registered commands. Matching `@run-at context-menu` entries appear in the native page context menu and start a fresh execution when selected. **Tools** provides diagnostics, download cancellation controls, DevTools, data/download folders, and language preferences.
 
+Use **Reload from file** to adopt external source changes and **Update dependencies and resources** to force fresh assets independently. Conditional editor saves preserve the draft on source or revision conflicts. The list shows enabled intent separately from unavailable preparation state; diagnostics remain visible for scripts with missing source or assets. Reload does not refresh browser tabs automatically.
+
 ## Portable data and recovery
 
 The profile is stored beside the executable, independently of the process working directory:
@@ -55,8 +57,9 @@ The profile is stored beside the executable, independently of the process workin
   ui-language.txt
   monkeysharp.db
   BrowserCache/Default/
-  UserScripts/<script-key>.user.js
-  Dependencies/<cache-key>.json
+  UserScripts/<script-key>/userscript.js
+  UserScriptCache/objects/<sha256>
+  UserScriptCache/tmp/
   Downloads/
   Logs/demo.log
 ```
@@ -65,9 +68,10 @@ The profile is stored beside the executable, independently of the process workin
 
 Startup fails if the directory is not writable or another process is using the profile. Use a writable application directory instead of elevating the process; there is no AppData fallback. Back up the complete `Data/` directory **after closing the application**, including SQLite `-wal`/`-shm` files if present.
 
-The database uses schema format **2**. An unsupported format stops startup and leaves the database intact. To start with an empty database, first back up the profile, then move `Data/monkeysharp.db` and its `-wal`/`-shm` files out of the profile before restarting. This does not restore scripts or GM values, and source files are not automatically reimported.
+The database uses schema format **3**. An unsupported format stops startup and leaves the database intact. To start with an empty database, first back up the profile, then move `Data/monkeysharp.db` and its `-wal`/`-shm` files out of the profile before restarting. This does not restore scripts or GM values, and source files are not automatically reimported.
 
-Source changes use staging files, database transactions, and committed hashes for recovery. Missing, invalid, or hash-mismatched sources remain visible but disabled; recovery failures appear in diagnostics. Do not edit installed source files outside the running application. Import or paste reviewed source into the existing manager entry to retain its script identity and GM values. Deleting a script also removes its stored values.
+Source commits use per-installation transaction markers, SQLite commit IDs and verified staging/backup files for recovery. External UTF-8 source edits are adopted at startup or explicit reload; no file watcher or navigation-time disk check is used. Missing or invalid source retains enabled intent but prevents execution. Recovery conflicts preserve unknown files and transaction evidence; stop the application and back up these files before resolving them manually. Old database formats are rejected without migration. Uninstall also deletes values, permissions and tab state; unreferenced asset objects are collected without deleting shared content.
+
 
 Diagnostics are written to `Logs/demo.log`, which retains one previous log after reaching approximately 5 MiB. Native CEF file logging is disabled.
 
@@ -87,7 +91,7 @@ Private console/runtime diagnostics and tab data are not written to the normal p
 | --- | --- |
 | Values and value listeners | Shared SQLite storage for normal tabs, with typed values, insertion order, serialized writes, atomic snapshots, committed notifications, and legacy storage mirrors. Private sessions copy the normal baseline into isolated memory. |
 | DOM, info, log | Core facade; logs also appear in the diagnostics panel. |
-| `@require`, `@resource` | Persistent per-installation/revision URL cache. SRI `md5`/`sha256` checks use original bytes before caching and on reads. HTTP(S), up to 10 redirects, 30-second timeout, 10 MiB per item. |
+| `@require`, `@resource` | Immutable content-addressed files with per-installation associations. File hashes and current declaration integrity are verified; unchanged assets are reused, missing cache can be downloaded again. HTTP(S), up to 10 redirects, 30-second timeout, 10 MiB per item. |
 | Partitioned Cookie | CDP CRUD on tested 121/151; rejected on 84. XHR partition selection is rejected before sending. |
 | XHR, Cookie, webRequest | CefSharp services use the browser's actual RequestContext. Custom navigation handlers use the adapter's request-handler multiplexer. |
 | Audio | Native mute-state reads, writes, and change listeners; audible state is unavailable. |

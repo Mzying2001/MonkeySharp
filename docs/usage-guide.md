@@ -344,7 +344,7 @@ Legacy: `GM_addElement` with the same overloads; grant `GM.addElement` or its al
 
 ### GM.getResourceText(name) / GM_getResourceText(name)
 
-Requires a resource-family grant and `@resource name url`, with content prepared by the host at installation. `name` is a nonempty case-sensitive string. Modern returns `Promise<string>` using host-decoded text first, otherwise the declared charset, defaulting to UTF-8. Legacy returns the string immediately from the complete startup resource snapshot. Undeclared resources reject; snapshots must be complete before user source starts.
+Requires a resource-family grant and `@resource name url`, with content prepared by the host at installation. `name` is a nonempty case-sensitive string. Modern returns `Promise<string>` decoded from the original bytes using the declared charset, defaulting to UTF-8 with replacement fallback. Legacy returns the string immediately from the complete startup resource snapshot. Undeclared resources reject; snapshots must be complete before user source starts.
 
 ### GM.getResourceUrl(name) / GM_getResourceURL(name)
 

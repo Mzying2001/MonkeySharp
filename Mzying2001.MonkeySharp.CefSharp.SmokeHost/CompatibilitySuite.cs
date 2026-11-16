@@ -23,7 +23,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
         private readonly SmokeHttpDownloadService _downloads;
         private readonly LocalHttpFixture _otherFixture;
         private readonly SmokePermissionPolicy _permissions;
-        private readonly InMemoryUserScriptRepository _repository;
+        private readonly UserScriptRepository _repository;
         private readonly object _sync = new object();
         private readonly Dictionary<string, DocumentFrame> _frames = new Dictionary<string, DocumentFrame>();
         private readonly Dictionary<string, DocumentFrame> _isolatedFrames = new Dictionary<string, DocumentFrame>();
@@ -33,7 +33,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
         private DocumentFrame _context;
 
         public CompatibilitySuite(CefSharpUserScriptHost host, ChromiumWebBrowser browser,
-            LocalHttpFixture fixture, SmokeHttpDownloadService downloads, LocalHttpFixture otherFixture, SmokePermissionPolicy permissions, InMemoryUserScriptRepository repository)
+            LocalHttpFixture fixture, SmokeHttpDownloadService downloads, LocalHttpFixture otherFixture, SmokePermissionPolicy permissions, UserScriptRepository repository)
         {
             _host = host; _browser = browser; _fixture = fixture; _downloads = downloads;
             _otherFixture = otherFixture; _permissions = permissions;
@@ -41,7 +41,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             host.DocumentLifecycle += Lifecycle;
         }
 
-        public static async Task InstallAsync(InMemoryUserScriptRepository repository, int port, int otherPort)
+        public static async Task InstallAsync(UserScriptRepository repository, int port, int otherPort)
         {
             await repository.InstallAsync("// ==UserScript==\n// @name Prepared content\n// @match http://127.0.0.1/compat/prepared*\n" +
                 "// @require https://content.example/one.js\n// @require https://content.example/two.js\n" +
@@ -512,9 +512,11 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
 
         private async Task ContextIsolationAsync()
         {
+            var otherRepository = new UserScriptRepository(new InMemoryUserScriptPersistence());
+            await otherRepository.InitializeAsync(CancellationToken.None);
             using (var primary = new CefSharpCookieService(_host))
             using (var context = CookiePhase("context", () => new RequestContext(new RequestContextSettings())))
-            using (var otherHost = new CefSharpUserScriptHostBuilder(new InMemoryUserScriptRepository()).Build())
+            using (var otherHost = new CefSharpUserScriptHostBuilder(otherRepository).Build())
             using (var other = CookiePhase("browser", () => new ChromiumWebBrowser("about:blank", context)))
             {
                 Console.WriteLine("{\"type\":\"cookie-probe\",\"phase\":\"contexts-created\"}");

@@ -121,6 +121,7 @@ namespace Mzying2001.MonkeySharp.Core.Updates
             var installation = await _repository.GetAsync(scriptKey, cancellationToken).ConfigureAwait(false);
             var metadata = installation.Definition.Metadata;
             var now = _utcNow();
+            if (metadata == null) return Result(installation, UserScriptUpdateStatus.NotConfigured, null, null, null, null, now);
             if (string.Equals(metadata.DownloadUrl?.Trim(), "none", StringComparison.OrdinalIgnoreCase))
                 return Result(installation, UserScriptUpdateStatus.Disabled, metadata.Version, null, null, null, now);
 
@@ -160,7 +161,7 @@ namespace Mzying2001.MonkeySharp.Core.Updates
             var installation = await _repository.GetAsync(result.ScriptKey, cancellationToken).ConfigureAwait(false);
             if (installation.RevisionId != result.ExpectedRevisionId ||
                 installation.UpdatedAt != result.ExpectedUpdatedAt ||
-                !string.Equals(installation.Definition.Metadata.Version, result.CurrentVersion, StringComparison.Ordinal))
+                !string.Equals(installation.Definition.Metadata?.Version, result.CurrentVersion, StringComparison.Ordinal))
                 throw new UserScriptUpdateException("MSU005_STALE_CHECK", "The installed script changed after the update check.");
 
             var source = await _fetcher.FetchSourceAsync(installation, result.DownloadUrl, cancellationToken).ConfigureAwait(false);
@@ -181,7 +182,7 @@ namespace Mzying2001.MonkeySharp.Core.Updates
                     result.DownloadUrl,
                     cancellationToken).ConfigureAwait(false);
             }
-            catch (RepositoryRevisionMismatchException exception)
+            catch (Exception exception) when (exception is RepositoryRevisionMismatchException || exception is UserScriptSourceConflictException)
             {
                 throw new UserScriptUpdateException("MSU005_STALE_CHECK", "The installed script changed before the update could be committed.", exception);
             }

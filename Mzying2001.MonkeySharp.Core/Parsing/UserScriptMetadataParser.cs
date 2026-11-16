@@ -1,4 +1,4 @@
-﻿using Mzying2001.MonkeySharp.Core.Domain;
+using Mzying2001.MonkeySharp.Core.Domain;
 using Mzying2001.MonkeySharp.Core.Compatibility;
 using Mzying2001.MonkeySharp.Core.Security;
 using Mzying2001.MonkeySharp.Core.Matching;
@@ -80,7 +80,8 @@ namespace Mzying2001.MonkeySharp.Core.Parsing
 
                 if (CollectionKeys.Contains(entry.Key) || !SingletonKeys.Contains(BaseKey(entry.Key)))
                 {
-                    if (!list.Any(item => string.Equals(item.Value, entry.Value, StringComparison.Ordinal)))
+                    if (entry.Key.Equals("require", StringComparison.OrdinalIgnoreCase) ||
+                        !list.Any(item => string.Equals(item.Value, entry.Value, StringComparison.Ordinal)))
                         list.Add(entry);
                 }
                 else if (list.Count == 0)

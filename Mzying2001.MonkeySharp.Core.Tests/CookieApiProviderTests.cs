@@ -140,7 +140,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             public Task<bool> DeleteAsync(UserScriptCookieMutation mutation, CancellationToken token) { Mutation = mutation; return Task.FromResult(true); }
         }
 
-        private static Task<UserScriptInstallation> Install() => new InMemoryUserScriptRepository().InstallAsync(
+        private static Task<UserScriptInstallation> Install() => TestRepository.Create().InstallAsync(
             MetadataAndMatchingTests.Script("// @name cookie\n// @match https://*.example.com/*\n// @grant GM.cookie"), "test", true, CancellationToken.None);
         private static ApiInvocationContext Context(UserScriptInstallation installation, object value)
             => new ApiInvocationContext(installation, new DocumentFrame("browser", "document", "frame", new Uri("https://example.com/path"), true,

@@ -1,4 +1,4 @@
-﻿using CefSharp;
+using CefSharp;
 using Moq;
 using Mzying2001.MonkeySharp.Core.Apis;
 using Mzying2001.MonkeySharp.Core.Bridge;
@@ -134,7 +134,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
         [Fact]
         public async Task PageBindingRejectsAValidIsolatedExecutionProof()
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             var script = await repository.InstallAsync("// ==UserScript==\n// @name native proof\n// @match https://example.com/*\n// @sandbox DOM\n// @grant GM_getValue\n// @run-at document-end\n// ==/UserScript==", "test", true, CancellationToken.None);
             using (var host = new CefSharpUserScriptHostBuilder(repository).Build())
             {
@@ -446,7 +446,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
         [Fact]
         public async Task LoadFallbackRunsBodyEndAndIdleOnceInOrder()
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             await repository.InstallAsync(Script("none", "document-body", "body"), "test", true, CancellationToken.None);
             await repository.InstallAsync(Script("none", "document-end", "end"), "test", true, CancellationToken.None);
             await repository.InstallAsync(Script("none", "document-idle", "idle"), "test", true, CancellationToken.None);
@@ -599,7 +599,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
         public async Task BuilderServicesBecomeHelloCapabilitiesAndResolveDependencies()
         {
             var services = new AllHostServices();
-            var repository = new InMemoryUserScriptRepository(preparer: new UserScriptPreparer(services, services));
+            var repository = TestRepository.Create(preparer: new UserScriptPreparer(services, services));
             var grants = new[]
             {
                 "GM.getResourceText", "GM.getResourceUrl", "GM.xmlHttpRequest",
@@ -660,7 +660,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
         [Fact]
         public async Task DefaultNetworkServicesAreExposedAndCanBeDisabled()
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             await repository.InstallAsync(
                 Script("GM.xmlHttpRequest\n// @grant GM.webRequest\n// @grant GM.cookie", "document-end"),
                 "test", true, CancellationToken.None);
@@ -780,7 +780,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
         {
             var service = new Mock<IWebRequestService>();
             service.Setup(item => item.Evaluate(It.IsAny<WebRequestEvent>())).Returns(new WebRequestDecision());
-            using (var host = new CefSharpUserScriptHostBuilder(new InMemoryUserScriptRepository())
+            using (var host = new CefSharpUserScriptHostBuilder(TestRepository.Create())
                 .UseWebRequestService(service.Object).Build())
             {
                 var first = new BrowserFixture();
@@ -999,7 +999,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
         [Fact]
         public async Task ExplicitNetworkServicesRemainApplicationOwned()
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             await repository.InstallAsync(Script("none", "document-end"), "test", true,
                 CancellationToken.None);
             var httpDisposed = false;
@@ -1037,7 +1037,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
             string source,
             CefSharpHostOptions options = null)
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             await repository.InstallAsync(source, "test", true, CancellationToken.None);
             var builder = new CefSharpUserScriptHostBuilder(repository);
             if (options != null)
@@ -1223,14 +1223,13 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
                 CancellationToken cancellationToken)
                 => Task.FromResult(new ResourceContent(
                     Encoding.UTF8.GetBytes("window.dependencyLoaded = true;"),
-                    "application/javascript",
-                    "window.dependencyLoaded = true;"));
+                    "application/javascript"));
 
             public Task<ResourceContent> GetAsync(
                 UserScriptInstallation installation,
                 ResourceDeclaration resource,
                 CancellationToken cancellationToken)
-                => Task.FromResult(new ResourceContent(Encoding.UTF8.GetBytes("resource"), "text/plain", "resource"));
+                => Task.FromResult(new ResourceContent(Encoding.UTF8.GetBytes("resource"), "text/plain"));
 
             public IHttpRequestOperation SendAsync(
                 UserScriptHttpRequest request,

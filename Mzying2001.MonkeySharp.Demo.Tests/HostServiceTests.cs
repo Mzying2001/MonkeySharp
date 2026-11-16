@@ -54,7 +54,7 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
         [Fact]
         public Task PermissionWindowUsesExplicitChoicesAndClosesOnCancellation() => OnDispatcher(async () =>
         {
-            var repository = new Mzying2001.MonkeySharp.Core.Repository.InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             var script = await repository.InstallAsync(PersistenceTests.Source, "test", true, CancellationToken.None);
             var frame = new Mzying2001.MonkeySharp.Core.Runtime.DocumentFrame("browser", "document", "main", new Uri("https://example.com/"), true,
                 Mzying2001.MonkeySharp.Core.Runtime.TimingGuarantee.BestEffortDocumentStart);
@@ -233,7 +233,7 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
         public Task MenuRegistrationHasUserVisibleCommandAndDeterministicRemoval() => OnDispatcher(async () =>
         {
             var tab = new BrowserTabViewModel("about:blank");
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             var script = await InstallMenuScriptAsync(repository, "Menu sample");
             var menu = new WpfMenuService(tab, Dispatcher.CurrentDispatcher, repository);
             var invoked = 0;
@@ -252,7 +252,7 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
         [Fact]
         public Task MenuGroupsPreserveCommandsWhileSubscribersAndScriptsChange() => OnDispatcher(async () =>
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             var first = await InstallMenuScriptAsync(repository, "First script");
             var second = await InstallMenuScriptAsync(repository, "Second script");
             var tab = new BrowserTabViewModel("about:blank");
@@ -301,7 +301,7 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
         [Fact]
         public Task IdenticallyNamedScriptsKeepSeparateMenuSectionsAndCallbacks() => OnDispatcher(async () =>
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             var first = await InstallMenuScriptAsync(repository, "Same name");
             var second = await InstallMenuScriptAsync(repository, "Same name");
             var tab = new BrowserTabViewModel("about:blank");
@@ -341,16 +341,16 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
         {
             using (var fixture = await PersistenceTests.Fixture.Create())
             using (var server = new LocalHttpFixture())
-            using (var content = new HttpContentService(fixture.Paths))
+            using (var content = new HttpContentService())
             {
-                var repository = new Mzying2001.MonkeySharp.Core.Repository.PersistentUserScriptRepository(fixture.Persistence,
+                var repository = new Mzying2001.MonkeySharp.Core.Repository.UserScriptRepository(fixture.Persistence,
                     preparer: new Mzying2001.MonkeySharp.Core.Repository.UserScriptPreparer(content, content));
                 await repository.InitializeAsync(CancellationToken.None);
                 var source = PersistenceTests.Source.Replace("// @grant none", "// @grant none\n// @require " + server.BaseUrl +
                     "/dependency.js\n// @resource text " + server.BaseUrl + "/redirect");
                 var script = await repository.InstallAsync(source, "origin", true, CancellationToken.None);
                 server.Dispose();
-                var restored = new Mzying2001.MonkeySharp.Core.Repository.PersistentUserScriptRepository(fixture.Persistence);
+                var restored = new Mzying2001.MonkeySharp.Core.Repository.UserScriptRepository(fixture.Persistence);
                 await restored.InitializeAsync(CancellationToken.None);
                 var loaded = await restored.GetAsync(script.ScriptKey, CancellationToken.None);
                 Assert.True(loaded.IsEnabled);
@@ -365,19 +365,20 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
         {
             using (var fixture = await PersistenceTests.Fixture.Create())
             using (var server = new LocalHttpFixture())
-            using (var content = new HttpContentService(fixture.Paths))
+            using (var content = new HttpContentService())
             {
                 var source = PersistenceTests.Source.Replace("// @grant none", "// @grant none\n// @require " + server.BaseUrl + "/dependency.js");
-                var repository = new Mzying2001.MonkeySharp.Core.Repository.InMemoryUserScriptRepository(
+                var repository = TestRepository.Create(
                     preparer: new Mzying2001.MonkeySharp.Core.Repository.UserScriptPreparer(content, content));
                 var script = await repository.InstallAsync(source, "origin", true, CancellationToken.None);
-                Assert.Equal("demo-resource", (await content.FetchAsync(server.BaseUrl + "/redirect", CancellationToken.None)).Text);
+                Assert.Equal("demo-resource", (await content.FetchAsync(server.BaseUrl + "/redirect", CancellationToken.None)).DecodeText());
                 await Assert.ThrowsAsync<ArgumentException>(() => content.FetchAsync(server.BaseUrl + "/bad-redirect", CancellationToken.None));
                 await Assert.ThrowsAsync<IOException>(() => content.FetchAsync(server.BaseUrl + "/oversize", CancellationToken.None));
                 var dependency = script.Definition.Metadata.Requires[0];
-                var first = await content.GetScriptAsync(script, dependency, CancellationToken.None);
+                var first = script.PreparedRevision.Dependencies[0];
                 server.Dispose();
-                Assert.Equal(first.Text, (await content.GetScriptAsync(script, dependency, CancellationToken.None)).Text);
+                var updated = await repository.UpdateAsync(script.ScriptKey, source + "body();", "origin", CancellationToken.None);
+                Assert.Equal(first.DecodeText(), updated.PreparedRevision.Dependencies[0].DecodeText());
             }
         }
 
@@ -386,7 +387,7 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
         {
             using (var fixture = await PersistenceTests.Fixture.Create())
             using (var server = new LocalHttpFixture())
-            using (var content = new HttpContentService(fixture.Paths))
+            using (var content = new HttpContentService())
             {
                 var expectedBytes = Encoding.UTF8.GetBytes("window.__demoDependency = true;");
                 string digest;
@@ -394,24 +395,23 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
                     digest = Convert.ToBase64String(sha.ComputeHash(expectedBytes));
                 var source = PersistenceTests.Source.Replace("// @grant none", "// @grant none\n// @require " +
                     server.BaseUrl + "/dependency.js#sha256=" + digest);
-                var repository = new Mzying2001.MonkeySharp.Core.Repository.InMemoryUserScriptRepository(
+                var repository = TestRepository.Create(
                     preparer: new Mzying2001.MonkeySharp.Core.Repository.UserScriptPreparer(content, content));
                 var script = await repository.InstallAsync(source, "origin", true, CancellationToken.None);
                 var dependency = script.Definition.Metadata.Requires.Single();
                 var first = await content.GetScriptAsync(script, dependency, CancellationToken.None);
-                Assert.Equal(Encoding.UTF8.GetString(expectedBytes), first.Text);
+                Assert.Equal(Encoding.UTF8.GetString(expectedBytes), first.DecodeText());
 
-                var cachePath = Assert.Single(Directory.GetFiles(fixture.Paths.DependenciesDirectory, "*.json"));
-                var cachedJson = File.ReadAllText(cachePath, Encoding.UTF8);
-                cachedJson = cachedJson.Replace(
-                    Convert.ToBase64String(expectedBytes),
-                    Convert.ToBase64String(Encoding.UTF8.GetBytes("tampered")));
-                File.WriteAllText(cachePath, cachedJson, new UTF8Encoding(false));
-
-                var refreshed = await content.GetScriptAsync(script, dependency, CancellationToken.None);
-                Assert.Equal(Encoding.UTF8.GetString(expectedBytes), refreshed.Text);
-                using (var document = JsonDocument.Parse(File.ReadAllText(cachePath, Encoding.UTF8)))
-                    Assert.Equal(Convert.ToBase64String(expectedBytes), document.RootElement.GetProperty("bytes").GetString());
+                var persisted = new UserScriptRepository(fixture.Persistence, preparer: new UserScriptPreparer(content, content));
+                await persisted.InitializeAsync(CancellationToken.None);
+                var durable = await persisted.InstallAsync(source, "origin", true, CancellationToken.None);
+                var cachePath = Assert.Single(Directory.GetFiles(Path.Combine(fixture.Paths.UserScriptCacheDirectory, "objects")));
+                File.WriteAllText(cachePath, "tampered");
+                var loaded = await fixture.Persistence.LoadAsync(durable.ScriptKey, CancellationToken.None);
+                Assert.Null(Assert.Single(loaded.Record.Assets).Content);
+                var recovered = await persisted.ReloadAsync(durable.ScriptKey, CancellationToken.None);
+                Assert.True(recovered.CanExecute);
+                Assert.Equal(expectedBytes, recovered.PreparedRevision.Dependencies[0].Bytes);
             }
         }
 
@@ -516,7 +516,7 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
             }
         }
 
-        private static Task OnDispatcher(Func<Task> action)
+        internal static Task OnDispatcher(Func<Task> action)
         {
             var completion = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
             var thread = new Thread(() =>

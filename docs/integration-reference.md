@@ -16,7 +16,7 @@ Keep all projects on the selected `CefSharpVersion`; see the [development guide]
 
 ## Attachment and navigation
 
-Initialize CefSharp once before creating controls. Initialize a persistent repository before building the host, compose any occupied browser handler slots as shown in the [minimal integration](../README.md#existing-browser-handlers), then attach the host before adding the control to the UI. Keep the host and browser alive together.
+Initialize CefSharp once before creating controls. Initialize the repository, including in-memory storage, before building the host, compose any occupied browser handler slots as shown in the [minimal integration](../README.md#existing-browser-handlers), then attach the host before adding the control to the UI. Keep the host and browser alive together.
 
 For prepared navigation or static `@webRequest` rules, create the browser at `about:blank`. In an async UI-thread method, after building `host`:
 
@@ -71,16 +71,28 @@ var host = new CefSharpUserScriptHostBuilder(repository)
 
 ### Persistent installations
 
-For durable installations, replace the in-memory repository in the example above with a `PersistentUserScriptRepository` backed by an application-owned `IUserScriptRepositoryPersistence`. Initialize it before using it or attaching a host:
+For durable installations, supply an application-owned `IUserScriptPersistence` to the same `UserScriptRepository` used with in-memory storage. Initialize it before using it or attaching a host:
 
 ```csharp
 using System.Threading;
 
-var repository = new PersistentUserScriptRepository(persistence, parser);
+var repository = new UserScriptRepository(persistence, parser);
 await repository.InitializeAsync(CancellationToken.None);
 ```
 
-The persistence implementation must preserve `ScriptKey`, installation order, and timestamps, and commit mutations atomically. Cancellation after a successful commit must complete successfully; repository change notifications follow commit. Stable keys retain the association with GM storage. For implementation examples, read [SqliteUserScriptRepositoryPersistence](../Mzying2001.MonkeySharp.Demo/Persistence/SqliteUserScriptRepositoryPersistence.cs), [SqliteUserScriptValueStore](../Mzying2001.MonkeySharp.Demo/Persistence/SqliteUserScriptValueStore.cs) and their [DemoRuntime initialization](../Mzying2001.MonkeySharp.Demo/Runtime/DemoRuntime.cs). The [Demo data and recovery guide](../Mzying2001.MonkeySharp.Demo/README.md#portable-data-and-recovery) covers profile operation and recovery.
+`IUserScriptPersistence` has five operations: `LoadAllAsync`, `LoadAsync(key)`, `SaveAsync(request)`, `SetEnabledAsync` and `DeleteAsync`. Loads exchange `UserScriptLoadResult` with a typed `UserScriptPersistenceRecord`, source version and diagnostics. Each record carries source, origin, enabled intent, timestamps and ordered `UserScriptAsset` descriptors (`Kind`, `Ordinal`, `Name`, `Url`, `Content`). Null source or content denotes a local loading failure; saves require validated source and every declared asset. The host chooses file, database or memory layout; no prepared JSON is exchanged.
+
+Preserve stable `ScriptKey`, installation order and `InstalledAt`. Save source, metadata and all asset associations as one visible commit. A new save uses a null expected version and must not overwrite an existing installation or unregistered file. Existing saves compare the opaque `SourceVersion` from the actual read; bytes changing, appearing or disappearing must change it. A missing file has a reliable host-defined version, while an unreadable file or unresolved recovery has a null version and cannot be conditionally repaired yet. `SourceChangedSinceSave` identifies external edits and is not a rejection reason.
+
+`UserScriptSaveRequest` combines the complete record, `ExpectedSourceVersion` and `SourceWriteMode`. `Replace` writes an installation or reviewed edit; `Preserve` verifies source equality and leaves bytes, BOM, newlines and modification time unchanged. Both check the expected version before commit. Return the committed version. `UserScriptSourceConflictException` identifies external edits; `UserScriptPersistenceException` identifies a local read/recovery/commit failure. Global directory or database failures propagate. Deletion is idempotent and removes the installation's GM values, permissions and temporary tab state while preserving shared assets.
+
+One storage instance has one repository writer. Mutations and reloads serialize preparation, commit and snapshot publication; readers keep using the old immutable snapshot during downloads. Do not put network operations inside storage transactions. Cancellation after a successful commit succeeds, and observer exceptions do not roll back committed state. Initialization publishes no partial repository and emits no per-installation installation events.
+
+Use `UpdateIfUnchangedAsync(key, revisionId, source, origin, token)` for editor saves. The repository combines that draft revision with its observed source version; keep the draft on either revision or source conflicts. `ReloadAsync(key, token)` adopts current external source, while `RefreshAssetsAsync(key, revisionId, token)` downloads all assets independently of source editing. Ordinary edits reuse valid unchanged assets. Reload failure publishes an unavailable installation and revokes obsolete execution; it does not restore the old file. `Reloaded` is a state notification, not an instruction to rerun an existing document. Identical reloads retain their revision ID and timestamp.
+
+`IsEnabled` is durable user intent. `IsReady` means preparation is complete; `CanExecute` requires both. Check `CanExecute` before metadata or prepared rules at every execution entry. Disabled startup uses cached content only; explicit reload can download assets for disabled scripts. Enabling an unavailable script commits intent first, then prepares the already observed source. A later failure or cancellation returns enabled but unavailable state with diagnostics. Started reload cancellation instead publishes unavailable state and then ends as canceled. Missing cache may be fetched again, subject to current declaration integrity; without declared integrity, fresh remote content is allowed.
+
+Local repository diagnostics use `MSR420_SOURCE_UNAVAILABLE`, `MSR421_ASSET_UNAVAILABLE`, `MSR422_SOURCE_CHANGED`, `MSR423_PERSISTENCE_FAILED`, `MSR424_RECOVERY_CONFLICT`, `MSR425_ASSET_FETCH_FAILED` and `MSR426_PREPARATION_CANCELLED`, retaining script identity without page/frame context. Successful recovery clears obsolete unavailable diagnostics. For implementation examples, see [Demo persistence](../Mzying2001.MonkeySharp.Demo/Persistence/SqliteUserScriptRepositoryPersistence.cs) and the [data and recovery guide](../Mzying2001.MonkeySharp.Demo/README.md#portable-data-and-recovery). Version 4 intentionally provides no legacy API or database migration layer.
 
 ### Value-store and permission providers
 
@@ -120,11 +132,12 @@ The runtime uses handle events to deliver script callbacks; completing a `Comple
 
 ## Resource Integrity and Update Checks
 
-Configure installation content with `new InMemoryUserScriptRepository(preparer: new UserScriptPreparer(dependencyProvider, resourceProvider))`, or pass the same preparer to `PersistentUserScriptRepository`. Install, edit and update await complete preparation before publishing a revision; a failed update leaves the active revision intact. All frames consume the captured revision without further content-provider calls. Dependencies share one scope and retain directive/strict semantics, with newline/semicolon boundaries between source segments.
+Configure installation content with `new UserScriptRepository(persistence, preparer: new UserScriptPreparer(dependencyProvider, resourceProvider))`. Install, edit and update await complete preparation before publishing a revision; a failed update leaves the active revision intact. All frames consume the captured revision without further content-provider calls. Dependencies share one scope and retain directive/strict semantics, with newline/semicolon boundaries between source segments.
 
-`ResourceContent` retains original bytes, MIME, optional charset and optional host-decoded text. The host text takes precedence; otherwise charset selects the decoder, with UTF-8 as the default. Binary data URLs use the original bytes. The Demo atomically stores prepared content with the script, validates its content digests on reload, and upgrades format-2 databases with an additive table. Existing records are prepared once during initialization; unavailable content fails initialization explicitly and preserves the database. Installation providers own trusted network policy separately from GM network authorization.
+`ResourceContent` retains original bytes, MIME and optional charset. Text is derived using that charset or UTF-8; dependencies use strict decoding and resources use replacement fallback. Each decoder removes one leading U+FEFF without changing newlines. Binary data URLs use the original bytes.
 
-The preparer defaults to a 32 MiB combined source/content budget. Resource packages have a separate 64 MiB serialized bootstrap budget and use indexed response chunks when needed. User code starts only after complete reassembly; missing, duplicate or truncated chunks fail execution. See [resource and storage evidence](compatibility/README.md#storage-and-resources).
+
+The preparer defaults to a 32 MiB combined budget covering source UTF-8 bytes and each declaration's raw content plus derived text UTF-8 bytes, for both cached and fetched content. Duplicate declarations are counted separately, even when a download is shared. Resource packages have a separate 64 MiB serialized bootstrap budget and use indexed response chunks when needed. User code starts only after complete reassembly; missing, duplicate or truncated chunks fail execution. See [resource and storage evidence](compatibility/README.md#storage-and-resources).
 
 `@require` and `@resource` may carry `md5`, `sha1`, `sha256`, `sha384` or `sha512` hashes in hexadecimal or standard Base64. Both `#algorithm=value` and `#algorithm-value` forms are accepted, with comma/semicolon-separated hashes; the last supported declaration is selected. The fragment is stripped from the requested and cached URL. When integrity is declared, the installation preparer, resource API, and Demo HTTP cache verify original bytes before use, and cached bytes are verified again when read. An unsupported algorithm produces a warning; malformed declarations, no usable supported hash among the declarations, and digest mismatches fail closed and prevent the resource from loading. Resources without integrity declarations load without hash verification.
 

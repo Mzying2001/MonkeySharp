@@ -360,7 +360,7 @@ attributes 是可选对象：textContent/innerHTML 设置内容，字符串 styl
 
 ### GM.getResourceText(name) / GM_getResourceText(name)
 
-需要资源家族授权和 `@resource name url`，内容由宿主在安装时准备。name 是非空、区分大小写的字符串。现代返回 `Promise<string>`：优先使用宿主解码文本，否则按声明 charset 解码，默认 UTF-8。旧版从完整启动资源快照立即返回字符串。未声明的资源导致拒绝；快照必须在用户源码启动前完整准备。
+需要资源家族授权和 `@resource name url`，内容由宿主在安装时准备。name 是非空、区分大小写的字符串。现代返回 `Promise<string>`：从原始字节按声明 charset 解码，默认 UTF-8，使用替换回退。旧版从完整启动资源快照立即返回字符串。未声明的资源导致拒绝；快照必须在用户源码启动前完整准备。
 
 ### GM.getResourceUrl(name) / GM_getResourceURL(name)
 

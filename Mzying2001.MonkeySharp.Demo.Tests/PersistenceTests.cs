@@ -86,7 +86,7 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
                 var first = await fixture.Repository.InstallAsync(Source, "first", true, CancellationToken.None);
                 var second = await fixture.Repository.InstallAsync(Source, "second", false, CancellationToken.None);
                 await fixture.Repository.UpdateAsync(first.ScriptKey, Source.Replace("sqlite", "changed"), "updated", CancellationToken.None);
-                var restored = new PersistentUserScriptRepository(fixture.Persistence);
+                var restored = new UserScriptRepository(fixture.Persistence);
                 await restored.InitializeAsync(CancellationToken.None);
                 var scripts = await restored.GetSnapshotAsync(CancellationToken.None);
                 Assert.Equal(new[] { first.ScriptKey, second.ScriptKey }, scripts.Select(item => item.ScriptKey));
@@ -109,7 +109,7 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
                     command.CommandText = "CREATE TRIGGER reject_update BEFORE UPDATE ON scripts BEGIN SELECT RAISE(ABORT, 'injected failure'); END;";
                     command.ExecuteNonQuery();
                 }
-                await Assert.ThrowsAsync<SqliteException>(() => fixture.Repository.UpdateAsync(installation.ScriptKey, Source.Replace("sqlite", "changed"), "new", CancellationToken.None));
+                await Assert.ThrowsAsync<UserScriptPersistenceException>(() => fixture.Repository.UpdateAsync(installation.ScriptKey, Source.Replace("sqlite", "changed"), "new", CancellationToken.None));
                 Assert.Equal(Source, File.ReadAllText(fixture.SourcePath(installation.ScriptKey.ToString())));
                 Assert.Equal("sqlite", (await fixture.Repository.GetAsync(installation.ScriptKey, CancellationToken.None)).Definition.Metadata.Name);
             }
@@ -122,27 +122,30 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
             {
                 var script = await fixture.Repository.InstallAsync(Source, "first", true, CancellationToken.None);
                 File.Delete(fixture.SourcePath(script.ScriptKey.ToString()));
-                var restored = new PersistentUserScriptRepository(fixture.Persistence);
+                var restored = new UserScriptRepository(fixture.Persistence);
                 await restored.InitializeAsync(CancellationToken.None);
                 var unavailable = Assert.Single(await restored.GetSnapshotAsync(CancellationToken.None));
-                Assert.False(unavailable.IsEnabled);
+                Assert.True(unavailable.IsEnabled);
+                Assert.False(unavailable.IsReady);
                 Assert.False(unavailable.Definition.ParseResult.CanEnable);
                 Assert.Contains(fixture.Messages, message => message.Contains("unavailable"));
             }
         }
 
         [Fact]
-        public async Task InterruptedFileReplacementRecoversDatabaseCommittedRevision()
+        public async Task ExternalFileWithoutMarkerIsAdoptedAndUnknownBackupIsPreserved()
         {
             using (var fixture = await Fixture.Create())
             {
                 var script = await fixture.Repository.InstallAsync(Source, "first", true, CancellationToken.None);
                 var path = fixture.SourcePath(script.ScriptKey.ToString());
-                File.Copy(path, path + ".bak");
-                File.WriteAllText(path, Source.Replace("sqlite", "uncommitted"));
-                var records = await fixture.Persistence.LoadAsync(CancellationToken.None);
-                Assert.Equal(Source, records[0].Source);
-                Assert.False(File.Exists(path + ".bak"));
+                File.Copy(path, path + ".backup");
+                var external = Source.Replace("sqlite", "external");
+                File.WriteAllText(path, external);
+                var loaded = await fixture.Persistence.LoadAsync(script.ScriptKey, CancellationToken.None);
+                Assert.Equal(external, loaded.Record.Source);
+                Assert.True(loaded.SourceChangedSinceSave);
+                Assert.True(File.Exists(path + ".backup"));
             }
         }
 
@@ -175,12 +178,8 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
                 var installation = await fixture.Repository.InstallAsync(Source, "origin", true, CancellationToken.None);
                 var path = fixture.SourcePath(installation.ScriptKey.ToString());
                 using (var held = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
-                    await Assert.ThrowsAsync<IOException>(() => fixture.Repository.RemoveAsync(installation.ScriptKey, CancellationToken.None));
+                    await Assert.ThrowsAsync<UserScriptPersistenceException>(() => fixture.Repository.RemoveAsync(installation.ScriptKey, CancellationToken.None));
                 Assert.Equal(installation.ScriptKey, Assert.Single(await fixture.Repository.GetSnapshotAsync(CancellationToken.None)).ScriptKey);
-                File.Move(path, path + ".deleted");
-                var records = await fixture.Persistence.LoadAsync(CancellationToken.None);
-                Assert.Equal(Source, Assert.Single(records).Source);
-                Assert.True(File.Exists(path));
                 await fixture.Repository.RemoveAsync(installation.ScriptKey, CancellationToken.None);
                 Assert.False(File.Exists(path));
             }
@@ -268,7 +267,8 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
         [Theory]
         [InlineData(0)]
         [InlineData(1)]
-        [InlineData(3)]
+        [InlineData(2)]
+        [InlineData(99)]
         public async Task UnsupportedDatabasesAreRejectedWithoutChangingTheFile(int version)
         {
             using (var fixture = await Fixture.Create())
@@ -296,7 +296,7 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
             public AppDataPaths Paths { get; private set; }
             public SqliteDatabase Database { get; private set; }
             public SqliteUserScriptRepositoryPersistence Persistence { get; private set; }
-            public PersistentUserScriptRepository Repository { get; private set; }
+            public UserScriptRepository Repository { get; private set; }
             public List<string> Messages { get; } = new List<string>();
             public static async Task<Fixture> Create()
             {
@@ -305,11 +305,11 @@ namespace Mzying2001.MonkeySharp.Demo.Tests
                 fixture.Database = new SqliteDatabase(fixture.Paths.DatabasePath);
                 await fixture.Database.InitializeAsync(CancellationToken.None);
                 fixture.Persistence = new SqliteUserScriptRepositoryPersistence(fixture.Database, fixture.Paths, fixture.Messages.Add);
-                fixture.Repository = new PersistentUserScriptRepository(fixture.Persistence);
+                fixture.Repository = new UserScriptRepository(fixture.Persistence);
                 await fixture.Repository.InitializeAsync(CancellationToken.None);
                 return fixture;
             }
-            public string SourcePath(string key) => Path.Combine(Paths.UserScriptsDirectory, key + ".user.js");
+            public string SourcePath(string key) => Path.Combine(Paths.UserScriptsDirectory, key, "userscript.js");
             public void Dispose()
             {
                 Database.Dispose();

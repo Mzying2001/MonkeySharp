@@ -80,7 +80,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         [Fact]
         public async Task BridgePinsSnapshotChunksAndRequestsFreshSnapshotForOversizedReplay()
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             var installation = await repository.InstallAsync(MetadataAndMatchingTests.Script(
                 "// @name atomic\n// @match https://example.com/*\n// @run-at document-end\n// @grant GM_getValue"), "test", true, CancellationToken.None);
             using (var store = new InMemoryUserScriptValueStore())

@@ -15,7 +15,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         [Fact]
         public async Task IsolatedNativeScopeSelectsOneInstallationAndRevisionWithoutPageFallback()
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             var first = await repository.InstallAsync(Source("DOM"), "first", true, CancellationToken.None);
             await repository.InstallAsync(Source("DOM"), "second", true, CancellationToken.None);
             using (var engine = new UserScriptEngine(repository, options: new UserScriptEngineOptions { SupportsIsolatedWorlds = true }))
@@ -43,7 +43,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         [InlineData("// @sandbox raw\n// @inject-into content")]
         public async Task IncompatibleRequirementsAreRejectedBeforeSourceRuns(string requirements)
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             await repository.InstallAsync(MetadataAndMatchingTests.Script("// @name rejected\n// @match https://example.com/*\n// @run-at document-end\n" + requirements), "test", true, CancellationToken.None);
             using (var engine = new UserScriptEngine(repository, options: new UserScriptEngineOptions { SupportsIsolatedWorlds = true }))
             {
@@ -58,7 +58,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         [Fact]
         public async Task GuaranteedStartPolicyDoesNotTreatIsolatedTransportRegistrationAsStrictTiming()
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             var script = await repository.InstallAsync(Source("DOM").Replace("document-end", "document-start"), "test", true, CancellationToken.None);
             using (var engine = new UserScriptEngine(repository, options: new UserScriptEngineOptions { SupportsIsolatedWorlds = true, RequireGuaranteedDocumentStart = true }))
                 Assert.Empty((await engine.ProcessLifecycleAsync(new DocumentLifecycleEventArgs(DocumentLifecycleKind.DocumentStart,

@@ -36,7 +36,7 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
             Update(parsed, sourceOrigin, null);
         }
 
-        public void Update(MetadataParseResult parsed, string sourceOrigin, string source)
+        public void Update(MetadataParseResult parsed, string sourceOrigin, string source, IEnumerable<UserScriptDiagnostic> installationDiagnostics = null)
         {
             if (parsed == null) throw new ArgumentNullException(nameof(parsed));
             var metadata = parsed.Metadata;
@@ -58,7 +58,9 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
             Requires = metadata == null ? Empty : ReadList(metadata.Requires.Select(item => item.Url));
             Resources = metadata == null ? Empty : ReadList(metadata.Resources.Select(item => item.Name + " = " + item.Url));
             Diagnostics = ReadList(parsed.Diagnostics.Select(item =>
-                item.Severity + " " + item.Code + (item.LineNumber > 0 ? " L" + item.LineNumber : string.Empty) + ": " + item.Message));
+                item.Severity + " " + item.Code + (item.LineNumber > 0 ? " L" + item.LineNumber : string.Empty) + ": " + item.Message)
+                .Concat((installationDiagnostics ?? Array.Empty<UserScriptDiagnostic>()).Where(item => !parsed.Diagnostics.Any(metadataDiagnostic => metadataDiagnostic.Code == item.Code))
+                    .Select(item => item.Severity + " " + item.Code + ": " + item.Message)));
             CompatibilityStatuses = BuildCompatibilityStatuses(metadata, source);
             OnPropertyChanged(string.Empty);
         }

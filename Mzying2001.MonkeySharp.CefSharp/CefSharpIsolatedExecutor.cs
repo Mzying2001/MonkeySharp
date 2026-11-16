@@ -254,7 +254,11 @@ namespace Mzying2001.MonkeySharp.CefSharp
         private void RepositoryChanged(object sender, UserScriptRepositoryChangedEventArgs args)
         {
             lock (_sync)
+            {
                 _repositoryEpoch++;
+                if (args.Kind == RepositoryChangeKind.Reloaded)
+                    foreach (var frame in _frames.Values) frame.StartedScripts.Add(args.Installation.ScriptKey);
+            }
             Track(RefreshAsync());
         }
 
@@ -263,7 +267,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             int epoch;
             lock (_sync) epoch = _repositoryEpoch;
             var scripts = await _repository.GetSnapshotAsync(_lifetime.Token).ConfigureAwait(false);
-            var eligible = scripts.Where(script => script.IsEnabled && UserScriptEngine.RequestedWorld(script.Definition.Metadata) == "isolated").ToArray();
+            var eligible = scripts.Where(script => script.CanExecute && UserScriptEngine.RequestedWorld(script.Definition.Metadata) == "isolated").ToArray();
             NativeFrame[] frames;
             lock (_sync)
             {
@@ -297,8 +301,9 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     World world;
                     lock (_sync)
                     {
-                        if (_disposed || _stopping || epoch != _repositoryEpoch || frame.Cancellation.IsCancellationRequested || frame.Worlds.ContainsKey(script.RevisionId)) continue;
+                        if (_disposed || _stopping || epoch != _repositoryEpoch || frame.Cancellation.IsCancellationRequested || frame.StartedScripts.Contains(script.ScriptKey)) continue;
                         world = new World(frame, script, _binding + "_" + script.ScriptKey + "_" + script.RevisionId.ToString("N"), _browserId, _session.Scope);
+                        frame.StartedScripts.Add(script.ScriptKey);
                         frame.Worlds.Add(script.RevisionId, world);
                         _requested[world.Name + "\n" + frame.Id] = world;
                         _documents.Add(world.Frame.DocumentId, world);
@@ -609,6 +614,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             internal Uri Url;
             internal readonly bool Main;
             internal readonly CancellationTokenSource Cancellation;
+            internal readonly HashSet<ScriptKey> StartedScripts = new HashSet<ScriptKey>();
             internal readonly Dictionary<Guid, World> Worlds = new Dictionary<Guid, World>();
         }
 

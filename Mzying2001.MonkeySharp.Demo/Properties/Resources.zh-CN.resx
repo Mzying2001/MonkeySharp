@@ -92,7 +92,7 @@
   <data name="DownloadFailed" xml:space="preserve"><value>失败</value></data>
   <data name="BrowserDownloadComplete" xml:space="preserve"><value>浏览器下载完成：{0}</value></data>
   <data name="TrustWarning" xml:space="preserve"><value>TrustedPageWorld 演示模式：网页可能观察并使用脚本已获授权的桥接能力。请勿运行不可信脚本或访问不可信网站；这不是安全沙箱。</value></data>
-  <data name="ScriptsChanged" xml:space="preserve"><value>脚本变更 {0}：已刷新打开的标签页。</value></data>
+  <data name="ScriptsChanged" xml:space="preserve"><value>脚本已变更（{0}）。</value></data>
   <data name="All" xml:space="preserve"><value>全部</value></data>
   <data name="Enabled" xml:space="preserve"><value>已启用</value></data>
   <data name="Disabled" xml:space="preserve"><value>已停用</value></data>
@@ -177,4 +177,11 @@ Resource：{10}
   <data name="EditorCopy" xml:space="preserve"><value>复制</value></data>
   <data name="EditorPaste" xml:space="preserve"><value>粘贴</value></data>
   <data name="EditorSelectAll" xml:space="preserve"><value>全选</value></data>
+  <data name="ReloadSource" xml:space="preserve"><value>从文件重载</value></data>
+  <data name="RefreshAssets" xml:space="preserve"><value>更新依赖与资源</value></data>
+  <data name="SourceReloaded" xml:space="preserve"><value>源码已重载，导航或刷新页面后执行此版本。</value></data>
+  <data name="ReloadUnavailable" xml:space="preserve"><value>重载的源码当前不可用，请查看诊断；文件已保留。</value></data>
+  <data name="AssetsRefreshed" xml:space="preserve"><value>依赖与资源已更新。</value></data>
+  <data name="SourceSaveConflict" xml:space="preserve"><value>脚本已发生变化，草稿已保留；请重载后再保存。</value></data>
+  <data name="UnavailableWithIntent" xml:space="preserve"><value>{0} · 不可用</value></data>
 </root>

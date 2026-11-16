@@ -27,7 +27,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         [Fact]
         public async Task CheckReportsNotConfiguredAndDisabledWithoutFetching()
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             var withoutVersion = await InstallAsync(repository, "// @name no version\n// @namespace tests");
             var fetcher = new FakeUpdateFetcher();
             var service = new UserScriptUpdateService(repository, fetcher);
@@ -45,7 +45,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         [Fact]
         public async Task CheckUsesUpdateUrlAndApplyDownloadsThenAtomicallyReplacesInstallation()
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             var current = await InstallAsync(repository,
                 "// @name same\n// @namespace https://scripts.example/id\n// @version 1.0\n" +
                 "// @updateURL https://updates.example/check.user.js\n// @downloadURL https://cdn.example/download.user.js",
@@ -71,7 +71,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         [Fact]
         public async Task CheckFallsBackToDownloadUrlAndReportsUpToDate()
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             var current = await InstallAsync(repository,
                 "// @name same\n// @namespace tests\n// @version 2\n// @downloadURL https://scripts.example/script.user.js");
             var fetcher = new FakeUpdateFetcher(
@@ -88,7 +88,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         [Fact]
         public async Task ApplyRejectsIdentityMismatchAndKeepsInstalledSource()
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             var current = await InstallAsync(repository,
                 "// @name same\n// @namespace tests\n// @version 1\n// @downloadURL https://scripts.example/script.user.js");
             var originalSource = current.Definition.Source;
@@ -105,7 +105,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         [Fact]
         public async Task ApplyRejectsDownloadOlderThanCheckSourceWithoutReplacingOldScript()
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             var current = await InstallAsync(repository,
                 "// @name same\n// @namespace tests\n// @version 1\n" +
                 "// @updateURL https://updates.example/check.user.js\n// @downloadURL https://cdn.example/download.user.js");
@@ -124,7 +124,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         [Fact]
         public async Task ApplyRejectsExpiredOrChangedCheckResult()
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             var current = await InstallAsync(repository,
                 "// @name same\n// @namespace tests\n// @version 1\n// @downloadURL https://scripts.example/script.user.js");
             var clock = new MutableClock(DateTimeOffset.UtcNow);
@@ -147,7 +147,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         [Fact]
         public async Task DownloadedVersionMustBeNewerAndInvalidSourcesDoNotMutateRepository()
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             var current = await InstallAsync(repository,
                 "// @name same\n// @namespace tests\n// @version 2\n// @updateURL https://updates.example/check.user.js\n// @downloadURL https://cdn.example/download.user.js");
             var fetcher = new FakeUpdateFetcher(
@@ -161,8 +161,25 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             Assert.Equal(current.Definition.Source, (await repository.GetAsync(current.ScriptKey, CancellationToken.None)).Definition.Source);
         }
 
+        [Fact]
+        public async Task ExternalSourceConflictExpiresUpdateCandidateAndPreservesCurrentSnapshot()
+        {
+            var storage = new PersistentRepositoryTests.Storage();
+            var repository = new UserScriptRepository(storage);
+            await repository.InitializeAsync(CancellationToken.None);
+            var current = await InstallAsync(repository, "// @name same\n// @namespace tests\n// @version 1\n// @updateURL https://updates.example/check.user.js\n// @downloadURL https://cdn.example/download.user.js");
+            var fetcher = new FakeUpdateFetcher(Pair("https://updates.example/check.user.js", Script("2", "check")), Pair("https://cdn.example/download.user.js", Script("2", "download")));
+            var updates = new UserScriptUpdateService(repository, fetcher);
+            var candidate = await updates.CheckAsync(current.ScriptKey, CancellationToken.None);
+            await storage.Change(current.ScriptKey, current.Definition.Source + "external();");
+            var error = await Assert.ThrowsAsync<UserScriptUpdateException>(() => updates.ApplyAsync(candidate, CancellationToken.None));
+            Assert.Equal("MSU005_STALE_CHECK", error.Code);
+            Assert.IsType<UserScriptSourceConflictException>(error.InnerException);
+            Assert.Same(current, await repository.GetAsync(current.ScriptKey, CancellationToken.None));
+        }
+
         private static Task<UserScriptInstallation> InstallAsync(
-            InMemoryUserScriptRepository repository,
+            UserScriptRepository repository,
             string extraMetadata,
             bool enabled = true)
         {

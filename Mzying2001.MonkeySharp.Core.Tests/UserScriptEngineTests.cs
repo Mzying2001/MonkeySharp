@@ -16,7 +16,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         [Fact]
         public async Task DuplicateAntifeaturesDoNotInterruptInjectionOrOtherScripts()
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             await repository.InstallAsync(MetadataAndMatchingTests.Script("// @name disclosures\n// @match https://example.com/*\n// @grant none\n// @run-at document-end\n" +
                 "// @antifeature tracking first\n// @antifeature tracking second\n// @antifeature:en-US tracking English\n// @antifeature:EN-us tracking ignored"), "test", true, CancellationToken.None);
             await repository.InstallAsync(Script("document-end"), "test", true, CancellationToken.None);
@@ -32,7 +32,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         [Fact]
         public async Task ARunAtExecutesOnlyOncePerDocumentAndScript()
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             await repository.InstallAsync(Script("document-start"), "test", true, CancellationToken.None);
             using (var engine = new UserScriptEngine(repository))
             {
@@ -51,7 +51,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         [Fact]
         public async Task ContextMenuEntriesAreFilteredAndEachSelectionCreatesANewExecution()
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             var installation = await repository.InstallAsync(
                 MetadataAndMatchingTests.Script(
                     "// @name context action\n// @match https://example.com/*\n// @grant none\n// @run-at context-menu"),
@@ -74,7 +74,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         [Fact]
         public async Task ContextMenuHonorsNoFrames()
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             var installation = await repository.InstallAsync(
                 MetadataAndMatchingTests.Script(
                     "// @name context main\n// @match https://example.com/*\n// @noframes\n// @grant none\n// @run-at context-menu"),
@@ -90,7 +90,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         [Fact]
         public async Task AboutBlankMatchProducesAnInjectionPlanOncePerDocument()
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             await repository.InstallAsync(
                 MetadataAndMatchingTests.Script(
                     "// @name about blank\n// @match about:blank\n// @grant none\n// @run-at document-start",
@@ -112,7 +112,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         [Fact]
         public async Task NoFramesSkipsChildFrame()
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             var source = MetadataAndMatchingTests.Script(
                 "// @name noframes\n// @match https://example.com/*\n// @noframes\n// @run-at document-end");
             await repository.InstallAsync(source, "test", true, CancellationToken.None);
@@ -129,7 +129,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         [Fact]
         public async Task BestEffortDocumentStartProducesDiagnostic()
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             await repository.InstallAsync(Script("document-start"), "test", true, CancellationToken.None);
             using (var engine = new UserScriptEngine(repository))
             {
@@ -147,7 +147,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         [Fact]
         public async Task RequiredGuaranteedStartSkipsBestEffortHost()
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             await repository.InstallAsync(Script("document-start"), "test", true, CancellationToken.None);
             using (var engine = new UserScriptEngine(
                 repository,
@@ -164,7 +164,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         [Fact]
         public async Task UnavailableWorldDoesNotFallBackToPageExecution()
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             await repository.InstallAsync(
                 MetadataAndMatchingTests.Script(
                     "// @name worlds\n// @match https://example.com/*\n// @grant none\n" +
@@ -186,7 +186,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         [Fact]
         public async Task InvocationContainsTampermonkeyInfoSnapshot()
         {
-            var repository = new InMemoryUserScriptRepository(preparer: new UserScriptPreparer(resources: new PreparedScriptRevisionTests.Content()));
+            var repository = TestRepository.Create(preparer: new UserScriptPreparer(resources: new PreparedScriptRevisionTests.Content()));
             await repository.InstallAsync(
                 MetadataAndMatchingTests.Script(
                     "// @name info\n// @namespace tests\n// @version 1.2.3\n" +
@@ -224,7 +224,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         [Fact]
         public async Task UnsupportedUnwrapRejectsExecutionInsteadOfKeepingAWrapper()
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             await repository.InstallAsync(
                 MetadataAndMatchingTests.Script(
                     "// @name isolation\n// @match https://example.com/*\n// @grant none\n" +
@@ -255,7 +255,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         public async Task DefaultBridgePolicyAllowsInfoButStillSuppressesPrivilegedGrants(
             string grantLines, bool requiresBridge)
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             var installation = await repository.InstallAsync(
                 MetadataAndMatchingTests.Script(
                     "// @name info policy\n// @match https://example.com/*\n" + grantLines +
@@ -290,7 +290,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         [InlineData("browser", true, true)]
         public async Task InfoUsesTheManagerVersionAndActualHostEnvironment(string mode, bool privateContext, bool updates)
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             await repository.InstallAsync(MetadataAndMatchingTests.Script(
                 "// @name environment\n// @version 1.2.3\n// @match https://example.com/*\n// @run-at document-end"), "test", true, CancellationToken.None);
             using (var engine = new UserScriptEngine(repository, options: new UserScriptEngineOptions

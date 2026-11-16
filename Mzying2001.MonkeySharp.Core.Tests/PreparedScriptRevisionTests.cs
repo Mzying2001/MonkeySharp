@@ -49,10 +49,10 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         public async Task RepeatedFramesUseOneImmutablePreparedRevisionAndOriginalBytes()
         {
             var content = new Content();
-            var repository = new InMemoryUserScriptRepository(preparer: new UserScriptPreparer(content, content));
+            var repository = TestRepository.Create(preparer: new UserScriptPreparer(content, content));
             var script = await repository.InstallAsync(Source("// @require https://cdn.example/one.js\n// @require https://cdn.example/two.js\n// @resource binary https://cdn.example/binary"), "test", true, CancellationToken.None);
             Assert.Equal(3, content.Calls);
-            Assert.Contains("comment\n;\n// @require https://cdn.example/two.js\n// é\nshared++\n;\n", script.PreparedRevision.Source);
+            Assert.Contains("comment\n;\n// @require https://cdn.example/two.js\n// \u00e9\nshared++\n;\n", script.PreparedRevision.Source);
             var bytes = script.PreparedRevision.Resources["binary"].Bytes;
             bytes[1] = 0;
             Assert.Equal(255, script.PreparedRevision.Resources["binary"].Bytes[1]);
@@ -76,16 +76,16 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         public async Task FailedPreparationDoesNotInstallOrReplacePreviousRevision()
         {
             var content = new Content();
-            var repository = new InMemoryUserScriptRepository(preparer: new UserScriptPreparer(content, content));
+            var repository = TestRepository.Create(preparer: new UserScriptPreparer(content, content));
             var original = await repository.InstallAsync(Source(), "old", true, CancellationToken.None);
             var bad = Source("// @resource binary https://cdn.example/binary#sha256=" + new string('0', 64));
             await Assert.ThrowsAsync<ResourceIntegrityException>(() => repository.UpdateAsync(original.ScriptKey, bad, "new", CancellationToken.None));
             Assert.Same(original, await repository.GetAsync(original.ScriptKey, CancellationToken.None));
             await Assert.ThrowsAsync<ResourceIntegrityException>(() => repository.InstallAsync(bad, "new", true, CancellationToken.None));
             Assert.Single(await repository.GetSnapshotAsync(CancellationToken.None));
-            var limited = new InMemoryUserScriptRepository(preparer: new UserScriptPreparer(content, content, 1));
-            await Assert.ThrowsAsync<InvalidOperationException>(() => limited.InstallAsync(Source("// @require https://cdn.example/one.js"), "test", true, CancellationToken.None));
-            await Assert.ThrowsAsync<InvalidOperationException>(() => new InMemoryUserScriptRepository().InstallAsync(
+            var limited = TestRepository.Create(preparer: new UserScriptPreparer(content, content, 1));
+            await Assert.ThrowsAnyAsync<InvalidOperationException>(() => limited.InstallAsync(Source("// @require https://cdn.example/one.js"), "test", true, CancellationToken.None));
+            await Assert.ThrowsAnyAsync<InvalidOperationException>(() => TestRepository.Create().InstallAsync(
                 Source("// @require https://cdn.example/one.js"), "test", true, CancellationToken.None));
         }
 
@@ -93,15 +93,16 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         public async Task PendingUpdateKeepsOldSnapshotAndRejectsConcurrentEdit()
         {
             var content = new Content();
-            var repository = new InMemoryUserScriptRepository(preparer: new UserScriptPreparer(content, content));
+            var repository = TestRepository.Create(preparer: new UserScriptPreparer(content, content));
             var original = await repository.InstallAsync(Source(), "old", true, CancellationToken.None);
             content.Waiting = new TaskCompletionSource<bool>();
             var pending = repository.UpdateAsync(original.ScriptKey, Source("// @require https://cdn.example/one.js"), "new", CancellationToken.None);
             Assert.Same(original, Assert.Single(await repository.GetSnapshotAsync(CancellationToken.None)));
-            var edited = await repository.UpdateAsync(original.ScriptKey, Source(body: "edited();"), "edited", CancellationToken.None);
+            var edited = repository.UpdateIfUnchangedAsync(original.ScriptKey, original.RevisionId, Source(body: "edited();"), "edited", CancellationToken.None);
             content.Waiting.SetResult(true);
-            await Assert.ThrowsAsync<RepositoryRevisionMismatchException>(() => pending);
-            Assert.Same(edited, await repository.GetAsync(original.ScriptKey, CancellationToken.None));
+            var updated = await pending;
+            await Assert.ThrowsAsync<RepositoryRevisionMismatchException>(() => edited);
+            Assert.Same(updated, await repository.GetAsync(original.ScriptKey, CancellationToken.None));
         }
 
         [Theory]

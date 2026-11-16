@@ -23,7 +23,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         [Fact]
         public async Task GatewayDownloadRetainsAuthenticatedFrameForSharedWebRequestRules()
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             await repository.InstallAsync(MetadataAndMatchingTests.Script("// @name download rules\n// @match https://example.com/*\n// @run-at document-end\n// @grant GM.download\n// @webRequest {\"selector\":\"*example.com*\",\"action\":\"cancel\"}"), "test", true, CancellationToken.None);
             using var engine = new UserScriptEngine(repository);
             using var store = new InMemoryUserScriptValueStore();

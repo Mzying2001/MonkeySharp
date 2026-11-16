@@ -24,7 +24,8 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             using (var store = new InMemoryUserScriptValueStore())
             {
                 var start = fixture.Start();
-                var repository = new InMemoryUserScriptRepository(preparer: new UserScriptPreparer(resources: new ProbeResources()));
+                var repository = new UserScriptRepository(new InMemoryUserScriptPersistence(), preparer: new UserScriptPreparer(resources: new ProbeResources()));
+                await repository.InitializeAsync(CancellationToken.None);
                 var script = await repository.InstallAsync("// ==UserScript==\n// @name GM first inline probe\n// @match http://127.0.0.1/*\n// @run-at document-start\n// @grant GM_getValue\n// @grant GM_getResourceText\n// @grant GM.xmlHttpRequest\n// @resource text " + start + "\n// @connect 127.0.0.1\n// ==/UserScript==\n" +
                     "document.documentElement.dataset.gmStart = GM_getValue('ready') + ':' + GM_getResourceText('text');\n" +
                     "GM.xmlHttpRequest({url:location.origin+'/xhr'}).then(function(r){document.documentElement.dataset.gmXhr=r.responseText;});", "probe://timing", true, CancellationToken.None);
@@ -39,7 +40,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
         private sealed class ProbeResources : IResourceProvider
         {
             public Task<ResourceContent> GetAsync(UserScriptInstallation installation, ResourceDeclaration resource, CancellationToken cancellationToken)
-                => Task.FromResult(new ResourceContent(Encoding.UTF8.GetBytes("resource"), "text/plain", "resource"));
+                => Task.FromResult(new ResourceContent(Encoding.UTF8.GetBytes("resource"), "text/plain"));
         }
 
         private sealed class ProbeForm : Form

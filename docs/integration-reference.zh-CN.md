@@ -16,7 +16,7 @@
 
 ## 附加与导航
 
-创建浏览器控件前只初始化一次 CefSharp。持久化仓库须先完成初始化，再构建宿主；已有浏览器处理器须按[最小集成示例](../README.zh-CN.md#已有的浏览器处理器)组合，然后在控件加入 UI 前附加宿主。宿主与浏览器应保持相同的使用生命周期。
+创建浏览器控件前只初始化一次 CefSharp。所有仓库（包括内存存储）须先完成初始化，再构建宿主；已有浏览器处理器须按[最小集成示例](../README.zh-CN.md#已有的浏览器处理器)组合，然后在控件加入 UI 前附加宿主。宿主与浏览器应保持相同的使用生命周期。
 
 需要准备后导航或静态 `@webRequest` 规则时，以 `about:blank` 创建浏览器。在 UI 线程的异步方法中，构建好 `host` 后：
 
@@ -71,16 +71,28 @@ var host = new CefSharpUserScriptHostBuilder(repository)
 
 ### 持久化安装
 
-需要持久化安装时，将前述示例中的内存仓库替换为 `PersistentUserScriptRepository`，并由应用程序提供和管理 `IUserScriptRepositoryPersistence`。在使用仓库或附加宿主前完成初始化：
+需要持久化安装时，为同一个 `UserScriptRepository` 注入应用程序提供和管理的 `IUserScriptPersistence`。在使用仓库或附加宿主前完成初始化：
 
 ```csharp
 using System.Threading;
 
-var repository = new PersistentUserScriptRepository(persistence, parser);
+var repository = new UserScriptRepository(persistence, parser);
 await repository.InitializeAsync(CancellationToken.None);
 ```
 
-持久化实现必须保留 `ScriptKey`、安装顺序及时间戳，并原子提交变更。提交成功后即使收到取消也应成功完成；仓库变更通知在提交后发出。稳定的键用于维持脚本与 GM 存储的关联。实现示例见 [SqliteUserScriptRepositoryPersistence](../Mzying2001.MonkeySharp.Demo/Persistence/SqliteUserScriptRepositoryPersistence.cs)、[SqliteUserScriptValueStore](../Mzying2001.MonkeySharp.Demo/Persistence/SqliteUserScriptValueStore.cs)及其 [DemoRuntime 初始化](../Mzying2001.MonkeySharp.Demo/Runtime/DemoRuntime.cs)。[Demo 数据与恢复指南](../Mzying2001.MonkeySharp.Demo/README.zh-CN.md#便携数据与恢复)说明配置目录的操作和恢复。
+`IUserScriptPersistence` 包含五个操作：`LoadAllAsync`、`LoadAsync(key)`、`SaveAsync(request)`、`SetEnabledAsync` 和 `DeleteAsync`。加载通过 `UserScriptLoadResult` 返回类型化安装记录、源码版本和诊断；记录携带源码、来源、启用意图、时间及有序 `UserScriptAsset`（`Kind`、`Ordinal`、`Name`、`Url`、`Content`）。加载时源码或内容可为 null，保存必须提供经过验证的源码和完整声明资产。宿主自行选择文件、数据库或内存布局，不交换 prepared JSON。
+
+保存须保留稳定 `ScriptKey`、安装顺序及 `InstalledAt`，源码、元数据和全部资产关联作为一个可见单位提交。新安装使用 null 预期版本，不能覆盖已有安装或未注册文件。更新比较实际读取对应的不透明 `SourceVersion`；字节改变、文件出现或消失都须改变版本。缺文件有可靠的宿主定义版本，不可读文件或未解决恢复冲突使用 null 版本，暂不能条件修复。`SourceChangedSinceSave` 表示外部编辑，不是拒绝加载的理由。
+
+`UserScriptSaveRequest` 包含完整记录、`ExpectedSourceVersion` 与 `SourceWriteMode`。`Replace` 用于安装或确认编辑；`Preserve` 检查源码相等，保持字节、BOM、换行和修改时间。两种模式提交前均核对版本，成功返回提交版本。`UserScriptSourceConflictException` 表示外部源码冲突，`UserScriptPersistenceException` 表示单安装读写、恢复或提交失败；全局目录或数据库故障直接失败。删除幂等，并清除该安装的 GM 值、权限和临时标签状态，保留共享资产。
+
+一个存储实例只配一个仓库写者。变更与重载串行执行准备、提交和快照发布；下载期间读者继续使用旧不可变快照，不在存储事务中联网。提交后的取消和事件处理器异常不回滚已保存结果。初始化不开放半完成仓库，也不逐条发送安装事件。
+
+编辑器使用 `UpdateIfUnchangedAsync(key, revisionId, source, origin, token)`；仓库结合草稿修订和已观测源码版本检查冲突，两类冲突均应保留草稿。`ReloadAsync(key, token)` 采纳当前外部源码；`RefreshAssetsAsync(key, revisionId, token)` 独立强制获取全部资产。普通编辑优先复用合格旧资产。重载失败发布不可用安装并撤销旧执行，不还原用户文件；`Reloaded` 只是状态通知，不要求在现有文档重复运行。完全相同的重载保留修订 ID 与时间。
+
+`IsEnabled` 是持久化启用意图，`IsReady` 表示完整准备，`CanExecute` 同时要求两者；所有执行入口先检查后者，再访问 metadata 或准备规则。禁用安装启动仅用缓存，主动重载仍可下载。启用未就绪安装先保存意图，再准备已观测源码；后续失败或取消返回已启用但不可用的状态和诊断。已经开始的重载被取消时，先发布不可用状态，再按取消结束。缓存缺失可重新获取，须满足当前声明完整性；无声明摘要时允许采用远端新内容。
+
+局部仓库诊断使用 `MSR420_SOURCE_UNAVAILABLE`、`MSR421_ASSET_UNAVAILABLE`、`MSR422_SOURCE_CHANGED`、`MSR423_PERSISTENCE_FAILED`、`MSR424_RECOVERY_CONFLICT`、`MSR425_ASSET_FETCH_FAILED` 和 `MSR426_PREPARATION_CANCELLED`，携带脚本键，不设置页面或 frame。成功恢复后清除过时的不可用原因。实现示例见 [Demo 持久化](../Mzying2001.MonkeySharp.Demo/Persistence/SqliteUserScriptRepositoryPersistence.cs)及[数据与恢复指南](../Mzying2001.MonkeySharp.Demo/README.zh-CN.md#便携数据与恢复)。4.0 不提供旧 API 或数据库兼容迁移层。
 
 ### 值存储与权限提供程序
 
@@ -120,9 +132,10 @@ await repository.InitializeAsync(CancellationToken.None);
 
 ## 资源完整性与更新检查
 
-安装前通过 `new InMemoryUserScriptRepository(preparer: new UserScriptPreparer(dependencyProvider, resourceProvider))` 配置内容服务，持久化仓库接受相同的 preparer。安装、编辑和更新会先完整准备，再原子发布；失败保留原版本。所有 frame 消费捕获的不可变版本，执行时不再调用内容提供程序。依赖共享作用域并保留指令/严格模式语义，段间加入换行和分号。
+安装前通过 `new UserScriptRepository(persistence, preparer: new UserScriptPreparer(dependencyProvider, resourceProvider))` 配置内容服务。安装、编辑和更新会先完整准备，再原子发布；失败保留原版本。所有 frame 消费捕获的不可变版本，执行时不再调用内容提供程序。依赖共享作用域并保留指令/严格模式语义，段间加入换行和分号。
 
-`ResourceContent` 保留原始字节、MIME、可选 charset 及宿主解码文本。宿主文本优先，否则按 charset 解码，默认 UTF-8；二进制 data URL 使用原始字节。Demo 将准备内容与脚本原子持久化，重载时验证内容摘要，并为格式 2 数据库添加表而不删除数据。已有记录在初始化时一次性准备；内容不可用会明确中止初始化并保留数据库。安装内容服务的可信网络政策与 GM 请求授权分别处理。
+`ResourceContent` 保留原始字节、MIME 和可选 charset。文本按 charset 派生，默认 UTF-8；依赖严格解码，资源使用替换回退，两者只移除一个开头 U+FEFF，不改变换行；二进制 data URL 使用原始字节。
+
 
 默认安装源码/内容总预算为 32 MiB；序列化资源包预算为 64 MiB，必要时按索引分块传输。用户代码只在完整重组后启动，缺块、重复索引或截断都会失败。详见 [资源与存储证据](compatibility/README.md#storage-and-resources)。
 

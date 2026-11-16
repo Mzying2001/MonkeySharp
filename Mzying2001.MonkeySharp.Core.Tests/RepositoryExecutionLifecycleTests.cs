@@ -23,7 +23,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         [InlineData("update")]
         public async Task RepositoryChangesRevokeOldExecutionsWithoutAnotherBridgeCall(string change)
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             var installation = await repository.InstallAsync(Source("changed"), "test", true, CancellationToken.None);
             var other = await repository.InstallAsync(Source("other"), "test", true, CancellationToken.None);
             using var engine = new UserScriptEngine(repository);
@@ -60,7 +60,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         [Fact]
         public async Task DisableMutesAcceptedDownloadWithoutCancelingItsTransfer()
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             var script = await repository.InstallAsync(Source("download"), "test", true, CancellationToken.None);
             using var engine = new UserScriptEngine(repository);
             using var store = new InMemoryUserScriptValueStore();
@@ -88,7 +88,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         [InlineData("remove")]
         public async Task AcceptedDownloadRedirectsUseCapturedInstallationAndStillApplyTargetPolicy(string change)
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             var script = await repository.InstallAsync(Source("captured"), "test", true, CancellationToken.None);
             using var engine = new UserScriptEngine(repository);
             using var store = new InMemoryUserScriptValueStore();
@@ -122,7 +122,7 @@ namespace Mzying2001.MonkeySharp.Core.Tests
         [Fact]
         public async Task RepositoryCallbackDoesNotBlockOnTheEngineQueueAndCanBeDisposedWhileQueued()
         {
-            var repository = new InMemoryUserScriptRepository();
+            var repository = TestRepository.Create();
             var script = await repository.InstallAsync(Source("queued"), "test", true, CancellationToken.None);
             using var engine = new UserScriptEngine(repository);
             var queue = (SemaphoreSlim)typeof(UserScriptEngine).GetField("_queue", BindingFlags.Instance | BindingFlags.NonPublic).GetValue(engine);

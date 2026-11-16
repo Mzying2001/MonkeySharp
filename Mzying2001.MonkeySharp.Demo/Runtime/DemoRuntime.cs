@@ -39,7 +39,7 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
         }
 
         public AppDataPaths Paths { get; }
-        public PersistentUserScriptRepository Repository { get; private set; }
+        public UserScriptRepository Repository { get; private set; }
         public HttpContentService Content { get; private set; }
         public UserScriptUpdateService Updates { get; private set; }
         public MainWindowViewModel MainWindow { get; private set; }
@@ -71,10 +71,12 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
             _database = new SqliteDatabase(Paths.DatabasePath);
             await _database.InitializeAsync(CancellationToken.None);
             var diagnostics = new DiagnosticsViewModel(_dispatcher, Paths.LogsDirectory);
-            Content = new HttpContentService(Paths);
-            Repository = new PersistentUserScriptRepository(new SqliteUserScriptRepositoryPersistence(_database, Paths, diagnostics.Report),
+            Content = new HttpContentService();
+            var persistence = new SqliteUserScriptRepositoryPersistence(_database, Paths, diagnostics.Report);
+            Repository = new UserScriptRepository(persistence,
                 preparer: new UserScriptPreparer(Content, Content));
             await Repository.InitializeAsync(CancellationToken.None);
+            await persistence.CollectAsync(CancellationToken.None);
             _values = new SqliteUserScriptValueStore(_database);
             _tabStates = new SqliteTabStateService(_database);
             Updates = new UserScriptUpdateService(Repository, Content);
@@ -185,7 +187,7 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
             if (_disposed || _dispatcher.HasShutdownStarted) return;
             _dispatcher.BeginInvoke(new Action(() =>
             {
-                ReloadTabs();
+                if (args.Kind != RepositoryChangeKind.Reloaded) ReloadTabs();
                 MainWindow.Diagnostics.Report(Strings.Format("ScriptsChanged", args.Kind));
             }));
         }

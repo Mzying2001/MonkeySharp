@@ -1,4 +1,4 @@
-﻿using Mzying2001.MonkeySharp.Core.Domain;
+using Mzying2001.MonkeySharp.Core.Domain;
 using Mzying2001.MonkeySharp.Core.Apis;
 using Mzying2001.MonkeySharp.Core.Security;
 using Mzying2001.MonkeySharp.Core.Compatibility;
@@ -73,7 +73,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                     lock (_stateLock)
                     {
                         foreach (var execution in _executions.Values.Where(item => item.Installation.ScriptKey == key &&
-                            (current == null || !current.IsEnabled || current.RevisionId != item.Installation.RevisionId)).ToArray())
+                            (current == null || !current.CanExecute || current.RevisionId != item.Installation.RevisionId)).ToArray())
                         {
                             _executions.Remove(execution.Invocation.ExecutionId);
                             if (_documents.TryGetValue(execution.Frame.DocumentId, out var document))
@@ -146,7 +146,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                 ThrowIfDisposed();
                 var installations = await _repository.GetSnapshotAsync(cancellationToken).ConfigureAwait(false);
                 var entries = installations
-                    .Where(item => item.IsEnabled && item.Definition.Metadata != null &&
+                    .Where(item => item.CanExecute && item.Definition.Metadata != null &&
                         item.Definition.Metadata.RunAt == UserScriptRunAt.ContextMenu &&
                         (frame.IsMainFrame || !item.Definition.Metadata.NoFrames) &&
                         Matches(item, frame, true, diagnostics))
@@ -179,7 +179,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
                 ThrowIfDisposed();
                 var installations = await _repository.GetSnapshotAsync(cancellationToken).ConfigureAwait(false);
                 var installation = installations.FirstOrDefault(item => item.ScriptKey == scriptKey);
-                if (installation == null || !installation.IsEnabled || installation.Definition.Metadata == null)
+                if (installation == null || !installation.CanExecute || installation.Definition.Metadata == null)
                     return EmptyPlan(frame, UserScriptRunAt.ContextMenu);
                 var metadata = installation.Definition.Metadata;
                 if (metadata.RunAt != UserScriptRunAt.ContextMenu ||
@@ -298,7 +298,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
             try
             {
                 var current = await _repository.GetAsync(installation.ScriptKey, token).ConfigureAwait(false);
-                return current.IsEnabled && current.RevisionId == installation.RevisionId;
+                return current.CanExecute && current.RevisionId == installation.RevisionId;
             }
             catch (KeyNotFoundException) { return false; }
         }
@@ -354,8 +354,9 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
             foreach (var installation in installations)
             {
                 cancellationToken.ThrowIfCancellationRequested();
+                if (!installation.CanExecute) continue;
                 var metadata = installation.Definition.Metadata;
-                if (!installation.IsEnabled || metadata.RunAt != runAt ||
+                if (metadata.RunAt != runAt ||
                     (!frame.IsMainFrame && metadata.NoFrames) ||
                     !Matches(installation, frame, metadata.RunAt == UserScriptRunAt.ContextMenu, diagnostics))
                     continue;

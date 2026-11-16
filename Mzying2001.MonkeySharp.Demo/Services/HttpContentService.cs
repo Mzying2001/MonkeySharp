@@ -1,6 +1,5 @@
 using Mzying2001.MonkeySharp.Core.Apis;
 using Mzying2001.MonkeySharp.Core.Domain;
-using Mzying2001.MonkeySharp.Core.Security;
 using Mzying2001.MonkeySharp.Core.Updates;
 using Mzying2001.MonkeySharp.Demo.Persistence;
 using System;
@@ -8,7 +7,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Net.Http;
 using System.Text;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -16,16 +14,12 @@ namespace Mzying2001.MonkeySharp.Demo.Services
 {
     public sealed class HttpContentService : IResourceProvider, IUserScriptDependencyProvider, IUserScriptUpdateFetcher, IDisposable
     {
-        private readonly HttpClient _client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false })
+        private readonly HttpClient _client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false, AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate })
         { Timeout = Timeout.InfiniteTimeSpan };
-        private readonly string _directory;
-        private readonly SemaphoreSlim _cacheGate = new SemaphoreSlim(1, 1);
-        public HttpContentService(AppDataPaths paths) { _directory = paths.DependenciesDirectory; }
-
         public Task<ResourceContent> GetAsync(UserScriptInstallation installation, ResourceDeclaration resource, CancellationToken cancellationToken)
-            => CachedAsync(installation, resource.Url, resource.Integrity, cancellationToken);
+            => FetchAsync(resource.Url, cancellationToken);
         public Task<ResourceContent> GetScriptAsync(UserScriptInstallation installation, UserScriptDependencyDeclaration dependency, CancellationToken cancellationToken)
-            => CachedAsync(installation, dependency.Url, dependency.Integrity, cancellationToken);
+            => FetchAsync(dependency.Url, cancellationToken);
 
         public async Task<ResourceContent> FetchAsync(string url, CancellationToken cancellationToken)
         {
@@ -48,9 +42,8 @@ namespace Mzying2001.MonkeySharp.Demo.Services
                     }
                     var bytes = output.ToArray();
                     var charset = response.Content.Headers.ContentType?.CharSet?.Trim('"');
-                    var encoding = string.IsNullOrWhiteSpace(charset) ? Encoding.UTF8 : Encoding.GetEncoding(charset);
                     return new ResourceContent(bytes, response.Content.Headers.ContentType?.MediaType,
-                        encoding.GetString(bytes).TrimStart('\uFEFF'), charset);
+                        charset);
                 }
             }
         }
@@ -60,52 +53,8 @@ namespace Mzying2001.MonkeySharp.Demo.Services
             string url,
             CancellationToken cancellationToken)
         {
-            return (await FetchAsync(url, cancellationToken).ConfigureAwait(false)).Text;
-        }
-
-        private async Task<ResourceContent> CachedAsync(
-            UserScriptInstallation installation,
-            string url,
-            IReadOnlyList<ResourceIntegrityDeclaration> integrity,
-            CancellationToken cancellationToken)
-        {
-            RequireHttp(url);
-            var cacheKey = installation.ScriptKey + ":" + installation.RevisionId.ToString("N") + ":" + url;
-            var path = Path.Combine(_directory, ContentHash.Sha256(Encoding.UTF8.GetBytes(cacheKey)) + ".json");
-            await _cacheGate.WaitAsync(cancellationToken).ConfigureAwait(false);
-            try
-            {
-                if (File.Exists(path))
-                {
-                    try
-                    {
-                        using (var document = JsonDocument.Parse(File.ReadAllText(path)))
-                        {
-                            var root = document.RootElement;
-                            var cached = new ResourceContent(Convert.FromBase64String(root.GetProperty("bytes").GetString()),
-                                root.GetProperty("mime").GetString(), root.GetProperty("text").GetString(), root.TryGetProperty("charset", out var charset) ? charset.GetString() : null);
-                            ResourceIntegrityVerifier.Verify(cached.Bytes, integrity, url);
-                            return cached;
-                        }
-                    }
-                    catch (ResourceIntegrityException)
-                    { File.Delete(path); }
-                    catch (Exception exception) when (exception is JsonException || exception is FormatException || exception is KeyNotFoundException)
-                    { File.Delete(path); }
-                }
-                var content = await FetchAsync(url, cancellationToken).ConfigureAwait(false);
-                ResourceIntegrityVerifier.Verify(content.Bytes, integrity, url);
-                var temporary = path + ".tmp";
-                try
-                {
-                    File.WriteAllText(temporary, JsonSerializer.Serialize(new
-                    { bytes = Convert.ToBase64String(content.Bytes), mime = content.MediaType, text = content.Text, charset = content.Charset }), new UTF8Encoding(false));
-                    File.Move(temporary, path);
-                }
-                finally { if (File.Exists(temporary)) File.Delete(temporary); }
-                return content;
-            }
-            finally { _cacheGate.Release(); }
+            var content = await FetchAsync(url, cancellationToken).ConfigureAwait(false);
+            return new ResourceContent(content.Bytes, charset: "utf-8").DecodeText(strict: true);
         }
 
         internal static Uri RequireHttp(string url)

@@ -1,0 +1,133 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-11-17T00:13:48.990542+08:00",
+  "implementationCommit": "338f18b8572cce636995d44906141eff7f9d6267",
+  "sourcePatchSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "status": "persistence-v4-delivery-passed",
+  "packageVersion": "4.0.0",
+  "targetFrameworks": [
+    "net462",
+    "netstandard2.0",
+    "net8.0"
+  ],
+  "artifacts": {
+    "path": "artifacts/delivery/659817d49bfd/results.json",
+    "sha256": "b15e1b02239abd8da401cb9e8f612b34311233d962b9ec5c11b5176ef5c9160f"
+  },
+  "packages": {
+    "manifest": "artifacts/packages/4.0.0-0f2b5d5f7a60/packages.json",
+    "sha256": "9175d4aae4d0f5e243643d2dc8b52cbcb1fe691e51cb92b87c83be2040b49845",
+    "mainPackages": 5,
+    "symbolPackages": 5,
+    "offlinePublicationChecks": 7,
+    "published": false
+  },
+  "scope": [
+    "Typed persistence and immutable source/assets exchange",
+    "Source-version conflicts, reload, refresh and enabled intent",
+    "Strict dependency and replacement resource decoding with preparation budgets",
+    "Demo source transactions, recovery, content-addressed objects and collection",
+    "Core, adapter, Demo, JavaScript, native browser and NuGet-only consumers"
+  ],
+  "matrix": [
+    {
+      "cefSharpVersion": "84.4.10",
+      "platform": "x64",
+      "status": "passed",
+      "dotNetTests": {
+        "Mzying2001.MonkeySharp.CefSharp.IntegrationTests": 139,
+        "Mzying2001.MonkeySharp.Core.Tests": 341,
+        "Mzying2001.MonkeySharp.Demo.Tests": 129
+      },
+      "dotNetPassed": 609,
+      "javaScriptPassed": 135,
+      "smokeHost": "passed",
+      "normalAndPrivateOopif": "passed",
+      "wpf": "passed",
+      "packageConsumer": "passed",
+      "sourceCorpus": {
+        "passed": 6,
+        "expected-engine-limitation": 4
+      },
+      "packageCorpus": {
+        "passed": 6,
+        "expected-engine-limitation": 4
+      }
+    },
+    {
+      "cefSharpVersion": "84.4.10",
+      "platform": "x86",
+      "status": "passed",
+      "dotNetTests": {
+        "Mzying2001.MonkeySharp.CefSharp.IntegrationTests": 139,
+        "Mzying2001.MonkeySharp.Core.Tests": 341
+      },
+      "dotNetPassed": 480,
+      "javaScriptPassed": 135,
+      "smokeHost": "passed",
+      "normalAndPrivateOopif": "passed",
+      "wpf": "not-applicable",
+      "packageConsumer": "passed",
+      "sourceCorpus": {
+        "passed": 6,
+        "expected-engine-limitation": 4
+      },
+      "packageCorpus": {
+        "passed": 6,
+        "expected-engine-limitation": 4
+      }
+    },
+    {
+      "cefSharpVersion": "156.0.150",
+      "platform": "x64",
+      "status": "passed",
+      "dotNetTests": {
+        "Mzying2001.MonkeySharp.CefSharp.IntegrationTests": 139,
+        "Mzying2001.MonkeySharp.Core.Tests": 341,
+        "Mzying2001.MonkeySharp.Demo.Tests": 129
+      },
+      "dotNetPassed": 609,
+      "javaScriptPassed": 135,
+      "smokeHost": "passed",
+      "normalAndPrivateOopif": "passed",
+      "wpf": "passed",
+      "packageConsumer": "passed",
+      "sourceCorpus": {
+        "passed": 8,
+        "expected-engine-limitation": 2
+      },
+      "packageCorpus": {
+        "passed": 8,
+        "expected-engine-limitation": 2
+      }
+    },
+    {
+      "cefSharpVersion": "156.0.150",
+      "platform": "x86",
+      "status": "passed",
+      "dotNetTests": {
+        "Mzying2001.MonkeySharp.CefSharp.IntegrationTests": 139,
+        "Mzying2001.MonkeySharp.Core.Tests": 341
+      },
+      "dotNetPassed": 480,
+      "javaScriptPassed": 135,
+      "smokeHost": "passed",
+      "normalAndPrivateOopif": "passed",
+      "wpf": "not-applicable",
+      "packageConsumer": "passed",
+      "sourceCorpus": {
+        "passed": 8,
+        "expected-engine-limitation": 2
+      },
+      "packageCorpus": {
+        "passed": 8,
+        "expected-engine-limitation": 2
+      }
+    }
+  ],
+  "boundaries": [
+    "Expected engine limitations remain classified separately from functional passes.",
+    "This run does not establish new fixed-Tampermonkey parity or expand existing execution-world guarantees.",
+    "Source-version checks and recovery do not provide filesystem compare-and-swap against arbitrary external editors."
+  ]
+}
