@@ -149,8 +149,9 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             public Task<UserScriptPermissionChoice> PromptAsync(ApiAuthorizationRequest request, UserScriptPermissionScope scope, CancellationToken token)
             {
                 Interlocked.Increment(ref Calls);
-                var dialog = new Dialog(token); _dialogs.Enqueue(dialog);
+                var dialog = new Dialog(token);
                 token.Register(() => dialog.Completion.TrySetCanceled());
+                _dialogs.Enqueue(dialog);
                 return dialog.Completion.Task;
             }
             internal async Task<Dialog> Next()
