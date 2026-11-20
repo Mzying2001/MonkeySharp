@@ -18,6 +18,23 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 _isolated?.ConfirmNativeMenuFrame(proof, GetFrameIdentifier(args.Frame), args.Frame.IsMain);
         }
 
+        /// <summary>Gets the installation key for a command this host added for <c>@run-at context-menu</c>.</summary>
+        /// <param name="commandId">The command ID from the current context menu model.</param>
+        /// <param name="scriptKey">Receives the installation key on success or the default value on failure.</param>
+        /// <returns><see langword="true"/> if the attached host has a mapping for the command, otherwise <see langword="false"/>.</returns>
+        /// <remarks>Query after the adapter's <c>OnBeforeContextMenu</c> has completed and use the result for that menu only. Command IDs can be reused on the next build.</remarks>
+        public bool TryGetContextMenuScriptKey(CefMenuCommand commandId, out ScriptKey scriptKey)
+        {
+            lock (_sync)
+            {
+                if (!_disposed && _browser != null && _contextMenuHandler != null)
+                    return _contextMenuHandler.TryGetScriptKey(commandId, out scriptKey);
+            }
+
+            scriptKey = default;
+            return false;
+        }
+
         /// <summary>Resolves a menu subscriber against a native menu event frame, rejecting stale documents and unknown mappings.</summary>
         /// <param name="nativeFrame">The native CEF event frame; never construct it from page-supplied IDs.</param>
         /// <param name="request">The authenticated registration received by the menu service.</param>
@@ -105,11 +122,26 @@ namespace Mzying2001.MonkeySharp.CefSharp
 
             public IContextMenuHandler Previous => _inner;
 
+            public bool TryGetScriptKey(CefMenuCommand commandId, out ScriptKey scriptKey)
+            {
+                lock (_sync)
+                {
+                    if (_commands.TryGetValue(commandId, out var target))
+                    {
+                        scriptKey = target.Entry.ScriptKey;
+                        return true;
+                    }
+                }
+
+                scriptKey = default;
+                return false;
+            }
+
             public void OnBeforeContextMenu(IWebBrowser browser, IBrowser cefBrowser, IFrame frame,
                 IContextMenuParams parameters, IMenuModel model)
             {
-                _inner?.OnBeforeContextMenu(browser, cefBrowser, frame, parameters, model);
                 lock (_sync) _commands.Clear();
+                _inner?.OnBeforeContextMenu(browser, cefBrowser, frame, parameters, model);
                 var entries = _host.GetContextMenuEntries(frame);
                 if (entries.Count == 0)
                     return;
@@ -117,8 +149,9 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 for (var index = 0; index < entries.Count; index++)
                 {
                     var command = (CefMenuCommand)((int)CefMenuCommand.UserFirst + index);
-                    lock (_sync) _commands[command] = entries[index];
-                    model.AddItem(command, entries[index].Entry.Title);
+                    var target = entries[index];
+                    if (model.AddItem(command, target.Entry.Title))
+                        lock (_sync) _commands[command] = target;
                 }
             }
 

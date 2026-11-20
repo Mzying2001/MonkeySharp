@@ -2,7 +2,7 @@
 
 This index describes maintained capabilities and evidence gaps. The [validation guide](validation.md#latest-recorded-validation) records the latest native/package matrix, and the [evidence index](../../scripts/compatibility/evidence/README.md) separates reference baselines, capability matrices and historical results.
 
-MonkeySharp targets the observable Chromium Tampermonkey contract while keeping CefSharp **84.4.10** as the minimum engine. The current CI and delivery matrix covers the fixed legacy and current release versions on x64/x86; see the [development guide](../development.md#environment-and-gate-selection). Dated results for other versions remain historical evidence in the validation guide. The WPF Demo supports x64 only. Build the adapter against the exact CefSharp version shipped by the host.
+MonkeySharp targets the observable Chromium Tampermonkey contract and supports CefSharp starting at **84.4.10**. Build the adapter against the exact CefSharp version shipped by the host. The WPF Demo supports x64 only. See the [development guide](../development.md#environment-and-gate-selection) for the CI matrix.
 
 The [reference baseline](api-contract.md) distinguishes official API descriptions, pinned observations and MonkeySharp guarantees, including legacy and modern calling forms. The [userscript guide](../usage-guide.md) / [中文](../usage-guide.zh-CN.md) owns parameters and examples; the [integration reference](../integration-reference.md) / [中文](../integration-reference.zh-CN.md) owns host interfaces and configuration.
 
@@ -11,12 +11,12 @@ Read support claims with their conditions: **implemented** describes a MonkeySha
 | Topic | Maintained reference | Versioned evidence |
 | --- | --- | --- |
 | Grants and return shapes | [Reference baseline](api-contract.md) | [Pinned TM 5.5.1 returns](../../scripts/compatibility/evidence/tampermonkey-5.5.1-returns.json) and [grant test baselines](../../scripts/compatibility/evidence/README.md#test-reference-baselines) |
-| Worlds, lifecycle and CSP | [Execution worlds](execution-worlds.md) | [World/lifecycle matrix](../../scripts/compatibility/evidence/execution-worlds.json), [OOPIF follow-up](../../scripts/compatibility/evidence/oopif-follow-up.json), [start/CSP assessment](../../scripts/compatibility/evidence/start-csp-follow-up.json) |
+| Worlds, lifecycle and CSP | [Execution worlds](execution-worlds.md) | [World/lifecycle matrix](../../scripts/compatibility/evidence/execution-worlds.json), [OOPIF routing](../../scripts/compatibility/evidence/oopif-follow-up.json), [start/CSP assessment](../../scripts/compatibility/evidence/start-csp-follow-up.json) |
 | Cookies and partitions | [Cookies](cookies.md) | [Basic Cookie matrix](../../scripts/compatibility/evidence/cookies.json), [partition matrix](../../scripts/compatibility/evidence/partition-cookies.json) |
 | HTTP requests and streams | [Network scope](network.md) | [Incremental text](../../scripts/compatibility/evidence/progress-follow-up.json), [stream inputs](../../scripts/compatibility/evidence/stream-body-follow-up.json) |
 | Downloads and binary inputs | [Downloads](downloads.md) | [Download matrix](../../scripts/compatibility/evidence/downloads.json), [binary matrix](../../scripts/compatibility/evidence/binary-transport.json) |
 | Notifications, menus and clipboard | [Host interactions](host-interactions.md) | [Native/WPF interactions](../../scripts/compatibility/evidence/interactions.json) |
-| Reproduction and delivery | [Validation](validation.md) | [Latest recorded delivery](../../scripts/compatibility/evidence/enhanced-follow-up-delivery.json) |
+| Reproduction and validation | [Validation](validation.md) | [Delivery snapshots](../../scripts/compatibility/evidence/README.md#delivery-snapshots) |
 
 ## Storage and resources
 
@@ -42,7 +42,7 @@ See [page and tab services](../integration-reference.md#page-helpers-and-stable-
 
 webRequest rules use official selectors, cancel/redirect actions and capture substitution. Registration replaces an execution's rules; an empty array revokes them. Static metadata rules are prepared before navigation. Native request ownership scopes rules to their browser/frame/document; unowned requests do not inherit another frame's rules. Listeners report asynchronously and cannot decide network I/O. Static loading cannot open an interactive permission prompt.
 
-The [native matrix](../../scripts/compatibility/evidence/webrequest.json) verifies first-request effects, capture redirects, replacement and revocation. A pinned historical MV2 reference is unavailable: immediate void returns and first-match overlap behavior remain implementation decisions awaiting that comparison. WebSocket interception, OOPIF and isolated-frame dynamic page interception are not passed capabilities. See the [request interception guide](../usage-guide.md#request-interception) and [host integration](../integration-reference.md#web-requests).
+The native matrix verifies first-request effects, capture redirects, replacement and revocation. Its scope excludes WebSocket interception, OOPIF and isolated-frame dynamic page interception. Immediate `undefined` returns and first-match overlap behavior have no pinned MV2 comparison. See the [native matrix](../../scripts/compatibility/evidence/webrequest.json), [request interception guide](../usage-guide.md#request-interception) and [host integration](../integration-reference.md#web-requests).
 
 ## Tab audio
 
@@ -54,12 +54,10 @@ The pinned 5.5.1 reference resolves modern setMute with `{isMuted}`, differing f
 
 The Demo uses real in-memory RequestContexts, temporary permissions/tab state and a private GM value store. A script's first private access copies its ordinary atomic baseline; private writes never return to ordinary storage. Private browsers drain before the last tab releases the shared private context. Diagnostics and automatic favicon loading avoid ordinary persistent paths; explicitly saved files and copied clipboard contents remain user outputs.
 
-The [native/WPF matrix](../../scripts/compatibility/evidence/private-contexts.json) and [2026-11-07 delivery snapshot](../../scripts/compatibility/evidence/delivery.json) record their original checks and 84/121/151 x64 WPF coverage. The [latest recorded matrix](validation.md#latest-recorded-validation) identifies the newer delivery. See the [private browsing guide](../usage-guide.md#private-browsing) and [pinned temporary-session reference](../../scripts/compatibility/evidence/tampermonkey-5.5.1-private-tabs.json). Page-world trust still applies; Firefox containers are unavailable.
+Page-world trust applies in private contexts. Firefox containers are unavailable. See the [private browsing guide](../usage-guide.md#private-browsing), [native/WPF matrix](../../scripts/compatibility/evidence/private-contexts.json) and [pinned temporary-session reference](../../scripts/compatibility/evidence/tampermonkey-5.5.1-private-tabs.json).
 
 ## Known evidence gaps
 
-Guaranteed full-GM document-start and transparent BFCache restoration remain unavailable. Isolated OOPIF source/storage/resources/XHR now use native child sessions; native isolated child manual menus are verified on 84, while 121/151 remain main-only. See the precise [execution limits](execution-worlds.md#remaining-limits). Cookie partition CRUD does not imply XHR request-partition selection; see [partition scope](cookies.md#partitioned-cookie-scope).
+Full-GM document-start is best effort. BFCache revokes cached executions and scripts require a fresh navigation to run again. Manual isolated-world menus support the main frame, with same-process child-frame support limited to CefSharp 84. The default XHR backend has no request-partition selector. See the [execution limits](execution-worlds.md#remaining-limits) and [Cookie partition scope](cookies.md#partitioned-cookie-scope).
 
-The [seven-category corpus](../../scripts/compatibility/corpus/README.md) has pinned sources and functional runs. Full stable-reference and comprehensive acceptance remain incomplete: saved-file/ZIP/cancellation checks are blocked by reference browser download permission, the reference history-refresh assertion failed, and native notification/download interactions still lack comparisons. The [reference corpus](../../scripts/compatibility/evidence/corpus-reference-stable.json) and [delivery evidence](../../scripts/compatibility/evidence/enhanced-follow-up-delivery.json) preserve those outcomes. Native test totals are not a compatibility percentage.
-
-The selected enhancement delivery passed its recorded native/package scope. Incremental non-fetch text, staged stream upload and isolated OOPIF execution have documented capabilities; full menu acceptance still lacks 121/151 isolated child routing and fixed-beta native click/overlap comparisons. BFCache and strict start/CSP work establish assessment results only. Request partitions, audible and historical MV2 parity remain unsupported or unverified; they were not implemented by the scoped delivery. See [network scope](network.md), [menu boundaries](host-interactions.md#menus), [execution limits](execution-worlds.md#remaining-limits) and [recorded validation](validation.md#latest-recorded-validation).
+In the pinned stable corpus, browser download permission blocked the saved-file, ZIP and cancellation checks, and the history-refresh assertion failed. Native notification and download interactions lack reference comparisons. The pinned beta menu comparison lacks native click and overlap observations. See the [stable corpus record](../../scripts/compatibility/evidence/corpus-reference-stable.json), [downloads](downloads.md#evidence-and-reproduction) and [host interactions](host-interactions.md).

@@ -123,8 +123,9 @@ namespace Mzying2001.MonkeySharp.Core.Tests
                 var changedWhileWaiting = request();
                 var obsolete = await prompt.Next();
                 await repository.SetEnabledAsync(script.ScriptKey, false, CancellationToken.None);
-                obsolete.Completion.SetResult(new UserScriptPermissionChoice(PermissionDecision.Allow));
-                using (var result = JsonDocument.Parse(await changedWhileWaiting)) Assert.Equal(BridgeErrorCodes.SessionExpired, result.RootElement.GetProperty("error").GetProperty("code").GetString());
+                using (var result = JsonDocument.Parse(await changedWhileWaiting.WaitAsync(TimeSpan.FromSeconds(5))))
+                    Assert.Equal(BridgeErrorCodes.SessionExpired, result.RootElement.GetProperty("error").GetProperty("code").GetString());
+                Assert.True(obsolete.Completion.Task.IsCanceled);
                 using (var result = JsonDocument.Parse(await request())) Assert.Equal(BridgeErrorCodes.SessionExpired, result.RootElement.GetProperty("error").GetProperty("code").GetString());
             }
         }
@@ -148,8 +149,9 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             public Task<UserScriptPermissionChoice> PromptAsync(ApiAuthorizationRequest request, UserScriptPermissionScope scope, CancellationToken token)
             {
                 Interlocked.Increment(ref Calls);
-                var dialog = new Dialog(token); _dialogs.Enqueue(dialog);
+                var dialog = new Dialog(token);
                 token.Register(() => dialog.Completion.TrySetCanceled());
+                _dialogs.Enqueue(dialog);
                 return dialog.Completion.Task;
             }
             internal async Task<Dialog> Next()

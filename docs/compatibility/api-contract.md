@@ -51,7 +51,7 @@ Run the same original [return probe](../../scripts/compatibility/fixtures/return
 
 The original modern reference used Edge 156.0.4314.58, Tampermonkey 5.5.1 and MV3; later fixed-stable observations use Edge 157.0.4341.42 with the same manager. The extension requires Chromium 120, independently of MonkeySharp's 84 baseline. The [original return record](../../scripts/compatibility/evidence/tampermonkey-5.5.1-returns.json) confirms modern Promise returns for DOM, menus and openInTab, and notification timeout resolving false. It does not establish every click/tag-replacement result. Delayed tab closure passed after an immediate-close observation needed a retry; MonkeySharp's queued early-close guarantee is documented separately.
 
-The historical MV2 reference remains unavailable. Immediate webRequest void returns and first-match overlap behavior are implementation decisions awaiting that comparison, not established differential parity. Do not install the pinned modern extension on Chromium 84 or count MV3 webRequest absence as a MonkeySharp failure.
+Immediate webRequest `undefined` returns and first-match overlap are MonkeySharp behavior. Comparison requires an MV2 reference with webRequest support. See the [historical webRequest scope and evidence](README.md#historical-webrequest).
 
 The [reference schema](../../scripts/compatibility/evidence/schema.json) records fixture SHA-256, source, versions, settings, commit, capabilities, immediate returns, ordered events, settlements, effects and status. Raw logs stay under ignored `artifacts/`; concise [evidence records](../../scripts/compatibility/evidence/) remain in Git. Native matrices and delivery summaries have their own shapes. Only random IDs, absolute timestamps, paths and visual appearance may be normalized; preserve observable ordering and failed assertions. `blocked` is not a passing status.
 
@@ -82,5 +82,3 @@ The [storage-authority probe](../../scripts/compatibility/evidence/tampermonkey-
 ## Real-script corpus intake
 
 The original probes are not third-party compatibility evidence. The [corpus manifest](../../scripts/compatibility/corpus.json) pins unmodified third-party source and licenses for seven executable categories and preserves optional historical local-script provenance. Intake ready status is separate from actual pass/limit/block/failure records. Classify failures as syntax, GM contract, matching, authorization or world/CSP. See [corpus scope](../../scripts/compatibility/corpus/README.md) and [current evidence gaps](README.md#known-evidence-gaps).
-
-The [network scope](network.md) includes incremental non-fetch text and staged ReadableStream input. [Menu scope](host-interactions.md#menus) includes native event fields and clickedFrame filtering within its documented frame limits. These enhancements do not close missing stable-reference interactions.

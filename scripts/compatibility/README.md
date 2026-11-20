@@ -89,6 +89,6 @@ BFCache read-only polling treats a confirmed retired native frame as not yet rea
 
 `Run-NativeProbe.ps1 -Probe oopif` tests distinct-site targets, flat public DevTools transport and actual isolated GM in normal/private contexts, including nested targets, migration, script/storage separation, permission denial and native cookie jars. Run-Baseline.ps1 invokes it on each selected engine/platform; it requires no external extension input.
 
-`Run-NativeProbe.ps1 -Probe start-csp` runs prepared full-GM start, owned parser-pause and CSP effect experiments in normal/private main and OOPIF pages. Assessment success never implies strict start or a CSP bypass; see [decisions and candidate limits](../../docs/compatibility/start-csp-decision.md).
+`Run-NativeProbe.ps1 -Probe start-csp` measures prepared full-GM start, parser-pause readiness and CSP effects in normal/private main and OOPIF pages. See the [start/CSP assessment](../../docs/compatibility/start-csp-decision.md).
 
 The public NuGet-only consumer also exercises incremental text progress, staged ReadableStream upload, the current typed menu callback contract and actual isolated OOPIF GM. Delivery retains native-probes output before worktree cleanup. A PackageOnly run remains diagnostic even when these checks pass.

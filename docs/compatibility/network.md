@@ -12,7 +12,7 @@ The HTTP service captures the attached RequestContext when it accepts a request 
 
 Non-fetch text, JSON, document and XML responses expose cumulative `responseText` during progress. Text also exposes cumulative `response`; JSON/document parsing remains final-only. Binary and stream responses expose no partial text. The renderer pulls at most 64 KiB at a time, uses a persistent decoder across chunk boundaries and bounds progress frequency without resending the complete prefix over the bridge. Malformed UTF-8 uses replacement characters; unsupported charset names retain the existing UTF-8 fallback.
 
-MonkeySharp's fetch mode suppresses progress and intermediate readyState events. Fixed Tampermonkey 5.6.6242 emits fetch progress, so this is an intentional difference. The [incremental-text evidence](../../scripts/compatibility/evidence/progress-follow-up.json) links the identity-qualified [beta reference](../../scripts/compatibility/evidence/tampermonkey-5.6.6242-progress-repro.json); the [evidence index](../../scripts/compatibility/evidence/README.md#retained-failures-and-regressions) distinguishes earlier failed and superseded attempts.
+MonkeySharp's fetch mode suppresses progress and intermediate readyState events. The pinned Tampermonkey 5.6.6242 run observed fetch progress. See the [native incremental-text results](../../scripts/compatibility/evidence/progress-follow-up.json) and [pinned beta observation](../../scripts/compatibility/evidence/tampermonkey-5.6.6242-progress-repro.json).
 
 ## Stream request bodies
 

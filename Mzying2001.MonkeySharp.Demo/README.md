@@ -68,10 +68,9 @@ The profile is stored beside the executable, independently of the process workin
 
 Startup fails if the directory is not writable or another process is using the profile. Use a writable application directory instead of elevating the process; there is no AppData fallback. Back up the complete `Data/` directory **after closing the application**, including SQLite `-wal`/`-shm` files if present.
 
-The database uses schema format **3**. An unsupported format stops startup and leaves the database intact. To start with an empty database, first back up the profile, then move `Data/monkeysharp.db` and its `-wal`/`-shm` files out of the profile before restarting. This does not restore scripts or GM values, and source files are not automatically reimported.
+An unsupported database format stops startup and leaves the database intact. To rebuild the database, close the application and back up the profile. Move `Data/monkeysharp.db` and its `-wal`/`-shm` files, if present, out of the profile, then restart the Demo. The new database starts empty. Reinstall your scripts manually. The backup retains the original GM values.
 
-Source commits use per-installation transaction markers, SQLite commit IDs and verified staging/backup files for recovery. External UTF-8 source edits are adopted at startup or explicit reload; no file watcher or navigation-time disk check is used. Missing or invalid source retains enabled intent but prevents execution. Recovery conflicts preserve unknown files and transaction evidence; stop the application and back up these files before resolving them manually. Old database formats are rejected without migration. Uninstall also deletes values, permissions and tab state; unreferenced asset objects are collected without deleting shared content.
-
+Source commits use per-installation transaction markers, SQLite commit IDs and verified staging/backup files for recovery. External UTF-8 source edits are adopted at startup or explicit reload; no file watcher or navigation-time disk check is used. Missing or invalid source retains enabled intent but prevents execution. Recovery conflicts preserve unknown files and transaction evidence; stop the application and back up these files before resolving them manually. Uninstall also deletes values, permissions and tab state; unreferenced asset objects are collected without deleting shared content.
 
 Diagnostics are written to `Logs/demo.log`, which retains one previous log after reaching approximately 5 MiB. Native CEF file logging is disabled.
 

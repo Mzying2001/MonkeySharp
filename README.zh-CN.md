@@ -13,7 +13,7 @@ MonkeySharp 是面向 CefSharp 嵌入式应用的用户脚本运行时。Core �
 | 编写或移植用户脚本 | [用户脚本使用指南](docs/usage-guide.zh-CN.md) |
 | 构建、打包或验证运行时 | [构建与测试](#构建与测试)，然后参阅[开发指南](docs/development.zh-CN.md) |
 
-[文档导航](docs/README.md) · [兼容性范围与证据](docs/compatibility/README.md)
+[文档导航](docs/README.zh-CN.md) · [兼容性范围与证据](docs/compatibility/README.md)
 
 ## 软件包
 

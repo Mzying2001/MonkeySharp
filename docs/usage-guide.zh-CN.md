@@ -170,7 +170,7 @@ Demo 手动更新时优先从 `@updateURL` 检查，其次使用 `@downloadURL`�
 
 沙箱 window 按脚本私有地回放缓存的 DOMContentLoaded/load 事件，回放事件的 `isTrusted` 为 false；document-idle 不回放更早的 DOMContentLoaded。window 监听支持 once、移除和 AbortSignal，执行结束清理运行时拥有的监听；直接注册到页面 DOM 的监听由脚本管理。源码、DOM 和样式的 CSP 效果分别有边界，不提供全站 CSP 绕过。
 
-隔离 OOPIF 已支持经验证的源码、存储、资源及 XHR 范围，不代表菜单或 webRequest 均可用。隔离世界的手动菜单在三个已测版本均支持主 frame，84 另支持同进程子 frame；121/151 仍仅主 frame，隔离 OOPIF 菜单不支持。页面世界的菜单使用当前原生 CEF frame 会话。BFCache 缓存执行会被撤销，需要新导航。详见[执行世界与限制](compatibility/execution-worlds.md)，严格 start 与 CSP 的评估见[专项决策](compatibility/start-csp-decision.md)。
+隔离 OOPIF 支持源码执行、存储、资源及 XHR。隔离世界的手动菜单支持主 frame，同进程子 frame 仅在 CefSharp 84 上受支持。页面世界的菜单使用当前原生 CEF frame 会话。BFCache 缓存执行会被撤销，需要新导航。详见[执行世界与限制](compatibility/execution-worlds.md)和[严格启动时机与 CSP 评估](compatibility/start-csp-decision.md)。
 
 <a id="api-index"></a>
 
@@ -490,7 +490,7 @@ attributes 是可选对象：textContent/innerHTML 设置内容，字符串 styl
 
 需要菜单授权及服务。第三参数可以是访问键字符串，或 `{id, accessKey, title, autoClose, clickedFrame}`。id 是正整数或非空字符串，用于更新当前执行的已有注册，不存在则创建；省略时分配数字 ID。现代返回注册后的 `Promise<number|string>`，旧版立即返回 ID。更新和注销按调用顺序排队。渲染器按原生输入事实创建 MouseEvent 或 KeyboardEvent，携带可取得的修饰键、鼠标键和 key/code；未知来源使用普通 menucommand Event。isTrusted 始终为 false，回调异常单独报告。
 
-Demo 将同一安装、同一标签页中 name/title/accessKey 相同的条目合并，点击时调用所有已订阅 frame 的回调。title 显示为提示，autoClose:false 保持菜单打开；合并项有任一订阅要求保持时即保持。注销或结束一个 frame 仅移除该 frame 的订阅，执行结束清理其命令。5.6.6242 的 clickedFrame 按每个订阅的可信当前文档/frame 过滤；false/省略保持广播。无法确定 frame 的入口（含 Demo 标签页弹出菜单）不派发 clickedFrame:true。合并条目分别保留各订阅的选项，固定 beta 重叠/点击一致性仍待原生证据。
+Demo 合并同一安装、同一标签页中 `name`、`title` 和 `accessKey` 相同的条目。`title` 显示为提示。任一订阅设置 `autoClose: false` 时，合并条目会保持打开。选择菜单项时，逐个应用订阅的 `clickedFrame` 选项。设为 `true` 时，宿主须确认当前文档和 frame 与订阅匹配才会调用回调。无法确定 frame 的入口（包括 Demo 标签页弹出菜单）会跳过这些回调。设为 `false` 或省略时，选择条目就会调用回调，不受 frame 限制。注销或结束一个 frame 仅移除该 frame 的订阅。详见[菜单兼容性](compatibility/host-interactions.md#menus)。
 
 ### GM.unregisterMenuCommand(commandId)
 
@@ -724,7 +724,7 @@ listener 异步接收 `(action, status, details)`：action 为 `"cancel"`/`"redi
 
 静态 `@webRequest` JSON 在安装期编译，并通过 `host.NavigateAsync` 在导航前激活，无须等待用户源码执行；仓库变更撤销旧规则。静态规则遵循 URL、frame、run-in 和宿主权限策略，文档加载期间不能弹出交互授权。晚附加无法补拦截已发送的请求。
 
-目标依据[官方历史契约](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_webRequest)。固定 MV2 差分环境尚缺；OOPIF、isolated frame 动态页面拦截及 WebSocket 覆盖不计为通过，见 [webRequest 范围与证据](compatibility/README.md#historical-webrequest)。
+API 遵循 Tampermonkey 历史 MV2 规则格式。frame、WebSocket 限制及对照覆盖范围见 [webRequest 范围与证据](compatibility/README.md#historical-webrequest)。
 
 ```javascript
 // @grant GM_webRequest
@@ -779,7 +779,7 @@ window.addEventListener("urlchange", onRoute);
 | 标签页 | 现代返回 Promise，旧版立即返回句柄；Demo 支持数字插入和真实私密上下文，通过 close/onclose 操作。 |
 | 下载 | 立即返回带 abort 的完成 Promise；Demo 共用浏览器网络上下文，文件提交后才完成。 |
 | Cookie | 分区 CRUD 按 Chromium 协议版本范围适配；请求 cookiePartition、firstPartyDomain 及变更监听仍不可用。 |
-| webRequest | 历史 MV2 目标；官方 selector/cancel/redirect、返回 void，重新注册替换或 [] 撤销；历史 TM 差分仍 pending。 |
+| webRequest | 使用历史 MV2 的 selector/cancel/redirect 规则。返回 `undefined`。重新注册可替换规则，传入 `[]` 可撤销。 |
 | 其他管理器 API | 不内置扩展专属内容/部署 API；未知授权不会增加它们。音频按上文提供部分能力。 |
 
 这张表描述支持的约定及已知差异，不保证任意 Tampermonkey 脚本都能原样运行。应在实际宿主应用中验证所用功能。
@@ -821,4 +821,6 @@ window.addEventListener("urlchange", onRoute);
 
 ## 参考来源
 
-MonkeySharp 行为依据[授权目录](../Mzying2001.MonkeySharp.Core/Compatibility/UserScriptGrantCatalog.cs)、[JavaScript 门面](../Mzying2001.MonkeySharp.Core/Js/Init.js)、[Core API 提供器](../Mzying2001.MonkeySharp.Core/Apis/)、[元数据解析器](../Mzying2001.MonkeySharp.Core/Parsing/UserScriptMetadataParser.cs)、[运行时信息构建](../Mzying2001.MonkeySharp.Core/Runtime/UserScriptEngine.cs)、[CefSharp 服务](../Mzying2001.MonkeySharp.CefSharp/)及 [JavaScript 行为测试](../Mzying2001.MonkeySharp.Core.Tests/JavaScript/)核对。具体持久化及交互服务见 [Demo 指南](../Mzying2001.MonkeySharp.Demo/README.zh-CN.md)。升级运行时或替换宿主服务时，可据此复核。
+- 元数据和授权由[元数据解析器](../Mzying2001.MonkeySharp.Core/Parsing/UserScriptMetadataParser.cs)和[授权目录](../Mzying2001.MonkeySharp.Core/Compatibility/UserScriptGrantCatalog.cs)定义。
+- GM API 由 [JavaScript 门面](../Mzying2001.MonkeySharp.Core/Js/Init.js)、[Core API 提供器](../Mzying2001.MonkeySharp.Core/Apis/)和[运行时信息构建器](../Mzying2001.MonkeySharp.Core/Runtime/UserScriptEngine.cs)实现。预期行为示例见 [JavaScript 行为测试](../Mzying2001.MonkeySharp.Core.Tests/JavaScript/)。
+- 宿主实现见 [CefSharp 适配器](../Mzying2001.MonkeySharp.CefSharp/)。Demo 的持久化和交互服务见 [Demo 指南](../Mzying2001.MonkeySharp.Demo/README.zh-CN.md)。
