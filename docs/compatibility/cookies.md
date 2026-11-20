@@ -35,12 +35,12 @@ Ordinary jar-based login, TLS/Secure/HttpOnly/domain/path selection, redirects, 
 
 The [fixed Tampermonkey 5.5.1 reference](../../scripts/compatibility/evidence/tampermonkey-5.5.1-cookies.json) gives `headers.Cookie` priority over the entire `details.cookie` string. Explicit names override jar names; repeated explicit names use the last value, preserving empty values and embedded `=`. An explicit string also collapses jar names across paths. Anonymous suppresses the jar but still sends explicit cookies, with headers taking priority. Custom verified `IHttpRequestService` backends can implement these observed merge rules; the default backend does not claim that behavior.
 
-See the [native before/after evidence](../../scripts/compatibility/evidence/explicit-cookies-follow-up.json).
+See the [native explicit Cookie checks](../../scripts/compatibility/evidence/explicit-cookies-follow-up.json).
 
 ## Evidence and reproduction
 
 The [basic native matrix](../../scripts/compatibility/evidence/cookies.json) covers real HTTP/TLS effects, SameSite, Secure, HttpOnly, host-only/domain cookies, expiration, exact multi-path deletion and two independent RequestContexts. The [pinned CRUD reference](../../scripts/compatibility/evidence/tampermonkey-5.5.1-cookie-returns.json) establishes return shapes and defaults.
 
-The [partition matrix](../../scripts/compatibility/evidence/partition-cookies.json) separately records CRUD and native request limitations. The [pinned partition reference](../../scripts/compatibility/evidence/tampermonkey-5.5.1-partition-cookies.json) retains its deletion side effect. The [2026-11-07 delivery snapshot](../../scripts/compatibility/evidence/delivery.json) includes all three x64 WPF gates; [validation](validation.md#latest-recorded-validation) identifies the latest recorded delivery.
+The [partition matrix](../../scripts/compatibility/evidence/partition-cookies.json) records CRUD and native request limitations. The [pinned partition reference](../../scripts/compatibility/evidence/tampermonkey-5.5.1-partition-cookies.json) records the same-name deletion side effect.
 
 Run the [baseline and native gates](validation.md). SmokeHost's test certificate and DNS mapping are confined to the test host. Chromium 121's HTTP-loopback Secure behavior differs from 84, so TLS/credential claims use actual requests and readback, not mocks or CDP submission alone.

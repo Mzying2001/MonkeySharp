@@ -11,15 +11,15 @@ Choose the execution world from the script's page-access needs and the host's tr
 
 Conflicting world requirements, explicit DOM plus an `unsafeWindow` grant, and unsupported unwrap reject before source starts with `MSR215_EXECUTION_WORLD_UNAVAILABLE`; there is no page-world fallback. Neither world provides guaranteed full-GM document-start or transparent BFCache restoration.
 
-| Isolated execution scope | 84.4.10 | 121.3.70 | 151.3.240 |
-| --- | --- | --- | --- |
-| Main and same-process child source/storage/resources/XHR | Validated | Validated | Validated |
-| OOPIF source/storage/resources/XHR through native child sessions | Validated | Validated | Validated |
-| Main-frame `@run-at context-menu` selection | Supported | Supported | Supported |
-| Same-process child `@run-at context-menu` selection | Verified | Unavailable | Unavailable |
-| OOPIF `@run-at context-menu` selection | Unsupported | Unsupported | Unsupported |
+| Isolated execution scope | Support |
+| --- | --- |
+| Main and same-process child source/storage/resources/XHR | Supported |
+| OOPIF source/storage/resources/XHR | Supported through native child sessions |
+| Main-frame `@run-at context-menu` selection | Supported |
+| Same-process child `@run-at context-menu` selection | CefSharp 84 only |
+| OOPIF `@run-at context-menu` selection | Unsupported |
 
-This table concerns source execution. `GM.registerMenuCommand` callbacks use their host service and optional clickedFrame filtering, described in [menu scope](host-interactions.md#menus). Page-world manual source selection uses the current native CEF frame session; isolated child-source routing does not imply native menu or historical webRequest support.
+This table concerns source execution. `GM.registerMenuCommand` callbacks use their host service and optional clickedFrame filtering. Page-world manual source selection uses the current native CEF frame session. See [menu scope](host-interactions.md#menus) and the [recorded engine/platform matrix](validation.md#latest-recorded-validation).
 
 ## Trust boundary
 
@@ -51,7 +51,7 @@ Commands run on CEF's UI thread with CEF-allocated IDs so other observers can co
 
 The real protocol probe verifies Cookie readback and HTTP effects, pre-inline page injection without full GM, separate named worlds, context-ID bindings, revocation, concurrent observers, timeout and cancellation. Chromium 84 lacks future-world `executionContextName` binding. Successful registration is not evidence that a complete GM userscript started before the first page inline. The production path adds prepared data and generation-pinned delivery; it retains the timing limits below. The probe itself is not the production sandbox.
 
-The [84](../../scripts/compatibility/evidence/cdp-84.4.10.json), [121](../../scripts/compatibility/evidence/cdp-121.3.70.json) and [151](../../scripts/compatibility/evidence/cdp-151.3.240.json) records separate protocol success from blocked strict-GM timing. Reproduce through SmokeHost `Run-E2E.ps1`, its independent `Run-CdpProbe.ps1`, or the [baseline gate](validation.md#reproduction). Reports include adjacent `cdp-probe.jsonl` files. A renderer subprocess remains a separate deployment/ABI decision if future strict timing requirements justify it.
+The [84](../../scripts/compatibility/evidence/cdp-84.4.10.json), [121](../../scripts/compatibility/evidence/cdp-121.3.70.json) and [151](../../scripts/compatibility/evidence/cdp-151.3.240.json) records separate protocol success from blocked strict-GM timing. Reproduce through SmokeHost `Run-E2E.ps1`, its independent `Run-CdpProbe.ps1`, or the [baseline gate](validation.md#reproduction). Reports include adjacent `cdp-probe.jsonl` files.
 
 ## Isolated OOPIF routing
 
@@ -59,19 +59,19 @@ OOPIF commands and events carry their native child session. Context IDs are scop
 
 Reserved CEF command IDs, owned-session detach and per-observer envelope filtering preserve other observers and shared domains. Read-only coexistence is tested; competing owners that mutate Target discovery/attachment state are not independently isolated DevTools clients.
 
-The [native OOPIF matrix](../../scripts/compatibility/evidence/oopif-follow-up.json) uses distinct sites, actual iframe targets and prepared GM. It verifies source, snapshots/resources, permission-checked XHR, two script partitions, nested targets, same-process/OOPIF migration without duplicate source, balanced document release and normal/private Cookie jar isolation. [Recorded delivery](validation.md#latest-recorded-validation) covers both architectures on 84/121/151. Native menus, strict start, historical isolated webRequest and transparent BFCache retain separate limits.
+The native x64 OOPIF probe covers 84/121/151 using distinct sites, actual iframe targets and prepared GM. It verifies source, snapshots/resources, permission-checked XHR, two script partitions, nested targets, same-process/OOPIF migration without duplicate source, balanced document release and normal/private Cookie jar isolation. See the [native OOPIF record](../../scripts/compatibility/evidence/oopif-follow-up.json) and [validation matrices](validation.md#latest-recorded-validation).
 
 Run `./scripts/compatibility/Run-NativeProbe.ps1 -Probe oopif -Platform x64 -CefSharpVersion 121.3.70`; the baseline also runs this gate for its selected engine/platform. Actual effects and runtime diagnostics are checked together. See [runner parameters](../../scripts/compatibility/README.md#native-feasibility-probes).
 
 ## Remaining limits
 
 - Full-GM document-start remains best effort, including prepared navigation. `RequireGuaranteedDocumentStart` rejects these combinations; protocol registration is not proof of pre-inline user execution.
-- Isolated OOPIF routing supports the validated source/storage/resource/XHR scope through native child sessions on 84/121/151. Native menu frame targeting remains separate; strict start and BFCache are not implied. Failed creation reports an error without raw fallback.
+- Failure to create an isolated OOPIF context reports an error without raw fallback.
 - BFCache cached executions revoke their GM/window state and require a fresh navigation; transparent restoration is not claimed.
-- Same-process isolated child manual menus are verified on 84. On 121 the asynchronous native message event arrives with a disposed borrowed IFrame; 151 does not expose PostMessage in the tested child isolated context. Both retain main-frame selection and reject unmapped children. Page-supplied IDs and DOM markers are never used for this mapping.
+- Isolated child menu selection requires a native frame mapping. The adapter supplies this for same-process children on CefSharp 84 using a context-private proof. See the [native menu observations](../../scripts/compatibility/evidence/menus-follow-up.json).
 - Historical page-frame webRequest interception is unavailable from isolated contexts. See the [historical webRequest scope](README.md#historical-webrequest).
 - User-managed DOM listeners/timers are not an unload API for arbitrary code in a live document; document navigation destroys normal contexts, and runtime-owned listeners/bridge state are revoked explicitly.
 
 The [native BFCache assessment](../../scripts/compatibility/evidence/bfcache-follow-up.json) includes cacheable control pages without a runtime/CDP attachment. Neither control nor prepared raw/isolated runs retained the closure or reported persisted pageshow on 84/121/151, including explicit BFCache enablement. Transparent restoration remains unimplemented; no global BFCache disablement was used. Private-context restoration and suspended-state listener/storage recovery remain unverified because the basic cache-hit prerequisite was not met. The [native probe runner](../../scripts/compatibility/Run-NativeProbe.ps1) preserves capability outcomes separately from probe completion.
 
-The [start/CSP decisions](start-csp-decision.md) use full prepared GM and real child sessions. The owned parser-pause alternative still lacked full-GM readiness/acknowledgement/completion before resume. CSP effects and renderer deployment constraints are recorded separately; strict start and whole-page bypass remain unavailable.
+See the [start/CSP assessment](start-csp-decision.md) for measured pre-inline readiness, parser-pause results and CSP effects.

@@ -82,7 +82,7 @@ Run shared fixtures through [Run-Reference.cjs](../../scripts/compatibility/Run-
 
 ## Latest recorded validation
 
-The [version 4 persistence delivery](../../scripts/compatibility/evidence/persistence-v4-delivery.json) records implementation `338f18b` with no source patch on 2026-11-17. All four currently supported engine/platform combinations passed the source/native/package gates. Raw results are retained in `artifacts/delivery/659817d49bfd/`; five release packages and symbols are in `artifacts/packages/4.0.0-0f2b5d5f7a60/`. Package validation and seven publication-flow checks ran offline; nothing was published.
+The matrix summarizes the 2026-11-17 source, native and package validation run for commit `338f18b`. See the [recorded results](../../scripts/compatibility/evidence/persistence-v4-delivery.json) for the exact inputs, checks and artifact locations.
 
 | CefSharp | Platform | .NET | JavaScript | SmokeHost + normal/private OOPIF | WPF | NuGet consumer | Source + package corpus |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -91,26 +91,7 @@ The [version 4 persistence delivery](../../scripts/compatibility/evidence/persis
 | 156.0.150 | x64 | 609 passed | 135 passed | Passed | Passed | Passed | 10 + 10, declared scope |
 | 156.0.150 | x86 | 480 passed | 135 passed | Passed | N/A | Passed | 10 + 10, declared scope |
 
-Each x64 .NET total contains 341 Core, 139 adapter and 129 Demo tests; x86 excludes Demo. Each 84 corpus run has six functional passes and four expected engine limitations; each 156 run has eight functional passes and two expected engine limitations. Core and Demo tests cover typed records, cache reuse, source conflicts, readiness, cancellation, recovery and collection. The native gates also verify existing execution and package-consumer behavior; expected engine limitations do not count as functional passes or establish new fixed-reference parity.
-
-### Historical enhanced delivery
-
-The historical [enhanced delivery evidence](../../scripts/compatibility/evidence/enhanced-follow-up-delivery.json) records implementation `1ef4c4f`, a documentation-only source patch and raw run `artifacts/p2-delivery/1d2373523e2f`. The matrix below describes that recorded run on 2026-11-11; documentation reorganization does not constitute another native run.
-
-| CefSharp | Platform | .NET | JavaScript | SmokeHost/CDP + normal/private OOPIF | WPF | NuGet/public consumer | Source + package corpus |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| 84.4.10 | x64 | 422 passed | 129 passed | Passed | Passed | Passed | 10 + 10, declared scope |
-| 84.4.10 | x86 | 373 passed | 129 passed | Passed | N/A | Passed | 10 + 10, declared scope |
-| 121.3.70 | x64 | 422 passed | 129 passed | Passed | Passed | Passed | 10 + 10, declared scope |
-| 121.3.70 | x86 | 373 passed | 129 passed | Passed | N/A | Passed | 10 + 10, declared scope |
-| 151.3.240 | x64 | 422 passed | 129 passed | Passed | Passed | Passed | 10 + 10, declared scope |
-| 151.3.240 | x86 | 373 passed | 129 passed | Passed | N/A | Passed | 10 + 10, declared scope |
-
-Each x64 .NET total contains 305 Core, 68 adapter and 49 Demo tests; x86 excludes Demo. Every combination includes 15 SmokeHost compatibility cases and normal/private OOPIF records without runtime diagnostics. The 120 source/package corpus executions retain individual outcomes: each 84 run has six passed cases and four expected engine limitations; each 121/151 run has eight passed cases and two expected engine limitations. These limitations are not functional passes.
-
-The public consumer verifies a 350003-byte staged upload, split UTF-8 incremental text, menu callback fields and prepared GM inside an actual iframe target. Native OOPIF checks additionally cover script isolation, nested targets, migration, denied requests, private jars and balanced release. The gate rejects unexplained initialization/dispatch diagnostics and preserves full exception stacks. These checks do not substitute for fixed-TM native menu input or missing download/notification interactions.
-
-The earlier [stable scoped delivery](../../scripts/compatibility/evidence/stable-follow-up-delivery.json) and [2026-11-07 snapshot](../../scripts/compatibility/evidence/delivery.json) remain historical evidence with their original scope. The [evidence index](../../scripts/compatibility/evidence/README.md#delivery-snapshots) distinguishes those snapshots and retained superseded matrices. Full stable-reference acceptance and full menu acceptance remain incomplete; request partitions, audible, historical MV2, strict start and transparent BFCache retain their own limitations. See [current evidence gaps](README.md#known-evidence-gaps).
+Each 84 corpus run recorded six functional passes and four expected engine limitations. Each 156 run recorded eight functional passes and two expected engine limitations. See [delivery snapshots](../../scripts/compatibility/evidence/README.md#delivery-snapshots) for other engine matrices and [known evidence gaps](README.md#known-evidence-gaps) for the scope of reference coverage.
 
 ## Corpus intake
 

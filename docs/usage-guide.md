@@ -164,7 +164,7 @@ Isolated worlds separate script globals and dispatch identity, not operating-sys
 
 The sandbox window privately replays cached DOMContentLoaded/load events with `isTrusted: false`; document-idle does not replay the earlier DOMContentLoaded event. Window listeners support once/removal/AbortSignal and are cleared with their execution; direct page DOM listeners remain script-owned. Source, DOM and style CSP effects have separate limits, without whole-page CSP bypass.
 
-Isolated OOPIF supports the validated source/storage/resource/XHR scope, not every menu or webRequest feature. For isolated manual menus, all three tested versions support the main frame and 84 also supports same-process child frames; 121/151 remain main-only, and isolated OOPIF menus are unsupported. Page-world menus use the current native CEF frame session. BFCache cached executions are revoked and require fresh navigation. See [execution worlds and limits](compatibility/execution-worlds.md) and the [strict-start/CSP assessment](compatibility/start-csp-decision.md).
+Isolated OOPIF supports source execution, storage, resources and XHR. Manual isolated-world menus support the main frame, with same-process child-frame support limited to CefSharp 84. Page-world menus use the current native CEF frame session. BFCache cached executions are revoked and require fresh navigation. See [execution worlds and limits](compatibility/execution-worlds.md) and the [strict-start/CSP assessment](compatibility/start-csp-decision.md).
 
 ## API index
 
@@ -470,7 +470,7 @@ A stream response Promise resolves when headers and the stream are available; la
 
 Requires a menu grant and service. The third argument is an access-key string or `{id, accessKey, title, autoClose, clickedFrame}`. `id` is a positive integer or nonempty string; it updates that execution's existing registration, or creates one. Without an ID, a numeric ID is allocated. Modern returns `Promise<number|string>` after registration; legacy returns the ID immediately. Updates and removals are queued in call order. The renderer creates a MouseEvent or KeyboardEvent from observed native input fields; unknown provenance produces a generic menucommand Event. Available modifiers, mouse button and keyboard key/code are carried; isTrusted remains false. Callback exceptions are reported independently.
 
-Demo merges commands from the same installation and tab when name, title and accessKey match. Selection invokes each registered frame's callback. `title` becomes the tooltip; `autoClose:false` keeps the popup open (a merged item stays open if any subscriber requests it). Unregistering or ending one frame removes only that frame's subscription. Execution end removes its commands. The 5.6.6242 clickedFrame option filters each subscription using host-attested current document/frame identity; false/omission keeps broadcast behavior. Unknown-frame entry points, including Demo’s tab popup, suppress clickedFrame:true callbacks. Mixed merged options follow each subscription separately; pinned beta overlap/click parity remains pending.
+The Demo merges commands from the same installation and tab when `name`, `title` and `accessKey` match. `title` becomes the tooltip. A merged item stays open if any subscriber sets `autoClose: false`. Selection applies each subscription's `clickedFrame` option independently. With `clickedFrame: true`, the callback requires a host-verified match for the current document and frame. Entry points without frame identity, including the Demo's tab popup, skip these callbacks. With `clickedFrame: false` or omitted, the callback runs on selection regardless of frame. Unregistering or ending one frame removes only that frame's subscription. See [menu compatibility](compatibility/host-interactions.md#menus).
 
 ### GM.unregisterMenuCommand(commandId)
 
@@ -690,7 +690,7 @@ Listeners run asynchronously with `(action, status, details)`: action is `"cance
 
 Static `@webRequest` JSON is compiled during installation and activated before navigation through `host.NavigateAsync`. It does not need user source to run; repository changes revoke old rules. Static rules follow script URL, frame, run-in, and host permission policy. A static rule cannot open an interactive permission prompt while loading the document. Attach after navigation cannot intercept resources already sent.
 
-This follows the [official historical API](https://www.tampermonkey.net/documentation.php?locale=en&q=GM_webRequest). A pinned MV2 differential reference remains unavailable; OOPIF, isolated-frame dynamic page interception, and WebSocket coverage are not claimed. See [webRequest evidence](compatibility/README.md#historical-webrequest).
+The API follows the historical Tampermonkey MV2 rule format. See [webRequest scope and evidence](compatibility/README.md#historical-webrequest) for frame and WebSocket limits and the reference coverage.
 
 ```javascript
 // @grant GM_webRequest
@@ -741,7 +741,7 @@ window.addEventListener("urlchange", onRoute);
 | Tabs | Modern returns a Promise; legacy returns an immediate handle; use close/onclose; numeric insertion positions and real private contexts are supported by the Demo. |
 | Downloads | Immediately returns an abortable completion Promise; Demo uses the shared browser network context and commits the file before completion. |
 | Cookies | Partition CRUD follows Chromium protocol ranges; request cookiePartition, firstPartyDomain and change feeds remain unavailable. |
-| webRequest | Historical MV2 target: official selector/cancel/redirect rules; void return, replace registration or pass [] to revoke. Historical TM parity remains pending. |
+| webRequest | Historical MV2 selector/cancel/redirect rules. Returns `undefined`. Re-register to replace the rules or pass `[]` to revoke them. |
 | Other manager APIs | Extension-specific content/deployment APIs are not built in. Unknown grants do not add them. Audio is partial as described above. |
 
 This is a list of supported contracts and known differences, not a promise that every Tampermonkey script can run unchanged. Prefer testing each feature against the actual embedding application.
@@ -779,4 +779,6 @@ Defaults: each bridge request/response is limited to 1 MiB, each resource to 10 
 
 ## Reference sources
 
-MonkeySharp behavior was checked against the [grant catalog](../Mzying2001.MonkeySharp.Core/Compatibility/UserScriptGrantCatalog.cs), [JavaScript facade](../Mzying2001.MonkeySharp.Core/Js/Init.js), [Core API providers](../Mzying2001.MonkeySharp.Core/Apis/), [metadata parser](../Mzying2001.MonkeySharp.Core/Parsing/UserScriptMetadataParser.cs), [runtime info builder](../Mzying2001.MonkeySharp.Core/Runtime/UserScriptEngine.cs), [CefSharp services](../Mzying2001.MonkeySharp.CefSharp/), and [JavaScript contract tests](../Mzying2001.MonkeySharp.Core.Tests/JavaScript/). The [Demo guide](../Mzying2001.MonkeySharp.Demo/README.md) documents its concrete persistence and interaction services. Use these sources when upgrading the runtime or replacing host services.
+- Metadata and grants are defined by the [metadata parser](../Mzying2001.MonkeySharp.Core/Parsing/UserScriptMetadataParser.cs) and [grant catalog](../Mzying2001.MonkeySharp.Core/Compatibility/UserScriptGrantCatalog.cs).
+- GM API behavior is implemented by the [JavaScript facade](../Mzying2001.MonkeySharp.Core/Js/Init.js), [Core API providers](../Mzying2001.MonkeySharp.Core/Apis/) and [runtime info builder](../Mzying2001.MonkeySharp.Core/Runtime/UserScriptEngine.cs). Examples of expected behavior are in the [JavaScript contract tests](../Mzying2001.MonkeySharp.Core.Tests/JavaScript/).
+- Host implementations are in the [CefSharp adapter](../Mzying2001.MonkeySharp.CefSharp/). The [Demo guide](../Mzying2001.MonkeySharp.Demo/README.md) describes the Demo's persistence and interaction services.

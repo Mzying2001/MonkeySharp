@@ -8,7 +8,7 @@
 
 同一个适配器二进制文件无法兼容任意 CefSharp 版本。CefSharp 程序集具有强名称，而且公开接口曾在版本间发生变化，例如 `IBrowser.GetFrame(long)` 改为 `GetFrameByIdentifier(string)`，`IFrame.Identifier` 也从 `long` 改为 `string`。
 
-源码默认使用[适配器项目](../Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj)中固定的当前发布版，旧版 `CefSharp84` 包面向 `84.4.10`。CI 和交付验证覆盖固定旧版与当前发布版的 x64/x86。其他版本的历史原生证据仍只适用于其记录的引擎和版本。应用程序应针对实际发布的版本重新构建并测试；使用[源码构建命令](development.zh-CN.md#构建与测试)并指定所选版本。
+源码构建默认使用[适配器项目](../Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj)中固定的 CefSharp 版本。`CefSharp84` 包面向 `84.4.10`。请使用[源码构建命令](development.zh-CN.md#构建与测试)，针对应用实际发布的各个版本构建并测试适配器。
 
 每个适配器 NuGet 包均公开依赖其编译时使用的精确版本 `CefSharp.Common` 和共享 Core 包。使用者选择版本匹配的 `CefSharp.WinForms`、`CefSharp.Wpf` 等 UI 包，并在 .NET Framework 应用中允许常规绑定重定向。托管包、CEF 原生文件、MonkeySharp 适配器的版本和进程平台必须一致。应用程序只应安装一种适配器；绑定重定向无法解决 CefSharp API 不兼容。
 
@@ -92,7 +92,7 @@ await repository.InitializeAsync(CancellationToken.None);
 
 `IsEnabled` 是持久化启用意图，`IsReady` 表示完整准备，`CanExecute` 同时要求两者；所有执行入口先检查后者，再访问 metadata 或准备规则。禁用安装启动仅用缓存，主动重载仍可下载。启用未就绪安装先保存意图，再准备已观测源码；后续失败或取消返回已启用但不可用的状态和诊断。已经开始的重载被取消时，先发布不可用状态，再按取消结束。缓存缺失可重新获取，须满足当前声明完整性；无声明摘要时允许采用远端新内容。
 
-局部仓库诊断使用 `MSR420_SOURCE_UNAVAILABLE`、`MSR421_ASSET_UNAVAILABLE`、`MSR422_SOURCE_CHANGED`、`MSR423_PERSISTENCE_FAILED`、`MSR424_RECOVERY_CONFLICT`、`MSR425_ASSET_FETCH_FAILED` 和 `MSR426_PREPARATION_CANCELLED`，携带脚本键，不设置页面或 frame。成功恢复后清除过时的不可用原因。实现示例见 [Demo 持久化](../Mzying2001.MonkeySharp.Demo/Persistence/SqliteUserScriptRepositoryPersistence.cs)及[数据与恢复指南](../Mzying2001.MonkeySharp.Demo/README.zh-CN.md#便携数据与恢复)。4.0 不提供旧 API 或数据库兼容迁移层。
+局部仓库诊断使用 `MSR420_SOURCE_UNAVAILABLE`、`MSR421_ASSET_UNAVAILABLE`、`MSR422_SOURCE_CHANGED`、`MSR423_PERSISTENCE_FAILED`、`MSR424_RECOVERY_CONFLICT`、`MSR425_ASSET_FETCH_FAILED` 和 `MSR426_PREPARATION_CANCELLED`，携带脚本键，不设置页面或 frame。成功恢复后清除过时的不可用原因。实现示例见 [Demo 持久化](../Mzying2001.MonkeySharp.Demo/Persistence/SqliteUserScriptRepositoryPersistence.cs)及[数据与恢复指南](../Mzying2001.MonkeySharp.Demo/README.zh-CN.md#便携数据与恢复)。
 
 ### 值存储与权限提供程序
 
@@ -169,7 +169,7 @@ renderer 将已确认镜像与有序 pending 变更分开维护，同步读取�
 
 记忆键是稳定安装身份、权限类型及 HTTP(S) origin，不保存凭据、path/query。允许一次仅对当前合并等待批次有效，不能授权后续请求。单个等待者取消不影响其他文档的同批请求，全部取消才关闭提示。导航取消交互等待，授权结束后再次检查安装版本及启用状态。
 
-普通调用超时在授权后开始；隔离传输复用 Core 的期限，不在用户决定前另行计时，文档结束仍会拒绝等待中的请求。CEF 传输与下载的截止计时在重定向权限等待时暂停并恢复剩余预算。Demo 添加 SQLite 权限表而不删除原数据，使用真实异步窗口，并提供权限按钮及按脚本撤销。撤销取消等待并刷新执行状态；WPF E2E 操作真实按钮。
+普通调用超时在授权后开始；隔离传输复用 Core 的期限，不在用户决定前另行计时，文档结束仍会拒绝等待中的请求。CEF 传输与下载的截止计时在重定向权限等待时暂停并恢复剩余预算。Demo 将记住的权限决定存入 SQLite，并通过异步窗口请求授权。权限管理器支持按脚本撤销，撤销会取消待处理的授权提示并刷新受影响的执行状态。
 
 ## 网络 API
 
@@ -270,7 +270,7 @@ CefSharp 只能提供尽力而为的 document-start 钩子。相应执行产生 
 
 `@sandbox DOM`/`@inject-into content` 选择隔离 context，raw/默认/JavaScript 选择页面访问。DOM 与显式 `unsafeWindow` 授权、冲突世界或未支持的 unwrap 以 `MSR215_EXECUTION_WORLD_UNAVAILABLE` 拒绝，不退回 raw。隔离 OOPIF 通过原生 child session 支持已验证的源码/存储/资源/XHR 范围，包括普通/私密上下文及迁移，详见 [OOPIF 路由](compatibility/execution-worlds.md#isolated-oopif-routing)。
 
-BFCache 缓存执行会被撤销，需要新导航；隔离世界不支持历史 page-frame webRequest。页面世界的手动菜单使用当前原生 CEF frame 会话。隔离世界的手动菜单在三个已测版本均支持主 frame，84 另支持同进程子 frame；121/151 仍仅主 frame，隔离 OOPIF 菜单不支持。[执行证据](compatibility/execution-worlds.md)及 [start/CSP 决策](compatibility/start-csp-decision.md)分别说明这些边界、严格时机与 CSP 效果。
+BFCache 缓存执行会被撤销，需要新导航。隔离世界不支持历史 page-frame webRequest。页面世界的手动菜单使用当前原生 CEF frame 会话。隔离世界的手动菜单支持主 frame，同进程子 frame 仅在 CefSharp 84 上受支持。详见[执行限制](compatibility/execution-worlds.md#remaining-limits)和[严格启动时机与 CSP 评估](compatibility/start-csp-decision.md)。
 
 ## 桥协议
 
