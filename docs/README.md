@@ -1,13 +1,16 @@
 # MonkeySharp documentation
 
-Start with the repository [README](../README.md) / [中文说明](../README.zh-CN.md) for installation and a minimal host.
+**English** | [中文](README.zh-CN.md)
 
-| Audience | English | 中文 |
-| --- | --- | --- |
-| Userscript authors | [Userscript guide](usage-guide.md) | [用户脚本使用指南](usage-guide.zh-CN.md) |
-| Host developers | [Integration reference](integration-reference.md) | [集成参考](integration-reference.zh-CN.md) |
-| Demo browser users | [Demo guide](../Mzying2001.MonkeySharp.Demo/README.md) | [Demo 指南](../Mzying2001.MonkeySharp.Demo/README.zh-CN.md) |
-| Runtime contributors | [Development guide](development.md) | [开发指南](development.zh-CN.md) |
+Start with the [repository README](../README.md) for installation and a minimal host.
+
+| Audience | Guide |
+| --- | --- |
+| Userscript authors | [Userscript guide](usage-guide.md) |
+| Host developers | [Integration reference](integration-reference.md) |
+| Demo browser users | [Demo guide](../Mzying2001.MonkeySharp.Demo/README.md) |
+| Runtime contributors | [Development guide](development.md) |
+| Users upgrading MonkeySharp | [Changelog](changelog.md) |
 
 [Compatibility](compatibility/README.md) describes current capabilities, intentional differences, engine limits and the evidence supporting them, including [HTTP requests and streams](compatibility/network.md). [Validation](compatibility/validation.md) explains check selection, reproduction and the latest recorded matrix. The [tooling directory](../scripts/compatibility/README.md) owns runner parameters and inputs; the [evidence index](../scripts/compatibility/evidence/README.md) groups test baselines, capability matrices, reference observations, delivery snapshots and retained failures.
 
@@ -17,15 +20,16 @@ Use the primary reference below for detailed rules. Other documents keep the con
 
 | Question | Primary reference |
 | --- | --- |
-| What is MonkeySharp, and how do I start? | Repository [README](../README.md) / [中文](../README.zh-CN.md): packages, minimal integration and security overview. |
-| How do I write or port a script? | Userscript guide: metadata, grants, parameters, returns, errors and examples. |
-| What must my host implement? | Integration reference: configuration, service interfaces, persistence, ownership and lifecycle. |
-| How do I operate or recover the Demo? | Demo guide: UI, deployment, portable data and Demo-specific policies. |
-| How do I build, package or switch native versions? | Development guide: toolchain, source commands, packages and CI. |
-| Which behavior is reference-backed, different or limited? | [Reference baseline](compatibility/api-contract.md) and compatibility topics: separate official descriptions, pinned observations and MonkeySharp guarantees. |
-| Which checks should I run, and what do their results establish? | [Validation](compatibility/validation.md): gate scope, result interpretation, triage and dated matrices. |
-| What are the runner arguments and required inputs? | [Tooling reference](../scripts/compatibility/README.md): CLI parameters, pins and fixtures. |
-| Which recorded run supports a claim? | [Evidence index](../scripts/compatibility/evidence/README.md): test baselines, capability matrices, reference observations and historical deliveries. |
+| What is MonkeySharp, and how do I start? | The [repository README](../README.md) covers packages, minimal integration and the security model. |
+| How do I write or port a script? | The [userscript guide](usage-guide.md) covers metadata, grants, parameters, return values, errors and examples. |
+| What must my host implement? | The [integration reference](integration-reference.md) covers configuration, service interfaces, persistence, ownership and lifecycle. |
+| How do I operate or recover the Demo? | The [Demo guide](../Mzying2001.MonkeySharp.Demo/README.md) covers the UI, deployment, portable data and Demo-specific policies. |
+| How do I build, package or switch native versions? | The [development guide](development.md) covers the toolchain, source commands, packages and CI. |
+| What changed between releases? | The [changelog](changelog.md) covers features, fixes and upgrade requirements by version. |
+| Which behavior is reference-backed, different or limited? | The [reference baseline](compatibility/api-contract.md) and compatibility topics distinguish official descriptions, pinned observations and MonkeySharp guarantees. |
+| Which checks should I run, and what do their results establish? | The [validation guide](compatibility/validation.md) covers check scope, result interpretation, triage and dated matrices. |
+| What are the runner arguments and required inputs? | The [tooling reference](../scripts/compatibility/README.md) covers CLI parameters, pinned versions and fixtures. |
+| Which recorded run supports a claim? | The [evidence index](../scripts/compatibility/evidence/README.md) lists test baselines, capability matrices, reference observations and historical deliveries. |
 
 For example, script download parameters belong in the userscript guide, custom download-service obligations in the integration reference, compatibility differences in the download topic, and recorded outcomes in evidence. A link to Demo data recovery is useful for operating its profile; implementation guidance should also link directly to the relevant persistence code.
 
