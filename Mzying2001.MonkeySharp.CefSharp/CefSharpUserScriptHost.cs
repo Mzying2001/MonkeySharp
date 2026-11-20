@@ -289,6 +289,9 @@ namespace Mzying2001.MonkeySharp.CefSharp
 
             var boundBridge = new BoundBridge(this);
             var requestContext = browser.RequestContext;
+            var contextMenuHandler = contextMenuProperty == null ? null : new ContextMenuHandler(this, existingContextMenuHandler);
+            var frameLoadSubscribed = false;
+            var javascriptMessageSubscribed = false;
             try
             {
                 multiplexer.Add(_renderObserver);
@@ -299,11 +302,17 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     isAsync: true,
                     options: BindingOptions.DefaultBinder);
                 browser.FrameLoadEnd += BrowserFrameLoadEnd;
-                _contextMenuHandler = new ContextMenuHandler(this, existingContextMenuHandler);
-                if (contextMenuProperty != null)
-                    contextMenuProperty.SetValue(browser, _contextMenuHandler, null);
+                frameLoadSubscribed = true;
+                if (contextMenuHandler != null)
+                    contextMenuProperty.SetValue(browser, contextMenuHandler, null);
+                browser.JavascriptMessageReceived += BrowserJavascriptMessageReceived;
+                javascriptMessageSubscribed = true;
                 lock (_sync)
                 {
+                    var browserSessionId = Guid.NewGuid().ToString("D");
+                    var staticWebRequests = _webRequestService == null ? null : new StaticWebRequestRules(
+                        _repository, _webRequestService, _permissionPolicy, browserSessionId,
+                        () => _options.IsIncognito?.Invoke(_requestContextAccessor.Current));
                     _browser = browser;
                     IsLateAttach = lateAttach;
                     IsLatePreparation = false;
@@ -313,23 +322,28 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     _webRequestHandler = webRequestHandler;
                     _ownsRequestMultiplexer = ownsRequestMultiplexer;
                     _attachmentCancellation = new CancellationTokenSource();
-                    _browserSessionId = Guid.NewGuid().ToString("D");
+                    _browserSessionId = browserSessionId;
                     _rawDocumentMarker = "__MonkeySharpDocument_" + Guid.NewGuid().ToString("N");
                     _requestContextAccessor.Current = requestContext;
                     _requestContextAccessor.IsAttached = true;
                     _attachmentGeneration++;
-                    if (_webRequestService != null)
-                    {
-                        _staticWebRequests = new StaticWebRequestRules(_repository, _webRequestService, _permissionPolicy,
-                            _browserSessionId, () => _options.IsIncognito?.Invoke(_requestContextAccessor.Current));
-                        _staticWebRequestPreparation = _staticWebRequests.InitializeAsync(_attachmentCancellation.Token);
-                    }
+                    _staticWebRequests = staticWebRequests;
+                    _staticWebRequestPreparation = staticWebRequests?.InitializeAsync(_attachmentCancellation.Token);
+                    _contextMenuHandler = contextMenuHandler;
                 }
-                browser.JavascriptMessageReceived += BrowserJavascriptMessageReceived;
                 Observe(InitializeIsolatedIfNeededAsync(), "MSC230_ISOLATED_PREPARATION_FAILED", null);
             }
             catch (Exception exception)
             {
+                lock (_sync)
+                {
+                    if (ReferenceEquals(_contextMenuHandler, contextMenuHandler))
+                        _contextMenuHandler = null;
+                }
+                if (javascriptMessageSubscribed)
+                    browser.JavascriptMessageReceived -= BrowserJavascriptMessageReceived;
+                if (frameLoadSubscribed)
+                    browser.FrameLoadEnd -= BrowserFrameLoadEnd;
                 webRequestHandler?.Dispose();
                 EmitDiagnostic(
                     "MSC200_BRIDGE_REGISTRATION_FAILED",
@@ -342,7 +356,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     browser.JavascriptObjectRepository.UnRegister(BridgeObjectName);
                 if (ownsMultiplexer && ReferenceEquals(browser.RenderProcessMessageHandler, multiplexer))
                     browser.RenderProcessMessageHandler = null;
-                if (contextMenuProperty != null && ReferenceEquals(contextMenuProperty.GetValue(browser, null), _contextMenuHandler))
+                if (contextMenuHandler != null && ReferenceEquals(contextMenuProperty.GetValue(browser, null), contextMenuHandler))
                     contextMenuProperty.SetValue(browser, existingContextMenuHandler, null);
                 if (requestMultiplexer != null)
                 {
@@ -442,7 +456,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             browser.FrameLoadEnd -= BrowserFrameLoadEnd;
             browser.JavascriptMessageReceived -= BrowserJavascriptMessageReceived;
             var contextMenuProperty = GetContextMenuHandlerProperty(browser);
-            if (contextMenuProperty != null && ReferenceEquals(contextMenuProperty.GetValue(browser, null), contextMenuHandler))
+            if (contextMenuHandler != null && contextMenuProperty != null && ReferenceEquals(contextMenuProperty.GetValue(browser, null), contextMenuHandler))
                 contextMenuProperty.SetValue(browser, contextMenuHandler.Previous, null);
             multiplexer.HandlerFailed -= MultiplexerHandlerFailed;
             multiplexer.Remove(_renderObserver);

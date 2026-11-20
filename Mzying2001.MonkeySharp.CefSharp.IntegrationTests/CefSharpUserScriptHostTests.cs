@@ -89,6 +89,186 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
         }
 
         [Fact]
+        public async Task ContextMenuLookupDistinguishesSameNamedInstallationsAndPreservesExecution()
+        {
+            const CefMenuCommand firstCommand = CefMenuCommand.UserFirst;
+            const CefMenuCommand secondCommand = firstCommand + 1;
+            var repository = TestRepository.Create();
+            var source = Script("none", "context-menu");
+            var first = await repository.InstallAsync(source, "first", true, CancellationToken.None);
+            var second = await repository.InstallAsync(source, "second", true, CancellationToken.None);
+
+            using (var host = new CefSharpUserScriptHostBuilder(repository).Build())
+            {
+                var browser = new BrowserFixture();
+                string documentId = null;
+                host.DocumentLifecycle += (_, args) => documentId = args.Frame.DocumentId;
+                host.Attach(browser.Browser.Object);
+                browser.CreateContext();
+                await browser.WaitForScriptCountAsync(1);
+
+                var model = browser.BuildContextMenu();
+
+                model.Verify(item => item.AddItem(firstCommand, "fixture"), Times.Once);
+                model.Verify(item => item.AddItem(secondCommand, "fixture"), Times.Once);
+                Assert.True(host.TryGetContextMenuScriptKey(firstCommand, out var firstKey));
+                Assert.Equal(first.ScriptKey, firstKey);
+                Assert.True(host.TryGetContextMenuScriptKey(secondCommand, out var secondKey));
+                Assert.Equal(second.ScriptKey, secondKey);
+                Assert.NotEqual(firstKey, secondKey);
+                Assert.False(host.TryGetContextMenuScriptKey(CefMenuCommand.Back, out var missingKey));
+                Assert.Equal(default, missingKey);
+
+                Assert.True(browser.Browser.Object.MenuHandler.OnContextMenuCommand(
+                    browser.Browser.Object, browser.CefBrowser.Object, browser.Frame.Object, null, secondCommand, CefEventFlags.None));
+                await browser.WaitForScriptCountAsync(2);
+                Assert.NotNull(documentId);
+                var injection = Assert.Single(browser.Scripts, script => script.Contains("runtime.install(payload)"));
+                const string payloadPrefix = "decodePayload(\"";
+                var start = injection.IndexOf(payloadPrefix, StringComparison.Ordinal) + payloadPrefix.Length;
+                var end = injection.IndexOf("\")", start, StringComparison.Ordinal);
+                using (var payload = JsonDocument.Parse(Convert.FromBase64String(injection.Substring(start, end - start))))
+                {
+                    Assert.Equal(documentId, payload.RootElement.GetProperty("documentId").GetString());
+                    var invocation = Assert.Single(payload.RootElement.GetProperty("invocations").EnumerateArray());
+                    Assert.Equal(secondKey.ToString(), invocation.GetProperty("scriptKey").GetString());
+                }
+            }
+        }
+
+        [Fact]
+        public async Task ContextMenuLookupClearsBeforeRebuildAndSkipsRejectedItems()
+        {
+            const CefMenuCommand firstCommand = CefMenuCommand.UserFirst;
+            const CefMenuCommand secondCommand = firstCommand + 1;
+            var repository = TestRepository.Create();
+            await repository.InstallAsync(Script("none", "context-menu"), "test", true, CancellationToken.None);
+            var second = await repository.InstallAsync(Script("none", "context-menu", "second"), "test", true, CancellationToken.None);
+
+            using (var host = new CefSharpUserScriptHostBuilder(repository).Build())
+            {
+                var browser = new BrowserFixture();
+                var innerHandler = new Mock<IContextMenuHandler>();
+                browser.Browser.Object.MenuHandler = innerHandler.Object;
+                host.Attach(browser.Browser.Object);
+                browser.CreateContext();
+                await browser.WaitForScriptCountAsync(1);
+                browser.BuildContextMenu();
+                Assert.True(host.TryGetContextMenuScriptKey(firstCommand, out _));
+
+                innerHandler.Setup(item => item.OnBeforeContextMenu(
+                        browser.Browser.Object, browser.CefBrowser.Object, browser.Frame.Object, null, It.IsAny<IMenuModel>()))
+                    .Callback(() =>
+                    {
+                        Assert.False(host.TryGetContextMenuScriptKey(firstCommand, out var previousKey));
+                        Assert.Equal(default, previousKey);
+                    });
+
+                var model = browser.BuildContextMenu(rejectedCommand: firstCommand);
+
+                innerHandler.Verify(item => item.OnBeforeContextMenu(
+                    browser.Browser.Object, browser.CefBrowser.Object, browser.Frame.Object, null, model.Object), Times.Once);
+                model.Verify(item => item.AddItem(firstCommand, "fixture"), Times.Once);
+                Assert.False(host.TryGetContextMenuScriptKey(firstCommand, out var rejectedKey));
+                Assert.Equal(default, rejectedKey);
+                Assert.True(host.TryGetContextMenuScriptKey(secondCommand, out var secondKey));
+                Assert.Equal(second.ScriptKey, secondKey);
+                Assert.False(browser.Browser.Object.MenuHandler.OnContextMenuCommand(
+                    browser.Browser.Object, browser.CefBrowser.Object, browser.Frame.Object, null, firstCommand, CefEventFlags.None));
+            }
+        }
+
+        [Fact]
+        public async Task ContextMenuLookupTracksCurrentMenuAndBrowserAttachment()
+        {
+            const CefMenuCommand command = CefMenuCommand.UserFirst;
+            const string otherUrl = "https://other.example.com/page";
+            var repository = TestRepository.Create();
+            var first = await repository.InstallAsync(Script("none", "context-menu"), "test", true, CancellationToken.None);
+            var other = await repository.InstallAsync(Script("none", "context-menu", match: otherUrl), "test", true, CancellationToken.None);
+
+            using (var host = new CefSharpUserScriptHostBuilder(repository).Build())
+            using (var otherHost = new CefSharpUserScriptHostBuilder(repository).Build())
+            {
+                Assert.False(host.TryGetContextMenuScriptKey(command, out var key));
+                Assert.Equal(default, key);
+                var browser = new BrowserFixture();
+                host.Attach(browser.Browser.Object);
+                browser.CreateContext();
+                await browser.WaitForScriptCountAsync(1);
+                browser.BuildContextMenu();
+                Assert.True(host.TryGetContextMenuScriptKey(command, out key));
+                Assert.Equal(first.ScriptKey, key);
+
+                browser.Browser.Object.MenuHandler.OnContextMenuDismissed(browser.Browser.Object, browser.CefBrowser.Object, browser.Frame.Object);
+                Assert.False(host.TryGetContextMenuScriptKey(command, out key));
+                Assert.Equal(default, key);
+                browser.BuildContextMenu();
+                Assert.True(host.TryGetContextMenuScriptKey(command, out key));
+                Assert.Equal(first.ScriptKey, key);
+
+                var otherBrowser = new BrowserFixture(url: otherUrl);
+                otherHost.Attach(otherBrowser.Browser.Object);
+                otherBrowser.CreateContext();
+                await otherBrowser.WaitForScriptCountAsync(1);
+                otherBrowser.BuildContextMenu();
+                Assert.True(otherHost.TryGetContextMenuScriptKey(command, out key));
+                Assert.Equal(other.ScriptKey, key);
+                Assert.True(host.TryGetContextMenuScriptKey(command, out key));
+                Assert.Equal(first.ScriptKey, key);
+
+                await host.DetachAsync(CancellationToken.None);
+                Assert.False(host.TryGetContextMenuScriptKey(command, out key));
+                Assert.Equal(default, key);
+                var newBrowser = new BrowserFixture(url: otherUrl);
+                host.Attach(newBrowser.Browser.Object);
+                Assert.False(host.TryGetContextMenuScriptKey(command, out key));
+                Assert.Equal(default, key);
+                newBrowser.CreateContext();
+                await newBrowser.WaitForScriptCountAsync(1);
+                newBrowser.BuildContextMenu();
+                Assert.True(host.TryGetContextMenuScriptKey(command, out key));
+                Assert.Equal(other.ScriptKey, key);
+
+                host.Dispose();
+                Assert.False(host.TryGetContextMenuScriptKey(command, out key));
+                Assert.Equal(default, key);
+            }
+        }
+
+        [Fact]
+        public async Task FailedContextMenuAttachmentRestoresPreviousHandlerAndAllowsRetry()
+        {
+            using (var host = await CreateHostAsync(Script("none", "context-menu")))
+            {
+                var browser = new BrowserFixture();
+                var previous = Mock.Of<IContextMenuHandler>();
+                browser.Browser.Object.MenuHandler = previous;
+                var failure = new InvalidOperationException("Cannot subscribe to browser messages.");
+                var failSubscription = true;
+                browser.Browser.SetupAdd(item => item.JavascriptMessageReceived += It.IsAny<EventHandler<JavascriptMessageReceivedEventArgs>>())
+                    .Callback(() =>
+                    {
+                        Assert.NotSame(previous, browser.Browser.Object.MenuHandler);
+                        if (failSubscription) throw failure;
+                    });
+
+                Assert.Same(failure, Assert.Throws<InvalidOperationException>(() => host.Attach(browser.Browser.Object)));
+                Assert.Same(previous, browser.Browser.Object.MenuHandler);
+                Assert.False(host.TryGetContextMenuScriptKey(CefMenuCommand.UserFirst, out var key));
+                Assert.Equal(default, key);
+
+                failSubscription = false;
+                host.Attach(browser.Browser.Object);
+                browser.CreateContext();
+                await browser.WaitForScriptCountAsync(1);
+                browser.BuildContextMenu();
+                Assert.True(host.TryGetContextMenuScriptKey(CefMenuCommand.UserFirst, out key));
+                Assert.NotEqual(default, key);
+            }
+        }
+
+        [Fact]
         public void MultiplexerContinuesAfterAHandlerFails()
         {
             var failing = new Mock<IRenderProcessMessageHandler>();
@@ -1148,6 +1328,15 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
             {
                 Browser.Object.RenderProcessMessageHandler.OnContextCreated(
                     Browser.Object, CefBrowser.Object, Frame.Object);
+            }
+
+            public Mock<IMenuModel> BuildContextMenu(CefMenuCommand? rejectedCommand = null)
+            {
+                var model = new Mock<IMenuModel>();
+                model.Setup(item => item.AddItem(It.IsAny<CefMenuCommand>(), It.IsAny<string>()))
+                    .Returns<CefMenuCommand, string>((command, _) => command != rejectedCommand);
+                Browser.Object.MenuHandler.OnBeforeContextMenu(Browser.Object, CefBrowser.Object, Frame.Object, null, model.Object);
+                return model;
             }
 
             public void RaiseFrameLoadEnd()

@@ -110,6 +110,8 @@ Local repository diagnostics use `MSR420_SOURCE_UNAVAILABLE`, `MSR421_ASSET_UNAV
 
 `IMenuService.RegisterAsync` receives `Action<MenuCommandInvocation>`. `MenuCommandRequest.OriginFrame` identifies the authenticated subscriber; `ClickedFrame` requests invocation only for a matching host-attested current frame. Populate only input fields actually observed. Use `host.ResolveMenuFrame(nativeFrame, request)` for native frame resolution; null means unknown/stale and suppresses a targeted invocation. The Demo popup has no frame identity. This GM callback contract is separate from `@run-at context-menu` source execution. See [menu semantics and evidence](compatibility/host-interactions.md#menus).
 
+For `@run-at context-menu` items, a custom menu handler can call `host.TryGetContextMenuScriptKey(commandId, out var scriptKey)` after the adapter's `OnBeforeContextMenu` returns. Pass the actual command IDs from the items the application retains. The installation key lets the application look up display metadata such as icons. Use the result for that menu build only, since command IDs can be reused. The lookup returns `false` and a default key if the command is unmapped, the menu has been dismissed, or the host has no active menu handler.
+
 Interaction services have distinct lifecycle contracts:
 
 | Service entry point | Returned handle | Lifecycle members |

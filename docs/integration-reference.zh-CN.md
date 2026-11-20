@@ -110,6 +110,8 @@ await repository.InitializeAsync(CancellationToken.None);
 
 `IMenuService.RegisterAsync` 接收 `Action<MenuCommandInvocation>`。`MenuCommandRequest.OriginFrame` 标识已认证的订阅文档，`ClickedFrame` 要求仅向匹配且经宿主证明的当前 frame 派发。仅填写实际观测到的输入字段。通过 `host.ResolveMenuFrame(nativeFrame, request)` 解析原生 frame；null 表示未知或已过期，不派发定向调用。Demo 弹出菜单没有 frame 身份。该 GM 回调契约与 `@run-at context-menu` 源码执行不同，详见[菜单语义及证据](compatibility/host-interactions.md#menus)。
 
+自定义菜单处理器可在适配器的 `OnBeforeContextMenu` 返回后，对应用保留的 `@run-at context-menu` 菜单项使用其实际命令 ID 调用 `host.TryGetContextMenuScriptKey(commandId, out var scriptKey)`。应用可按返回的安装 key 查找图标等显示数据。命令 ID 可在下次构建时重用，因此查询结果只用于本次菜单。命令无映射、菜单已关闭或宿主没有活动的菜单处理器时，查询返回 `false` 并输出默认 key。
+
 交互服务的生命周期契约各不相同：
 
 | 服务入口 | 返回句柄 | 生命周期成员 |
