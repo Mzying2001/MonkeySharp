@@ -2,9 +2,11 @@
 
 [English](changelog.md) | **中文**
 
-## 4.1.0（未发布）
+## 4.1.0 — 2026-11-20
 
 - 新增 `CefSharpUserScriptHost.TryGetContextMenuScriptKey`。自定义 CefSharp 菜单处理程序可用 `@run-at context-menu` 菜单项的命令 ID 查询安装键，并根据安装键为同名脚本选取正确的图标。命令 ID 仅在当前菜单中有效。 [集成参考](integration-reference.zh-CN.md#交互服务) · [Git 提交](https://github.com/Mzying2001/MonkeySharp/commit/2514967ec798caaa51e1e475bcd455881165a7af)
+
+[与 4.0.0 相比的 Git 变更](https://github.com/Mzying2001/MonkeySharp/compare/4.0.0...4.1.0)
 
 ## 4.0.0 — 2026-11-17
 

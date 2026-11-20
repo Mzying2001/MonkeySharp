@@ -2,9 +2,11 @@
 
 **English** | [中文](changelog.zh-CN.md)
 
-## 4.1.0 (Unreleased)
+## 4.1.0 — 2026-11-20
 
 - Added `CefSharpUserScriptHost.TryGetContextMenuScriptKey`. Custom CefSharp menu handlers can resolve an `@run-at context-menu` command ID to an installation key and use that key to select the correct icon when scripts share a name. The command ID is scoped to the active menu. [Integration reference](integration-reference.md#interaction-services) · [Git commit](https://github.com/Mzying2001/MonkeySharp/commit/2514967ec798caaa51e1e475bcd455881165a7af)
+
+[Git changes since 4.0.0](https://github.com/Mzying2001/MonkeySharp/compare/4.0.0...4.1.0)
 
 ## 4.0.0 — 2026-11-17
 
