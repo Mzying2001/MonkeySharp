@@ -1,0 +1,46 @@
+name: Compatibility report / 兼容性报告
+description: Report a behavior difference across userscript managers or CefSharp environments. / 报告不同脚本管理器或 CefSharp 环境之间的行为差异。
+body:
+  - type: input
+    id: affected-behavior
+    attributes:
+      label: GM API or script behavior / GM API 或脚本行为
+      description: Name the affected API or behavior, such as `GM.getValue`, `GM_getValue`, or `@run-at document-start`. / 写明受影响的 API 或行为，例如 `GM.getValue`、`GM_getValue` 或 `@run-at document-start`。
+    validations:
+      required: true
+  - type: textarea
+    id: monkeysharp-environment
+    attributes:
+      label: MonkeySharp test environment / MonkeySharp 测试环境
+      description: Include the MonkeySharp version or commit and, where applicable, the exact CefSharp version, process architecture, and execution world. / 请注明 MonkeySharp 版本或提交，以及适用的 CefSharp 精确版本、进程架构和执行世界。
+    validations:
+      required: true
+  - type: textarea
+    id: reference-environment
+    attributes:
+      label: Reference environment or documentation / 对照环境或文档
+      description: Give the manager and browser versions, the other CefSharp configuration, or a link to the documentation that describes the reference behavior. / 请提供对照的脚本管理器和浏览器版本、另一套 CefSharp 配置，或说明对照行为的文档链接。
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce / 复现步骤
+      description: Include the page or fixture, script setup, and actions needed for the comparison. / 请注明对照所需的页面或测试样例、脚本设置和操作步骤。
+    validations:
+      required: true
+  - type: textarea
+    id: comparison-results
+    attributes:
+      label: MonkeySharp and reference results / MonkeySharp 与对照结果
+      description: Describe what each environment produced, or quote the documented behavior if the reference is a document. / 说明两个环境的实际结果。如果依据是文档，请引述相关行为说明。
+      placeholder: |
+        MonkeySharp:
+        Reference / 对照：
+    validations:
+      required: true
+  - type: textarea
+    id: supporting-evidence
+    attributes:
+      label: Script and diagnostics / 脚本与诊断信息
+      description: If available, share a sanitized minimal script with relevant metadata such as `@grant`, `@match`, or `@sandbox`, and any relevant logs. / 如有，请附上脱敏后的最小脚本及相关元数据（如 `@grant`、`@match` 或 `@sandbox`），并附上相关日志。

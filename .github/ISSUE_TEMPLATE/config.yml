@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Documentation / 文档导航
+    url: https://github.com/Mzying2001/MonkeySharp/blob/main/docs/README.md
+    about: Browse the userscript, integration, and development guides in English or Chinese. / 查看中英文用户脚本、集成和开发指南。

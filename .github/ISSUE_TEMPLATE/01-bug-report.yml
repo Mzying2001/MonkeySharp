@@ -1,0 +1,52 @@
+name: Bug report / 缺陷报告
+description: Report a problem in MonkeySharp. / 报告 MonkeySharp 中的问题。
+body:
+  - type: dropdown
+    id: component
+    attributes:
+      label: Affected component / 受影响组件
+      options:
+        - Core and GM APIs / Core 与 GM API
+        - CefSharp adapter / CefSharp 适配器
+        - WPF Demo / WPF 示例
+        - Packaging and CI / 打包与 CI
+        - Documentation / 文档
+        - Other or unsure / 其他或不确定
+    validations:
+      required: true
+  - type: input
+    id: monkeysharp-version
+    attributes:
+      label: MonkeySharp version or commit / MonkeySharp 版本或提交
+      description: Enter the NuGet package version or the Git commit you built. / 填写 NuGet 包版本或构建所用的 Git 提交。
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment / 运行环境
+      description: If relevant, include the exact CefSharp version, process architecture (x64 or x86), target framework, and host or Demo configuration. / 如适用，请提供 CefSharp 精确版本、进程架构（x64 或 x86）、目标框架和宿主或 Demo 配置。
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce / 复现步骤
+      description: Include the setup and the shortest sequence that triggers the problem. / 请注明初始设置和能触发问题的最短步骤。
+    validations:
+      required: true
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected behavior / 预期行为
+    validations:
+      required: true
+  - type: textarea
+    id: actual-behavior
+    attributes:
+      label: Actual behavior / 实际行为
+    validations:
+      required: true
+  - type: textarea
+    id: supporting-evidence
+    attributes:
+      label: Reproduction code and diagnostics / 复现代码与诊断信息
+      description: If available, share a sanitized minimal script or host example, stack trace, or MSR/MSP diagnostic code. / 如有，请附上脱敏后的最小脚本或宿主示例、异常堆栈或 MSR/MSP 诊断代码。

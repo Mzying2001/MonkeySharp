@@ -9,7 +9,7 @@
 | 用户脚本作者 | [用户脚本使用指南](usage-guide.zh-CN.md) |
 | 宿主开发者 | [集成参考](integration-reference.zh-CN.md) |
 | Demo 浏览器用户 | [Demo 指南](../Mzying2001.MonkeySharp.Demo/README.zh-CN.md) |
-| 运行时贡献者 | [开发指南](development.zh-CN.md) |
+| 项目贡献者 | [贡献指南](../CONTRIBUTING.zh-CN.md)、[开发指南](development.zh-CN.md) |
 | 升级 MonkeySharp 的用户 | [更新日志](changelog.zh-CN.md) |
 
 兼容性、验证和工具资料为英文。[兼容性说明](compatibility/README.md)记录当前能力、有意保留的差异、引擎限制及相关证据，其中包括 [HTTP 请求与流](compatibility/network.md)。[验证指南](compatibility/validation.md)说明如何选择和复现检查，并提供最近记录的验证矩阵。[工具说明](../scripts/compatibility/README.md)列出运行参数与输入。[证据索引](../scripts/compatibility/evidence/README.md)汇集测试基线、能力矩阵、参考实现观测、发布验证快照和保留的失败记录。

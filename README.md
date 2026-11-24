@@ -13,7 +13,7 @@ Scripts can use modern `GM.*` methods and legacy `GM_*` names. Availability depe
 | Write or port a userscript | [Userscript guide](docs/usage-guide.md) |
 | Build, package, or verify the runtime | [Build and test](#build-and-test), then the [development guide](docs/development.md) |
 
-[Documentation index](docs/README.md) · [Compatibility and evidence](docs/compatibility/README.md)
+[Documentation index](docs/README.md) · [Compatibility and evidence](docs/compatibility/README.md) · [Contributing](CONTRIBUTING.md)
 
 ## Packages
 

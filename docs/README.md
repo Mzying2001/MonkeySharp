@@ -9,7 +9,7 @@ Start with the [repository README](../README.md) for installation and a minimal 
 | Userscript authors | [Userscript guide](usage-guide.md) |
 | Host developers | [Integration reference](integration-reference.md) |
 | Demo browser users | [Demo guide](../Mzying2001.MonkeySharp.Demo/README.md) |
-| Runtime contributors | [Development guide](development.md) |
+| Contributors | [Contributing guide](../CONTRIBUTING.md), [Development guide](development.md) |
 | Users upgrading MonkeySharp | [Changelog](changelog.md) |
 
 [Compatibility](compatibility/README.md) describes current capabilities, intentional differences, engine limits and the evidence supporting them, including [HTTP requests and streams](compatibility/network.md). [Validation](compatibility/validation.md) explains check selection, reproduction and the latest recorded matrix. The [tooling directory](../scripts/compatibility/README.md) owns runner parameters and inputs; the [evidence index](../scripts/compatibility/evidence/README.md) groups test baselines, capability matrices, reference observations, delivery snapshots and retained failures.
