@@ -16,6 +16,10 @@ foreach ($id in @('prepared', 'conditions', 'isolated', 'replay', 'csp', 'permis
 foreach ($name in @('partitionA','partitionB','siteNormalization','partitionDeleteIsExact','cleaned','partitionCrudExecuted','ancestorIdentities','defaultDeleteAncestor','ancestorCrudExecuted')) {
     ($sample | Where-Object { $_.caseId -eq 'partitions' }).checks[$name] = $true
 }
+foreach ($name in @('nativeChildMenuMapping','clickedFrameAttestation','nativeChildMenuFrame','isolatedChildManualExecution',
+        'staleClickedFrameRejected','staleChildMenuRejected','reboundChildMenu','removedChildMenuRejected')) {
+    ($sample | Where-Object { $_.caseId -eq 'isolated' }).checks[$name] = $true
+}
 $sampleJson = ConvertTo-Json -InputObject $sample -Depth 20
 Assert-SmokeRecords -Records ($sampleJson | ConvertFrom-Json) -Platform x64 -CefSharpVersion 156.0.300
 $focused = @(($sampleJson | ConvertFrom-Json) | Where-Object { $_.type -ne 'compatibility-case' -or $_.caseId -eq 'webRequest' })
@@ -39,6 +43,7 @@ $tests = [ordered]@{
     missingLegacy = { param($r) @($r | Where-Object { $_.phase -ne 'initial' }) }
     inconsistentSummary = { param($r) ($r | Where-Object { $_.type -eq 'smoke-summary' }).compatibility.frames = $false; $r }
     missingPartitionCrud = { param($r) ($r | Where-Object { $_.caseId -eq 'partitions' }).checks.PSObject.Properties.Remove('partitionCrudExecuted'); $r }
+    missingChildMenu = { param($r) ($r | Where-Object { $_.caseId -eq 'isolated' }).checks.PSObject.Properties.Remove('nativeChildMenuFrame'); $r }
     timeout = { param($r) $r + [pscustomobject]@{ type = 'runner-timeout' } }
 }
 foreach ($test in $tests.GetEnumerator()) {

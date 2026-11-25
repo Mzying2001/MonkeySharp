@@ -47,6 +47,12 @@ function Assert-SmokeRecords {
         $checks = @($matches[0].checks.PSObject.Properties)
         if ($checks.Count -eq 0 -or @($checks | Where-Object { $_.Value -isnot [bool] -or !$_.Value }).Count -gt 0) { throw "Compatibility assertions failed or missing: $id." }
         if ($summary.compatibility.$id -isnot [bool] -or !$summary.compatibility.$id) { throw "Compatibility summary failed: $id." }
+        if ($id -eq 'isolated') {
+            foreach ($name in @('nativeChildMenuMapping','clickedFrameAttestation','nativeChildMenuFrame','isolatedChildManualExecution',
+                    'staleClickedFrameRejected','staleChildMenuRejected','reboundChildMenu','removedChildMenuRejected')) {
+                if ($matches[0].checks.$name -isnot [bool] -or !$matches[0].checks.$name) { throw "Isolated menu assertion missing or failed: $name." }
+            }
+        }
         if ($id -eq 'partitions') {
             $required = if ($expected.Major -lt 114) { @('listRejected','setRejected','deleteRejected') }
                 else { @('partitionA','partitionB','siteNormalization','partitionDeleteIsExact','cleaned','partitionCrudExecuted') }

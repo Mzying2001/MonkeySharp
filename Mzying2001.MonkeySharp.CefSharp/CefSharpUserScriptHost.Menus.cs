@@ -12,10 +12,12 @@ namespace Mzying2001.MonkeySharp.CefSharp
 {
     public sealed partial class CefSharpUserScriptHost
     {
-        private void BrowserJavascriptMessageReceived(object sender, JavascriptMessageReceivedEventArgs args)
+        private void UpdateNativeMenuNavigation(object sender, IBrowser nativeBrowser, IFrame frame, bool loading)
         {
-            if (args.Message is string proof && args.Frame != null && !args.Frame.IsDisposed)
-                _isolated?.ConfirmNativeMenuFrame(proof, GetFrameIdentifier(args.Frame), args.Frame.IsMain);
+            CefSharpIsolatedExecutor isolated;
+            lock (_sync) isolated = ReferenceEquals(sender, _browser) && nativeBrowser?.IsPopup == false ? _isolated : null;
+            if (isolated != null && frame != null && !frame.IsDisposed)
+                isolated.NativeMenuNavigation(GetFrameIdentifier(frame), frame.IsMain, loading);
         }
 
         /// <summary>Gets the installation key for a command this host added for <c>@run-at context-menu</c>.</summary>
@@ -52,6 +54,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 id = GetFrameIdentifier(nativeFrame);
                 if (frame.ExecutionWorld != "isolated") return _sessions.TryGetValue(id, out var session) && session.Initialized &&
                     !session.Token.IsCancellationRequested && CefSharpDocumentIdentity.Matches(session.Frame, frame) ? session.Frame : null;
+                if (!nativeFrame.IsValid) return null;
                 isolated = _isolated;
                 main = nativeFrame.IsMain;
             }
@@ -67,7 +70,9 @@ namespace Mzying2001.MonkeySharp.CefSharp
             if (session != null && session.Initialized)
                 entries.AddRange(_engine.GetContextMenuEntriesAsync(session.Frame, CancellationToken.None).GetAwaiter().GetResult()
                     .Select(entry => new CefSharpMenuTarget(entry, session.Frame, GetFrameIdentifier(cefFrame))));
-            if (_isolated != null) entries.AddRange(_isolated.MenuAsync(GetFrameIdentifier(cefFrame), cefFrame.IsMain).GetAwaiter().GetResult());
+            var isolated = _isolated;
+            if (isolated != null && !cefFrame.IsDisposed && cefFrame.IsValid)
+                entries.AddRange(isolated.MenuAsync(GetFrameIdentifier(cefFrame), cefFrame.IsMain).GetAwaiter().GetResult());
             return entries;
         }
 
@@ -77,7 +82,8 @@ namespace Mzying2001.MonkeySharp.CefSharp
             if (target.Frame.ExecutionWorld == "isolated")
             {
                 var executor = _isolated;
-                if (executor != null) Observe(executor.ExecuteMenuAsync(target.Frame.DocumentId, target.NativeFrameId, target.Entry.ScriptKey), "MSC104_CONTEXT_MENU_FAILED", null);
+                if (executor != null && !cefFrame.IsDisposed && cefFrame.IsValid)
+                    Observe(executor.ExecuteMenuAsync(target, cefFrame.IsMain), "MSC104_CONTEXT_MENU_FAILED", null);
                 return;
             }
             FrameSession session;

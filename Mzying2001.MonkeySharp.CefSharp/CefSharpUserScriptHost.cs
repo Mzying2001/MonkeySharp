@@ -126,16 +126,24 @@ namespace Mzying2001.MonkeySharp.CefSharp
         {
             var scripts = await _repository.GetSnapshotAsync(CancellationToken.None).ConfigureAwait(false);
             if (!scripts.Any(script => script.CanExecute && UserScriptEngine.RequestedWorld(script.Definition.Metadata) == "isolated")) return;
-            var session = await GetCdpSessionAsync(GetAttachmentToken()).ConfigureAwait(false);
-            Task preparation;
+            long attachmentGeneration;
+            Task<CefSharpCdpSession> sessionPreparation;
             lock (_sync)
             {
                 if (_browser == null || _disposed) return;
+                attachmentGeneration = _attachmentGeneration;
+                sessionPreparation = GetCdpSessionAsync(_attachmentCancellation.Token);
+            }
+            var session = await sessionPreparation.ConfigureAwait(false);
+            Task preparation;
+            lock (_sync)
+            {
+                if (_browser == null || _disposed || _attachmentGeneration != attachmentGeneration) return;
                 if (_isolatedPreparation == null)
                 {
                     _isolated = new CefSharpIsolatedExecutor(session, _repository, _engine, _gateway, _browserSessionId,
                         () => _options.IsIncognito?.Invoke(_requestContextAccessor.Current), _options.Bridge,
-                        diagnostic => Diagnostic?.Invoke(this, diagnostic), args => RaiseDocumentLifecycle(args, null), _attachmentCancellation.Token);
+                        diagnostic => Diagnostic?.Invoke(this, diagnostic), args => RaiseDocumentLifecycle(args, null), _attachmentCancellation.Token, _browser);
                     foreach (var frame in _sessions.Values)
                     {
                         using (var current = GetFrameByIdentifier(_browser.GetBrowser(), frame.Frame.FrameId))
@@ -291,7 +299,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             var requestContext = browser.RequestContext;
             var contextMenuHandler = contextMenuProperty == null ? null : new ContextMenuHandler(this, existingContextMenuHandler);
             var frameLoadSubscribed = false;
-            var javascriptMessageSubscribed = false;
+            var frameLoadStartSubscribed = false;
             try
             {
                 multiplexer.Add(_renderObserver);
@@ -305,8 +313,8 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 frameLoadSubscribed = true;
                 if (contextMenuHandler != null)
                     contextMenuProperty.SetValue(browser, contextMenuHandler, null);
-                browser.JavascriptMessageReceived += BrowserJavascriptMessageReceived;
-                javascriptMessageSubscribed = true;
+                browser.FrameLoadStart += BrowserFrameLoadStart;
+                frameLoadStartSubscribed = true;
                 lock (_sync)
                 {
                     var browserSessionId = Guid.NewGuid().ToString("D");
@@ -340,8 +348,8 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     if (ReferenceEquals(_contextMenuHandler, contextMenuHandler))
                         _contextMenuHandler = null;
                 }
-                if (javascriptMessageSubscribed)
-                    browser.JavascriptMessageReceived -= BrowserJavascriptMessageReceived;
+                if (frameLoadStartSubscribed)
+                    browser.FrameLoadStart -= BrowserFrameLoadStart;
                 if (frameLoadSubscribed)
                     browser.FrameLoadEnd -= BrowserFrameLoadEnd;
                 webRequestHandler?.Dispose();
@@ -454,7 +462,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 session.Cancel();
 
             browser.FrameLoadEnd -= BrowserFrameLoadEnd;
-            browser.JavascriptMessageReceived -= BrowserJavascriptMessageReceived;
+            browser.FrameLoadStart -= BrowserFrameLoadStart;
             var contextMenuProperty = GetContextMenuHandlerProperty(browser);
             if (contextMenuHandler != null && contextMenuProperty != null && ReferenceEquals(contextMenuProperty.GetValue(browser, null), contextMenuHandler))
                 contextMenuProperty.SetValue(browser, contextMenuHandler.Previous, null);
@@ -1014,8 +1022,14 @@ namespace Mzying2001.MonkeySharp.CefSharp
             }
         }
 
+        private void BrowserFrameLoadStart(object sender, FrameLoadStartEventArgs args)
+        {
+            UpdateNativeMenuNavigation(sender, args.Browser, args.Frame, true);
+        }
+
         private void BrowserFrameLoadEnd(object sender, FrameLoadEndEventArgs args)
         {
+            UpdateNativeMenuNavigation(sender, args.Browser, args.Frame, false);
             FrameSession session;
             lock (_sync)
             {

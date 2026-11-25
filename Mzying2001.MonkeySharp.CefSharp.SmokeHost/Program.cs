@@ -256,9 +256,11 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             // CefSharp 121 creates the native browser when the control handle is
             // created. Attach before adding the control so the host sees the
             // uninitialized browser and can register its bridge first.
+            var menuProbe = new CompatibilitySuite.NativeMenuProbe();
+            _browser.MenuHandler = menuProbe;
             _host.Attach(_browser);
             _host.DocumentLifecycle += HostDocumentLifecycle;
-            _compatibility = new CompatibilitySuite(host, _browser, fixture, downloads, otherFixture, permissions, repository);
+            _compatibility = new CompatibilitySuite(host, _browser, fixture, downloads, otherFixture, permissions, repository, menuProbe);
             _browser.FrameLoadEnd += BrowserFrameLoadEnd;
             _browser.ConsoleMessage += (_, message) => Console.WriteLine(JsonSerializer.Serialize(new
             { type = "console", level = message.Level.ToString(), message = message.Message, source = message.Source, line = message.Line }));

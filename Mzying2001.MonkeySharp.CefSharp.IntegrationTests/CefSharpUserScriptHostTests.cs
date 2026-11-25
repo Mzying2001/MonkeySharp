@@ -244,9 +244,9 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
                 var browser = new BrowserFixture();
                 var previous = Mock.Of<IContextMenuHandler>();
                 browser.Browser.Object.MenuHandler = previous;
-                var failure = new InvalidOperationException("Cannot subscribe to browser messages.");
+                var failure = new InvalidOperationException("Cannot subscribe to browser navigation.");
                 var failSubscription = true;
-                browser.Browser.SetupAdd(item => item.JavascriptMessageReceived += It.IsAny<EventHandler<JavascriptMessageReceivedEventArgs>>())
+                browser.Browser.SetupAdd(item => item.FrameLoadStart += It.IsAny<EventHandler<FrameLoadStartEventArgs>>())
                     .Callback(() =>
                     {
                         Assert.NotSame(previous, browser.Browser.Object.MenuHandler);
