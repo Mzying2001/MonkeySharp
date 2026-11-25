@@ -170,7 +170,7 @@ Demo 手动更新时优先从 `@updateURL` 检查，其次使用 `@downloadURL`�
 
 沙箱 window 按脚本私有地回放缓存的 DOMContentLoaded/load 事件，回放事件的 `isTrusted` 为 false；document-idle 不回放更早的 DOMContentLoaded。window 监听支持 once、移除和 AbortSignal，执行结束清理运行时拥有的监听；直接注册到页面 DOM 的监听由脚本管理。源码、DOM 和样式的 CSP 效果分别有边界，不提供全站 CSP 绕过。
 
-隔离 OOPIF 支持源码执行、存储、资源及 XHR。隔离世界的手动菜单仅支持主 frame。页面世界的菜单使用当前原生 CEF frame 会话。BFCache 缓存执行会被撤销，需要新导航。详见[执行世界与限制](compatibility/execution-worlds.md)和[严格启动时机与 CSP 评估](compatibility/start-csp-decision.md)。
+隔离 OOPIF 支持源码执行、存储、资源及 XHR。隔离世界的手动菜单支持主 frame 和已验证的同进程子 frame。页面世界的菜单使用当前原生 CEF frame 会话。BFCache 缓存执行会被撤销，需要新导航。详见[执行世界与限制](compatibility/execution-worlds.md)和[严格启动时机与 CSP 评估](compatibility/start-csp-decision.md)。
 
 <a id="api-index"></a>
 
@@ -223,7 +223,7 @@ Demo 手动更新时优先从 `@updateURL` 检查，其次使用 `@downloadURL`�
 | `execution.documentStart` | 尽力执行，不保证早于页面脚本。 |
 | `execution.oopif` | 已验证的隔离 child-target session 范围。 |
 | `execution.bfcache` | 缓存执行撤销，需要新导航。 |
-| `execution.contextMenuFrame` | 两条受支持的 CefSharp 发布线均仅在主 frame 提供隔离菜单。 |
+| `execution.contextMenuFrame` | 隔离菜单支持主 frame 和已验证的同进程子 frame。 |
 | `GM.xmlHttpRequest.cookie`、`GM.xmlHttpRequest.cookiePartition` | 默认后端不支持显式 Cookie 或请求分区选择。 |
 | `GM.cookie.partitionKey` | 分区及 ancestor 支持按 [Chromium 协议版本范围](compatibility/cookies.md#partitioned-cookie-scope)适配。 |
 | `GM.audio.audible` | 没有可靠来源时不可用。 |

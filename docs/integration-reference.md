@@ -268,7 +268,7 @@ The adapter uses native CDP frame/loader/context events, installation/revision s
 
 `@sandbox DOM`/`@inject-into content` select isolated contexts; raw/default/JavaScript select page access. DOM plus an explicit `unsafeWindow` grant, conflicting worlds and unsupported unwrap reject with `MSR215_EXECUTION_WORLD_UNAVAILABLE`, without raw fallback. Isolated OOPIF uses native child sessions for the validated source/storage/resource/XHR scope, including normal/private contexts and migrations; see [OOPIF routing](compatibility/execution-worlds.md#isolated-oopif-routing).
 
-BFCache cached executions are revoked and require fresh navigation. Historical page-frame webRequest is unavailable from isolated contexts. Page-world manual menus use the current native CEF frame session. Isolated manual menus are limited to the main frame on both supported CefSharp releases. See [execution limits](compatibility/execution-worlds.md#remaining-limits) and the [strict-start/CSP assessment](compatibility/start-csp-decision.md).
+BFCache cached executions are revoked and require fresh navigation. Historical page-frame webRequest is unavailable from isolated contexts. Page-world manual menus use the current native CEF frame session. Isolated manual menus support the main frame and same-process child frames whose current document has been verified. For an unverified child frame, the adapter omits manual menu entries and `ResolveMenuFrame` returns `null` for a frame-targeted registration. See [execution limits](compatibility/execution-worlds.md#remaining-limits) and the [strict-start/CSP assessment](compatibility/start-csp-decision.md).
 
 ## Bridge Protocol
 

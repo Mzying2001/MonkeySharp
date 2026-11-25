@@ -164,7 +164,7 @@ Isolated worlds separate script globals and dispatch identity, not operating-sys
 
 The sandbox window privately replays cached DOMContentLoaded/load events with `isTrusted: false`; document-idle does not replay the earlier DOMContentLoaded event. Window listeners support once/removal/AbortSignal and are cleared with their execution; direct page DOM listeners remain script-owned. Source, DOM and style CSP effects have separate limits, without whole-page CSP bypass.
 
-Isolated OOPIF supports source execution, storage, resources and XHR. Manual isolated-world menus are limited to the main frame. Page-world menus use the current native CEF frame session. BFCache cached executions are revoked and require fresh navigation. See [execution worlds and limits](compatibility/execution-worlds.md) and the [strict-start/CSP assessment](compatibility/start-csp-decision.md).
+Isolated OOPIF supports source execution, storage, resources and XHR. Manual isolated-world menus support the main frame and verified same-process child frames. Page-world menus use the current native CEF frame session. BFCache cached executions are revoked and require fresh navigation. See [execution worlds and limits](compatibility/execution-worlds.md) and the [strict-start/CSP assessment](compatibility/start-csp-decision.md).
 
 ## API index
 
@@ -213,7 +213,7 @@ Except for info and `unsafeWindow` as described below, each row requires its cap
 | `execution.documentStart` | Best effort, without a pre-page guarantee. |
 | `execution.oopif` | Validated isolated child-target session scope. |
 | `execution.bfcache` | Cached executions revoked; fresh navigation required. |
-| `execution.contextMenuFrame` | Isolated menus are available in the main frame on both supported CefSharp releases. |
+| `execution.contextMenuFrame` | Isolated menus are available in the main frame and verified same-process child frames. |
 | `GM.xmlHttpRequest.cookie`, `GM.xmlHttpRequest.cookiePartition` | No explicit Cookie or request-partition selection in the default backend. |
 | `GM.cookie.partitionKey` | Partition and ancestor support follow the [Chromium protocol ranges](compatibility/cookies.md#partitioned-cookie-scope). |
 | `GM.audio.audible` | Unavailable without a reliable source. |

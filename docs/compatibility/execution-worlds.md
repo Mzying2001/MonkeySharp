@@ -16,7 +16,7 @@ Conflicting world requirements, explicit DOM plus an `unsafeWindow` grant, and u
 | Main and same-process child source/storage/resources/XHR | Supported |
 | OOPIF source/storage/resources/XHR | Supported through native child sessions |
 | Main-frame `@run-at context-menu` selection | Supported |
-| Same-process child `@run-at context-menu` selection | Unavailable on the supported CefSharp releases |
+| Same-process child `@run-at context-menu` selection | Supported after native frame and document verification |
 | OOPIF `@run-at context-menu` selection | Unsupported |
 
 This table concerns source execution. `GM.registerMenuCommand` callbacks use their host service and optional clickedFrame filtering. Page-world manual source selection uses the current native CEF frame session. See [menu scope](host-interactions.md#menus) and the [recorded engine/platform matrix](validation.md#latest-recorded-validation).
@@ -68,7 +68,7 @@ Run `./scripts/compatibility/Run-NativeProbe.ps1 -Probe oopif -Platform x64 -Cef
 - Full-GM document-start remains best effort, including prepared navigation. `RequireGuaranteedDocumentStart` rejects these combinations; protocol registration is not proof of pre-inline user execution.
 - Failure to create an isolated OOPIF context reports an error without raw fallback.
 - BFCache cached executions revoke their GM/window state and require a fresh navigation; transparent restoration is not claimed.
-- Isolated child menu selection requires a native frame mapping. CefSharp 87 delivers the proof callback with a disposed frame, so isolated manual menus are limited to the main frame on both supported releases.
+- Isolated child menu selection requires an asynchronous mapping between the native CEF frame and the current document in the root CDP session. The adapter checks a temporary lexical marker written through the native frame. An unverified frame has no isolated menu entry, and replacing the document invalidates existing selections.
 - Historical page-frame webRequest interception is unavailable from isolated contexts. See the [historical webRequest scope](README.md#historical-webrequest).
 - User-managed DOM listeners/timers are not an unload API for arbitrary code in a live document; document navigation destroys normal contexts, and runtime-owned listeners/bridge state are revoked explicitly.
 

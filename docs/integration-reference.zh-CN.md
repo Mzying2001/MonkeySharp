@@ -270,7 +270,7 @@ CefSharp 只能提供尽力而为的 document-start 钩子。相应执行产生 
 
 `@sandbox DOM`/`@inject-into content` 选择隔离 context，raw/默认/JavaScript 选择页面访问。DOM 与显式 `unsafeWindow` 授权、冲突世界或未支持的 unwrap 以 `MSR215_EXECUTION_WORLD_UNAVAILABLE` 拒绝，不退回 raw。隔离 OOPIF 通过原生 child session 支持已验证的源码/存储/资源/XHR 范围，包括普通/私密上下文及迁移，详见 [OOPIF 路由](compatibility/execution-worlds.md#isolated-oopif-routing)。
 
-BFCache 缓存执行会被撤销，需要新导航。隔离世界不支持历史 page-frame webRequest。页面世界的手动菜单使用当前原生 CEF frame 会话。两条受支持的 CefSharp 发布线均仅在主 frame 提供隔离世界的手动菜单。详见[执行限制](compatibility/execution-worlds.md#remaining-limits)和[严格启动时机与 CSP 评估](compatibility/start-csp-decision.md)。
+BFCache 缓存执行会被撤销，需要新导航。隔离世界不支持历史 page-frame webRequest。页面世界的手动菜单使用当前原生 CEF frame 会话。隔离世界的手动菜单支持主 frame 和当前文档已验证的同进程子 frame。子 frame 待验证或验证失败时，适配器隐藏手动菜单项，`ResolveMenuFrame` 对定向注册返回 `null`。详见[执行限制](compatibility/execution-worlds.md#remaining-limits)和[严格启动时机与 CSP 评估](compatibility/start-csp-decision.md)。
 
 ## 桥协议
 

@@ -58,6 +58,6 @@ Page-world trust applies in private contexts. Firefox containers are unavailable
 
 ## Known evidence gaps
 
-Full-GM document-start is best effort. BFCache revokes cached executions and scripts require a fresh navigation to run again. Manual isolated-world menus are limited to the main frame. The default XHR backend has no request-partition selector. See the [execution limits](execution-worlds.md#remaining-limits) and [Cookie partition scope](cookies.md#partitioned-cookie-scope).
+Full-GM document-start is best effort. BFCache revokes cached executions and scripts require a fresh navigation to run again. Manual isolated-world menus support the main frame and verified same-process child frames. The default XHR backend has no request-partition selector. See the [execution limits](execution-worlds.md#remaining-limits) and [Cookie partition scope](cookies.md#partitioned-cookie-scope).
 
 In the pinned stable corpus, browser download permission blocked the saved-file, ZIP and cancellation checks, and the history-refresh assertion failed. Native notification and download interactions lack reference comparisons. The pinned beta menu comparison lacks native click and overlap observations. See the [stable corpus record](../../scripts/compatibility/evidence/corpus-reference-stable.json), [downloads](downloads.md#evidence-and-reproduction) and [host interactions](host-interactions.md).
