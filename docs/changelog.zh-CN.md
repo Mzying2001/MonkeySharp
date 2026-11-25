@@ -2,9 +2,19 @@
 
 [English](changelog.md) | **中文**
 
-## 未发布
+## 5.0.0（未发布）
 
-- 将 CefSharp 适配器更新至 `87.1.132` 和 `156.0.300`，旧版适配器包名使用 `CefSharp87`。
+### 破坏性变更
+
+- 旧版 CefSharp 适配器从 `84.4.10` 升级至 `87.1.132`，当前版从 `156.0.150` 升级至 `156.0.300`。请按平台将 `Mzying2001.MonkeySharp.CefSharp84.x64` 或 `.x86` 替换为 `Mzying2001.MonkeySharp.CefSharp87.x64` 或 `.x86`。两条适配器发布线均要求使用匹配的 CefSharp 包和原生 CEF 二进制文件。 [CefSharp 版本兼容性](integration-reference.zh-CN.md#cefsharp-版本兼容性)
+
+### 修复
+
+- 在两条受支持的 CefSharp 版本线上，恢复已验证的同进程 iframe 中隔离世界 `@run-at context-menu` 脚本的执行，以及启用 `clickedFrame: true` 的 `GM.registerMenuCommand` 回调。iframe 切换到新文档后，旧文档的菜单选择会失效。 [菜单兼容性](compatibility/host-interactions.md#menus)
+
+### 文档
+
+- 新增中英文贡献指南和 Issue 表单，以及 Pull Request 模板。 [贡献指南](../CONTRIBUTING.zh-CN.md)
 
 ## 4.1.0 — 2026-11-20
 

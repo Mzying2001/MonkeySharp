@@ -2,9 +2,19 @@
 
 **English** | [中文](changelog.zh-CN.md)
 
-## Unreleased
+## 5.0.0 (Unreleased)
 
-- Updated the CefSharp adapters to `87.1.132` and `156.0.300`. The legacy adapter packages use `CefSharp87` in their IDs.
+### Breaking changes
+
+- Updated the legacy CefSharp adapter from `84.4.10` to `87.1.132` and the current adapter from `156.0.150` to `156.0.300`. Replace `Mzying2001.MonkeySharp.CefSharp84.x64` or `.x86` with `Mzying2001.MonkeySharp.CefSharp87.x64` or `.x86` for your platform. Both adapter lines require matching CefSharp packages and native CEF binaries. [CefSharp version compatibility](integration-reference.md#cefsharp-version-compatibility)
+
+### Fixes
+
+- Restored isolated-world `@run-at context-menu` execution and `GM.registerMenuCommand` callbacks with `clickedFrame: true` in verified same-process iframes on both supported CefSharp versions. Replacing an iframe document invalidates menu selections tied to the previous document. [Menu compatibility](compatibility/host-interactions.md#menus)
+
+### Documentation
+
+- Added bilingual contribution guides and issue forms, plus a pull request template. [Contribution guide](../CONTRIBUTING.md)
 
 ## 4.1.0 — 2026-11-20
 
