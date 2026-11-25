@@ -2,6 +2,10 @@
 
 [English](changelog.md) | **中文**
 
+## 未发布
+
+- 将 CefSharp 适配器更新至 `87.1.132` 和 `156.0.300`，旧版适配器包名使用 `CefSharp87`。
+
 ## 4.1.0 — 2026-11-20
 
 - 新增 `CefSharpUserScriptHost.TryGetContextMenuScriptKey`。自定义 CefSharp 菜单处理程序可用 `@run-at context-menu` 菜单项的命令 ID 查询安装键，并根据安装键为同名脚本选取正确的图标。命令 ID 仅在当前菜单中有效。 [集成参考](integration-reference.zh-CN.md#交互服务) · [Git 提交](https://github.com/Mzying2001/MonkeySharp/commit/2514967ec798caaa51e1e475bcd455881165a7af)
@@ -41,6 +45,6 @@
 - 新增脚本持久化安装和更新检查，在激活脚本修订前准备 `@require` 和 `@resource`，并校验声明的完整性哈希。
 - 提供基于 CefSharp 的 HTTP 请求和 Cookie 支持，以及带作用域的 `GM.webRequest` 取消和重定向规则。新增二进制与流式上传、增量文本响应、可中止的下载、标签页音频控制，以及受引擎版本支持的分区 Cookie 操作。
 - 新增 WPF Demo，提供多标签浏览、SQLite 持久化、带语法高亮编辑器的脚本管理器、中英文界面，以及按脚本分组的菜单命令。Demo 支持私密浏览、交互式权限确认和记住权限决定。
-- 发布共享的 Core NuGet 包，以及分别面向 CefSharp `156.0.150` 和 `84.4.10` 的 x64、x86 适配器包。每个适配器包声明精确的 CefSharp 依赖版本。
+- 发布共享的 Core NuGet 包，并为两条 CefSharp 发布线分别提供 x64、x86 适配器包。每个适配器包声明精确的 CefSharp 依赖版本。
 
 [3.0.0 的 Git 历史](https://github.com/Mzying2001/MonkeySharp/commits/3.0.0/)

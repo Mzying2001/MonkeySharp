@@ -94,7 +94,7 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
             CefSharpSettings.ConcurrentTaskExecution = true;
             CefSharpSettings.ShutdownOnExit = false;
             var cache = Path.Combine(Paths.BrowserCacheDirectory, "Default");
-            using (var settings = new global::CefSharp.Wpf.CefSettings
+            var settings = new global::CefSharp.Wpf.CefSettings
             {
                 RootCachePath = Paths.BrowserCacheDirectory,
                 CachePath = cache,
@@ -103,10 +103,8 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                 LogFile = Path.Combine(Paths.LogsDirectory, "cef.log"),
                 LogSeverity = LogSeverity.Disable,
                 UncaughtExceptionStackSize = 20
-            })
-            {
-                if (!Cef.Initialize(settings)) throw new InvalidOperationException("CefSharp initialization failed.");
-            }
+            };
+            if (!Cef.Initialize(settings)) throw new InvalidOperationException("CefSharp initialization failed.");
             _cefInitialized = true;
             RequestContext = new RequestContext(new RequestContextSettings { CachePath = cache, PersistSessionCookies = true });
             MainWindow = new MainWindowViewModel(diagnostics);

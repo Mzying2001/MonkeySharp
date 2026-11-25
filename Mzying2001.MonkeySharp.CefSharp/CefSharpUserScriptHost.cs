@@ -1022,7 +1022,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 var frameId = GetFrameIdentifier(args.Frame);
                 if (!_sessions.TryGetValue(frameId, out session))
                 {
-                    // CEF 84 can report the old main-frame wrapper in the new
+                    // CEF can report the old main-frame wrapper in the new
                     // renderer's context callback. Recover only a different,
                     // native-attested main frame, never a failed/retired session.
                     if (_browser == null || !args.Frame.IsMain || args.Frame.IsDisposed || !args.Frame.IsValid ||

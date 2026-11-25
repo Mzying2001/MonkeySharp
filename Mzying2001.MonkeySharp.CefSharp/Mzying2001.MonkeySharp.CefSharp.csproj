@@ -21,10 +21,10 @@
       CefSharp is selected by the host application. Keep a known-good default
       for deterministic repository builds, while allowing source consumers to
       compile the adapter against the exact CefSharp version they run.
-      Example: dotnet build -p:Platform=x64 -p:CefSharpVersion=84.4.10
+      Example: dotnet build -p:Platform=x64 -p:CefSharpVersion=87.1.132
     -->
-    <CefSharpVersion Condition="'$(CefSharpVersion)' == ''">156.0.150</CefSharpVersion>
-    <CefSharpPackageSuffix Condition="'$(CefSharpVersion)' == '84.4.10'">84</CefSharpPackageSuffix>
+    <CefSharpVersion Condition="'$(CefSharpVersion)' == ''">156.0.300</CefSharpVersion>
+    <CefSharpPackageSuffix Condition="'$(CefSharpVersion)' == '87.1.132'">87</CefSharpPackageSuffix>
     <DefineConstants Condition="$([MSBuild]::VersionGreaterThanOrEquals('$(CefSharpVersion)', '143.0.0'))">$(DefineConstants);CEF_SHARP_EXTENDED_RENDER_TERMINATED</DefineConstants>
     <DefineConstants Condition="$([MSBuild]::VersionLessThan('$(CefSharpVersion)', '100.0.0'))">$(DefineConstants);CEF_SHARP_LEGACY_REQUEST_FACTORY</DefineConstants>
   </PropertyGroup>

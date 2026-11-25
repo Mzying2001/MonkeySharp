@@ -8,7 +8,7 @@
 
 同一个适配器二进制文件无法兼容任意 CefSharp 版本。CefSharp 程序集具有强名称，而且公开接口曾在版本间发生变化，例如 `IBrowser.GetFrame(long)` 改为 `GetFrameByIdentifier(string)`，`IFrame.Identifier` 也从 `long` 改为 `string`。
 
-源码构建默认使用[适配器项目](../Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj)中固定的 CefSharp 版本。`CefSharp84` 包面向 `84.4.10`。请使用[源码构建命令](development.zh-CN.md#构建与测试)，针对应用实际发布的各个版本构建并测试适配器。
+源码构建默认使用[适配器项目](../Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj)中固定的 CefSharp `156.0.300`。`CefSharp87` 包面向 `87.1.132`。请使用[源码构建命令](development.zh-CN.md#构建与测试)，针对应用实际发布的各个版本构建并测试适配器。
 
 每个适配器 NuGet 包均公开依赖其编译时使用的精确版本 `CefSharp.Common` 和共享 Core 包。使用者选择版本匹配的 `CefSharp.WinForms`、`CefSharp.Wpf` 等 UI 包，并在 .NET Framework 应用中允许常规绑定重定向。托管包、CEF 原生文件、MonkeySharp 适配器的版本和进程平台必须一致。应用程序只应安装一种适配器；绑定重定向无法解决 CefSharp API 不兼容。
 
@@ -234,7 +234,7 @@ profile 处理、保存文件/剪贴板例外及脚本行为见[私密浏览](us
 
 ## 标签音频
 
-默认 `ITabAudioService` 在 84/121/151 提供原生静音读写及变更监听。在 CEF UI 线程访问原生状态，每 200 ms 轮询其他宿主操作，因此可能漏报更短的变化。不提供可靠 audible 来源，能力报告 `partial:mute-only;audible-unavailable`。已测 151 导航会重置原生静音，不能保证跨导航保留。
+默认 `ITabAudioService` 在两条受支持的 CefSharp 发布线上提供原生静音读写及变更监听。在 CEF UI 线程访问原生状态，每 200 ms 轮询其他宿主操作，因此可能漏报更短的变化。不提供可靠 audible 来源，能力报告 `partial:mute-only;audible-unavailable`。导航可能改变原生静音状态。
 
 通过 `UseTabAudioService` 替换，或设 `EnableDefaultAudioService = false` 省略默认服务；网络服务选项不控制音频。应用传入的服务仍归应用所有。状态、回调及版本差异见[音频 API](usage-guide.zh-CN.md#tab-audio)及[原生证据](compatibility/README.md#tab-audio)。
 
@@ -270,7 +270,7 @@ CefSharp 只能提供尽力而为的 document-start 钩子。相应执行产生 
 
 `@sandbox DOM`/`@inject-into content` 选择隔离 context，raw/默认/JavaScript 选择页面访问。DOM 与显式 `unsafeWindow` 授权、冲突世界或未支持的 unwrap 以 `MSR215_EXECUTION_WORLD_UNAVAILABLE` 拒绝，不退回 raw。隔离 OOPIF 通过原生 child session 支持已验证的源码/存储/资源/XHR 范围，包括普通/私密上下文及迁移，详见 [OOPIF 路由](compatibility/execution-worlds.md#isolated-oopif-routing)。
 
-BFCache 缓存执行会被撤销，需要新导航。隔离世界不支持历史 page-frame webRequest。页面世界的手动菜单使用当前原生 CEF frame 会话。隔离世界的手动菜单支持主 frame，同进程子 frame 仅在 CefSharp 84 上受支持。详见[执行限制](compatibility/execution-worlds.md#remaining-limits)和[严格启动时机与 CSP 评估](compatibility/start-csp-decision.md)。
+BFCache 缓存执行会被撤销，需要新导航。隔离世界不支持历史 page-frame webRequest。页面世界的手动菜单使用当前原生 CEF frame 会话。两条受支持的 CefSharp 发布线均仅在主 frame 提供隔离世界的手动菜单。详见[执行限制](compatibility/execution-worlds.md#remaining-limits)和[严格启动时机与 CSP 评估](compatibility/start-csp-decision.md)。
 
 ## 桥协议
 

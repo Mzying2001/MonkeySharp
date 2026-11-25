@@ -1,7 +1,7 @@
 ﻿[CmdletBinding()]
 param(
     [ValidateSet('x64', 'x86')][string]$Platform = 'x64',
-    [ValidatePattern('^\d+\.\d+\.\d+$')][string]$CefSharpVersion = '84.4.10',
+    [ValidatePattern('^\d+\.\d+\.\d+$')][string]$CefSharpVersion = '87.1.132',
     [string]$OutputDirectory = ''
 )
 $ErrorActionPreference = 'Stop'

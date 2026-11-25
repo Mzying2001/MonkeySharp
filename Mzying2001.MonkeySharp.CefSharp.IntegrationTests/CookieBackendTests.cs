@@ -170,7 +170,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
         }
 
         [Theory]
-        [InlineData(84)]
+        [InlineData(87)]
         [InlineData(113)]
         public async Task UnsupportedEnginesRejectPartitionParametersBeforeCookieCommands(int major)
         {

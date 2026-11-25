@@ -2,6 +2,10 @@
 
 **English** | [中文](changelog.zh-CN.md)
 
+## Unreleased
+
+- Updated the CefSharp adapters to `87.1.132` and `156.0.300`. The legacy adapter packages use `CefSharp87` in their IDs.
+
 ## 4.1.0 — 2026-11-20
 
 - Added `CefSharpUserScriptHost.TryGetContextMenuScriptKey`. Custom CefSharp menu handlers can resolve an `@run-at context-menu` command ID to an installation key and use that key to select the correct icon when scripts share a name. The command ID is scoped to the active menu. [Integration reference](integration-reference.md#interaction-services) · [Git commit](https://github.com/Mzying2001/MonkeySharp/commit/2514967ec798caaa51e1e475bcd455881165a7af)
@@ -41,6 +45,6 @@
 - Added persistent script installations, update checks, and preparation of `@require` and `@resource` before a revision activates, including declared integrity hash verification.
 - Added CefSharp-backed HTTP requests, cookies, and scoped `GM.webRequest` cancellation and redirects. Added binary and stream upload support, incremental text responses, abortable downloads, tab audio controls, and partitioned cookie operations where the engine supports them.
 - Added the WPF Demo with a multi-tab browser, SQLite persistence, a script manager with a syntax-highlighted editor, English and Chinese UI, and script menu commands grouped by script. The Demo supports private contexts and interactive permission prompts with remembered decisions.
-- Published a shared Core NuGet package and separate x64 and x86 adapters for CefSharp `156.0.150` and `84.4.10`. Each adapter declares its exact CefSharp dependency.
+- Published a shared Core NuGet package and separate x64 and x86 adapters for each CefSharp line. Each adapter declares its exact CefSharp dependency.
 
 [Git history for 3.0.0](https://github.com/Mzying2001/MonkeySharp/commits/3.0.0/)

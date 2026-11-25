@@ -20,10 +20,10 @@ Scripts can use modern `GM.*` methods and legacy `GM_*` names. Availability depe
 | Package | Target frameworks | Purpose |
 | --- | --- | --- |
 | `Mzying2001.MonkeySharp.Core` | `net462`, `netstandard2.0`, `net8.0` | Browser-independent runtime and host contracts. |
-| `Mzying2001.MonkeySharp.CefSharp.x64` | `net462` x64 | Current-release CefSharp adapter for 64-bit hosts. |
-| `Mzying2001.MonkeySharp.CefSharp.x86` | `net462` x86 | Current CefSharp adapter for 32-bit hosts. |
-| `Mzying2001.MonkeySharp.CefSharp84.x64` | `net462` x64 | Adapter targeting CefSharp `84.4.10` for 64-bit hosts. |
-| `Mzying2001.MonkeySharp.CefSharp84.x86` | `net462` x86 | Legacy CefSharp 84 adapter for 32-bit hosts. |
+| `Mzying2001.MonkeySharp.CefSharp.x64` | `net462` x64 | Adapter targeting CefSharp `156.0.300` for 64-bit hosts. |
+| `Mzying2001.MonkeySharp.CefSharp.x86` | `net462` x86 | Adapter targeting CefSharp `156.0.300` for 32-bit hosts. |
+| `Mzying2001.MonkeySharp.CefSharp87.x64` | `net462` x64 | Adapter targeting CefSharp `87.1.132` for 64-bit hosts. |
+| `Mzying2001.MonkeySharp.CefSharp87.x86` | `net462` x86 | Adapter targeting CefSharp `87.1.132` for 32-bit hosts. |
 
 All adapter packages expose the `Mzying2001.MonkeySharp.CefSharp` assembly and namespace and depend on the shared Core package. Install one adapter matching the application's CefSharp version and platform. For source integration, reference the adapter project directly; Core is transitive:
 
@@ -153,7 +153,7 @@ This table summarizes availability. Parameters, return values, callbacks, and [T
 | `GM.notification`, `GM.setClipboard`, `GM.openInTab` and aliases | Conditional | Require their corresponding host services. |
 | `GM.download` / `GM_download` | Conditional | Requires `IDownloadService`; completion follows file commit. Demo shares the browser network context. See [downloads](docs/usage-guide.md#downloads). |
 | `GM.getTab`, `GM.saveTab`, `GM.getTabs` and aliases | Conditional | Require `ITabStateService`. |
-| `GM.cookie` / `GM_cookie` | CefSharp default | CRUD in the attached RequestContext; partition CRUD on 121/151, unavailable on 84. No change listeners or XHR request-partition selection. |
+| `GM.cookie` / `GM_cookie` | CefSharp default | CRUD in the attached RequestContext; partition CRUD on CefSharp 156.0.300, unavailable on 87.1.132. No change listeners or XHR request-partition selection. |
 | `GM.audio` / `GM_audio` | CefSharp default | Native mute state, operations and listeners; audible omitted and partial capability reported. |
 | `GM.webRequest` / `GM_webRequest` | CefSharp default | Scoped cancel/redirect rules, capture substitution, asynchronous result callbacks, and static metadata rules. No removal handle. |
 | `window.close`, `window.focus` | Conditional | Require their exact grants and `IUserScriptWindowService`; the host may refuse to close the last tab. |

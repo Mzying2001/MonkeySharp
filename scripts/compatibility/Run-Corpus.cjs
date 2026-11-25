@@ -250,12 +250,6 @@ async function main() {
             if (scenario.id === 'authenticated-xhr' && actual.status === 'passed' && !files.some(file => file.entries?.some(entry => entry.sha256 === hash(png)))) { result.status = 'failed'; result.reason = 'Authenticated XHR archive did not contain the controlled response bytes.'; }
             if (scenario.id === 'page-hook' && result.status === 'passed' && actual.observations.hookBeforeFirstInline !== true) { result.status = 'expected-engine-limitation'; result.reason = 'History hook works after startup but was not installed before first inline.'; result.reasonCategory = 'engine-timing'; }
             if (scenario.id === 'dom-decoration-csp' && result.status === 'passed' && actual.observations.styleApplied !== true) { result.status = 'expected-engine-limitation'; result.reason = 'Source created its live DOM toolbar, but page style-src blocked its inline styles.'; result.reasonCategory = 'engine-csp'; }
-            if (scenario.script === 'find-scripts' && result.status === 'failed' && actual.environment?.chromiumVersion?.startsWith('84.') &&
-                actual.observations?.engineFeatures?.replaceAll === 'undefined' && actual.failedAction?.name === 'settingsPanel' &&
-                actual.diagnostics?.some(message => message.includes('replaceAll is not a function'))) {
-                result.status = 'expected-engine-limitation'; result.reasonCategory = 'javascript-engine';
-                result.reason = 'The unchanged upstream settings UI requires String.prototype.replaceAll, which this Chromium 84 engine does not provide. ' + result.reason;
-            }
             if (scenario.id === 'authenticated-xhr-denied' && result.status === 'passed') {
                 const mark = result.effects.requests.findIndex(request => request.path === '/phase/denial-start');
                 if (mark < 0 || result.effects.requests.slice(mark + 1).some(request => request.path.startsWith('/protected/'))) { result.status = 'failed'; result.reason = 'Denied GM requests produced a network effect.'; }

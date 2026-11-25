@@ -8,7 +8,7 @@ This reference describes host configuration, service contracts, persistence and 
 
 The adapter cannot support arbitrary CefSharp versions from one binary. CefSharp assemblies are strong-named, and public interfaces have changed between releases. For example, `IBrowser.GetFrame(long)` became `GetFrameByIdentifier(string)`, while `IFrame.Identifier` changed from `long` to `string`.
 
-Source builds default to the CefSharp version pinned in the [adapter project](../Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj). The `CefSharp84` packages target `84.4.10`. Build and test the adapter against every version shipped by the application using the [source build commands](development.md#build-and-test).
+Source builds default to CefSharp `156.0.300`, pinned in the [adapter project](../Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj). The `CefSharp87` packages target `87.1.132`. Build and test the adapter against every version shipped by the application using the [source build commands](development.md#build-and-test).
 
 Each adapter NuGet package publicly depends on the exact `CefSharp.Common` version it was compiled against and on the shared Core package. Consumers choose a matching `CefSharp.WinForms`, `CefSharp.Wpf`, or other UI package and allow the normal .NET Framework binding redirects. Keep the managed packages, native CEF binaries, and MonkeySharp adapter on the same version and process platform. Install only one adapter variant; binding redirects cannot bridge incompatible CefSharp APIs.
 
@@ -232,7 +232,7 @@ For profile handling, saved-file/clipboard exceptions and script behavior, see [
 
 ## Tab audio
 
-The default `ITabAudioService` provides native mute read/write and change listeners on 84/121/151. It runs native access on the CEF UI thread and polls external host changes every 200 ms, so shorter transitions may be missed. It does not provide a reliable audible source; capabilities report `partial:mute-only;audible-unavailable`. The tested 151 navigation resets native mute, so retention across navigation is not guaranteed.
+The default `ITabAudioService` provides native mute read/write and change listeners on the supported CefSharp lines. It runs native access on the CEF UI thread and polls external host changes every 200 ms, so shorter transitions may be missed. It does not provide a reliable audible source; capabilities report `partial:mute-only;audible-unavailable`. Native mute may change across navigation.
 
 Override it with `UseTabAudioService`, or set `EnableDefaultAudioService = false` to omit the default; network-service options do not control audio. Application-supplied services remain application-owned. See the [audio API](usage-guide.md#tab-audio) and [native evidence](compatibility/README.md#tab-audio) for state, callbacks and version differences.
 
@@ -268,7 +268,7 @@ The adapter uses native CDP frame/loader/context events, installation/revision s
 
 `@sandbox DOM`/`@inject-into content` select isolated contexts; raw/default/JavaScript select page access. DOM plus an explicit `unsafeWindow` grant, conflicting worlds and unsupported unwrap reject with `MSR215_EXECUTION_WORLD_UNAVAILABLE`, without raw fallback. Isolated OOPIF uses native child sessions for the validated source/storage/resource/XHR scope, including normal/private contexts and migrations; see [OOPIF routing](compatibility/execution-worlds.md#isolated-oopif-routing).
 
-BFCache cached executions are revoked and require fresh navigation. Historical page-frame webRequest is unavailable from isolated contexts. Page-world manual menus use the current native CEF frame session. Isolated manual menus support the main frame, with same-process child-frame support limited to CefSharp 84. See [execution limits](compatibility/execution-worlds.md#remaining-limits) and the [strict-start/CSP assessment](compatibility/start-csp-decision.md).
+BFCache cached executions are revoked and require fresh navigation. Historical page-frame webRequest is unavailable from isolated contexts. Page-world manual menus use the current native CEF frame session. Isolated manual menus are limited to the main frame on both supported CefSharp releases. See [execution limits](compatibility/execution-worlds.md#remaining-limits) and the [strict-start/CSP assessment](compatibility/start-csp-decision.md).
 
 ## Bridge Protocol
 

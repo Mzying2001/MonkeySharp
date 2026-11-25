@@ -21,7 +21,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        cefSharpVersion: ['84.4.10', '156.0.150']
+        cefSharpVersion: ['87.1.132', '156.0.300']
         platform: [x64, x86]
 
     steps:
@@ -54,7 +54,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        cefSharpVersion: ['84.4.10', '156.0.150']
+        cefSharpVersion: ['87.1.132', '156.0.300']
         platform: [x64, x86]
 
     steps:

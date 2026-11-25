@@ -113,7 +113,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                                     throw new InvalidOperationException("CEF rejected the child session message.");
                                 return;
                             }
-                            // CEF 84 can deliver the response reentrantly before returning
+                            // CEF can deliver the response reentrantly before returning
                             // its allocated ID. Keep only responses received during submission.
                             if (_submissionDepth++ == 0) _submissionResults = new Dictionary<int, Action<TaskCompletionSource<JsonElement>>>();
                             try

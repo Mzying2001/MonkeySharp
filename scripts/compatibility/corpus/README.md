@@ -1,6 +1,6 @@
 # Pinned third-party corpus
 
-`source.user.js` files are unmodified upstream bytes, including metadata and line endings. Each source and license is hashed in [corpus.json](../corpus.json). Both scripts declare MIT licensing; the original full licenses are included. Git treats these pinned sources/licenses as binary so checkout and delivery patches preserve bytes. Delivery installs changed attributes before other files. No runtime dependencies are fetched. The corpus does not modify `@match`, `@connect`, grant or failed source branches, and does not polyfill Chromium 84.
+`source.user.js` files are unmodified upstream bytes, including metadata and line endings. Each source and license is hashed in [corpus.json](../corpus.json). Both scripts declare MIT licensing; the original full licenses are included. Git treats these pinned sources/licenses as binary so checkout and delivery patches preserve bytes. Delivery installs changed attributes before other files. No runtime dependencies are fetched. The corpus does not modify `@match`, `@connect`, grant or failed source branches.
 
 | Category | Upstream script | Functional check |
 | --- | --- | --- |
@@ -18,6 +18,6 @@ The server listens on two randomly assigned loopback ports, preserving the upstr
 
 The host is shared between SmokeHost and the package consumer and uses only public MonkeySharp services. WinForms `ToolStripMenuItem.PerformClick` invokes the native host menu callback; it is not a claim of trusted DOM user activation. Tampermonkey uses its action UI for the exact originating tab. Only completed actions are included in events; failed actions and reasons remain in results.
 
-Chromium 84 lacks `String.prototype.replaceAll`, used by the unmodified Find Scripts settings panel. That exact observed TypeError plus engine version and feature check classifies these two scenarios as `expected-engine-limitation`. No generic test failure is relabeled as an engine restriction.
+The unmodified Find Scripts settings panel uses `String.prototype.replaceAll`, available in both supported CefSharp releases.
 
 See [CLI and output](../README.md#pinned-third-party-corpus) and [recorded corpus results](../evidence/README.md#corpus-results). A reference without browser downloads permission is blocked, not passed. Full stable-reference acceptance still needs saved-file/ZIP/cancellation and native notification/download interaction comparisons, plus resolution of the failed reference history-refresh assertion; see [current evidence gaps](../../../docs/compatibility/README.md#known-evidence-gaps).

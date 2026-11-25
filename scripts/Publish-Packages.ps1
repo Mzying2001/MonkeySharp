@@ -23,8 +23,8 @@ if ($manifest.version -cne $Version -or $manifest.configuration -ne 'Release') {
 }
 $expected = @(
     'Mzying2001.MonkeySharp.Core',
-    'Mzying2001.MonkeySharp.CefSharp84.x64',
-    'Mzying2001.MonkeySharp.CefSharp84.x86',
+    'Mzying2001.MonkeySharp.CefSharp87.x64',
+    'Mzying2001.MonkeySharp.CefSharp87.x86',
     'Mzying2001.MonkeySharp.CefSharp.x64',
     'Mzying2001.MonkeySharp.CefSharp.x86'
 )

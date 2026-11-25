@@ -35,13 +35,13 @@ internal static class Program
         {
             CefSharpSettings.WcfEnabled = false;
             CefSharpSettings.ConcurrentTaskExecution = true;
-            using (var settings = new CefSettings { RootCachePath = Path.Combine(Path.GetDirectoryName(report), "profile-" + Guid.NewGuid().ToString("N")) })
-            {
-                settings.CefCommandLineArgs.Add("site-per-process", "1");
-                settings.CefCommandLineArgs.Add("host-resolver-rules", "MAP *.monkeysharp.test 127.0.0.1, MAP *.monkeysharp-other.test 127.0.0.1");
-                settings.CefCommandLineArgs.Add("no-proxy-server", "1");
-                initialized = Cef.Initialize(settings);
-            }
+            CefSharpSettings.ShutdownOnExit = false;
+            Cef.EnableWaitForBrowsersToClose();
+            var settings = new CefSettings { RootCachePath = Path.Combine(Path.GetDirectoryName(report), "profile-" + Guid.NewGuid().ToString("N")) };
+            settings.CefCommandLineArgs.Add("site-per-process", "1");
+            settings.CefCommandLineArgs.Add("host-resolver-rules", "MAP *.monkeysharp.test 127.0.0.1, MAP *.monkeysharp-other.test 127.0.0.1");
+            settings.CefCommandLineArgs.Add("no-proxy-server", "1");
+            initialized = Cef.Initialize(settings);
             if (!initialized) throw new InvalidOperationException("CEF initialization failed.");
             var actual = typeof(Cef).Assembly.GetName().Version;
             checks["cefVersion"] = actual.Major == expected.Major && actual.Minor == expected.Minor && actual.Build == expected.Build;
@@ -117,7 +117,14 @@ internal static class Program
             }
         }
         catch (Exception error) { failure = error.ToString(); }
-        finally { if (initialized) Cef.Shutdown(); }
+        finally
+        {
+            if (initialized)
+            {
+                Cef.WaitForBrowsersToClose();
+                Cef.Shutdown();
+            }
+        }
         var result = new { type = "package-consumer", success = success && failure == null && checks.Values.All(value => value), checks,
             error = failure, cefSharpVersion = typeof(Cef).Assembly.GetName().Version.ToString(), platform = Environment.Is64BitProcess ? "x64" : "x86",
             corpusSha256 = corpus == null ? null : Hash(File.ReadAllBytes(corpus)) };

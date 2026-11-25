@@ -110,10 +110,10 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
             {
                 host.Setup(value => value.ExecuteDevToolsMethod(0, It.IsAny<string>(), It.IsAny<string>())).Returns(() =>
                 {
-                    session.OnDevToolsMethodResult(null, 4, true, Json("{\"product\":\"Chrome/84\"}"));
+                    session.OnDevToolsMethodResult(null, 4, true, Json("{\"product\":\"Chrome/87\"}"));
                     return 4;
                 });
-                Assert.Equal("Chrome/84", (await session.ExecuteAsync("Browser.getVersion")).GetProperty("product").GetString());
+                Assert.Equal("Chrome/87", (await session.ExecuteAsync("Browser.getVersion")).GetProperty("product").GetString());
             }
         }
 

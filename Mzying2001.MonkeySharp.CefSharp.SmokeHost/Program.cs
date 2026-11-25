@@ -37,7 +37,9 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             if (args.Length == 3 && args[0] == "--corpus") { Environment.ExitCode = global::MonkeySharp.Compatibility.CorpusHost.Run(args[1], args[2]); return; }
             CefSharpSettings.WcfEnabled = false;
             CefSharpSettings.ConcurrentTaskExecution = true;
-            if (args.Contains("--bfcache-probe") || args.Contains("--oopif-probe") || args.Contains("--start-csp-probe")) CefSharpSettings.ShutdownOnExit = false;
+            // Shut down after the form, host and test services have disposed.
+            CefSharpSettings.ShutdownOnExit = false;
+            Cef.EnableWaitForBrowsersToClose();
             var cachePath = Path.Combine(Path.GetTempPath(), "MonkeySharpSmoke", Guid.NewGuid().ToString("N"));
             var settings = new CefSettings
             {
@@ -68,6 +70,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             }
             finally
             {
+                Cef.WaitForBrowsersToClose();
                 Cef.Shutdown();
             }
         }

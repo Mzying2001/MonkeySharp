@@ -193,10 +193,12 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             Check("childFrame", child.GetProperty("privateValue").GetString() == "A" && child.GetProperty("committedValue").GetInt32() == 42);
             Check("childRawRunsOnce", (await ReadAsync("window.__rawControlCount === 1", FindFrame("/compat/isolated-child"))).Value.GetBoolean());
             CefSharpMenuTarget capturedMenu = null;
+            var nativeChildFound = false;
             foreach (var identifier in _browser.GetBrowser().GetFrameIdentifiers())
                 using (var native = CefSharpUserScriptHost.GetFrameByIdentifier(_browser.GetBrowser(), identifier.ToString()))
                     if (native != null && native.Url.Contains("/compat/isolated-child"))
                     {
+                        nativeChildFound = true;
                         if (typeof(Cef).Assembly.GetName().Version.Major != 84)
                         {
                             Check("childMenuNativeProofUnavailable", !_host.GetContextMenuEntries(native).Any(item => item.Entry.Title == "Isolated manual frame"));
@@ -208,6 +210,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                             new MenuCommandRequest(capturedMenu.Entry.ScriptKey, "frame", null, originFrame: capturedMenu.Frame, clickedFrame: true))));
                         _host.ExecuteContextMenu(native, capturedMenu);
                     }
+            Check("nativeChildMenuFrame", nativeChildFound);
             if (capturedMenu != null)
             {
                 Check("nativeChildMenuMapping", true);
@@ -329,7 +332,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
 
         private static IFrame GetFrame(IBrowser browser, string id)
         {
-            // CefSharp 151 uses string identifiers; 84/121 use Int64 identifiers.
+            // Newer CefSharp versions use string identifiers; older versions use Int64 identifiers.
             var method = typeof(IBrowser).GetMethod("GetFrameByIdentifier", new[] { typeof(string) });
             if (method != null) return (IFrame)method.Invoke(browser, new object[] { id });
             method = typeof(IBrowser).GetMethod("GetFrame", new[] { typeof(long) });

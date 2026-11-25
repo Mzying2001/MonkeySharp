@@ -91,7 +91,7 @@ Private console/runtime diagnostics and tab data are not written to the normal p
 | Values and value listeners | Shared SQLite storage for normal tabs, with typed values, insertion order, serialized writes, atomic snapshots, committed notifications, and legacy storage mirrors. Private sessions copy the normal baseline into isolated memory. |
 | DOM, info, log | Core facade; logs also appear in the diagnostics panel. |
 | `@require`, `@resource` | Immutable content-addressed files with per-installation associations. File hashes and current declaration integrity are verified; unchanged assets are reused, missing cache can be downloaded again. HTTP(S), up to 10 redirects, 30-second timeout, 10 MiB per item. |
-| Partitioned Cookie | CDP CRUD on tested 121/151; rejected on 84. XHR partition selection is rejected before sending. |
+| Partitioned Cookie | CDP CRUD on CefSharp 156.0.300; unavailable on 87.1.132. XHR partition selection is rejected before sending. |
 | XHR, Cookie, webRequest | CefSharp services use the browser's actual RequestContext. Custom navigation handlers use the adapter's request-handler multiplexer. |
 | Audio | Native mute-state reads, writes, and change listeners; audible state is unavailable. |
 | Menus | Per-tab commands, callbacks, access keys, and cleanup on execution end. New main documents retire the previous page's commands, including child-frame commands, even when cross-site navigation changes the main frame ID. Hash and History API changes within the same document preserve its commands. |

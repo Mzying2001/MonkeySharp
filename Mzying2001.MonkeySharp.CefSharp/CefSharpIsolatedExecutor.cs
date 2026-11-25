@@ -333,6 +333,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 await _session.ExecuteAsync("Runtime.addBinding", new { name = _binding, executionContextId = id }, world.Token).ConfigureAwait(false);
                 // The one-shot nonce is sent before user source, solely through this private context.
                 // JavascriptMessageReceived supplies the CEF frame; the payload supplies no frame identity.
+                // CefSharp 87 delivers this event with an already-disposed frame wrapper.
                 if (typeof(global::CefSharp.Cef).Assembly.GetName().Version.Major == 84)
                 {
                     lock (_sync) _menuProofs[world.MenuProof] = world;
