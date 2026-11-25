@@ -2,7 +2,7 @@
 
 [English](changelog.md) | **中文**
 
-## 5.0.0（未发布）
+## 5.0.0 — 2026-11-25
 
 ### 破坏性变更
 
@@ -15,6 +15,8 @@
 ### 文档
 
 - 新增中英文贡献指南和 Issue 表单，以及 Pull Request 模板。 [贡献指南](../CONTRIBUTING.zh-CN.md)
+
+[与 4.1.0 相比的 Git 变更](https://github.com/Mzying2001/MonkeySharp/compare/4.1.0...5.0.0)
 
 ## 4.1.0 — 2026-11-20
 

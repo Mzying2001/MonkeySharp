@@ -2,7 +2,7 @@
 
 **English** | [中文](changelog.zh-CN.md)
 
-## 5.0.0 (Unreleased)
+## 5.0.0 — 2026-11-25
 
 ### Breaking changes
 
@@ -15,6 +15,8 @@
 ### Documentation
 
 - Added bilingual contribution guides and issue forms, plus a pull request template. [Contribution guide](../CONTRIBUTING.md)
+
+[Git changes since 4.1.0](https://github.com/Mzying2001/MonkeySharp/compare/4.1.0...5.0.0)
 
 ## 4.1.0 — 2026-11-20
 
