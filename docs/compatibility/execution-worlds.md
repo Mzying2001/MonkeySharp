@@ -16,7 +16,7 @@ Conflicting world requirements, explicit DOM plus an `unsafeWindow` grant, and u
 | Main and same-process child source/storage/resources/XHR | Supported |
 | OOPIF source/storage/resources/XHR | Supported through native child sessions |
 | Main-frame `@run-at context-menu` selection | Supported |
-| Same-process child `@run-at context-menu` selection | CefSharp 84 only |
+| Same-process child `@run-at context-menu` selection | Supported after native frame and document verification |
 | OOPIF `@run-at context-menu` selection | Unsupported |
 
 This table concerns source execution. `GM.registerMenuCommand` callbacks use their host service and optional clickedFrame filtering. Page-world manual source selection uses the current native CEF frame session. See [menu scope](host-interactions.md#menus) and the [recorded engine/platform matrix](validation.md#latest-recorded-validation).
@@ -29,7 +29,7 @@ The browser process, host application and other CDP owners are trusted. DOM isol
 
 The adapter executes `@sandbox DOM` / `@inject-into content` in per-installation, per-revision isolated worlds. Native CDP frame/loader/context events establish ownership. Source and delivery use a remote global-object ID tied to a context generation. Binding packets must belong to that native context's script and document before reaching the normal grant/permission gateway; the page binding rejects isolated proofs. CEF frame IDs are not cast into CDP IDs.
 
-Raw/default and Chromium JavaScript access remain in the page world. Host-backed raw privileges require `TrustedPageWorld`; DOM dispatch uses verified native context ownership. DOM plus unsafeWindow, unsupported world requirements and unwrap reject before user source. Main-frame native manual selection can dispatch either world. CefSharp 84 also maps same-process isolated child-frame menus through a one-shot challenge sent before user source; native CEF event metadata supplies the frame. CEF's additional context callbacks caused by isolated V8 worlds are coalesced on the explicitly trusted raw path; raw scripts execute once, and isolated authentication does not use the page-world deduplication marker.
+Raw/default and Chromium JavaScript access remain in the page world. Host-backed raw privileges require `TrustedPageWorld`; DOM dispatch uses verified native context ownership. DOM plus unsafeWindow, unsupported world requirements and unwrap reject before user source. Main-frame native manual selection can dispatch either world. CEF's additional context callbacks caused by isolated V8 worlds are coalesced on the explicitly trusted raw path; raw scripts execute once, and isolated authentication does not use the page-world deduplication marker.
 
 Native CEF frame recovery and URL-probe retries are documented in [lifecycle maintenance](../development.md#native-lifecycle-maintenance).
 
@@ -47,11 +47,11 @@ Validated combinations include full synchronous value/resource readiness, actual
 
 The adapter prepares one shared CDP session per browser attachment. Follow the [host attachment and navigation sequence](../integration-reference.md#attachment-and-navigation) to prepare before business navigation. The preparation APIs expose readiness and late-attachment state; they do not upgrade the timing guarantee.
 
-Commands run on CEF's UI thread with CEF-allocated IDs so other observers can coexist. On 84, a method result may arrive synchronously inside `ExecuteDevToolsMethod` before the assigned ID returns; the session retains results only during that submission window. Cancellation/timeout removes pending ownership and ignores late results. Detach or agent closure fails pending work and releases only this observer, leaving shared domains and other DevTools owners intact.
+Commands run on CEF's UI thread with CEF-allocated IDs so other observers can coexist. A method result may arrive synchronously inside `ExecuteDevToolsMethod` before the assigned ID returns; the session retains results only during that submission window. Cancellation/timeout removes pending ownership and ignores late results. Detach or agent closure fails pending work and releases only this observer, leaving shared domains and other DevTools owners intact.
 
-The real protocol probe verifies Cookie readback and HTTP effects, pre-inline page injection without full GM, separate named worlds, context-ID bindings, revocation, concurrent observers, timeout and cancellation. Chromium 84 lacks future-world `executionContextName` binding. Successful registration is not evidence that a complete GM userscript started before the first page inline. The production path adds prepared data and generation-pinned delivery; it retains the timing limits below. The probe itself is not the production sandbox.
+The real protocol probe verifies Cookie readback and HTTP effects, pre-inline page injection without full GM, separate named worlds, context-ID bindings, revocation, concurrent observers, timeout and cancellation. Chromium 87 lacks future-world `executionContextName` binding. Successful registration is not evidence that a complete GM userscript started before the first page inline. The production path adds prepared data and generation-pinned delivery; it retains the timing limits below. The probe itself is not the production sandbox.
 
-The [84](../../scripts/compatibility/evidence/cdp-84.4.10.json), [121](../../scripts/compatibility/evidence/cdp-121.3.70.json) and [151](../../scripts/compatibility/evidence/cdp-151.3.240.json) records separate protocol success from blocked strict-GM timing. Reproduce through SmokeHost `Run-E2E.ps1`, its independent `Run-CdpProbe.ps1`, or the [baseline gate](validation.md#reproduction). Reports include adjacent `cdp-probe.jsonl` files.
+The [historical protocol results](../../scripts/compatibility/evidence/README.md#capability-matrices) record protocol checks and strict GM timing separately. Reproduce through SmokeHost `Run-E2E.ps1`, its independent `Run-CdpProbe.ps1`, or the [baseline gate](validation.md#reproduction). Reports include adjacent `cdp-probe.jsonl` files.
 
 ## Isolated OOPIF routing
 
@@ -59,19 +59,19 @@ OOPIF commands and events carry their native child session. Context IDs are scop
 
 Reserved CEF command IDs, owned-session detach and per-observer envelope filtering preserve other observers and shared domains. Read-only coexistence is tested; competing owners that mutate Target discovery/attachment state are not independently isolated DevTools clients.
 
-The native x64 OOPIF probe covers 84/121/151 using distinct sites, actual iframe targets and prepared GM. It verifies source, snapshots/resources, permission-checked XHR, two script partitions, nested targets, same-process/OOPIF migration without duplicate source, balanced document release and normal/private Cookie jar isolation. See the [native OOPIF record](../../scripts/compatibility/evidence/oopif-follow-up.json) and [validation matrices](validation.md#latest-recorded-validation).
+The native x64 OOPIF probe uses distinct sites, actual iframe targets and prepared GM. It verifies source, snapshots/resources, permission-checked XHR, two script partitions, nested targets, same-process/OOPIF migration without duplicate source, balanced document release and normal/private Cookie jar isolation. See the [native OOPIF record](../../scripts/compatibility/evidence/oopif-follow-up.json) and [validation matrices](validation.md#latest-recorded-validation).
 
-Run `./scripts/compatibility/Run-NativeProbe.ps1 -Probe oopif -Platform x64 -CefSharpVersion 121.3.70`; the baseline also runs this gate for its selected engine/platform. Actual effects and runtime diagnostics are checked together. See [runner parameters](../../scripts/compatibility/README.md#native-feasibility-probes).
+Run `./scripts/compatibility/Run-NativeProbe.ps1 -Probe oopif -Platform x64 -CefSharpVersion 87.1.132`. The baseline also runs this gate for its selected engine and platform. See [runner parameters](../../scripts/compatibility/README.md#native-feasibility-probes).
 
 ## Remaining limits
 
 - Full-GM document-start remains best effort, including prepared navigation. `RequireGuaranteedDocumentStart` rejects these combinations; protocol registration is not proof of pre-inline user execution.
 - Failure to create an isolated OOPIF context reports an error without raw fallback.
 - BFCache cached executions revoke their GM/window state and require a fresh navigation; transparent restoration is not claimed.
-- Isolated child menu selection requires a native frame mapping. The adapter supplies this for same-process children on CefSharp 84 using a context-private proof. See the [native menu observations](../../scripts/compatibility/evidence/menus-follow-up.json).
+- Isolated child menu selection requires an asynchronous mapping between the native CEF frame and the current document in the root CDP session. The adapter checks a temporary lexical marker written through the native frame. An unverified frame has no isolated menu entry, and replacing the document invalidates existing selections.
 - Historical page-frame webRequest interception is unavailable from isolated contexts. See the [historical webRequest scope](README.md#historical-webrequest).
 - User-managed DOM listeners/timers are not an unload API for arbitrary code in a live document; document navigation destroys normal contexts, and runtime-owned listeners/bridge state are revoked explicitly.
 
-The [native BFCache assessment](../../scripts/compatibility/evidence/bfcache-follow-up.json) includes cacheable control pages without a runtime/CDP attachment. Neither control nor prepared raw/isolated runs retained the closure or reported persisted pageshow on 84/121/151, including explicit BFCache enablement. Transparent restoration remains unimplemented; no global BFCache disablement was used. Private-context restoration and suspended-state listener/storage recovery remain unverified because the basic cache-hit prerequisite was not met. The [native probe runner](../../scripts/compatibility/Run-NativeProbe.ps1) preserves capability outcomes separately from probe completion.
+The [native BFCache assessment](../../scripts/compatibility/evidence/bfcache-follow-up.json) includes cacheable control pages without a runtime/CDP attachment. Neither control nor prepared raw/isolated runs retained the closure or reported persisted pageshow in the recorded runs, including explicit BFCache enablement. Transparent restoration remains unimplemented; no global BFCache disablement was used. Private-context restoration and suspended-state listener/storage recovery remain unverified because the basic cache-hit prerequisite was not met. The [native probe runner](../../scripts/compatibility/Run-NativeProbe.ps1) preserves capability outcomes separately from probe completion.
 
 See the [start/CSP assessment](start-csp-decision.md) for measured pre-inline readiness, parser-pause results and CSP effects.

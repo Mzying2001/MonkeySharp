@@ -2,7 +2,7 @@
 
 This index describes maintained capabilities and evidence gaps. The [validation guide](validation.md#latest-recorded-validation) records the latest native/package matrix, and the [evidence index](../../scripts/compatibility/evidence/README.md) separates reference baselines, capability matrices and historical results.
 
-MonkeySharp targets the observable Chromium Tampermonkey contract and supports CefSharp starting at **84.4.10**. Build the adapter against the exact CefSharp version shipped by the host. The WPF Demo supports x64 only. See the [development guide](../development.md#environment-and-gate-selection) for the CI matrix.
+MonkeySharp targets the observable Chromium Tampermonkey contract and maintains adapters for CefSharp **87.1.132** and **156.0.300**. Build the adapter against the exact CefSharp version shipped by the host. The WPF Demo supports x64 only. See the [development guide](../development.md#environment-and-gate-selection) for the CI matrix.
 
 The [reference baseline](api-contract.md) distinguishes official API descriptions, pinned observations and MonkeySharp guarantees, including legacy and modern calling forms. The [userscript guide](../usage-guide.md) / [中文](../usage-guide.zh-CN.md) owns parameters and examples; the [integration reference](../integration-reference.md) / [中文](../integration-reference.zh-CN.md) owns host interfaces and configuration.
 
@@ -46,7 +46,7 @@ The native matrix verifies first-request effects, capture redirects, replacement
 
 ## Tab audio
 
-The native service provides mute state, mute changes and exact-function listeners on 84/121/151. External host changes are polled every 200 ms, so shorter transitions may be missed. Audible state is unavailable. In the tested 151 navigation, native mute resets to false; 84/121 retain it. The service reports native readback and does not promise retention on 151.
+The native service provides mute state, mute changes and exact-function listeners on the supported CefSharp lines. External host changes are polled every 200 ms, so shorter transitions may be missed. Audible state is unavailable. The service reports native readback after navigation.
 
 The pinned 5.5.1 reference resolves modern setMute with `{isMuted}`, differing from the current official Promise<void> description. See the [audio guide](../usage-guide.md#tab-audio), [native matrix](../../scripts/compatibility/evidence/audio.json) and [pinned reference](../../scripts/compatibility/evidence/tampermonkey-5.5.1-audio.json).
 
@@ -58,6 +58,6 @@ Page-world trust applies in private contexts. Firefox containers are unavailable
 
 ## Known evidence gaps
 
-Full-GM document-start is best effort. BFCache revokes cached executions and scripts require a fresh navigation to run again. Manual isolated-world menus support the main frame, with same-process child-frame support limited to CefSharp 84. The default XHR backend has no request-partition selector. See the [execution limits](execution-worlds.md#remaining-limits) and [Cookie partition scope](cookies.md#partitioned-cookie-scope).
+Full-GM document-start is best effort. BFCache revokes cached executions and scripts require a fresh navigation to run again. Manual isolated-world menus support the main frame and verified same-process child frames. The default XHR backend has no request-partition selector. See the [execution limits](execution-worlds.md#remaining-limits) and [Cookie partition scope](cookies.md#partitioned-cookie-scope).
 
 In the pinned stable corpus, browser download permission blocked the saved-file, ZIP and cancellation checks, and the history-refresh assertion failed. Native notification and download interactions lack reference comparisons. The pinned beta menu comparison lacks native click and overlap observations. See the [stable corpus record](../../scripts/compatibility/evidence/corpus-reference-stable.json), [downloads](downloads.md#evidence-and-reproduction) and [host interactions](host-interactions.md).

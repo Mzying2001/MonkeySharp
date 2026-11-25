@@ -11,7 +11,7 @@ $ErrorActionPreference = 'Stop'
 $root = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '../..'))
 if (!$CefSharpVersions.Count) {
     [xml]$adapterXml = Get-Content -LiteralPath (Join-Path $root 'Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj') -Raw
-    $CefSharpVersions = @('84.4.10', $adapterXml.SelectSingleNode('//CefSharpVersion').InnerText)
+    $CefSharpVersions = @('87.1.132', $adapterXml.SelectSingleNode('//CefSharpVersion').InnerText)
 }
 $runId = [Guid]::NewGuid().ToString('N').Substring(0,12)
 $runRoot = Join-Path $root "artifacts/delivery/$runId"
@@ -65,7 +65,7 @@ foreach ($version in $CefSharpVersions) {
             Invoke-Logged 'dotnet' @('pack',(Join-Path $checkout 'Mzying2001.MonkeySharp.Core/Mzying2001.MonkeySharp.Core.csproj'),'-c','Release','-p:Platform=AnyCPU',"-p:Version=$packageVersion","-p:PackageVersion=$packageVersion",'-o',$feed,'--nologo') $checkout (Join-Path $caseRoot 'pack-core.log')
             Invoke-Logged 'dotnet' @('pack',(Join-Path $checkout 'Mzying2001.MonkeySharp.CefSharp/Mzying2001.MonkeySharp.CefSharp.csproj'),'-c','Release',"-p:Platform=$platform","-p:CefSharpVersion=$version","-p:Version=$packageVersion","-p:PackageVersion=$packageVersion",'-o',$feed,'--nologo') $checkout (Join-Path $caseRoot 'pack-adapter.log')
             Add-Type -AssemblyName System.IO.Compression.FileSystem
-            $suffix = if ($version -eq '84.4.10') { '84' } else { '' }
+            $suffix = if ($version -eq '87.1.132') { '87' } else { '' }
             $adapter = Get-Item -LiteralPath (Join-Path $feed "Mzying2001.MonkeySharp.CefSharp$suffix.$platform.$packageVersion.nupkg")
             $zip = [IO.Compression.ZipFile]::OpenRead($adapter.FullName)
             try {

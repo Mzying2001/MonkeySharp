@@ -32,8 +32,8 @@ if (!$CurrentCefSharpVersion) {
 if ($Version -notmatch '^\d+\.\d+\.\d+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$') {
     throw 'Version must be a three-part NuGet version, optionally with a prerelease suffix.'
 }
-if ($CurrentCefSharpVersion -notmatch '^\d+\.\d+\.\d+$' -or ([version]$CurrentCefSharpVersion).Major -le 84) {
-    throw 'CurrentCefSharpVersion must be an explicit stable CefSharp version newer than 84.'
+if ($CurrentCefSharpVersion -notmatch '^\d+\.\d+\.\d+$' -or ([version]$CurrentCefSharpVersion).Major -le 87) {
+    throw 'CurrentCefSharpVersion must be an explicit stable CefSharp version newer than 87.'
 }
 if (!$Platforms.Count) { throw 'Select at least one platform.' }
 $Platforms = @($Platforms | Select-Object -Unique)
@@ -117,8 +117,8 @@ try {
     # ArtifactsPath isolates both projects' restore/build outputs for each engine/platform.
     Invoke-DotNet (@('pack', $coreProject, '-p:Platform=AnyCPU', "-p:ArtifactsPath=$buildRoot/core") + $common)
     $packages = @(Confirm-Package 'Mzying2001.MonkeySharp.Core')
-    foreach ($cefVersion in @('84.4.10', $CurrentCefSharpVersion)) {
-        $suffix = if ($cefVersion -eq '84.4.10') { '84' } else { '' }
+    foreach ($cefVersion in @('87.1.132', $CurrentCefSharpVersion)) {
+        $suffix = if ($cefVersion -eq '87.1.132') { '87' } else { '' }
         foreach ($platform in $Platforms) {
             Invoke-DotNet (@('pack', $adapterProject, "-p:Platform=$platform", "-p:CefSharpVersion=$cefVersion",
                 "-p:ArtifactsPath=$buildRoot/$cefVersion-$platform") + $common)

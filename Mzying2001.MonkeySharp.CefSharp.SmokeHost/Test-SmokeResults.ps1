@@ -8,7 +8,7 @@ $sample = @(
         download = $true; cookie = $true; webRequest = $true; navigation = $true;
         mainFrameLoads = 2; childFrameLoads = 1; contextReleased = 1;
         compatibility = @{ partitions = $true; audio = $true; pageHelpers = $true; binary = $true; permissions = $true; csp = $true; replay = $true; isolated = $true; conditions = $true; prepared = $true; frames = $true; spaUrl = $true; download = $true; cookie = $true; webRequest = $true } },
-    @{ type = 'final-disposal'; disposed = $true; platform = 'x64'; cefSharpVersion = '121.3.70.0' }
+    @{ type = 'final-disposal'; disposed = $true; platform = 'x64'; cefSharpVersion = '156.0.300.0' }
 )
 foreach ($id in @('prepared', 'conditions', 'isolated', 'replay', 'csp', 'permissions', 'binary', 'pageHelpers', 'frames', 'spaUrl', 'download', 'cookie', 'webRequest', 'audio', 'partitions')) {
     $sample += @{ type = 'compatibility-case'; caseId = $id; success = $true; checks = @{ assertion = $true }; error = $null }
@@ -16,13 +16,17 @@ foreach ($id in @('prepared', 'conditions', 'isolated', 'replay', 'csp', 'permis
 foreach ($name in @('partitionA','partitionB','siteNormalization','partitionDeleteIsExact','cleaned','partitionCrudExecuted','ancestorIdentities','defaultDeleteAncestor','ancestorCrudExecuted')) {
     ($sample | Where-Object { $_.caseId -eq 'partitions' }).checks[$name] = $true
 }
+foreach ($name in @('nativeChildMenuMapping','clickedFrameAttestation','nativeChildMenuFrame','isolatedChildManualExecution',
+        'staleClickedFrameRejected','staleChildMenuRejected','reboundChildMenu','removedChildMenuRejected')) {
+    ($sample | Where-Object { $_.caseId -eq 'isolated' }).checks[$name] = $true
+}
 $sampleJson = ConvertTo-Json -InputObject $sample -Depth 20
-Assert-SmokeRecords -Records ($sampleJson | ConvertFrom-Json) -Platform x64 -CefSharpVersion 121.3.70
+Assert-SmokeRecords -Records ($sampleJson | ConvertFrom-Json) -Platform x64 -CefSharpVersion 156.0.300
 $focused = @(($sampleJson | ConvertFrom-Json) | Where-Object { $_.type -ne 'compatibility-case' -or $_.caseId -eq 'webRequest' })
 ($focused | Where-Object type -eq 'smoke-summary') | Add-Member NoteProperty compatibilityCase webRequest
-Assert-SmokeRecords -Records $focused -Platform x64 -CefSharpVersion 121.3.70 -Case webRequest
+Assert-SmokeRecords -Records $focused -Platform x64 -CefSharpVersion 156.0.300 -Case webRequest
 $focusedRejected = $false
-try { Assert-SmokeRecords -Records $focused -Platform x64 -CefSharpVersion 121.3.70 } catch { $focusedRejected = $true }
+try { Assert-SmokeRecords -Records $focused -Platform x64 -CefSharpVersion 156.0.300 } catch { $focusedRejected = $true }
 if (!$focusedRejected) { throw 'A focused result was accepted as the full suite.' }
 $tests = [ordered]@{
     missingCase = { param($r) @($r | Where-Object { $_.caseId -ne 'frames' }) }
@@ -31,7 +35,7 @@ $tests = [ordered]@{
     falseAssertion = { param($r) ($r | Where-Object { $_.caseId -eq 'frames' }).checks.assertion = $false; $r }
     emptyAssertions = { param($r) ($r | Where-Object { $_.caseId -eq 'frames' }).checks = [pscustomobject]@{}; $r }
     nonBoolean = { param($r) ($r | Where-Object { $_.caseId -eq 'frames' }).success = 'true'; $r }
-    wrongVersion = { param($r) ($r | Where-Object { $_.type -eq 'final-disposal' }).cefSharpVersion = '84.4.10.0'; $r }
+    wrongVersion = { param($r) ($r | Where-Object { $_.type -eq 'final-disposal' }).cefSharpVersion = '87.1.132.0'; $r }
     wrongPlatform = { param($r) ($r | Where-Object { $_.type -eq 'final-disposal' }).platform = 'x86'; $r }
     missingDisposal = { param($r) @($r | Where-Object { $_.type -ne 'final-disposal' }) }
     attachedHost = { param($r) ($r | Where-Object { $_.type -eq 'smoke-summary' }).hostAttachedAfterDetach = $true; $r }
@@ -39,20 +43,21 @@ $tests = [ordered]@{
     missingLegacy = { param($r) @($r | Where-Object { $_.phase -ne 'initial' }) }
     inconsistentSummary = { param($r) ($r | Where-Object { $_.type -eq 'smoke-summary' }).compatibility.frames = $false; $r }
     missingPartitionCrud = { param($r) ($r | Where-Object { $_.caseId -eq 'partitions' }).checks.PSObject.Properties.Remove('partitionCrudExecuted'); $r }
+    missingChildMenu = { param($r) ($r | Where-Object { $_.caseId -eq 'isolated' }).checks.PSObject.Properties.Remove('nativeChildMenuFrame'); $r }
     timeout = { param($r) $r + [pscustomobject]@{ type = 'runner-timeout' } }
 }
 foreach ($test in $tests.GetEnumerator()) {
     $records = & $test.Value ($sampleJson | ConvertFrom-Json)
     $rejected = $false
-    try { Assert-SmokeRecords -Records $records -Platform x64 -CefSharpVersion 121.3.70 } catch { $rejected = $true }
+    try { Assert-SmokeRecords -Records $records -Platform x64 -CefSharpVersion 156.0.300 } catch { $rejected = $true }
     if (!$rejected) { throw "Invalid result was accepted: $($test.Key)." }
 }
 $rejected = $false
-try { Assert-SmokeRecords -Records ($sampleJson | ConvertFrom-Json) -Platform x64 -CefSharpVersion 121.3.70 -RunExitCode 1 } catch { $rejected = $true }
+try { Assert-SmokeRecords -Records ($sampleJson | ConvertFrom-Json) -Platform x64 -CefSharpVersion 156.0.300 -RunExitCode 1 } catch { $rejected = $true }
 if (!$rejected) { throw 'Nonzero exit code was accepted.' }
 Write-Host "Smoke result validation passed (1 positive, $($tests.Count + 1) negative cases)."
 $partitionNegative = 0
-foreach ($version in @('84.4.10','127.0.0','128.0.0','156.0.150','200.0.0')) {
+foreach ($version in @('87.1.132','127.0.0','128.0.0','156.0.300','200.0.0')) {
     $records = $sampleJson | ConvertFrom-Json
     ($records | Where-Object { $_.type -eq 'final-disposal' }).cefSharpVersion = $version + '.0'
     $partition = $records | Where-Object { $_.caseId -eq 'partitions' }
@@ -66,17 +71,17 @@ foreach ($version in @('84.4.10','127.0.0','128.0.0','156.0.150','200.0.0')) {
     $partitionNegative++
 }
 Write-Host "Partition result validation passed (5 positive, $partitionNegative negative cases)."
-$cdp = @{ type = 'cdp-probe'; status = 'passed'; platform = 'x64'; cefSharpVersion = '84.4.10.0'; strictGm = 'blocked'; checks = @{} }
+$cdp = @{ type = 'cdp-probe'; status = 'passed'; platform = 'x64'; cefSharpVersion = '87.1.132.0'; strictGm = 'blocked'; checks = @{} }
 foreach ($name in @('preparedNavigation', 'pageBeforeFirstInline', 'isolatedBeforeFirstInline', 'realGmEventuallyReady', 'nativeFrameIdentity', 'perScriptWorld', 'contextIdBinding', 'cookieEngineAccepted', 'cookieReadback', 'cookieHttpEffect', 'cookieDeleted', 'observerCoexistence', 'commandTimeout', 'commandCancellation', 'contextRevocation')) { $cdp.checks[$name] = $true }
 $cdpJson = ConvertTo-Json $cdp -Depth 10
-Assert-CdpProbeRecords -Records @($cdpJson | ConvertFrom-Json) -Platform x64 -CefSharpVersion 84.4.10
+Assert-CdpProbeRecords -Records @($cdpJson | ConvertFrom-Json) -Platform x64 -CefSharpVersion 87.1.132
 foreach ($mutation in @('missingCheck', 'falseCheck', 'nonBoolean', 'wrongVersion', 'wrongPlatform', 'missingTiming', 'failed', 'duplicate')) {
     $record = $cdpJson | ConvertFrom-Json
     switch ($mutation) {
         missingCheck { $record.checks.PSObject.Properties.Remove('cookieHttpEffect') }
         falseCheck { $record.checks.cookieHttpEffect = $false }
         nonBoolean { $record.checks.cookieHttpEffect = 'true' }
-        wrongVersion { $record.cefSharpVersion = '121.3.70.0' }
+        wrongVersion { $record.cefSharpVersion = '156.0.300.0' }
         wrongPlatform { $record.platform = 'x86' }
         missingTiming { $record.strictGm = $null }
         failed { $record.status = 'failed' }
@@ -84,7 +89,7 @@ foreach ($mutation in @('missingCheck', 'falseCheck', 'nonBoolean', 'wrongVersio
     $records = @($record)
     if ($mutation -eq 'duplicate') { $records += $record }
     $rejected = $false
-    try { Assert-CdpProbeRecords -Records $records -Platform x64 -CefSharpVersion 84.4.10 } catch { $rejected = $true }
+    try { Assert-CdpProbeRecords -Records $records -Platform x64 -CefSharpVersion 87.1.132 } catch { $rejected = $true }
     if (!$rejected) { throw "Invalid CDP result was accepted: $mutation." }
 }
 Write-Host 'CDP result validation passed (1 positive, 8 negative cases).'

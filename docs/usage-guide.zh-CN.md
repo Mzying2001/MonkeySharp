@@ -170,7 +170,7 @@ Demo 手动更新时优先从 `@updateURL` 检查，其次使用 `@downloadURL`�
 
 沙箱 window 按脚本私有地回放缓存的 DOMContentLoaded/load 事件，回放事件的 `isTrusted` 为 false；document-idle 不回放更早的 DOMContentLoaded。window 监听支持 once、移除和 AbortSignal，执行结束清理运行时拥有的监听；直接注册到页面 DOM 的监听由脚本管理。源码、DOM 和样式的 CSP 效果分别有边界，不提供全站 CSP 绕过。
 
-隔离 OOPIF 支持源码执行、存储、资源及 XHR。隔离世界的手动菜单支持主 frame，同进程子 frame 仅在 CefSharp 84 上受支持。页面世界的菜单使用当前原生 CEF frame 会话。BFCache 缓存执行会被撤销，需要新导航。详见[执行世界与限制](compatibility/execution-worlds.md)和[严格启动时机与 CSP 评估](compatibility/start-csp-decision.md)。
+隔离 OOPIF 支持源码执行、存储、资源及 XHR。隔离世界的手动菜单支持主 frame 和已验证的同进程子 frame。页面世界的菜单使用当前原生 CEF frame 会话。BFCache 缓存执行会被撤销，需要新导航。详见[执行世界与限制](compatibility/execution-worlds.md)和[严格启动时机与 CSP 评估](compatibility/start-csp-decision.md)。
 
 <a id="api-index"></a>
 
@@ -223,7 +223,7 @@ Demo 手动更新时优先从 `@updateURL` 检查，其次使用 `@downloadURL`�
 | `execution.documentStart` | 尽力执行，不保证早于页面脚本。 |
 | `execution.oopif` | 已验证的隔离 child-target session 范围。 |
 | `execution.bfcache` | 缓存执行撤销，需要新导航。 |
-| `execution.contextMenuFrame` | 隔离菜单：84 支持同进程子 frame；121/151 仅主 frame，隔离 OOPIF 菜单不支持。 |
+| `execution.contextMenuFrame` | 隔离菜单支持主 frame 和已验证的同进程子 frame。 |
 | `GM.xmlHttpRequest.cookie`、`GM.xmlHttpRequest.cookiePartition` | 默认后端不支持显式 Cookie 或请求分区选择。 |
 | `GM.cookie.partitionKey` | 分区及 ancestor 支持按 [Chromium 协议版本范围](compatibility/cookies.md#partitioned-cookie-scope)适配。 |
 | `GM.audio.audible` | 没有可靠来源时不可用。 |
@@ -421,7 +421,7 @@ attributes 是可选对象：textContent/innerHTML 设置内容，字符串 styl
 
 对象/数组按 JSON 发送，URLSearchParams 使用表单编码，FormData 使用包含自动边界、文件名和媒体类型的 multipart。未自行设置时会补入适当 Content-Type。支持 Blob/File 请求体及 URL 输入；blob URL 由所属 renderer 解引用，本地输入仅支持不含网络头、认证和请求体的 GET。
 
-允许 User-Agent、Referer、Origin 头。禁止 Host、Content-Length、连接/传输控制头和 Sec-*/Proxy-* 头。默认 CefSharp 后端对任意大小写的 headers.Cookie 及 cookie 在发送前返回 MSP006_NOT_SUPPORTED，包括 anonymous 组合。84/121/151 原生 URLRequest 忽略这些显式值；普通认证请求仍使用真实 RequestContext jar，anonymous 禁用 jar。自定义且已验证的 HTTP 后端可实现[固定参考合并契约](compatibility/cookies.md#explicit-request-cookies)。跨源重定向移除 Authorization。见[显式 Cookie 证据](compatibility/cookies.md#explicit-request-cookies)。
+允许 User-Agent、Referer、Origin 头。禁止 Host、Content-Length、连接/传输控制头和 Sec-*/Proxy-* 头。默认 CefSharp 后端对任意大小写的 headers.Cookie 及 cookie 在发送前返回 MSP006_NOT_SUPPORTED，包括 anonymous 组合。普通认证请求使用真实 RequestContext jar，anonymous 禁用 jar。自定义且已验证的 HTTP 后端可实现[固定参考合并契约](compatibility/cookies.md#explicit-request-cookies)。跨源重定向移除 Authorization。见[显式 Cookie 证据](compatibility/cookies.md#explicit-request-cookies)。
 
 @connect self 同时检查协议、主机和端口。`example.com` 和 `*.example.com` 均允许裸域名自身及其所有层级的子域名；IP 和 localhost 必须精确匹配。URL 声明还限制协议/端口，但其中路径不构成白名单限制。没有白名单时，同源 XHR 也被拒绝。原始目标和所有重定向目标都必须通过白名单及宿主权限策略。
 
@@ -695,7 +695,7 @@ GM 值遵循固定 TM 5.5.1 临时私密会话实测：每脚本首次私密访�
 
 `addStateChangeListener(listener)`、`removeStateChangeListener(listener)` 按函数身份注册/移除。现代形式返回完成 Promise，旧式形式返回 undefined，可提供完成回调。监听应在修改前注册；事件含 `muted`（已知原因、`"unknown"` 或 false），只有可靠后端才提供 `audible`。导航和 detach 清理执行所属监听。
 
-默认 CefSharp 服务在 84/121/151 提供真实静音状态。已测 151 导航会将原生静音重置为 false，84/121 保持，因此不要假定跨导航保留。外部静音变化每 200 ms 轮询，可能漏报更短的变化。不提供可靠 `isAudible`/`audible`，能力报告 `partial:mute-only;audible-unavailable`；未知原因在状态中省略，在事件中为 `"unknown"`。
+默认 CefSharp 服务提供原生静音状态。导航可能改变原生静音状态。外部静音变化每 200 ms 轮询，可能漏报更短的变化。不提供可靠 `isAudible`/`audible`，能力报告 `partial:mute-only;audible-unavailable`；未知原因在状态中省略，在事件中为 `"unknown"`。
 
 音频服务可由宿主替换或关闭，配置与所有权见[集成参考](integration-reference.zh-CN.md#标签音频)；返回值与版本差异见[音频证据](compatibility/README.md#tab-audio)。
 

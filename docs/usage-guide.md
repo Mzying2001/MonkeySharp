@@ -164,7 +164,7 @@ Isolated worlds separate script globals and dispatch identity, not operating-sys
 
 The sandbox window privately replays cached DOMContentLoaded/load events with `isTrusted: false`; document-idle does not replay the earlier DOMContentLoaded event. Window listeners support once/removal/AbortSignal and are cleared with their execution; direct page DOM listeners remain script-owned. Source, DOM and style CSP effects have separate limits, without whole-page CSP bypass.
 
-Isolated OOPIF supports source execution, storage, resources and XHR. Manual isolated-world menus support the main frame, with same-process child-frame support limited to CefSharp 84. Page-world menus use the current native CEF frame session. BFCache cached executions are revoked and require fresh navigation. See [execution worlds and limits](compatibility/execution-worlds.md) and the [strict-start/CSP assessment](compatibility/start-csp-decision.md).
+Isolated OOPIF supports source execution, storage, resources and XHR. Manual isolated-world menus support the main frame and verified same-process child frames. Page-world menus use the current native CEF frame session. BFCache cached executions are revoked and require fresh navigation. See [execution worlds and limits](compatibility/execution-worlds.md) and the [strict-start/CSP assessment](compatibility/start-csp-decision.md).
 
 ## API index
 
@@ -213,7 +213,7 @@ Except for info and `unsafeWindow` as described below, each row requires its cap
 | `execution.documentStart` | Best effort, without a pre-page guarantee. |
 | `execution.oopif` | Validated isolated child-target session scope. |
 | `execution.bfcache` | Cached executions revoked; fresh navigation required. |
-| `execution.contextMenuFrame` | Isolated menus: 84 same-process child frames; 121/151 main only; no isolated OOPIF menus. |
+| `execution.contextMenuFrame` | Isolated menus are available in the main frame and verified same-process child frames. |
 | `GM.xmlHttpRequest.cookie`, `GM.xmlHttpRequest.cookiePartition` | No explicit Cookie or request-partition selection in the default backend. |
 | `GM.cookie.partitionKey` | Partition and ancestor support follow the [Chromium protocol ranges](compatibility/cookies.md#partitioned-cookie-scope). |
 | `GM.audio.audible` | Unavailable without a reliable source. |
@@ -403,7 +403,7 @@ Modern result: a `Promise<Response>` with an immediate `.abort()` method. Non-st
 
 Objects/arrays are sent as JSON, URLSearchParams as form encoding, and FormData as multipart with generated boundary/filenames/media types. Appropriate content type is supplied unless you set it yourself. Blob/File bodies and URL inputs are supported. Blob/File URL inputs and blob URL strings are resolved inside their owning renderer; local requests support GET without network headers, authentication, or an upload body.
 
-`User-Agent`, `Referer` and `Origin` headers are allowed. `Host`, `Content-Length`, connection/transfer-control headers and `Sec-*`/`Proxy-*` names are rejected. The default CefSharp backend rejects `headers.Cookie` (any casing) and `cookie` with `MSP006_NOT_SUPPORTED` before sending, including with `anonymous`. Native 84/121/151 URLRequest ignored these explicit values; ordinary authenticated requests still use the actual RequestContext jar, and anonymous requests suppress it. A custom verified HTTP backend may implement the [pinned merge contract](compatibility/cookies.md#explicit-request-cookies). Cross-origin redirects strip authorization. See [Cookie evidence](compatibility/cookies.md#explicit-request-cookies).
+`User-Agent`, `Referer` and `Origin` headers are allowed. `Host`, `Content-Length`, connection/transfer-control headers and `Sec-*`/`Proxy-*` names are rejected. The default CefSharp backend rejects `headers.Cookie` (any casing) and `cookie` with `MSP006_NOT_SUPPORTED` before sending, including with `anonymous`. Ordinary authenticated requests use the actual RequestContext jar, and anonymous requests suppress it. A custom verified HTTP backend may implement the [pinned merge contract](compatibility/cookies.md#explicit-request-cookies). Cross-origin redirects strip authorization. See [Cookie evidence](compatibility/cookies.md#explicit-request-cookies).
 
 `@connect self` checks scheme, host, and port. Both `example.com` and `*.example.com` allow the domain itself and all its subdomains. IPs and localhost are exact. URL declarations additionally constrain scheme/port; their path is not an allowlist restriction. An omitted allowlist denies even same-origin XHR. Original and redirected URLs must all pass the allowlist and host permission policy.
 
@@ -663,7 +663,7 @@ Grant `GM.audio` or `GM_audio`. Modern `GM.audio.getState()` returns a Promise o
 
 `addStateChangeListener(listener)` and `removeStateChangeListener(listener)` use the exact function identity. Modern calls resolve after registration/removal; legacy calls return undefined and accept a completion callback. Register before changing mute state. Events contain `muted` (known reason, `"unknown"`, or false), and `audible` only when a reliable backend supplies it. Listeners belong to their execution and are removed on navigation/detach.
 
-The default CefSharp service provides actual mute state on 84/121/151. The tested 151 navigation resets native mute to false, while 84/121 retain it, so do not assume retention across navigation. External changes are polled every 200 ms and shorter transitions may be missed. No reliable `isAudible`/`audible` source is provided; capabilities report `partial:mute-only;audible-unavailable`. Unknown reasons are omitted from state and reported as `"unknown"` in events.
+The default CefSharp service reports actual native mute state. Native mute may change across navigation. External changes are polled every 200 ms and shorter transitions may be missed. No reliable `isAudible`/`audible` source is provided; capabilities report `partial:mute-only;audible-unavailable`. Unknown reasons are omitted from state and reported as `"unknown"` in events.
 
 Hosts can replace or disable the audio service; see [configuration and ownership](integration-reference.md#tab-audio) and [audio evidence](compatibility/README.md#tab-audio) for version/return-value differences.
 

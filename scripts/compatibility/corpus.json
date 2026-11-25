@@ -253,7 +253,7 @@
       "licenseSha256": "db61ff2215afa764ff75e4a370c25c292bc1027018c25ba9279b5c889e100268",
       "licenseUrl": "https://raw.githubusercontent.com/utags/userscripts/5b6c8bbc379fcf8caf8f5e07d3dffe2de80387f9/LICENSE",
       "engineRequirements": [
-        "String.prototype.replaceAll; absent on the tested Chromium 84 engine, present on tested 121/151"
+        "String.prototype.replaceAll (Chromium 85 or later)"
       ]
     }
   },

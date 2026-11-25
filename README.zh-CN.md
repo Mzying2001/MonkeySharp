@@ -20,10 +20,10 @@ MonkeySharp 是面向 CefSharp 嵌入式应用的用户脚本运行时。Core �
 | 软件包 | 目标框架 | 用途 |
 | --- | --- | --- |
 | `Mzying2001.MonkeySharp.Core` | `net462`、`netstandard2.0`、`net8.0` | 与浏览器无关的运行时和宿主契约。 |
-| `Mzying2001.MonkeySharp.CefSharp.x64` | `net462` x64 | 面向当前发布版 CefSharp 的 64 位宿主适配器。 |
-| `Mzying2001.MonkeySharp.CefSharp.x86` | `net462` x86 | 新版 CefSharp 的 32 位宿主适配器。 |
-| `Mzying2001.MonkeySharp.CefSharp84.x64` | `net462` x64 | 面向 CefSharp `84.4.10` 的 64 位宿主适配器。 |
-| `Mzying2001.MonkeySharp.CefSharp84.x86` | `net462` x86 | 旧版 CefSharp 84 的 32 位宿主适配器。 |
+| `Mzying2001.MonkeySharp.CefSharp.x64` | `net462` x64 | 面向 CefSharp `156.0.300` 的 64 位宿主适配器。 |
+| `Mzying2001.MonkeySharp.CefSharp.x86` | `net462` x86 | 面向 CefSharp `156.0.300` 的 32 位宿主适配器。 |
+| `Mzying2001.MonkeySharp.CefSharp87.x64` | `net462` x64 | 面向 CefSharp `87.1.132` 的 64 位宿主适配器。 |
+| `Mzying2001.MonkeySharp.CefSharp87.x86` | `net462` x86 | 面向 CefSharp `87.1.132` 的 32 位宿主适配器。 |
 
 所有适配器包都公开 `Mzying2001.MonkeySharp.CefSharp` 程序集和命名空间，并依赖同一个 Core 包。应用程序应选择一个与 CefSharp 版本和进程平台匹配的适配器。从源码集成时，可以直接引用适配器项目；Core 会被传递引用：
 
@@ -153,7 +153,7 @@ var host = new CefSharpUserScriptHostBuilder(repository)
 | `GM.notification`、`GM.setClipboard`、`GM.openInTab` 及别名 | 条件支持 | 需要对应宿主服务。 |
 | `GM.download` / `GM_download` | 条件支持 | 需要 `IDownloadService`，文件提交后才完成；Demo 共用浏览器网络上下文。详见[下载](docs/usage-guide.zh-CN.md#下载)。 |
 | `GM.getTab`、`GM.saveTab`、`GM.getTabs` 及别名 | 条件支持 | 需要 `ITabStateService`。 |
-| `GM.cookie` / `GM_cookie` | CefSharp 默认提供 | 实际 RequestContext 中的 CRUD；121/151 支持分区 CRUD，84 不支持。不提供变更监听或 XHR 请求分区选择。 |
+| `GM.cookie` / `GM_cookie` | CefSharp 默认提供 | 实际 RequestContext 中的 CRUD；CefSharp 156.0.300 支持分区 CRUD，87.1.132 不支持。不提供变更监听或 XHR 请求分区选择。 |
 | `GM.audio` / `GM_audio` | CefSharp 默认提供 | 原生静音状态、操作及监听；省略 audible，并明确报告部分能力。 |
 | `GM.webRequest` / `GM_webRequest` | CefSharp 默认提供 | 有归属的取消/重定向规则、捕获替换、异步结果回调及静态元数据规则；无自有移除句柄。 |
 | `window.close`、`window.focus` | 条件支持 | 需要各自的精确授权和 `IUserScriptWindowService`；宿主可以拒绝关闭最后一个标签页。 |

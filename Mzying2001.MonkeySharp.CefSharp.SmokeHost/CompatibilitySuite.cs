@@ -1,4 +1,5 @@
 using CefSharp;
+using CefSharp.Callback;
 using CefSharp.WinForms;
 using Mzying2001.MonkeySharp.Core.Repository;
 using Mzying2001.MonkeySharp.Core.Apis;
@@ -24,6 +25,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
         private readonly LocalHttpFixture _otherFixture;
         private readonly SmokePermissionPolicy _permissions;
         private readonly UserScriptRepository _repository;
+        private readonly NativeMenuProbe _menuProbe;
         private readonly object _sync = new object();
         private readonly Dictionary<string, DocumentFrame> _frames = new Dictionary<string, DocumentFrame>();
         private readonly Dictionary<string, DocumentFrame> _isolatedFrames = new Dictionary<string, DocumentFrame>();
@@ -33,11 +35,13 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
         private DocumentFrame _context;
 
         public CompatibilitySuite(CefSharpUserScriptHost host, ChromiumWebBrowser browser,
-            LocalHttpFixture fixture, SmokeHttpDownloadService downloads, LocalHttpFixture otherFixture, SmokePermissionPolicy permissions, UserScriptRepository repository)
+            LocalHttpFixture fixture, SmokeHttpDownloadService downloads, LocalHttpFixture otherFixture, SmokePermissionPolicy permissions,
+            UserScriptRepository repository, NativeMenuProbe menuProbe)
         {
             _host = host; _browser = browser; _fixture = fixture; _downloads = downloads;
             _otherFixture = otherFixture; _permissions = permissions;
             _repository = repository;
+            _menuProbe = menuProbe;
             host.DocumentLifecycle += Lifecycle;
         }
 
@@ -187,44 +191,49 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             using (var native = _browser.GetBrowser().MainFrame)
                 Check("sameDocumentMenuAttestation", main.All(frame => _host.ResolveMenuFrame(native,
                     new MenuCommandRequest(frame.ScriptScope.Value, "snapshot", null, originFrame: frame, clickedFrame: true)) != null));
-            await ReadAsync("(function(){var f=document.createElement('iframe');f.src='/compat/isolated-child';document.body.appendChild(f);return true;})()");
+            await ReadAsync("(function(){for(var name of ['left','right']){var f=document.createElement('iframe');f.name=name;" +
+                "f.style.display='block';f.width=360;f.height=140;f.src='/compat/isolated-child';document.body.appendChild(f);}return true;})()");
             await WaitAsync(() => Task.FromResult(FindFrame("/compat/isolated-child") != null));
             var child = await WaitResultAsync(readA, FindFrame("/compat/isolated-child"));
             Check("childFrame", child.GetProperty("privateValue").GetString() == "A" && child.GetProperty("committedValue").GetInt32() == 42);
             Check("childRawRunsOnce", (await ReadAsync("window.__rawControlCount === 1", FindFrame("/compat/isolated-child"))).Value.GetBoolean());
-            CefSharpMenuTarget capturedMenu = null;
-            foreach (var identifier in _browser.GetBrowser().GetFrameIdentifiers())
-                using (var native = CefSharpUserScriptHost.GetFrameByIdentifier(_browser.GetBrowser(), identifier.ToString()))
-                    if (native != null && native.Url.Contains("/compat/isolated-child"))
-                    {
-                        if (typeof(Cef).Assembly.GetName().Version.Major != 84)
-                        {
-                            Check("childMenuNativeProofUnavailable", !_host.GetContextMenuEntries(native).Any(item => item.Entry.Title == "Isolated manual frame"));
-                            continue;
-                        }
-                        await WaitAsync(() => Task.FromResult(_host.GetContextMenuEntries(native).Any(item => item.Entry.Title == "Isolated manual frame")));
-                        capturedMenu = _host.GetContextMenuEntries(native).Single(item => item.Entry.Title == "Isolated manual frame");
-                        Check("clickedFrameAttestation", ReferenceEquals(capturedMenu.Frame, _host.ResolveMenuFrame(native,
-                            new MenuCommandRequest(capturedMenu.Entry.ScriptKey, "frame", null, originFrame: capturedMenu.Frame, clickedFrame: true))));
-                        _host.ExecuteContextMenu(native, capturedMenu);
-                    }
-            if (capturedMenu != null)
+            await WaitAsync(() => Task.FromResult(FindChildMenu("left") != null && FindChildMenu("right") != null));
+            var capturedMenu = FindChildMenu("left");
+            var siblingMenu = FindChildMenu("right");
+            var clickedFrame = new MenuCommandRequest(capturedMenu.Entry.ScriptKey, "frame", null, originFrame: capturedMenu.Frame, clickedFrame: true);
+            using (var left = FindNativeChild("left"))
+            using (var right = FindNativeChild("right"))
             {
-                Check("nativeChildMenuMapping", true);
-                await WaitAsync(async () => (await ReadAsync("document.documentElement.dataset.manualFrameCount === '1' && document.documentElement.dataset.manualFrameValue === 'ready'", FindFrame("/compat/isolated-child")))?.GetBoolean() == true);
-                Check("isolatedChildManualExecution", true);
-                await ReadAsync("(document.querySelector('iframe').src='/compat/isolated-child?replacement', true)");
-                await WaitAsync(async () => (await ReadAsync("location.search === '?replacement' && !document.documentElement.dataset.manualFrameCount", FindFrame("/compat/isolated-child")))?.GetBoolean() == true);
-                foreach (var identifier in _browser.GetBrowser().GetFrameIdentifiers())
-                    using (var native = CefSharpUserScriptHost.GetFrameByIdentifier(_browser.GetBrowser(), identifier.ToString()))
-                        if (native != null && native.Url.Contains("/compat/isolated-child"))
-                        {
-                            Check("staleClickedFrameRejected", _host.ResolveMenuFrame(native,
-                                new MenuCommandRequest(capturedMenu.Entry.ScriptKey, "frame", null, originFrame: capturedMenu.Frame, clickedFrame: true)) == null);
-                            _host.ExecuteContextMenu(native, capturedMenu);
-                        }
-                await Task.Delay(100);
-                Check("staleChildMenuRejected", (await ReadAsync("!document.documentElement.dataset.manualFrameCount", FindFrame("/compat/isolated-child"))).Value.GetBoolean());
+                Check("nativeChildMenuMapping", left.Url == right.Url && capturedMenu.Frame.FrameId != siblingMenu.Frame.FrameId);
+                Check("clickedFrameAttestation", ReferenceEquals(capturedMenu.Frame, _host.ResolveMenuFrame(left, clickedFrame)) &&
+                    _host.ResolveMenuFrame(right, clickedFrame) == null);
+            }
+            await SelectChildMenuAsync("left");
+            await WaitAsync(async () => (await ReadAsync("frames.left.document.documentElement.dataset.manualFrameValue === 'ready'"))?.GetBoolean() == true);
+            Check("isolatedChildManualExecution", (await ReadAsync("frames.left.document.documentElement.dataset.manualFrameCount === '1' && " +
+                "!frames.right.document.documentElement.dataset.manualFrameCount")).Value.GetBoolean());
+
+            await ReadAsync("(function(){var frame=document.querySelector('iframe[name=left]');frame.src=frame.src;return true;})()");
+            await WaitAsync(() => Task.FromResult(FindChildMenu("left") is CefSharpMenuTarget next && next.Frame.DocumentId != capturedMenu.Frame.DocumentId));
+            var rebound = FindChildMenu("left");
+            using (var left = FindNativeChild("left"))
+            {
+                Check("staleClickedFrameRejected", _host.ResolveMenuFrame(left, clickedFrame) == null);
+                _host.ExecuteContextMenu(left, capturedMenu);
+            }
+            await Task.Delay(100);
+            Check("staleChildMenuRejected", (await ReadAsync("!frames.left.document.documentElement.dataset.manualFrameCount")).Value.GetBoolean());
+            using (var left = FindNativeChild("left"))
+                _host.ExecuteContextMenu(left, rebound);
+            await WaitAsync(async () => (await ReadAsync("frames.left.document.documentElement.dataset.manualFrameCount === '1'"))?.GetBoolean() == true);
+            Check("reboundChildMenu", true);
+            await ReadAsync("(document.querySelector('iframe[name=left]').remove(), true)");
+            await WaitAsync(() => Task.FromResult(HasDocumentEnded(rebound.Frame.DocumentId)));
+            using (var right = FindNativeChild("right"))
+            {
+                _host.ExecuteContextMenu(right, rebound);
+                Check("removedChildMenuRejected", _host.ResolveMenuFrame(right, new MenuCommandRequest(rebound.Entry.ScriptKey, "frame", null,
+                    originFrame: rebound.Frame, clickedFrame: true)) == null && FindChildMenu("right").Frame.DocumentId == siblingMenu.Frame.DocumentId);
             }
             await ReadAsync("(function(){var f=document.createElement('iframe');f.id='isolated-blank';document.body.appendChild(f);var s=document.createElement('iframe');s.srcdoc='<html><body>srcdoc</body></html>';document.body.appendChild(s);return true;})()");
             await WaitAsync(() => Task.FromResult(FindFrame("blank") != null && FindFrame("srcdoc") != null));
@@ -250,6 +259,84 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
                 Check(world + ":cachedDOMContentLoaded", !events[0].GetProperty("trusted").GetBoolean());
             }
             Check("idleBeforeLoad", (await ReadAsync("document.documentElement.dataset.idleBeforeLoad === 'true'")).Value.GetBoolean());
+        }
+
+        private IFrame FindNativeChild(string name)
+        {
+            var browser = _browser.GetBrowser();
+            foreach (var identifier in browser.GetFrameIdentifiers())
+            {
+                var frame = CefSharpUserScriptHost.GetFrameByIdentifier(browser, identifier.ToString());
+                if (frame != null && frame.IsValid && frame.Name == name) return frame;
+                frame?.Dispose();
+            }
+            return null;
+        }
+
+        private CefSharpMenuTarget FindChildMenu(string name)
+        {
+            using (var native = FindNativeChild(name))
+                return native == null ? null : _host.GetContextMenuEntries(native).SingleOrDefault(item => item.Entry.Title == NativeMenuProbe.Title);
+        }
+
+        private async Task SelectChildMenuAsync(string name)
+        {
+            var rect = (await ReadAsync("(function(){var r=document.querySelector('iframe[name=" + name +
+                "]').getBoundingClientRect();return [Math.floor(r.left+r.width/2),Math.floor(r.top+r.height/2)];})()")).Value;
+            string expectedId;
+            using (var frame = FindNativeChild(name))
+                expectedId = frame.Identifier.ToString();
+            var selection = _menuProbe.AwaitSelection();
+            await Cef.UIThreadTaskFactory.StartNew(() =>
+            {
+                var host = _browser.GetBrowser().GetHost();
+                host.SendMouseClickEvent(rect[0].GetInt32(), rect[1].GetInt32(), MouseButtonType.Right, false, 1, CefEventFlags.None);
+                host.SendMouseClickEvent(rect[0].GetInt32(), rect[1].GetInt32(), MouseButtonType.Right, true, 1, CefEventFlags.None);
+            });
+            if (await Task.WhenAny(selection, Task.Delay(5000)) != selection)
+                throw new TimeoutException("The native context menu did not open.");
+            var selected = await selection;
+            if (selected != expectedId) throw new InvalidOperationException("Expected the native context menu for " + expectedId + ", received " + selected + ".");
+            Check("nativeChildMenuFrame", true);
+        }
+
+        internal sealed class NativeMenuProbe : IContextMenuHandler
+        {
+            internal const string Title = "Isolated manual frame";
+            private TaskCompletionSource<string> _selection;
+
+            internal Task<string> AwaitSelection()
+            {
+                var selection = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+                Interlocked.Exchange(ref _selection, selection);
+                return selection.Task;
+            }
+
+            public bool RunContextMenu(IWebBrowser control, IBrowser browser, IFrame frame, IContextMenuParams parameters,
+                IMenuModel model, IRunContextMenuCallback callback)
+            {
+                var selection = Interlocked.Exchange(ref _selection, null);
+                if (selection == null) return false;
+                using (callback)
+                {
+                    for (var index = 0; index < model.Count; index++)
+                        if (model.GetLabelAt(index) == Title)
+                        {
+                            var frameId = frame.Identifier.ToString();
+                            callback.Continue(model.GetCommandIdAt(index), CefEventFlags.None);
+                            selection.TrySetResult(frameId);
+                            return true;
+                        }
+                    callback.Cancel();
+                    selection.TrySetException(new InvalidOperationException("The native child context menu is missing the script."));
+                    return true;
+                }
+            }
+
+            public void OnBeforeContextMenu(IWebBrowser control, IBrowser browser, IFrame frame, IContextMenuParams parameters, IMenuModel model) { }
+            public bool OnContextMenuCommand(IWebBrowser control, IBrowser browser, IFrame frame, IContextMenuParams parameters,
+                CefMenuCommand commandId, CefEventFlags eventFlags) => false;
+            public void OnContextMenuDismissed(IWebBrowser control, IBrowser browser, IFrame frame) { }
         }
 
         private async Task CspAsync()
@@ -329,7 +416,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
 
         private static IFrame GetFrame(IBrowser browser, string id)
         {
-            // CefSharp 151 uses string identifiers; 84/121 use Int64 identifiers.
+            // Newer CefSharp versions use string identifiers; older versions use Int64 identifiers.
             var method = typeof(IBrowser).GetMethod("GetFrameByIdentifier", new[] { typeof(string) });
             if (method != null) return (IFrame)method.Invoke(browser, new object[] { id });
             method = typeof(IBrowser).GetMethod("GetFrame", new[] { typeof(long) });

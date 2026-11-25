@@ -27,7 +27,7 @@ Choose the gate by the claim being checked. Source build/package commands and en
 
 ```powershell
 # One engine/platform baseline, including native OOPIF and source corpus.
-./scripts/compatibility/Run-Baseline.ps1 -Platform x64 -CefSharpVersion 84.4.10
+./scripts/compatibility/Run-Baseline.ps1 -Platform x64 -CefSharpVersion 87.1.132
 
 # Four isolated native combinations, packaging and public-API consumers.
 ./scripts/compatibility/Run-Delivery.ps1
@@ -76,26 +76,17 @@ Logs are written to fresh `artifacts/smoke/<version>-<platform>/<run>/` director
 
 ## Pinned reference and evidence
 
-Run shared fixtures through [Run-Reference.cjs](../../scripts/compatibility/Run-Reference.cjs). It requires Playwright and local Edge/Tampermonkey source; the default pins 5.5.1/MV3 identity and content. The separate beta pin selects 5.6.6242. The original stable reference used Edge 156.0.4314.58; later fixed-stable observations use Edge 157.0.4341.42. The stable extension's minimum Chromium 120 remains independent of MonkeySharp's 84 baseline. See [fixed-reference observations](api-contract.md#pinned-reference-observations), [network differences](network.md) and [pin/acquisition instructions](../../scripts/compatibility/README.md#pinned-beta-enhancements).
+Run shared fixtures through [Run-Reference.cjs](../../scripts/compatibility/Run-Reference.cjs). It requires Playwright and local Edge/Tampermonkey source; the default pins 5.5.1/MV3 identity and content. The separate beta pin selects 5.6.6242. The original stable reference used Edge 156.0.4314.58; later fixed-stable observations use Edge 157.0.4341.42. The stable extension's minimum Chromium 120 remains independent of MonkeySharp's CefSharp 87 baseline. See [fixed-reference observations](api-contract.md#pinned-reference-observations), [network differences](network.md) and [pin/acquisition instructions](../../scripts/compatibility/README.md#pinned-beta-enhancements).
 
 [Fixtures](../../scripts/compatibility/fixtures/), the [evidence index](../../scripts/compatibility/evidence/README.md) and the [corpus manifest](../../scripts/compatibility/corpus.json) are tracked together with the runners. The [differential schema](../../scripts/compatibility/evidence/schema.json) applies to reference records; native matrices and delivery summaries retain their own record shapes. Preserve recorded fixture hashes, versions, ordered events, settlements, effects and failed checks. A historical fixture hash identifies the input at the recorded commit and source patch, not necessarily the current fixture bytes. Maintained identifiers and descriptive metadata may be updated without changing those observations. Raw logs and browser profiles stay in ignored `artifacts/`.
 
 ## Latest recorded validation
 
-The matrix summarizes the 2026-11-17 source, native and package validation run for commit `338f18b`. See the [recorded results](../../scripts/compatibility/evidence/persistence-v4-delivery.json) for the exact inputs, checks and artifact locations.
-
-| CefSharp | Platform | .NET | JavaScript | SmokeHost + normal/private OOPIF | WPF | NuGet consumer | Source + package corpus |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| 84.4.10 | x64 | 609 passed | 135 passed | Passed | Passed | Passed | 10 + 10, declared scope |
-| 84.4.10 | x86 | 480 passed | 135 passed | Passed | N/A | Passed | 10 + 10, declared scope |
-| 156.0.150 | x64 | 609 passed | 135 passed | Passed | Passed | Passed | 10 + 10, declared scope |
-| 156.0.150 | x86 | 480 passed | 135 passed | Passed | N/A | Passed | 10 + 10, declared scope |
-
-Each 84 corpus run recorded six functional passes and four expected engine limitations. Each 156 run recorded eight functional passes and two expected engine limitations. See [delivery snapshots](../../scripts/compatibility/evidence/README.md#delivery-snapshots) for other engine matrices and [known evidence gaps](README.md#known-evidence-gaps) for the scope of reference coverage.
+The current delivery matrix covers CefSharp `87.1.132` and `156.0.300` on x64 and x86, with WPF on x64. The [delivery snapshots](../../scripts/compatibility/evidence/README.md#delivery-snapshots) retain the engine versions and results of previous runs. See [known evidence gaps](README.md#known-evidence-gaps) for the scope of reference coverage.
 
 ## Corpus intake
 
-The [pinned corpus](../../scripts/compatibility/corpus/README.md) contains two unmodified MIT-licensed upstream scripts with immutable commit URLs, exact source and license hashes, no external requirements, controlled loopback pages and seven separate category scenarios. CSP/cancellation/policy denial add variants. Source SmokeHost and NuGet-only consumers run the same actions. Fixed TM runs are separate; missing browser download permission remains blocked and the history-refresh reference assertion remains failed. Chromium 84's observed replaceAll failure is an explicit engine restriction, not a runtime pass. See [corpus evidence](../../scripts/compatibility/evidence/README.md#corpus-results).
+The [pinned corpus](../../scripts/compatibility/corpus/README.md) contains two unmodified MIT-licensed upstream scripts with immutable commit URLs, exact source and license hashes, no external requirements, controlled loopback pages and seven separate category scenarios. CSP/cancellation/policy denial add variants. Source SmokeHost and NuGet-only consumers run the same actions. Fixed TM runs are separate; missing browser download permission remains blocked and the history-refresh reference assertion remains failed. See [corpus evidence](../../scripts/compatibility/evidence/README.md#corpus-results).
 
 The manifest's `localOriginal.sourcePath` preserves historical provenance for an optional user-provided local script. Its source is not redistributed and is not required in a fresh checkout; use `-CorpusScript` to supply an available script separately from the pinned seven-category corpus.
 

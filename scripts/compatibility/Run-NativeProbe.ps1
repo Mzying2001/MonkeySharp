@@ -2,7 +2,7 @@
 param(
     [ValidateSet('bfcache','oopif','start-csp')][string]$Probe = 'bfcache',
     [ValidateSet('x64','x86')][string]$Platform = 'x64',
-    [string]$CefSharpVersion = '84.4.10',
+    [string]$CefSharpVersion = '87.1.132',
     [string]$OutputDirectory = '',
     [switch]$NoBuild,
     [switch]$EnableBackForwardCache

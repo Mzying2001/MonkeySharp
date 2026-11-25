@@ -29,7 +29,7 @@ XHR `cookiePartition` is unsupported on every tested engine. The native URLReque
 
 ## Explicit request cookies
 
-The default CefSharp HTTP backend rejects `headers.Cookie` (case insensitive) and `details.cookie` before network dispatch with `MSP006_NOT_SUPPORTED`, even with `anonymous`. 84/121/151 native probes showed the supplied values never reached the server: URLRequest used jar values or no cookies when anonymous. String deduplication cannot repair that native behavior. No jar swapping, Cookie CRUD mutation or unverified network replacement is performed.
+The default CefSharp HTTP backend rejects `headers.Cookie` (case insensitive) and `details.cookie` before network dispatch with `MSP006_NOT_SUPPORTED`, even with `anonymous`. Historical native probes showed the supplied values never reached the server: URLRequest used jar values or no cookies when anonymous. String deduplication cannot repair that native behavior. No jar swapping, Cookie CRUD mutation or unverified network replacement is performed.
 
 Ordinary jar-based login, TLS/Secure/HttpOnly/domain/path selection, redirects, anonymous suppression and independent RequestContexts retain their existing network validation. This limitation also applies to download headers through the same backend.
 
@@ -43,4 +43,4 @@ The [basic native matrix](../../scripts/compatibility/evidence/cookies.json) cov
 
 The [partition matrix](../../scripts/compatibility/evidence/partition-cookies.json) records CRUD and native request limitations. The [pinned partition reference](../../scripts/compatibility/evidence/tampermonkey-5.5.1-partition-cookies.json) records the same-name deletion side effect.
 
-Run the [baseline and native gates](validation.md). SmokeHost's test certificate and DNS mapping are confined to the test host. Chromium 121's HTTP-loopback Secure behavior differs from 84, so TLS/credential claims use actual requests and readback, not mocks or CDP submission alone.
+Run the [baseline and native gates](validation.md). SmokeHost's test certificate and DNS mapping are confined to the test host. TLS and credential assertions use actual requests and cookie readback.

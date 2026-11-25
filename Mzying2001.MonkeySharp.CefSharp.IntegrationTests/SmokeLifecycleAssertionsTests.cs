@@ -14,7 +14,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
         [InlineData(DocumentLifecycleKind.NavigationSuperseded, true)]
         public void NavigationAcceptsEitherOldDocumentTermination(DocumentLifecycleKind terminal, bool mainFrame)
         {
-            // Chromium 84 can report supersession before the native release callback.
+            // Chromium can report supersession before the native release callback.
             var old = Frame("old", "same", mainFrame);
             var next = Frame("next", "same-next", mainFrame);
             var events = new[]

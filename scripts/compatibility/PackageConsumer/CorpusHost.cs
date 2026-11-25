@@ -38,9 +38,11 @@ namespace MonkeySharp.Compatibility
             {
                 CefSharpSettings.WcfEnabled = false;
                 CefSharpSettings.ConcurrentTaskExecution = true;
+                CefSharpSettings.ShutdownOnExit = false;
+                Cef.EnableWaitForBrowsersToClose();
                 phase("cef-initialize", null);
-                using (var settings = new CefSettings { RootCachePath = Path.Combine(Path.GetDirectoryName(outputPath), "profile-" + Guid.NewGuid().ToString("N")), Locale = "en-US" })
-                    initialized = Cef.Initialize(settings);
+                var settings = new CefSettings { RootCachePath = Path.Combine(Path.GetDirectoryName(outputPath), "profile-" + Guid.NewGuid().ToString("N")), Locale = "en-US" };
+                initialized = Cef.Initialize(settings);
                 if (!initialized) throw new InvalidOperationException("CEF initialization failed.");
                 phase("prepare-source", null);
                 using (var store = new InMemoryUserScriptValueStore())
@@ -153,7 +155,11 @@ namespace MonkeySharp.Compatibility
             finally
             {
                 phase("cef-shutdown", failedAction);
-                if (initialized) Cef.Shutdown();
+                if (initialized)
+                {
+                    Cef.WaitForBrowsersToClose();
+                    Cef.Shutdown();
+                }
                 File.WriteAllText(outputPath, JsonSerializer.Serialize(new
                 {
                     status = error == null ? "passed" : "failed", error, checks, observations, diagnostics, events, failedAction,

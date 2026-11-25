@@ -14,7 +14,7 @@ Registration/removal share normalization and ordered submission. Numeric/string 
 
 The renderer creates mouse/keyboard events from optional host-observed input fields, or a generic menucommand Event for unknown provenance. isTrusted stays false. clickedFrame:true requires the subscribing current document/frame; unknown frames are suppressed. Same-document URL changes and later GM calls preserve menu identity, while a new document or isolated script revision invalidates it. Registration generations reject late clicks after an ID update. Frame navigation and unregister remove only their owned subscriptions. The pinned Tampermonkey 5.6.6242 comparison lacks native click and overlap observations. See the [menu evidence](../../scripts/compatibility/evidence/menus-follow-up.json).
 
-GM command callbacks and `@run-at context-menu` source execution have separate routing requirements. Native manual menus capture a document target at open time. CefSharp 84 attests same-process isolated child targets with one-shot context-private proofs, so navigation cannot retarget an old selection. See the [isolated frame support table](execution-worlds.md#world-and-frame-selection).
+GM command callbacks and `@run-at context-menu` source execution have separate routing requirements. Native manual menus capture a document target at open time. Isolated menus support the main frame and verified same-process child frames. A selection for a retired document is rejected. A host using `ResolveMenuFrame` for `clickedFrame: true` also requires a current mapping for an isolated child frame. See the [isolated frame support table](execution-worlds.md#world-and-frame-selection).
 
 ## Clipboard
 

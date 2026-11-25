@@ -6,7 +6,7 @@
 
 ## 环境与门禁选择
 
-清理并验证源码基线可运行 `./scripts/compatibility/Run-Baseline.ps1 -Platform x64 -CefSharpVersion 84.4.10`（x64 包含 WPF）。完整原生/包消费门禁使用 `./scripts/compatibility/Run-Delivery.ps1`，隔离各版本/平台、核查包内容并运行公开 API 消费宿主。`-CorpusScript <path>` 可额外原样安装本地脚本，`-PackageOnly` 跳过基础门禁、仅供诊断。范围见[验证说明](compatibility/validation.md#reproduction)，参数见[工具说明](../scripts/compatibility/README.md)。
+清理并验证源码基线可运行 `./scripts/compatibility/Run-Baseline.ps1 -Platform x64 -CefSharpVersion 87.1.132`（x64 包含 WPF）。完整原生/包消费门禁使用 `./scripts/compatibility/Run-Delivery.ps1`，隔离各版本/平台、核查包内容并运行公开 API 消费宿主。`-CorpusScript <path>` 可额外原样安装本地脚本，`-PackageOnly` 跳过基础门禁、仅供诊断。范围见[验证说明](compatibility/validation.md#reproduction)，参数见[工具说明](../scripts/compatibility/README.md)。
 
 CI 在目标分支为 `dev` 或 `main` 的 PR 上运行，按 [CI 矩阵](../.github/workflows/ci.yml)中固定的版本覆盖旧版和当前发布版 CefSharp 的 x64/x86，WPF 仅 x64。工具链为 Windows Server 2022、.NET SDK `9.0.315` 和 Node.js `24`，这些是已测试版本而非最低要求。SDK 须支持 `MonkeySharp.slnx`；Core 测试目标为 `net8.0`，CefSharp 测试/应用目标为 `net462`。真实 Chromium 门禁需要 Windows 桌面会话。
 
@@ -28,14 +28,14 @@ node --test --test-timeout=30000 Mzying2001.MonkeySharp.Core.Tests/JavaScript/*.
 选择其他引擎时，只设置一次三段数字版本号，并在还原、构建、测试和 runner 中使用同一值。例如，选择固定旧版：
 
 ```powershell
-$cefSharpVersion = '84.4.10'
+$cefSharpVersion = '87.1.132'
 dotnet restore MonkeySharp.slnx -p:Platform=x64 "-p:CefSharpVersion=$cefSharpVersion"
 dotnet build MonkeySharp.slnx -c Release -p:Platform=x64 "-p:CefSharpVersion=$cefSharpVersion" --no-restore
 dotnet test MonkeySharp.slnx -c Release -p:Platform=x64 "-p:CefSharpVersion=$cefSharpVersion" --no-build
 ./scripts/compatibility/Run-Baseline.ps1 -Platform x64 -CefSharpVersion $cefSharpVersion
 ```
 
-跟进当前发布版时，修改现有各项目的 `CefSharpVersion` 默认值、[CI 矩阵](../.github/workflows/ci.yml)和[稳定性工作流选项](../.github/workflows/test-stability.yml)，并保持这些值一致。Runner 默认读取项目配置，脚本和文档无需同步修改版本号。CI 和交付验证覆盖两条发布线；runner 接受其他显式版本并不代表已验证支持该版本。
+跟进当前发布版时，同步更新各项目的 `CefSharpVersion` 默认值、[CI 矩阵](../.github/workflows/ci.yml)、[稳定性工作流选项](../.github/workflows/test-stability.yml)和文档中的版本引用。验证当前发布版的 runner 读取项目默认值。CI 和交付验证覆盖两条发布线。
 
 ## 打包
 
@@ -50,11 +50,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/Build-Packages.ps1
 
 Windows 下可以双击 [Build-Packages.bat](../scripts/Build-Packages.bat) 按默认配置构建，也可以运行 `./scripts/Build-Packages.bat -Platforms x64 -OutputDirectory "artifacts/release packages"`。包装脚本不依赖当前工作目录，定位同目录的 PowerShell 脚本，通过 `-NoProfile -ExecutionPolicy Bypass` 绕过本次进程的执行限制，使用 `%*` 原样转发参数，并以 PowerShell 退出码作为自身结果。构建结束后直接退出，不暂停等待输入。
 
-默认构建一个 `Mzying2001.MonkeySharp.Core` 包和四个适配包：面向 `84.4.10` 的 `Mzying2001.MonkeySharp.CefSharp84.x64`/`.x86`，以及面向适配器项目中固定的当前发布版的 `Mzying2001.MonkeySharp.CefSharp.x64`/`.x86`。Core 和全部适配包共用 [Version.props](../Version.props) 中的 MonkeySharp 包版本；升级 MonkeySharp 版本时只需修改该文件，也可通过 `-Version <version>` 覆盖单次构建，无需修改源码。省略 `-CurrentCefSharpVersion` 时，脚本读取适配器项目的默认值；可通过 `-CurrentCefSharpVersion <version>` 覆盖单次构建的新版引擎。脚本不会动态解析最新版或执行发布。
+默认构建一个 `Mzying2001.MonkeySharp.Core` 包和四个适配包：面向 `87.1.132` 的 `Mzying2001.MonkeySharp.CefSharp87.x64`/`.x86`，以及面向 `156.0.300` 的 `Mzying2001.MonkeySharp.CefSharp.x64`/`.x86`。Core 和全部适配包共用 [Version.props](../Version.props) 中的 MonkeySharp 包版本；升级 MonkeySharp 版本时只需修改该文件，也可通过 `-Version <version>` 覆盖单次构建，无需修改源码。省略 `-CurrentCefSharpVersion` 时，脚本读取适配器项目的默认值；可通过 `-CurrentCefSharpVersion <version>` 覆盖单次构建的新版引擎。脚本不会动态解析最新版或执行发布。
 
 脚本默认使用 Release 和两个平台，`-Configuration` 可选 Release 或 Debug。相对 `-OutputDirectory` 按仓库根目录解析，且必须为空；默认输出到新的 `artifacts/packages/<version>-<run>/` 目录。每次运行按引擎和平台将还原、构建产物隔离到 `artifacts/package-build/<run>/`，原生命令失败立即停止，并检查包标识、Core 目标框架、Core 传递依赖、CefSharp 精确版本依赖及符号包。`packages.json` 记录 `.nupkg` 和相应 `.snupkg` 的路径、版本、平台与 SHA-256。失败时保留部分产物用于诊断，仅完整成功后写入清单。生成包不会运行源码或原生门禁，发布前仍须验证；CI 在源码及真实 Chromium 作业通过后使用同一个脚本打包。
 
-所有适配包保持相同的程序集与命名空间，每个应用程序只安装一种。Core 项目引用转换为 NuGet 依赖，`CefSharp.Common` 则是 `[84.4.10]` 等精确版本的公开依赖，宿主自行选择匹配的 WinForms/WPF 包。仅 `84.4.10` 在适配器包名中添加 `84`；手动构建其他新版并发布时，应使用新的 MonkeySharp 包版本。
+所有适配包保持相同的程序集与命名空间，每个应用程序只安装一种。Core 项目引用转换为 NuGet 依赖，`CefSharp.Common` 则是 `[87.1.132]` 等精确版本的公开依赖，宿主自行选择匹配的 WinForms/WPF 包。仅 `87.1.132` 在适配器包名中添加 `87`；手动构建其他新版并发布时，应使用新的 MonkeySharp 包版本。
 
 检查并验证产物后，在 nuget.org 创建 API Key，先发布 Core，再发布所需适配包。例如，将路径替换为脚本实际输出目录：
 
@@ -62,7 +62,7 @@ Windows 下可以双击 [Build-Packages.bat](../scripts/Build-Packages.bat) 按�
 $packages = 'artifacts/packages/<version>-<run>'
 $version = (Get-Content -LiteralPath "$packages/packages.json" -Raw | ConvertFrom-Json).version
 dotnet nuget push "$packages/Mzying2001.MonkeySharp.Core.$version.nupkg" --source https://api.nuget.org/v3/index.json --api-key $env:NUGET_API_KEY
-dotnet nuget push "$packages/Mzying2001.MonkeySharp.CefSharp84.x64.$version.nupkg" --source https://api.nuget.org/v3/index.json --api-key $env:NUGET_API_KEY
+dotnet nuget push "$packages/Mzying2001.MonkeySharp.CefSharp87.x64.$version.nupkg" --source https://api.nuget.org/v3/index.json --api-key $env:NUGET_API_KEY
 dotnet nuget push "$packages/Mzying2001.MonkeySharp.CefSharp.x64.$version.nupkg" --source https://api.nuget.org/v3/index.json --api-key $env:NUGET_API_KEY
 ```
 
@@ -126,7 +126,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/Test-PublishPackag
 powershell -NoProfile -ExecutionPolicy Bypass -File Mzying2001.MonkeySharp.Demo/Run-E2E.ps1
 ```
 
-验证全过程应使用同一版本值：`dotnet restore/build/test/pack` 使用 `-p:CefSharpVersion=<版本>`，PowerShell runner 使用 `-CefSharpVersion <版本>`。以上命令使用各宿主项目中固定的当前发布版；固定旧版还需传入 `-CefSharpVersion 84.4.10` 重复上述命令；Demo gate 覆盖两个版本的 x64，每个版本只运行一次默认英文界面。每份报告记录 `environment.uiLanguage`，并验证英文窗口及权限控件；其他语言由本地化单元测试覆盖，详见[界面语言和部署](../Mzying2001.MonkeySharp.Demo/README.zh-CN.md#界面语言)。在已有工作区切换版本前，先执行 `dotnet clean MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=<目标版本>`（位数使用目标平台），避免混用不同 CefSharp 版本的增量构建产物。SmokeHost runner 已使用选定版本执行 restore、clean、build，并核对实际运行的程序集版本和进程位数。两个验证入口都使用隔离 profile 和 `TrustedPageWorld`；它们是集成测试，不是安全沙箱。
+验证全过程应使用同一版本值：`dotnet restore/build/test/pack` 使用 `-p:CefSharpVersion=<版本>`，PowerShell runner 使用 `-CefSharpVersion <版本>`。以上命令使用各宿主项目中固定的当前发布版；固定旧版还需传入 `-CefSharpVersion 87.1.132` 重复上述命令；Demo gate 覆盖两个版本的 x64，每个版本只运行一次默认英文界面。每份报告记录 `environment.uiLanguage`，并验证英文窗口及权限控件；其他语言由本地化单元测试覆盖，详见[界面语言和部署](../Mzying2001.MonkeySharp.Demo/README.zh-CN.md#界面语言)。在已有工作区切换版本前，先执行 `dotnet clean MonkeySharp.slnx -c Release -p:Platform=x64 -p:CefSharpVersion=<目标版本>`（位数使用目标平台），避免混用不同 CefSharp 版本的增量构建产物。SmokeHost runner 已使用选定版本执行 restore、clean、build，并核对实际运行的程序集版本和进程位数。两个验证入口都使用隔离 profile 和 `TrustedPageWorld`；它们是集成测试，不是安全沙箱。
 
 ## Chromium 兼容性脚本包
 
@@ -146,7 +146,7 @@ host 主 partial 文件负责附加和文档生命周期；`CefSharpUserScriptHo
 
 同时运行页面和隔离世界的宿主通过异步页面标记探测区分文档导航与隔离 V8 上下文回调。旧版 CEF 可能复用 frame ID，并先完成释放探测、后完成创建探测。适配器在释放后保留帧代次编号，使待完成的创建探测仍可初始化新文档；后续文档、主页面替换或分离会使旧代次失效。这些记录不会保留已释放文档的能力或菜单注册。
 
-CEF 84 在跨站 context-created 回调中还可能提供上一个进程的主帧包装。若加载完成事件标识了另一个从未初始化过、且与浏览器当前原生主帧一致的 frame，适配器会结束旧页面并初始化该帧，再推进 load 生命周期阶段。已在新页面创建的子帧会话仅在原生父帧链确认其属于新主帧时保留。此恢复不会重试已知失败或已释放的帧，也不提供 document-start 时序保证。
+CEF 在跨站 context-created 回调中还可能提供上一个进程的主帧包装。若加载完成事件标识了另一个从未初始化过、且与浏览器当前原生主帧一致的 frame，适配器会结束旧页面并初始化该帧，再推进 load 生命周期阶段。已在新页面创建的子帧会话仅在原生父帧链确认其属于新主帧时保留。此恢复不会重试已知失败或已释放的帧，也不提供 document-start 时序保证。
 
 匹配前，适配器读取当前 renderer 的 `location.href`，因为旧版 CefSharp 的 context-created 回调可能仍携带上次导航 URL。只读求值取消后，在本次初始化的 15 秒总期限内重试；每次求值最多两秒，重试间隔为不超过剩余期限的 50 ms。调用方取消、分离、文档会话被替换或原生 frame 失效时停止初始化，不回退使用过期的回调 URL。耗尽求值期限会产生初始化诊断，其中包含 `TimeoutException` 和最后一次取消异常。读取失败时跳过该文档，包括 load fallback 及上下文菜单执行。document-start 仍为尽力执行。
 

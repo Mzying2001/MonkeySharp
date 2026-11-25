@@ -304,7 +304,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 ["execution.documentStart"] = "best-effort",
                 ["execution.oopif"] = "isolated:child-target-sessions",
                 ["execution.bfcache"] = "fresh-navigation-required",
-                ["execution.contextMenuFrame"] = typeof(global::CefSharp.Cef).Assembly.GetName().Version.Major == 84 ? "same-process;oopif-unsupported" : "main-only;child-native-proof-unavailable",
+                ["execution.contextMenuFrame"] = "same-process;oopif-unsupported",
                 ["GM.xmlHttpRequest.cookiePartition"] = "unsupported",
                 ["GM.registerMenuCommand.clickedFrame"] = "host-attested-document-required;unknown-frame-suppressed"
             };

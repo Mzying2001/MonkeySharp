@@ -2,6 +2,20 @@
 
 **English** | [中文](changelog.zh-CN.md)
 
+## 5.0.0 (Unreleased)
+
+### Breaking changes
+
+- Updated the legacy CefSharp adapter from `84.4.10` to `87.1.132` and the current adapter from `156.0.150` to `156.0.300`. Replace `Mzying2001.MonkeySharp.CefSharp84.x64` or `.x86` with `Mzying2001.MonkeySharp.CefSharp87.x64` or `.x86` for your platform. Both adapter lines require matching CefSharp packages and native CEF binaries. [CefSharp version compatibility](integration-reference.md#cefsharp-version-compatibility)
+
+### Fixes
+
+- Restored isolated-world `@run-at context-menu` execution and `GM.registerMenuCommand` callbacks with `clickedFrame: true` in verified same-process iframes on both supported CefSharp versions. Replacing an iframe document invalidates menu selections tied to the previous document. [Menu compatibility](compatibility/host-interactions.md#menus)
+
+### Documentation
+
+- Added bilingual contribution guides and issue forms, plus a pull request template. [Contribution guide](../CONTRIBUTING.md)
+
 ## 4.1.0 — 2026-11-20
 
 - Added `CefSharpUserScriptHost.TryGetContextMenuScriptKey`. Custom CefSharp menu handlers can resolve an `@run-at context-menu` command ID to an installation key and use that key to select the correct icon when scripts share a name. The command ID is scoped to the active menu. [Integration reference](integration-reference.md#interaction-services) · [Git commit](https://github.com/Mzying2001/MonkeySharp/commit/2514967ec798caaa51e1e475bcd455881165a7af)
@@ -41,6 +55,6 @@
 - Added persistent script installations, update checks, and preparation of `@require` and `@resource` before a revision activates, including declared integrity hash verification.
 - Added CefSharp-backed HTTP requests, cookies, and scoped `GM.webRequest` cancellation and redirects. Added binary and stream upload support, incremental text responses, abortable downloads, tab audio controls, and partitioned cookie operations where the engine supports them.
 - Added the WPF Demo with a multi-tab browser, SQLite persistence, a script manager with a syntax-highlighted editor, English and Chinese UI, and script menu commands grouped by script. The Demo supports private contexts and interactive permission prompts with remembered decisions.
-- Published a shared Core NuGet package and separate x64 and x86 adapters for CefSharp `156.0.150` and `84.4.10`. Each adapter declares its exact CefSharp dependency.
+- Published a shared Core NuGet package and separate x64 and x86 adapters for each CefSharp line. Each adapter declares its exact CefSharp dependency.
 
 [Git history for 3.0.0](https://github.com/Mzying2001/MonkeySharp/commits/3.0.0/)
