@@ -33,5 +33,8 @@ namespace Mzying2001.MonkeySharp.CefSharp
 
         /// <summary>Gets or sets whether scripts update automatically; null leaves policy unknown.</summary>
         public bool? AutomaticallyUpdatesScripts { get; set; }
+
+        /// <summary>Gets or sets the culture name used to localize script labels in the browser context menu. The default is null, which uses the default script names.</summary>
+        public string ContextMenuCultureName { get; set; }
     }
 }

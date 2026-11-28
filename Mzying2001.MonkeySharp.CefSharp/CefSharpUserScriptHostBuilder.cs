@@ -204,6 +204,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     RequireGuaranteedDocumentStart = _options.RequireGuaranteedDocumentStart,
                     RequireVerifiedBridge = true,
                     SupportsIsolatedWorlds = true,
+                    ContextMenuCultureName = _options.ContextMenuCultureName,
                     EnvironmentProvider = frame => new UserScriptExecutionEnvironment(
                         _downloads?.DownloadMode ?? "disabled",
                         _options.IsIncognito?.Invoke(contextAccessor.Current),
