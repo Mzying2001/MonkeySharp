@@ -2,12 +2,14 @@
 
 **English** | [中文](changelog.zh-CN.md)
 
-## 5.0.1 (Unreleased)
+## 5.0.1 — 2026-11-28
 
 ### Fixes
 
 - Fixed a race during cross-site back and forward navigation that could run a page-world userscript in the wrong document. URL matching and delivery now use the same verified document for document-start injection, load fallback, and context-menu execution. Pending delivery is discarded if that document is replaced.
 - Fixed a shutdown race that could throw from a queued CefSharp callback when a DevTools session closed. Pending commands fail through their tasks, and the adapter skips remote object cleanup for closed sessions.
+
+[Git changes since 5.0.0](https://github.com/Mzying2001/MonkeySharp/compare/5.0.0...5.0.1)
 
 ## 5.0.0 — 2026-11-25
 
