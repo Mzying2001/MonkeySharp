@@ -16,6 +16,24 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
         [Theory]
         [InlineData(false)]
         [InlineData(true)]
+        public async Task DocumentReleaseSchedulesObjectGroupCleanupOnlyWhileTheSessionIsOpen(bool closeSession)
+        {
+            using (var protocol = await Protocol.CreateAsync())
+            {
+                var document = await protocol.BindAsync("first");
+                if (closeSession) protocol.Dispose();
+                var scheduledBeforeRelease = protocol.ScheduledCommands;
+
+                await document.ReleaseAsync();
+
+                Assert.Equal(scheduledBeforeRelease + (closeSession ? 0 : 1), protocol.ScheduledCommands);
+                Assert.Equal(!closeSession, protocol.ObjectGroupReleased);
+            }
+        }
+
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
         public async Task ReusedObjectIdCannotRunThePreviousDocumentsSource(bool reload)
         {
             using (var protocol = await Protocol.CreateAsync())
@@ -74,12 +92,19 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
             internal Uri Url { get; private set; } = new Uri("https://example.test/matched");
             internal List<string> Executed { get; } = new List<string>();
             internal TaskCompletionSource<string> Rejected { get; } = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+            internal int ScheduledCommands { get; private set; }
+            internal bool ObjectGroupReleased { get; private set; }
 
             private Protocol(bool legacy)
             {
                 _legacy = legacy;
                 var host = new Mock<IBrowserHost>();
-                _session = new CefSharpCdpSession(host.Object, action => { action(); return Task.CompletedTask; });
+                _session = new CefSharpCdpSession(host.Object, action =>
+                {
+                    ScheduledCommands++;
+                    action();
+                    return Task.CompletedTask;
+                });
                 _contexts = new CefSharpPageContexts(_session);
                 host.Setup(item => item.ExecuteDevToolsMethod(0, It.IsAny<string>(), It.IsAny<string>()))
                     .Returns((int _, string method, string args) =>
@@ -131,6 +156,10 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
                         var source = declaration.Split('\n')[2];
                         Executed.Add(source);
                         return Json("{\"result\":{\"value\":true}}");
+                    case "Runtime.releaseObjectGroup":
+                        Assert.Equal(_generation, args.GetProperty("objectGroup").GetString());
+                        ObjectGroupReleased = true;
+                        return Json("{}");
                     default:
                         return Json("{}");
                 }
