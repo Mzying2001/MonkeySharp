@@ -31,3 +31,4 @@ Use an explicit `x64` or `x86` platform for CefSharp builds. The Demo and its te
 - Use Conventional Commits: `<type>(<scope>): <summary>`, with concise English summaries.
 - Optional scope: affected project, area, class, or file.
 - For non-trivial changes, explain why and how in the body.
+- When committing, separate production code and test-related changes.
