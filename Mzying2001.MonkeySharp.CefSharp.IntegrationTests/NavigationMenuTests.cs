@@ -127,49 +127,6 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
         }
 
         [Theory]
-        [InlineData(false, false)]
-        [InlineData(true, false)]
-        [InlineData(false, true)]
-        [InlineData(true, true)]
-        public async Task PendingCreationProbeSurvivesReleaseButCannotReplaceANewerDocument(bool child, bool superseded)
-        {
-            using (var fixture = await Fixture.CreateAsync())
-            {
-                fixture.EnableDocumentMarkers();
-                var main = new Frame(42);
-                await fixture.CreateContextAsync(main);
-                var frame = child ? new Frame(44, false) : main;
-                if (child) await fixture.CreateContextAsync(frame);
-                var menu = await fixture.RegisterAsync(frame);
-                var released = new TaskCompletionSource<JavascriptResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
-                var created = new TaskCompletionSource<JavascriptResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
-                frame.SetMarkerProbe(released.Task, created.Task);
-                try
-                {
-                    fixture.ReleaseContext(frame);
-                    fixture.CreateContext(frame);
-                    // Older CEF reuses the frame ID: both probes observe the new page,
-                    // but the release response can retire the old session first.
-                    released.SetResult(new JavascriptResponse { Success = true });
-                    Assert.Same(fixture.WaitForReleaseAsync(), await Task.WhenAny(fixture.WaitForReleaseAsync(), Task.Delay(5000)));
-                    if (superseded) await fixture.CreateContextAsync(new Frame(43));
-                    var before = fixture.DocumentCount;
-                    created.SetResult(new JavascriptResponse { Success = true });
-                    var drained = fixture.DrainAsync();
-                    Assert.Same(drained, await Task.WhenAny(drained, Task.Delay(5000)));
-                    await drained;
-                    Assert.Equal(before + (superseded ? 0 : 1), fixture.DocumentCount);
-                    Assert.Equal(1, menu.Registration.DisposeCount);
-                }
-                finally
-                {
-                    released.TrySetCanceled();
-                    created.TrySetCanceled();
-                }
-            }
-        }
-
-        [Theory]
         [InlineData(false)]
         [InlineData(true)]
         public async Task NewMainDocumentRemovesOldMainAndChildMenus(bool changesFrameId)
@@ -275,24 +232,10 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
             public HostInteractionApiProvider Provider;
             public readonly MenuService Menu = new MenuService();
             public readonly ConcurrentQueue<UserScriptDiagnostic> Diagnostics = new ConcurrentQueue<UserScriptDiagnostic>();
-            private readonly TaskCompletionSource<bool> _released = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             public int DocumentCount => _documents.Count;
 
-            public Task WaitForReleaseAsync() => _released.Task;
             public Task DrainAsync() => (Task)typeof(CefSharpUserScriptHost)
                 .GetMethod("DrainBackgroundTasksAsync", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(Host, null);
-
-            public void EnableDocumentMarkers()
-            {
-                // No CDP worlds are needed for this raw lifecycle race. An inactive
-                // executor enables the same marker path used by mixed-world hosts.
-                var cdp = new CefSharpCdpSession(Mock.Of<IBrowserHost>(), action => { action(); return Task.CompletedTask; });
-                cdp.Dispose();
-                var executor = new CefSharpIsolatedExecutor(cdp, TestRepository.Create(), Host.Engine, Host.Gateway,
-                    "test", () => false, new BridgeOptions(), _ => { }, _ => { }, CancellationToken.None);
-                typeof(CefSharpUserScriptHost).GetField("_isolated", BindingFlags.Instance | BindingFlags.NonPublic).SetValue(Host, executor);
-                _browser.Setup(browser => browser.GetBrowser()).Returns(_native.Object);
-            }
 
             public static async Task<Fixture> CreateAsync()
             {
@@ -306,7 +249,6 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
                 {
                     fixture.Lifecycle.Enqueue(args);
                     if (args.Kind == DocumentLifecycleKind.ContextCreated) fixture._documents.Enqueue(args.Frame);
-                    if (args.Kind == DocumentLifecycleKind.ContextReleased) fixture._released.TrySetResult(true);
                 };
                 fixture.Host.Diagnostic += (_, args) => fixture.Diagnostics.Enqueue(args);
                 fixture._browser.SetupGet(browser => browser.JavascriptObjectRepository).Returns(Mock.Of<IJavascriptObjectRepository>());
@@ -314,6 +256,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
                 fixture._browser.SetupProperty(browser => browser.RequestHandler);
                 fixture._browser.SetupProperty(browser => browser.MenuHandler);
                 fixture._browser.Setup(browser => browser.GetBrowser()).Returns(fixture._native.Object);
+                MockPageDocument.Use(fixture.Host);
                 fixture.Host.Attach(fixture._browser.Object);
                 return fixture;
             }
@@ -389,15 +332,6 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
 #endif
                 )).Returns(response);
 
-            public void SetMarkerProbe(Task<JavascriptResponse> released, Task<JavascriptResponse> created)
-            {
-                Native.SetupSequence(frame => frame.EvaluateScriptAsync(
-                    It.Is<string>(script => script.StartsWith("globalThis[", StringComparison.Ordinal)), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<TimeSpan?>()
-#if !CEF_SHARP_LEGACY_EVALUATION
-                    , false
-#endif
-                    )).Returns(released).Returns(created);
-            }
         }
 
         private sealed class RegisteredMenu

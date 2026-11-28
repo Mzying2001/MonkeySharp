@@ -100,6 +100,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
 
             using (var host = new CefSharpUserScriptHostBuilder(repository).Build())
             {
+                MockPageDocument.Use(host);
                 var browser = new BrowserFixture();
                 string documentId = null;
                 host.DocumentLifecycle += (_, args) => documentId = args.Frame.DocumentId;
@@ -147,6 +148,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
 
             using (var host = new CefSharpUserScriptHostBuilder(repository).Build())
             {
+                MockPageDocument.Use(host);
                 var browser = new BrowserFixture();
                 var innerHandler = new Mock<IContextMenuHandler>();
                 browser.Browser.Object.MenuHandler = innerHandler.Object;
@@ -190,6 +192,8 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
             using (var host = new CefSharpUserScriptHostBuilder(repository).Build())
             using (var otherHost = new CefSharpUserScriptHostBuilder(repository).Build())
             {
+                MockPageDocument.Use(host);
+                MockPageDocument.Use(otherHost);
                 Assert.False(host.TryGetContextMenuScriptKey(command, out var key));
                 Assert.Equal(default, key);
                 var browser = new BrowserFixture();
@@ -445,6 +449,46 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
         }
 
         [Theory]
+        [InlineData("document-start")]
+        [InlineData("document-end")]
+        [InlineData("context-menu")]
+        public async Task HostDiscardsAnInjectionIfTheNativeObjectWasReused(string runAt)
+        {
+            using (var protocol = await PageContextTests.Protocol.CreateAsync())
+            using (var host = await CreateHostAsync(Script("none", runAt)))
+            {
+                var browser = new BrowserFixture();
+                var document = await protocol.BindAsync("first");
+                host.PageDocumentFactory = (_, __, ___) => document;
+                var next = new Uri("https://other.example.test/returned");
+                if (runAt == "document-start")
+                    host.DocumentLifecycle += (_, item) =>
+                    {
+                        if (item.Kind == DocumentLifecycleKind.DocumentStart)
+                            protocol.ReplaceObject("second", next);
+                    };
+
+                host.Attach(browser.Browser.Object);
+                browser.CreateContext();
+                if (runAt != "document-start")
+                {
+                    Assert.Single(protocol.Executed);
+                    if (runAt == "context-menu") browser.BuildContextMenu();
+                    protocol.ReplaceObject("second", next);
+                    if (runAt == "document-end") browser.RaiseFrameLoadEnd();
+                    else
+                        Assert.True(browser.Browser.Object.MenuHandler.OnContextMenuCommand(browser.Browser.Object,
+                            browser.CefBrowser.Object, browser.Frame.Object, null, CefMenuCommand.UserFirst, CefEventFlags.None));
+                }
+
+                Assert.Same(protocol.Rejected.Task, await Task.WhenAny(protocol.Rejected.Task, Task.Delay(5000)));
+                Assert.Contains("runtime.install(payload)", await protocol.Rejected.Task);
+                Assert.Equal(runAt == "document-start" ? 0 : 1, protocol.Executed.Count);
+                Assert.Empty(browser.Scripts);
+            }
+        }
+
+        [Theory]
         [InlineData(true)]
         [InlineData(false)]
         public async Task LocationProbeDisposalOnlySkipsInitializationFaultForRetiredFrames(bool retired)
@@ -632,6 +676,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
             await repository.InstallAsync(Script("none", "document-idle", "idle"), "test", true, CancellationToken.None);
             using (var host = new CefSharpUserScriptHostBuilder(repository).Build())
             {
+                MockPageDocument.Use(host);
                 var browser = new BrowserFixture();
                 var lifecycle = new ConcurrentQueue<DocumentLifecycleKind>();
                 host.DocumentLifecycle += (_, item) => lifecycle.Enqueue(item.Kind);
@@ -1222,7 +1267,9 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
             var builder = new CefSharpUserScriptHostBuilder(repository);
             if (options != null)
                 builder.Configure(options);
-            return builder.Build();
+            var host = builder.Build();
+            MockPageDocument.Use(host);
+            return host;
         }
 
         private static string Script(

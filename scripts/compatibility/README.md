@@ -8,7 +8,7 @@ This directory contains the shared validation harness and its inputs. Maintained
 | `Run-Delivery.ps1` | Isolated version/platform worktrees, baseline gates, package checks and public-API consumers |
 | `Run-Reference.cjs` | Original fixture comparisons with a locally installed pinned Tampermonkey |
 | `Run-Corpus.ps1`, `Run-Corpus.cjs` | Build/run pinned third-party scenarios through a source host, package consumer or fixed reference |
-| `Run-NativeProbe.ps1` | Native OOPIF, BFCache and start/CSP capability experiments |
+| `Run-NativeProbe.ps1` | Native history-navigation regression and OOPIF, BFCache and start/CSP experiments |
 | `ReferenceEnvironment.cjs`, `Unpack-Reference.cjs` | Verify pinned source identity/content and unpack a signed beta package |
 | `reference-stable.json`, `reference-beta.json` | Separate complete environment pins for stable 5.5.1 and beta 5.6.6242 |
 | `PackageConsumer/` | Standalone consumer built against generated NuGet packages |
