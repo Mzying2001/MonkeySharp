@@ -27,7 +27,9 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
             var metadata = parsed.Metadata;
             var diagnostics = string.Join("\n", parsed.Diagnostics.Select(item => item.Severity + " " + item.Code + " L" + item.LineNumber + ": " + item.Message));
             if (metadata == null) return diagnostics;
-            return Strings.Format("EditorDescription", metadata.Name, metadata.Version, metadata.Author, metadata.Description,
+            var cultureName = UiLanguage.CurrentCulture.Name;
+            return Strings.Format("EditorDescription", metadata.GetLocalizedName(cultureName), metadata.Version, metadata.Author,
+                metadata.GetLocalizedDescription(cultureName),
                 string.Join(", ", metadata.Matches), string.Join(", ", metadata.Includes),
                 string.Join(", ", metadata.Excludes.Concat(metadata.ExcludeMatches)), string.Join(", ", metadata.DeclaredGrants),
                 string.Join(", ", metadata.Connects), string.Join(", ", metadata.Requires.Select(item => item.Url)),

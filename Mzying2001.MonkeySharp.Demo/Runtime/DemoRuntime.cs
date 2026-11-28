@@ -139,7 +139,8 @@ namespace Mzying2001.MonkeySharp.Demo.Runtime
                 {
                     TrustedPageWorld = true,
                     IsIncognito = native => native == context.RequestContext ? (bool?)context.IsIncognito : null,
-                    AutomaticallyUpdatesScripts = false
+                    AutomaticallyUpdatesScripts = false,
+                    ContextMenuCultureName = UiLanguage.CurrentCulture.Name
                 })
                 .LogTo(entry =>
                 {

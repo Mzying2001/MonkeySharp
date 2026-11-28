@@ -30,7 +30,9 @@ dotnet build Mzying2001.MonkeySharp.Demo/Mzying2001.MonkeySharp.Demo.csproj -c R
 & .\Mzying2001.MonkeySharp.Demo\bin\x64\Release\net462\MonkeySharpDemo.exe --lang en
 ```
 
-Windows 文件对话框中的系统控件跟随操作系统语言。脚本元数据、源码，以及运行时或第三方诊断消息保留原文。
+Demo 显示的脚本名称和描述跟随所选界面语言，依次尝试精确译文、父语言译文、同语言的其他译文和脚本默认文本。例如，脚本仅提供 `zh-TW` 中文译文时，简体中文界面也可以显示该译文。脚本管理器搜索也匹配默认名称和描述。
+
+Windows 文件对话框中的系统控件跟随操作系统语言。源码、脚本提供的命令标签，以及运行时或第三方诊断消息保留原文。
 
 ## 浏览器与脚本管理器
 

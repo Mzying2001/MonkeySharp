@@ -64,6 +64,7 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
             _diagnostics = diagnostics;
             Editor.PropertyChanged += EditorPropertyChanged;
             FilteredScripts = CollectionViewSource.GetDefaultView(Scripts);
+            FilteredScripts.Culture = UiLanguage.CurrentCulture;
             FilteredScripts.Filter = FilterScript;
             ApplySort();
             Details.Update(Editor.Parse(), _origin, Editor.Source);

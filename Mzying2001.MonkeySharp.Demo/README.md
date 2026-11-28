@@ -30,7 +30,9 @@ The default is English. To override the saved language for one launch without ch
 & .\Mzying2001.MonkeySharp.Demo\bin\x64\Release\net462\MonkeySharpDemo.exe --lang en
 ```
 
-Windows-owned file-dialog controls follow the operating system's language. Script metadata, source code, and runtime or third-party diagnostic messages retain their original text.
+Script names and descriptions shown in the Demo follow the selected interface language. The Demo tries an exact translation, then a parent culture, then another variant of the same language, and finally the default script text. For example, the Simplified Chinese interface can display a `zh-TW` translation when it is the only Chinese translation. Script-manager search also matches the default names and descriptions.
+
+Windows-owned file-dialog controls follow the operating system's language. Source code, script-provided command labels, and runtime or third-party diagnostic messages retain their original text.
 
 ## Browser and manager
 
