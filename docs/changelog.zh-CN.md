@@ -2,13 +2,15 @@
 
 [English](changelog.md) | **中文**
 
-## 5.1.0（未发布）
+## 5.1.0 — 2026-11-28
 
 ### 新增
 
 - 新增 `UserScriptMetadata.GetLocalizedName` 和 `GetLocalizedDescription`。宿主可以优先获取与所选语言区域完全匹配的译文，再查找父级语言区域和同语言的其他译文，均无匹配时使用脚本的默认文本。[多语言名称和描述](usage-guide.zh-CN.md#多语言名称和描述)
 - 新增 `CefSharpHostOptions.ContextMenuCultureName`，宿主可用它为 `@run-at context-menu` 菜单项显示本地化名称。[交互服务](integration-reference.zh-CN.md#交互服务)
 - Demo 的脚本管理器、权限提示和浏览器菜单根据所选界面语言显示脚本元数据。管理器按显示名称排序，也支持搜索默认名称和描述。[界面语言](../Mzying2001.MonkeySharp.Demo/README.zh-CN.md#界面语言)
+
+[与 5.0.1 相比的 Git 变更](https://github.com/Mzying2001/MonkeySharp/compare/5.0.1...5.1.0)
 
 ## 5.0.1 — 2026-11-28
 

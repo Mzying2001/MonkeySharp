@@ -2,13 +2,15 @@
 
 **English** | [中文](changelog.zh-CN.md)
 
-## 5.1.0 (Unreleased)
+## 5.1.0 — 2026-11-28
 
 ### Added
 
 - Added `UserScriptMetadata.GetLocalizedName` and `GetLocalizedDescription`. Hosts can resolve an exact translation, fall back through related cultures, and use the default script text when no translation matches. [Localized names and descriptions](usage-guide.md#localized-names-and-descriptions)
 - Added `CefSharpHostOptions.ContextMenuCultureName` so hosts can display localized names for `@run-at context-menu` items. [Interaction services](integration-reference.md#interaction-services)
 - The Demo uses its selected interface language for script metadata in the manager, permission prompts, and browser menus. The manager sorts by the displayed name and can also search default names and descriptions. [Interface language](../Mzying2001.MonkeySharp.Demo/README.md#interface-language)
+
+[Git changes since 5.0.1](https://github.com/Mzying2001/MonkeySharp/compare/5.0.1...5.1.0)
 
 ## 5.0.1 — 2026-11-28
 
