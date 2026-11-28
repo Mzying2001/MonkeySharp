@@ -88,17 +88,22 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
             }
         }
 
-        [Fact]
-        public async Task ContextMenuLookupDistinguishesSameNamedInstallationsAndPreservesExecution()
+        [Theory]
+        [InlineData(null, "fixture")]
+        [InlineData("en", "fixture")]
+        [InlineData("zh-CN", "同名脚本")]
+        public async Task ContextMenuLookupDistinguishesSameNamedInstallationsAndPreservesExecution(string cultureName, string label)
         {
             const CefMenuCommand firstCommand = CefMenuCommand.UserFirst;
             const CefMenuCommand secondCommand = firstCommand + 1;
             var repository = TestRepository.Create();
-            var source = Script("none", "context-menu");
+            var source = Script("none", "context-menu").Replace("// @name fixture\n", "// @name fixture\n// @name:zh-TW 同名脚本\n");
             var first = await repository.InstallAsync(source, "first", true, CancellationToken.None);
             var second = await repository.InstallAsync(source, "second", true, CancellationToken.None);
 
-            using (var host = new CefSharpUserScriptHostBuilder(repository).Build())
+            var builder = new CefSharpUserScriptHostBuilder(repository);
+            if (cultureName != null) builder.Configure(new CefSharpHostOptions { ContextMenuCultureName = cultureName });
+            using (var host = builder.Build())
             {
                 MockPageDocument.Use(host);
                 var browser = new BrowserFixture();
@@ -110,8 +115,8 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
 
                 var model = browser.BuildContextMenu();
 
-                model.Verify(item => item.AddItem(firstCommand, "fixture"), Times.Once);
-                model.Verify(item => item.AddItem(secondCommand, "fixture"), Times.Once);
+                model.Verify(item => item.AddItem(firstCommand, label), Times.Once);
+                model.Verify(item => item.AddItem(secondCommand, label), Times.Once);
                 Assert.True(host.TryGetContextMenuScriptKey(firstCommand, out var firstKey));
                 Assert.Equal(first.ScriptKey, firstKey);
                 Assert.True(host.TryGetContextMenuScriptKey(secondCommand, out var secondKey));
@@ -120,19 +125,24 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
                 Assert.False(host.TryGetContextMenuScriptKey(CefMenuCommand.Back, out var missingKey));
                 Assert.Equal(default, missingKey);
 
-                Assert.True(browser.Browser.Object.MenuHandler.OnContextMenuCommand(
-                    browser.Browser.Object, browser.CefBrowser.Object, browser.Frame.Object, null, secondCommand, CefEventFlags.None));
-                await browser.WaitForScriptCountAsync(2);
                 Assert.NotNull(documentId);
-                var injection = Assert.Single(browser.Scripts, script => script.Contains("runtime.install(payload)"));
-                const string payloadPrefix = "decodePayload(\"";
-                var start = injection.IndexOf(payloadPrefix, StringComparison.Ordinal) + payloadPrefix.Length;
-                var end = injection.IndexOf("\")", start, StringComparison.Ordinal);
-                using (var payload = JsonDocument.Parse(Convert.FromBase64String(injection.Substring(start, end - start))))
+                foreach (var selection in new[] { (Command: secondCommand, Key: secondKey), (Command: firstCommand, Key: firstKey) })
                 {
-                    Assert.Equal(documentId, payload.RootElement.GetProperty("documentId").GetString());
-                    var invocation = Assert.Single(payload.RootElement.GetProperty("invocations").EnumerateArray());
-                    Assert.Equal(secondKey.ToString(), invocation.GetProperty("scriptKey").GetString());
+                    var previousCount = browser.Scripts.Count;
+                    Assert.True(browser.Browser.Object.MenuHandler.OnContextMenuCommand(
+                        browser.Browser.Object, browser.CefBrowser.Object, browser.Frame.Object, null, selection.Command, CefEventFlags.None));
+                    await browser.WaitForScriptCountAsync(previousCount + 1);
+                    var injection = Assert.Single(browser.Scripts.Skip(previousCount));
+                    Assert.Contains("runtime.install(payload)", injection);
+                    const string payloadPrefix = "decodePayload(\"";
+                    var start = injection.IndexOf(payloadPrefix, StringComparison.Ordinal) + payloadPrefix.Length;
+                    var end = injection.IndexOf("\")", start, StringComparison.Ordinal);
+                    using (var payload = JsonDocument.Parse(Convert.FromBase64String(injection.Substring(start, end - start))))
+                    {
+                        Assert.Equal(documentId, payload.RootElement.GetProperty("documentId").GetString());
+                        var invocation = Assert.Single(payload.RootElement.GetProperty("invocations").EnumerateArray());
+                        Assert.Equal(selection.Key.ToString(), invocation.GetProperty("scriptKey").GetString());
+                    }
                 }
             }
         }
