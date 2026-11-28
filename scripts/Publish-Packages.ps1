@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
 Validates a release artifact and publishes its packages using NUGET_API_KEY.

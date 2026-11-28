@@ -1,4 +1,4 @@
-﻿using CefSharp;
+using CefSharp;
 using Mzying2001.MonkeySharp.Core.Apis;
 using Mzying2001.MonkeySharp.Core.Bridge;
 using Mzying2001.MonkeySharp.Core.Domain;

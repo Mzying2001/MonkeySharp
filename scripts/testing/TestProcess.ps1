@@ -1,4 +1,4 @@
-# Shared by native validation runners; works in Windows PowerShell 5.1 and PowerShell 7.
+﻿# Shared by native validation runners; works in Windows PowerShell 5.1 and PowerShell 7.
 if (!('MonkeySharp.Testing.TestProcess' -as [type])) {
     Add-Type -Path (Join-Path $PSScriptRoot 'TestProcess.cs')
 }

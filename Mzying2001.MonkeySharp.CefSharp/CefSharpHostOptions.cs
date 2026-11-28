@@ -1,4 +1,4 @@
-﻿using Mzying2001.MonkeySharp.Core.Bridge;
+using Mzying2001.MonkeySharp.Core.Bridge;
 using System;
 
 namespace Mzying2001.MonkeySharp.CefSharp

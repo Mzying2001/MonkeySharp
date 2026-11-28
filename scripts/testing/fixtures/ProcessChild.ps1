@@ -1,4 +1,4 @@
-param([string]$Mode, [string]$Payload, [string]$PidFile)
+﻿param([string]$Mode, [string]$Payload, [string]$PidFile)
 $ErrorActionPreference = 'Stop'
 [Console]::Out.WriteLine($Payload)
 [Console]::Error.WriteLine('fixture stderr')

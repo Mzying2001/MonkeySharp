@@ -1,4 +1,4 @@
-﻿// ==UserScript==
+// ==UserScript==
 // @name Compatibility request effects
 // @match http://127.0.0.1:__PORT__/compat/webrequest
 // @match http://127.0.0.1:__PORT__/compat/net/*

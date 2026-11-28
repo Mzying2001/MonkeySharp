@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'TestProcess.ps1')
 $directory = Join-Path ([IO.Path]::GetTempPath()) ('MonkeySharp-ProcessTests-' + [Guid]::NewGuid().ToString('N'))
 $fixture = Join-Path $PSScriptRoot 'fixtures/ProcessChild.ps1'

@@ -1,4 +1,4 @@
-﻿            const invokeHostCallback = function (record, callback, receiver, value, name) {
+            const invokeHostCallback = function (record, callback, receiver, value, name) {
                 if (typeof callback !== "function") return;
                 try { callback.call(receiver, value); }
                 catch (error) {

@@ -1,4 +1,4 @@
-﻿using Mzying2001.MonkeySharp.Core.Domain;
+using Mzying2001.MonkeySharp.Core.Domain;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;

@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'SmokeResults.ps1')
 $sample = @(
     @{ type = 'fixture-result'; phase = 'initial'; success = $true },
