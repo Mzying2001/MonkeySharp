@@ -100,13 +100,14 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     {
                         lock (_sync)
                         {
-                            ThrowIfDisposed();
+                            if (CompleteIfClosed(completion)) return;
                             deadline.Token.ThrowIfCancellationRequested();
                             if (_root != null)
                             {
                                 // Reserve a CEF-allocated ID before sending its child-session command.
                                 // No other observer can subsequently allocate this ID for a root request.
                                 id = _host.ExecuteDevToolsMethod(0, "Browser.getVersion", "{}");
+                                if (CompleteIfClosed(completion)) return;
                                 if (id <= 0) throw new InvalidOperationException("CEF did not allocate a child command ID.");
                                 _pending.Add(id, completion);
                                 if (!_host.SendDevToolsMessage(JsonSerializer.Serialize(new { id, sessionId = _sessionId, method, @params = parameters ?? new object() })))
@@ -119,7 +120,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                             try
                             {
                                 id = _host.ExecuteDevToolsMethod(0, method, json);
-                                ThrowIfDisposed();
+                                if (CompleteIfClosed(completion)) return;
                                 if (id <= 0) throw new InvalidOperationException("CEF rejected CDP command " + method + ".");
                                 if (_submissionResults.TryGetValue(id, out var deliver)) deliver(completion);
                                 else _pending.Add(id, completion);
@@ -241,6 +242,14 @@ namespace Mzying2001.MonkeySharp.CefSharp
         private void ThrowIfDisposed()
         {
             if (_disposed) throw new ObjectDisposedException(nameof(CefSharpCdpSession));
+        }
+
+        // Called under _sync. Report closure to the awaiting caller and let the CEF callback return normally.
+        private bool CompleteIfClosed(TaskCompletionSource<JsonElement> completion)
+        {
+            if (!_disposed) return false;
+            completion.TrySetException(new ObjectDisposedException(nameof(CefSharpCdpSession)));
+            return true;
         }
 
         public void Dispose()

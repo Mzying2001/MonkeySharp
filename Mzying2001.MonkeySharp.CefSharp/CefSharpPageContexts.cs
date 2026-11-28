@@ -346,6 +346,8 @@ namespace Mzying2001.MonkeySharp.CefSharp
 
             internal override async Task ReleaseAsync()
             {
+                if (_session.IsClosed) return;
+
                 // A unique object group releases only this capture, even when a
                 // replacement renderer has allocated the same remote object ID.
                 try

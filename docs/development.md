@@ -148,6 +148,8 @@ The adapter uses a per-attachment document marker to connect a CEF frame to the 
 
 The CDP binding captures the document reference and URL in a private remote object while confirming the target, frame and loader. Each page-world delivery checks the document reference and capture identifier in the same call as the payload. Chromium 87 can reuse numeric context IDs and remote object IDs on a renderer swap. The in-context check prevents a reused ID from accepting pending work from another document. Retirement cancels the session and clears runtime and bridge state. Same-document URL changes keep the binding and update the matching URL. Document-start remains best effort.
 
+Document retirement sends remote object-group cleanup while its CDP session is open. If the session closes before or during a queued command's submission, the CEF callback returns normally and the command task reports session closure to its caller.
+
 Use `./scripts/compatibility/Run-NativeProbe.ps1 -Probe history-navigation -Platform x64 -CefSharpVersion 87.1.132` to check cross-site back, forward, reload and same-document navigation in WinForms. The probe checks the script's execution log and the unmatched page's renderer marker. The native test runner includes this probe for its selected version and platform.
 
 ## Documentation maintenance
