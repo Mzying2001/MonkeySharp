@@ -21,6 +21,7 @@ Use an explicit `x64` or `x86` platform for CefSharp builds. The Demo and its te
 ## Development Guidelines
 
 - Use Semantic Versioning (SemVer) for MonkeySharp package versions.
+- Follow the repository's `.editorconfig` when modifying or adding files.
 - Update related documentation and tests alongside code changes so they reflect the current implementation and requirements.
 - Keep documentation updates concise and readable; integrate necessary information into the relevant sections rather than appending detailed fix histories.
 - Keep documentation paragraphs on single source lines, preserving Markdown structure.
@@ -31,3 +32,4 @@ Use an explicit `x64` or `x86` platform for CefSharp builds. The Demo and its te
 - Use Conventional Commits: `<type>(<scope>): <summary>`, with concise English summaries.
 - Optional scope: affected project, area, class, or file.
 - For non-trivial changes, explain why and how in the body.
+- When committing, separate production code and test-related changes.

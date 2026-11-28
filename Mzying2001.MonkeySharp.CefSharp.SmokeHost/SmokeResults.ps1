@@ -1,4 +1,4 @@
-function Assert-CdpProbeRecords {
+﻿function Assert-CdpProbeRecords {
     param([object[]]$Records, [string]$Platform, [string]$CefSharpVersion)
     $probes = @($Records | Where-Object { $_.type -eq 'cdp-probe' })
     if ($probes.Count -ne 1 -or $probes[0].status -ne 'passed') { throw 'Exactly one successful CDP probe is required.' }

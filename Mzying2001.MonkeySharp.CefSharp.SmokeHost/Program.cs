@@ -64,6 +64,7 @@ namespace Mzying2001.MonkeySharp.CefSharp.SmokeHost
             {
                 if (args.Contains("--cdp-probe")) CdpProbe.RunAsync().GetAwaiter().GetResult();
                 else if (args.Contains("--bfcache-probe")) BfcacheProbe.RunAsync().GetAwaiter().GetResult();
+                else if (args.Contains("--history-navigation-probe")) HistoryNavigationProbe.RunAsync().GetAwaiter().GetResult();
                 else if (args.Contains("--oopif-probe")) OopifProbe.Run();
                 else if (args.Contains("--start-csp-probe")) StartCspProbe.RunAsync().GetAwaiter().GetResult();
                 else RunAsync().GetAwaiter().GetResult();

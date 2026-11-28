@@ -53,7 +53,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                     frame.BrowserSessionId != _browserSessionId || nativeFrame.Browser.Identifier != _browser.GetBrowser().Identifier) return null;
                 id = GetFrameIdentifier(nativeFrame);
                 if (frame.ExecutionWorld != "isolated") return _sessions.TryGetValue(id, out var session) && session.Initialized &&
-                    !session.Token.IsCancellationRequested && CefSharpDocumentIdentity.Matches(session.Frame, frame) ? session.Frame : null;
+                    session.HasActivePage && CefSharpDocumentIdentity.Matches(session.Frame, frame) ? session.Frame : null;
                 if (!nativeFrame.IsValid) return null;
                 isolated = _isolated;
                 main = nativeFrame.IsMain;
@@ -67,7 +67,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             lock (_sync)
                 _sessions.TryGetValue(GetFrameIdentifier(cefFrame), out session);
             var entries = new List<CefSharpMenuTarget>();
-            if (session != null && session.Initialized)
+            if (session != null && session.Initialized && session.HasActivePage)
                 entries.AddRange(_engine.GetContextMenuEntriesAsync(session.Frame, CancellationToken.None).GetAwaiter().GetResult()
                     .Select(entry => new CefSharpMenuTarget(entry, session.Frame, GetFrameIdentifier(cefFrame))));
             var isolated = _isolated;
@@ -89,7 +89,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
             FrameSession session;
             lock (_sync)
                 _sessions.TryGetValue(GetFrameIdentifier(cefFrame), out session);
-            if (session == null || session.Frame.DocumentId != target.Frame.DocumentId)
+            if (session == null || !session.HasActivePage || session.Frame.DocumentId != target.Frame.DocumentId)
                 return;
             Observe(ExecuteContextMenuAsync(session, target.Entry.ScriptKey), "MSC104_CONTEXT_MENU_FAILED", session);
         }

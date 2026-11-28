@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [ValidateSet('x64','x86')][string]$Platform = 'x64',
     [ValidatePattern('^\d+\.\d+\.\d+$')][string]$CefSharpVersion = '',
@@ -24,6 +24,7 @@ function Invoke-Stage([string]$Name, [string]$Script, [string[]]$Arguments) {
 $native = @('-Platform',$Platform,'-CefSharpVersion',$CefSharpVersion)
 Invoke-Stage 'smoke' 'Mzying2001.MonkeySharp.CefSharp.SmokeHost/Run-E2E.ps1' ($native + @('-OutputDirectory',(Join-Path $OutputDirectory 'smoke')))
 Invoke-Stage 'oopif' 'scripts/compatibility/Run-NativeProbe.ps1' ($native + @('-Probe','oopif','-NoBuild','-OutputDirectory',(Join-Path $OutputDirectory 'oopif')))
+Invoke-Stage 'history-navigation' 'scripts/compatibility/Run-NativeProbe.ps1' ($native + @('-Probe','history-navigation','-NoBuild','-OutputDirectory',(Join-Path $OutputDirectory 'history-navigation')))
 Invoke-Stage 'corpus' 'scripts/compatibility/Run-Corpus.ps1' ($native + @('-NoBuild','-OutputDirectory',(Join-Path $OutputDirectory 'corpus')))
 if ($Platform -eq 'x64') {
     Invoke-Stage 'demo' 'Mzying2001.MonkeySharp.Demo/Run-E2E.ps1' @('-CefSharpVersion',$CefSharpVersion,'-OutputDirectory',(Join-Path $OutputDirectory 'demo'))

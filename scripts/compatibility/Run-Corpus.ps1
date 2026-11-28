@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [ValidateSet('x64','x86')][string]$Platform = 'x64',
     [ValidatePattern('^\d+\.\d+\.\d+$')][string]$CefSharpVersion = '',

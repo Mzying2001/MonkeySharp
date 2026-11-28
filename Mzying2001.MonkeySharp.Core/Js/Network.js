@@ -1,4 +1,4 @@
-﻿            const notSupported = function (message) {
+            const notSupported = function (message) {
                 const error = new Error(message);
                 error.code = "MSP006_NOT_SUPPORTED";
                 return error;

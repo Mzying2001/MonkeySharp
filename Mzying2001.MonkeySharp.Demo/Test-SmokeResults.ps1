@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Stop'
+﻿$ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'SmokeResults.ps1')
 $checks = [ordered]@{}
 foreach ($name in $script:DemoRequiredChecks) { $checks[$name] = $true }

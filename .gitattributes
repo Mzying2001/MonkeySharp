@@ -2,8 +2,8 @@
 * text=auto
 
 # Keep hashed compatibility fixtures byte-stable across Windows checkouts.
-scripts/compatibility/fixtures/*.user.js text eol=lf
-Mzying2001.MonkeySharp.CefSharp.SmokeHost/Fixtures/*.user.js text eol=lf
 Mzying2001.MonkeySharp.CefSharp.SmokeHost/Fixtures/loopback.pfx -text
+Mzying2001.MonkeySharp.CefSharp.SmokeHost/Fixtures/*.user.js text eol=lf
 scripts/compatibility/corpus/**/source.user.js binary
 scripts/compatibility/corpus/**/LICENSE binary
+scripts/compatibility/fixtures/*.user.js text eol=lf

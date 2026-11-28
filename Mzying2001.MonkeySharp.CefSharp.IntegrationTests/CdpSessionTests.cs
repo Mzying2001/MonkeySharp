@@ -138,6 +138,58 @@ namespace Mzying2001.MonkeySharp.CefSharp.IntegrationTests
             }
         }
 
+        [Theory]
+        [InlineData(false, false)]
+        [InlineData(false, true)]
+        [InlineData(true, false)]
+        [InlineData(true, true)]
+        public async Task SessionClosureCompletesTheCommandWithoutThrowingFromTheScheduledAction(bool useChild, bool detachDuringSubmission)
+        {
+            var host = new Mock<IBrowserHost>();
+            var scheduled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            Action queued = null;
+            var defer = false;
+            using (var root = new CefSharpCdpSession(host.Object, action =>
+            {
+                if (defer)
+                {
+                    queued = action;
+                    return scheduled.Task;
+                }
+
+                action();
+                return Task.CompletedTask;
+            }))
+            {
+                host.Setup(value => value.ExecuteDevToolsMethod(0, "Target.attachToTarget", It.IsAny<string>())).Returns(() =>
+                {
+                    using (var result = Json("{\"sessionId\":\"child\"}"))
+                        root.OnDevToolsMethodResult(null, 1, true, result);
+                    return 1;
+                });
+                var session = useChild ? await root.AttachTargetAsync("target", CancellationToken.None) : root;
+                var nativeMethod = useChild ? "Browser.getVersion" : "Runtime.evaluate";
+                host.Setup(value => value.ExecuteDevToolsMethod(0, nativeMethod, It.IsAny<string>())).Returns(() =>
+                {
+                    root.OnDevToolsAgentDetached(null);
+                    return 2;
+                });
+
+                defer = true;
+                var command = session.ExecuteAsync("Runtime.evaluate");
+                Assert.NotNull(queued);
+                if (!detachDuringSubmission) root.Dispose();
+
+                queued();
+                scheduled.SetResult(true);
+
+                var error = await Assert.ThrowsAsync<ObjectDisposedException>(() => command);
+                Assert.Equal(nameof(CefSharpCdpSession), error.ObjectName);
+                host.Verify(value => value.ExecuteDevToolsMethod(0, nativeMethod, It.IsAny<string>()), Times.Exactly(detachDuringSubmission ? 1 : 0));
+                host.Verify(value => value.SendDevToolsMessage(It.IsAny<string>()), Times.Never);
+            }
+        }
+
         [Fact]
         public async Task ProtocolFailuresAndObserverExceptionsDoNotLoseOtherEvents()
         {

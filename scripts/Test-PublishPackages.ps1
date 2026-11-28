@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
 Tests publication boundaries using built packages and an in-process dotnet stub.

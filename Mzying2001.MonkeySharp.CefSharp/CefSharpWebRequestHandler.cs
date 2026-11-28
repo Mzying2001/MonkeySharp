@@ -1,4 +1,4 @@
-﻿using CefSharp;
+using CefSharp;
 using Mzying2001.MonkeySharp.Core.Apis;
 using System;
 using System.Collections.Generic;

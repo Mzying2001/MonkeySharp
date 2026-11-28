@@ -1,4 +1,4 @@
-﻿using Mzying2001.MonkeySharp.Core.Bridge;
+using Mzying2001.MonkeySharp.Core.Bridge;
 using Mzying2001.MonkeySharp.Core.Domain;
 using Mzying2001.MonkeySharp.Core.Matching;
 using Mzying2001.MonkeySharp.Core.Runtime;

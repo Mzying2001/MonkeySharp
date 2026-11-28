@@ -238,7 +238,7 @@ Override it with `UseTabAudioService`, or set `EnableDefaultAudioService = false
 
 ## Lifecycle and Diagnostics
 
-The attachment and [navigation sequence](#attachment-and-navigation) establishes the shared CDP session. The adapter reads the current renderer URL before matching instead of trusting potentially stale callback URLs. If that lookup fails, it skips the document, including load fallback and context-menu execution; initialization diagnostics retain the exception. Native frame recovery and read-only retry details are in [lifecycle maintenance](development.md#native-lifecycle-maintenance).
+The attachment and [navigation sequence](#attachment-and-navigation) establishes the shared CDP session. Page-world URL matching, script delivery and menu execution use the same confirmed document context. The adapter drops pending delivery when that context is replaced or cannot be confirmed. See [lifecycle maintenance](development.md#native-lifecycle-maintenance) for native frame recovery.
 
 The adapter creates an identity per frame document and executes each `(document, frame, script, run-at)` once. `@run-at context-menu` scripts are listed by the native CefSharp context menu for the matching frame and execute a fresh invocation only after the user selects an entry. Navigation, context release and detach invalidate document capabilities and pending calls; both `ContextReleased` and `NavigationSuperseded` retire a document's executions. Accepted downloads continue as host tasks with document callbacks muted; host disposal cancels them.
 

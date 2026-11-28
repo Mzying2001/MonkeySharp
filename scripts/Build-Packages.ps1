@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
 Builds Core and the legacy/current CefSharp NuGet packages without publishing.
