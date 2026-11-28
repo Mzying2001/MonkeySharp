@@ -22,6 +22,9 @@ namespace Mzying2001.MonkeySharp.CefSharp
             public long AttachmentGeneration { get; set; }
             public long ContextGeneration { get; set; }
             public bool HasDocumentMarker { get; set; }
+            public CefSharpPageDocument PageDocument { get; set; }
+            public bool HasActivePage => PageDocument?.Revoked.IsCancellationRequested == false && !Token.IsCancellationRequested;
+            public CancellationTokenRegistration PageRevocation { get; set; }
             public IFrame CefFrame { get; }
             public DocumentFrame Frame { get; private set; }
             public string LifecycleToken { get; }
@@ -59,6 +62,7 @@ namespace Mzying2001.MonkeySharp.CefSharp
                 {
                     if (_disposed) return;
                     _disposed = true;
+                    PageRevocation.Dispose();
                     Cancellation.Dispose();
                     OperationGate.Dispose();
                 }
