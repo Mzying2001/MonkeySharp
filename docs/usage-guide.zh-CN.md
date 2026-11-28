@@ -122,6 +122,19 @@
 | `@run-in selector` | 可重复 normal-tabs/incognito-tabs，按 OR 合并。单一隐私条件要求宿主明确实际上下文；两者同时声明覆盖支持的两种环境。容器选择会诊断且不匹配 Chromium 上下文。 |
 | `@inject-into`、`@sandbox`、`@unwrap` | 执行世界声明，遵循适配器公布的限制。 |
 
+### 多语言名称和描述
+
+C# 宿主可以将显示语言传给 `UserScriptMetadata.GetLocalizedName` 和 `GetLocalizedDescription`。
+
+```csharp
+var metadata = installation.Definition.Metadata;
+var cultureName = System.Globalization.CultureInfo.CurrentUICulture.Name;
+var name = metadata.GetLocalizedName(cultureName);
+var description = metadata.GetLocalizedDescription(cultureName);
+```
+
+两个方法都会跳过空译文，依次查找精确语言、.NET 父语言和其他同语言译文。选择同语言译文时，优先选择与请求共享最近父级的译文，其次选择距离该父级最近的译文，仍并列时按语言代码做不区分大小写的序号排序。例如，`zh` 可以匹配 `zh-CN` 或 `zh-TW`，`zh-TW` 可以匹配 `zh`，也可以在没有更接近的中文译文时匹配 `zh-CN`。请求为空、无效或没有匹配时，返回默认的 `Name` 或 `Description`，未声明默认值时返回 `null`。通过 `LocalizedNames` 和 `LocalizedDescriptions` 字典可以读取解析出的译文。
+
 ### 匹配与生命周期
 
 `@match https://example.com/*` 匹配该主机；`@match https://*.example.com/*` 匹配裸域名 `example.com` 及其所有层级的子域名，与 [Tampermonkey 的 match 约定](https://www.tampermonkey.net/documentation.php?q=include)一致。`@exclude-match` 使用相同的主机通配符规则。`*://` 和 `http*://` 匹配 HTTP/HTTPS；显式端口会被检查。浏览器 URL 的主机名按 IDN 规范化；`@match` 主机声明应使用 Punycode。URL 片段被忽略，查询字符串参与匹配。

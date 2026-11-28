@@ -43,11 +43,12 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
             MetadataStatus = metadata == null
                 ? Strings.Get("NoMetadata")
                 : parsed.CanEnable ? Strings.Get("ValidMetadata") : Strings.Get("MetadataErrors");
-            Name = metadata?.Name ?? Strings.Get("Unrecognized");
+            var cultureName = UiLanguage.CurrentCulture.Name;
+            Name = metadata?.GetLocalizedName(cultureName) ?? Strings.Get("Unrecognized");
             Version = metadata?.Version ?? Strings.Get("NotProvided");
             Namespace = metadata?.Namespace ?? Strings.Get("NotProvided");
             Author = metadata?.Author ?? Strings.Get("NotProvided");
-            Description = metadata?.Description ?? Strings.Get("NotProvided");
+            Description = metadata?.GetLocalizedDescription(cultureName) ?? Strings.Get("NotProvided");
             SourceOrigin = string.IsNullOrWhiteSpace(sourceOrigin) ? Strings.Get("NotProvided") : sourceOrigin;
             RunAt = metadata == null ? Strings.Get("NotProvided") : FormatRunAt(metadata.RunAt);
             Matches = metadata == null ? Empty : ReadList(metadata.Matches);

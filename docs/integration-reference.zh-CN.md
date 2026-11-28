@@ -112,6 +112,8 @@ await repository.InitializeAsync(CancellationToken.None);
 
 自定义菜单处理器可在适配器的 `OnBeforeContextMenu` 返回后，对应用保留的 `@run-at context-menu` 菜单项使用其实际命令 ID 调用 `host.TryGetContextMenuScriptKey(commandId, out var scriptKey)`。应用可按返回的安装 key 查找图标等显示数据。命令 ID 可在下次构建时重用，因此查询结果只用于本次菜单。命令无映射、菜单已关闭或宿主没有活动的菜单处理器时，查询返回 `false` 并输出默认 key。
 
+将 `CefSharpHostOptions.ContextMenuCultureName` 设置为应用的界面语言，可在 `@run-at context-menu` 菜单项中显示本地化脚本名称。省略时，菜单标签使用脚本的默认名称。
+
 交互服务的生命周期契约各不相同：
 
 | 服务入口 | 返回句柄 | 生命周期成员 |

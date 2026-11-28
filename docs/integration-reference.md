@@ -112,6 +112,8 @@ Local repository diagnostics use `MSR420_SOURCE_UNAVAILABLE`, `MSR421_ASSET_UNAV
 
 For `@run-at context-menu` items, a custom menu handler can call `host.TryGetContextMenuScriptKey(commandId, out var scriptKey)` after the adapter's `OnBeforeContextMenu` returns. Pass the actual command IDs from the items the application retains. The installation key lets the application look up display metadata such as icons. Use the result for that menu build only, since command IDs can be reused. The lookup returns `false` and a default key if the command is unmapped, the menu has been dismissed, or the host has no active menu handler.
 
+Set `CefSharpHostOptions.ContextMenuCultureName` to the application's interface culture to display localized names for `@run-at context-menu` items. When omitted, menu labels use the default script names.
+
 Interaction services have distinct lifecycle contracts:
 
 | Service entry point | Returned handle | Lifecycle members |

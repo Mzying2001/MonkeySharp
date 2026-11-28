@@ -118,6 +118,19 @@ The header begins with `// ==UserScript==` and ends with `// ==/UserScript==`. P
 | `@run-in selector` | Repeatable `normal-tabs`/`incognito-tabs` conditions, combined with OR. Restricted execution requires a known host privacy context; declaring both covers either supported context. Container selectors are diagnosed and do not match Chromium contexts. |
 | `@inject-into`, `@sandbox`, `@unwrap` | Execution-world declarations; see the documented adapter limits. |
 
+### Localized names and descriptions
+
+From a C# host, pass the display language to `UserScriptMetadata.GetLocalizedName` and `GetLocalizedDescription`.
+
+```csharp
+var metadata = installation.Definition.Metadata;
+var cultureName = System.Globalization.CultureInfo.CurrentUICulture.Name;
+var name = metadata.GetLocalizedName(cultureName);
+var description = metadata.GetLocalizedDescription(cultureName);
+```
+
+Both methods skip blank translations and try an exact culture, then its .NET parent cultures, then other translations of the same language. Among those variants, the nearest shared culture wins, followed by the variant closest to it and then by culture name in case-insensitive ordinal order. For example, `zh` can select `zh-CN` or `zh-TW`. A request for `zh-TW` can select `zh` or, if there is no closer Chinese translation, `zh-CN`. An empty or invalid request or one with no match returns the default `Name` or `Description`, which can be `null` if undeclared. The `LocalizedNames` and `LocalizedDescriptions` dictionaries expose the parsed variants.
+
 ### Matching and lifecycle
 
 `@match https://example.com/*` covers that host; `@match https://*.example.com/*` covers the bare `example.com` and all its subdomains, following the [Tampermonkey match contract](https://www.tampermonkey.net/documentation.php?q=include). The same host wildcard rule applies to `@exclude-match`. `*://` and `http*://` cover HTTP/HTTPS; explicit ports are checked. Browser URL hosts are IDN-normalized; use Punycode in `@match` host declarations. Fragments are ignored, and query strings participate in matching.

@@ -369,6 +369,18 @@ namespace Mzying2001.MonkeySharp.Core.Domain
         /// <summary>Gets localized descriptions keyed by normalized culture name.</summary>
         public IReadOnlyDictionary<string, string> LocalizedDescriptions { get; }
 
+        /// <summary>Gets a non-empty name for the requested culture, a parent culture, or another culture of the same language.</summary>
+        /// <param name="cultureName">The requested culture name, such as <c>zh-TW</c>.</param>
+        /// <returns>The matching name, or <see cref="Name"/> if the request is empty, invalid, or has no match.</returns>
+        public string GetLocalizedName(string cultureName)
+            => LocalizedMetadataLookup.Find(cultureName, LocalizedNames) ?? Name;
+
+        /// <summary>Gets a non-empty description for the requested culture, a parent culture, or another culture of the same language.</summary>
+        /// <param name="cultureName">The requested culture name, such as <c>zh-TW</c>.</param>
+        /// <returns>The matching description, or <see cref="Description"/> if the request is empty, invalid, or has no match.</returns>
+        public string GetLocalizedDescription(string cultureName)
+            => LocalizedMetadataLookup.Find(cultureName, LocalizedDescriptions) ?? Description;
+
         /// <summary>Gets WebExtension-style match patterns.</summary>
         public IReadOnlyList<string> Matches { get; }
 

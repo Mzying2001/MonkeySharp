@@ -324,7 +324,7 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
     }
 
     /// <summary>
-    /// Configures userscript execution safety requirements.
+    /// Configures userscript execution requirements and browser context-menu labels.
     /// </summary>
     public sealed class UserScriptEngineOptions
     {
@@ -339,6 +339,9 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
 
         /// <summary>Gets or sets the actual execution environment reported by the host.</summary>
         public Func<DocumentFrame, UserScriptExecutionEnvironment> EnvironmentProvider { get; set; }
+
+        /// <summary>Gets or sets the culture name used to localize script labels in the browser context menu. The default is null, which uses the default script names.</summary>
+        public string ContextMenuCultureName { get; set; }
     }
 
     /// <summary>Reports host facts; unknown private/update state remains unspecified.</summary>

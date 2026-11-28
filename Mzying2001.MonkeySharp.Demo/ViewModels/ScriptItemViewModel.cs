@@ -22,11 +22,25 @@ namespace Mzying2001.MonkeySharp.Demo.ViewModels
             }
         }
         public bool CanToggle => !_isBusy;
-        public string Name => Installation.Definition.Metadata?.Name ?? Installation.ScriptKey.ToString();
+        public string Name => Installation.Definition.Metadata?.GetLocalizedName(UiLanguage.CurrentCulture.Name) ?? ScriptKey;
         public string Version => string.IsNullOrWhiteSpace(Installation.Definition.Metadata?.Version) ? Strings.Get("NoVersion") : "v" + Installation.Definition.Metadata.Version;
-        public string Description => string.IsNullOrWhiteSpace(Installation.Definition.Metadata?.Description) ? Strings.Get("NoDescription") : Installation.Definition.Metadata.Description;
+        public string Description
+        {
+            get
+            {
+                var description = Installation.Definition.Metadata?.GetLocalizedDescription(UiLanguage.CurrentCulture.Name);
+                return string.IsNullOrWhiteSpace(description) ? Strings.Get("NoDescription") : description;
+            }
+        }
         public string ScriptKey => Installation.ScriptKey.ToString();
-        public string SearchText => string.Join("\n", Name, Description, Installation.Definition.Metadata?.Namespace, Installation.SourceOrigin);
+        public string SearchText
+        {
+            get
+            {
+                var metadata = Installation.Definition.Metadata;
+                return string.Join("\n", Name, Description, metadata?.Name, metadata?.Description, metadata?.Namespace, Installation.SourceOrigin);
+            }
+        }
         public string IconUrl
         {
             get

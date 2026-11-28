@@ -1,5 +1,6 @@
 using Mzying2001.MonkeySharp.Core.Apis;
 using Mzying2001.MonkeySharp.Core.Repository;
+using Mzying2001.MonkeySharp.Demo.Localization;
 using Mzying2001.MonkeySharp.Demo.ViewModels;
 using System;
 using System.Collections.Generic;
@@ -33,7 +34,7 @@ namespace Mzying2001.MonkeySharp.Demo.Services
                 var key = Tuple.Create(request.ScriptKey.ToString(), request.Name, request.Title ?? "", request.AccessKey ?? "");
                 if (!_groups.TryGetValue(key, out var command))
                 {
-                    command = new ScriptMenuCommand(request, installation.Definition.Metadata.Name);
+                    command = new ScriptMenuCommand(request, installation.Definition.Metadata.GetLocalizedName(UiLanguage.CurrentCulture.Name));
                     _groups.Add(key, command);
                     _tab.MenuCommands.Add(command);
                 }

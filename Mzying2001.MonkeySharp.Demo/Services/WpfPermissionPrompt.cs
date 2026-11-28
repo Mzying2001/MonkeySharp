@@ -28,7 +28,8 @@ namespace Mzying2001.MonkeySharp.Demo.Services
                 {
                     if (token.IsCancellationRequested) return;
                     var panel = new StackPanel { Margin = new Thickness(20) };
-                    panel.Children.Add(new TextBlock { Text = request.Installation.Definition.Metadata.Name, FontSize = 18, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
+                    var name = request.Installation.Definition.Metadata.GetLocalizedName(UiLanguage.CurrentCulture.Name);
+                    panel.Children.Add(new TextBlock { Text = name, FontSize = 18, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
                     panel.Children.Add(new TextBlock { Text = scope.Kind + "\n" + scope.Target, Margin = new Thickness(0, 12, 0, 12), TextWrapping = TextWrapping.Wrap });
                     if (isPrivate) panel.Children.Add(new TextBlock { Text = Strings.Get("PrivatePermissionHint"), TextWrapping = TextWrapping.Wrap });
                     panel.Children.Add(new TextBlock { Text = Strings.Get("PermissionHint"), MaxWidth = 440, TextWrapping = TextWrapping.Wrap });

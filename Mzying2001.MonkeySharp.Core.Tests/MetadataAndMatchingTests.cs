@@ -31,6 +31,66 @@ namespace Mzying2001.MonkeySharp.Core.Tests
             Assert.Contains(result.Diagnostics, item => item.Code == "MSM010_DUPLICATE_SINGLETON");
         }
 
+        [Theory]
+        [InlineData("zh", "zh-CN zh-TW", "zh-CN")]
+        [InlineData("zh", "zh-TW zh-CN", "zh-CN")]
+        [InlineData("zh", "zh-TW", "zh-TW")]
+        [InlineData("zh", "zh-CN zh-Hant", "zh-Hant")]
+        [InlineData("zh", "zh-CN zh", "zh")]
+        [InlineData("zh-TW", "zh zh-CN", "zh")]
+        [InlineData("zh-TW", "zh zh-Hant zh-CN", "zh-Hant")]
+        [InlineData("zh-TW", "zh-CN zh-HK", "zh-HK")]
+        [InlineData("zh-TW", "zh-CN", "zh-CN")]
+        [InlineData(" ZH-tw ", "zh zh-TW zh-Hant", "zh-TW")]
+        [InlineData("en-AU", "en-US en-GB", "en-GB")]
+        [InlineData("ja", "zh-CN", "Default description")]
+        public void LocalizedDescriptionChoosesClosestLanguage(string requestedCulture, string declaredCultures, string expected)
+        {
+            var descriptions = declaredCultures.Split(' ').Select(culture => "// @description:" + culture + " " + culture);
+            var metadata = _parser.Parse(Script("// @name Script\n// @description Default description\n" +
+                string.Join("\n", descriptions))).Metadata;
+
+            Assert.Equal(expected, metadata.GetLocalizedDescription(requestedCulture));
+        }
+
+        [Fact]
+        public void LocalizedNameAndDescriptionResolveIndependently()
+        {
+            var metadata = _parser.Parse(Script("// @name Script\n// @name:zh-TW Translated name\n" +
+                "// @description Default description\n// @description:zh-CN Translated description")).Metadata;
+
+            Assert.Equal("Translated name", metadata.GetLocalizedName("zh-TW"));
+            Assert.Equal("Translated description", metadata.GetLocalizedDescription("zh-TW"));
+            Assert.Equal("Script", metadata.Name);
+            Assert.Equal("Default description", metadata.Description);
+            Assert.False(metadata.LocalizedDescriptions.ContainsKey("zh-TW"));
+        }
+
+        [Theory]
+        [InlineData(null)]
+        [InlineData("")]
+        [InlineData("  ")]
+        [InlineData("invalid@locale")]
+        public void LocalizedLookupUsesDefaultForEmptyOrInvalidCulture(string cultureName)
+        {
+            var metadata = _parser.Parse(Script("// @name Script\n// @name:zh-CN Translated name\n" +
+                "// @description:zh-CN Translated description")).Metadata;
+
+            Assert.Equal("Script", metadata.GetLocalizedName(cultureName));
+            Assert.Null(metadata.GetLocalizedDescription(cultureName));
+        }
+
+        [Fact]
+        public void LocalizedLookupSkipsEmptyTranslations()
+        {
+            var metadata = _parser.Parse(Script("// @name Script\n// @name:zh-TW\n// @name:zh-Hant\n" +
+                "// @name:zh-CN Translated name\n// @description:zh-TW")).Metadata;
+
+            Assert.Equal("Translated name", metadata.GetLocalizedName("zh-TW"));
+            Assert.Null(metadata.GetLocalizedDescription("zh-TW"));
+            Assert.Equal(string.Empty, metadata.LocalizedNames["zh-TW"]);
+        }
+
         [Fact]
         public void DuplicateAntifeaturesKeepFirstDescriptionForEachTypeAndNormalizedLocale()
         {

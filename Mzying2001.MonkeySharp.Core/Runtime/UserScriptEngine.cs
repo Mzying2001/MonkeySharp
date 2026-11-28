@@ -145,15 +145,17 @@ namespace Mzying2001.MonkeySharp.Core.Runtime
             {
                 ThrowIfDisposed();
                 var installations = await _repository.GetSnapshotAsync(cancellationToken).ConfigureAwait(false);
+                var cultureName = _options.ContextMenuCultureName;
                 var entries = installations
                     .Where(item => item.CanExecute && item.Definition.Metadata != null &&
                         item.Definition.Metadata.RunAt == UserScriptRunAt.ContextMenu &&
                         (frame.IsMainFrame || !item.Definition.Metadata.NoFrames) &&
                         Matches(item, frame, true, diagnostics))
-                    .Select(item => new ContextMenuEntry(item.ScriptKey,
-                        string.IsNullOrWhiteSpace(item.Definition.Metadata.Name)
-                            ? item.ScriptKey.ToString()
-                            : item.Definition.Metadata.Name))
+                    .Select(item =>
+                    {
+                        var name = item.Definition.Metadata.GetLocalizedName(cultureName);
+                        return new ContextMenuEntry(item.ScriptKey, string.IsNullOrWhiteSpace(name) ? item.ScriptKey.ToString() : name);
+                    })
                     .ToList();
                 return new ReadOnlyCollection<ContextMenuEntry>(entries);
             }
